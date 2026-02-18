@@ -1,0 +1,22 @@
+databases:
+  - name: Myshop-db-staging
+    databaseName: myshop
+    user: myshop_user
+
+services:
+  - type: web
+    name: MyShop-Api
+    env: node
+    plan: starter
+    branch: main
+    buildCommand: cd server && npm install && npm run build
+    startCommand: cd server && npm start
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: CORS_ORIGIN
+        value: http://localhost:5173,http://localhost:5174
