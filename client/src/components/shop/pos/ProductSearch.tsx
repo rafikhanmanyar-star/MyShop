@@ -5,11 +5,7 @@ import { ICONS, CURRENCY } from '../../../constants';
 import { POSProduct } from '../../../types/pos';
 import { InventoryItem } from '../../../types/inventory';
 import Card from '../../ui/Card';
-import { shopApi } from '../../../services/shopApi';
-
-const CATEGORIES = [
-    { id: 'all', name: 'All Items' },
-];
+import { shopApi, ShopProductCategory } from '../../../services/shopApi';
 
 function mapApiProductToPOS(p: any): POSProduct {
     return {
@@ -51,10 +47,20 @@ const ProductSearch: React.FC = () => {
     inventoryItemsRef.current = inventoryItems;
 
     const [selectedCategory, setSelectedCategory] = useState('all');
+    const [shopCategories, setShopCategories] = useState<ShopProductCategory[]>([]);
     const [products, setProducts] = useState<POSProduct[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+
+    const loadShopCategories = useCallback(async () => {
+        try {
+            const list = await shopApi.getShopCategories();
+            setShopCategories(Array.isArray(list) ? list : []);
+        } catch {
+            setShopCategories([]);
+        }
+    }, []);
 
     const loadProducts = useCallback(async () => {
         try {
@@ -82,7 +88,8 @@ const ProductSearch: React.FC = () => {
 
     useEffect(() => {
         loadProducts();
-    }, [loadProducts]);
+        loadShopCategories();
+    }, [loadProducts, loadShopCategories]);
 
     // Keep focus on search input for barcode scanner
     useEffect(() => {
@@ -94,9 +101,22 @@ const ProductSearch: React.FC = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const categoryTabs = useMemo(() => {
+        const all: { id: string; name: string }[] = [{ id: 'all', name: 'All Items' }];
+        const cats = (shopCategories || []).map(c => ({ id: c.id, name: c.name }));
+        return [...all, ...cats];
+    }, [shopCategories]);
+
+    const matchesCategory = useCallback((p: POSProduct) => {
+        if (selectedCategory === 'all') return true;
+        if (p.categoryId === selectedCategory) return true;
+        const cat = shopCategories.find(c => c.id === selectedCategory);
+        return cat ? p.categoryId === cat.name : false;
+    }, [selectedCategory, shopCategories]);
+
     const filteredProducts = useMemo(() => {
         const query = searchQuery.toLowerCase().trim();
-        if (!query) return products.filter(p => selectedCategory === 'all' || p.categoryId === selectedCategory);
+        if (!query) return products.filter(p => matchesCategory(p));
 
         return products.filter(p => {
             const barcode = (p.barcode || '').toLowerCase();
@@ -112,13 +132,11 @@ const ProductSearch: React.FC = () => {
             // Priority 3: Search in other fields (respected by category)
             const matchesOther = name.includes(query) ||
                 sku.includes(query) ||
-                p.categoryId.toLowerCase().includes(query) ||
+                (p.categoryId && p.categoryId.toLowerCase().includes(query)) ||
                 p.price.toString().includes(query) ||
                 p.unit.toLowerCase().includes(query);
 
-            const matchesCat = selectedCategory === 'all' || p.categoryId === selectedCategory;
-
-            return matchesOther && matchesCat;
+            return matchesOther && matchesCategory(p);
         }).sort((a, b) => {
             const aBarcode = (a.barcode || '').toLowerCase();
             const bBarcode = (b.barcode || '').toLowerCase();
@@ -135,7 +153,7 @@ const ProductSearch: React.FC = () => {
 
             return a.name.localeCompare(b.name);
         });
-    }, [searchQuery, selectedCategory, products]);
+    }, [searchQuery, selectedCategory, products, matchesCategory]);
 
     // Handle barcode "instant add"
     useEffect(() => {
@@ -171,7 +189,7 @@ const ProductSearch: React.FC = () => {
 
             {/* Category Tabs */}
             <div className="flex gap-2 overflow-x-auto p-4 scrollbar-none bg-white border-b border-slate-100 shadow-sm">
-                {CATEGORIES.map(cat => (
+                {categoryTabs.map(cat => (
                     <button
                         key={cat.id}
                         onClick={() => setSelectedCategory(cat.id)}

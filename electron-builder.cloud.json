@@ -1,0 +1,26 @@
+{
+  "appId": "com.myshop.app",
+  "productName": "MyShop",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "package.json",
+    "electron/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "client/dist",
+      "to": "client/dist",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": ["nsis"]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "shortcutName": "MyShop"
+  }
+}

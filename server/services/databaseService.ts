@@ -8,6 +8,11 @@ export class DatabaseService {
   constructor(connectionString: string) {
     this.connectionString = connectionString;
 
+    if (!connectionString) {
+      console.error('❌ DATABASE_URL is not set!');
+      console.error('   Please ensure the .env file contains DATABASE_URL');
+    }
+
     if (connectionString && connectionString.includes('@dpg-') && !connectionString.includes('.render.com')) {
       console.warn('⚠️  WARNING: Database URL appears to be an internal URL (missing .render.com domain)');
       console.warn('   Use the External Database URL from Render Dashboard.');
@@ -17,6 +22,8 @@ export class DatabaseService {
     const shouldUseSSL = process.env.NODE_ENV === 'production' ||
       process.env.NODE_ENV === 'staging' ||
       (connectionString && connectionString.includes('.render.com'));
+
+    console.log(`🔗 Connecting to database (SSL: ${shouldUseSSL ? 'enabled' : 'disabled'})...`);
 
     this.pool = new Pool({
       connectionString,
@@ -31,8 +38,11 @@ export class DatabaseService {
       application_name: 'myshop-api',
     });
 
-    this.pool.on('error', (err) => {
-      console.error('❌ Unexpected database pool error:', err);
+    this.pool.on('error', (err: any) => {
+      console.error('❌ Unexpected database pool error:', err.message);
+      if (err.code === 'ECONNREFUSED') {
+        console.error('   Make sure the database server is running and accessible');
+      }
     });
 
     this.pool.on('connect', () => {
@@ -131,7 +141,23 @@ export class DatabaseService {
         lastError = error;
         const isRetryable = this.isRetryableError(error);
         if (!isRetryable || attempt === retries) {
-          console.error('❌ Database execute error:', { query: text.substring(0, 100), error: error.message, code: error.code, attempt });
+          const errorDetails = {
+            query: text.substring(0, 100),
+            error: error.message,
+            code: error.code,
+            attempt,
+          };
+          console.error('❌ Database execute error:', errorDetails);
+          
+          if (error.message === 'Connection terminated unexpectedly' && attempt === 1) {
+            console.error('   This usually means:');
+            console.error('   1. The database server is not reachable');
+            console.error('   2. Network/firewall is blocking the connection');
+            console.error('   3. Database credentials are incorrect');
+            console.error('   4. The database is offline or overloaded');
+            console.error(`   Connection string host: ${this.connectionString?.split('@')[1]?.split(':')[0]}`);
+          }
+          
           throw error;
         }
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);

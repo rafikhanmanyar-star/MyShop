@@ -258,4 +258,79 @@ router.post('/policies', async (req: any, res) => {
   }
 });
 
+// --- Bank Accounts (Chart of Accounts for POS) ---
+router.get('/bank-accounts', async (req: any, res) => {
+  try {
+    const activeOnly = req.query.activeOnly !== 'false';
+    const list = await getShopService().getBankAccounts(req.tenantId, activeOnly);
+    res.json(list);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/bank-accounts', async (req: any, res) => {
+  try {
+    const id = await getShopService().createBankAccount(req.tenantId, req.body);
+    res.status(201).json({ id, message: 'Bank account created' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/bank-accounts/:id', async (req: any, res) => {
+  try {
+    await getShopService().updateBankAccount(req.tenantId, req.params.id, req.body);
+    res.json({ success: true, message: 'Bank account updated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/bank-accounts/:id', async (req: any, res) => {
+  try {
+    await getShopService().deleteBankAccount(req.tenantId, req.params.id);
+    res.json({ success: true, message: 'Bank account deactivated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Vendors (for Procurement) ---
+router.get('/vendors', async (req: any, res) => {
+  try {
+    const list = await getShopService().getVendors(req.tenantId);
+    res.json(list);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/vendors', async (req: any, res) => {
+  try {
+    const vendor = await getShopService().createVendor(req.tenantId, req.body);
+    res.status(201).json(vendor);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/vendors/:id', async (req: any, res) => {
+  try {
+    await getShopService().updateVendor(req.tenantId, req.params.id, req.body);
+    res.json({ success: true, message: 'Vendor updated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/vendors/:id', async (req: any, res) => {
+  try {
+    await getShopService().deleteVendor(req.tenantId, req.params.id);
+    res.json({ success: true, message: 'Vendor deactivated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

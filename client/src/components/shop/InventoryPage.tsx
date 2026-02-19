@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useInventory } from '../../context/InventoryContext';
+import { InventoryProvider, useInventory } from '../../context/InventoryContext';
 import InventoryDashboard from './inventory/InventoryDashboard';
 import StockMaster from './inventory/StockMaster';
 import StockMovements from './inventory/StockMovements';
@@ -219,7 +219,11 @@ const InventoryContent: React.FC = () => {
 };
 
 const InventoryPage: React.FC = () => {
-    return <InventoryContent />;
+    return (
+        <InventoryProvider>
+            <InventoryContent />
+        </InventoryProvider>
+    );
 };
 
 export default InventoryPage;

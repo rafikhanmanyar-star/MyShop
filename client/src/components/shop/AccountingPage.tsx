@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { AccountingProvider, useAccounting } from '../../context/AccountingContext';
 import AccountingDashboard from './accounting/AccountingDashboard';
-import ChartOfAccounts from './accounting/ChartOfAccounts';
 import GeneralLedger from './accounting/GeneralLedger';
 import FinancialStatements from './accounting/FinancialStatements';
 import { ICONS, CURRENCY } from '../../constants';
@@ -91,7 +90,6 @@ const AccountingContent: React.FC = () => {
 
     const tabs = [
         { id: 'dashboard', label: 'Finance Dashboard', icon: ICONS.barChart },
-        { id: 'coa', label: 'Chart of Accounts', icon: ICONS.list },
         { id: 'ledger', label: 'General Ledger', icon: ICONS.clipboard },
         { id: 'statements', label: 'Financial Statements', icon: ICONS.fileText },
     ];
@@ -138,7 +136,6 @@ const AccountingContent: React.FC = () => {
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-y-auto p-8">
                 {activeTab === 'dashboard' && <AccountingDashboard />}
-                {activeTab === 'coa' && <ChartOfAccounts />}
                 {activeTab === 'ledger' && <GeneralLedger />}
                 {activeTab === 'statements' && <FinancialStatements />}
             </div>
@@ -273,7 +270,11 @@ const AccountingContent: React.FC = () => {
 };
 
 const AccountingPage: React.FC = () => {
-    return <AccountingContent />;
+    return (
+        <AccountingProvider>
+            <AccountingContent />
+        </AccountingProvider>
+    );
 };
 
 export default AccountingPage;

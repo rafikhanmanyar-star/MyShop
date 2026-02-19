@@ -1,9 +1,9 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../../ui/Modal';
 import { usePOS } from '../../../context/POSContext';
 import { POSPaymentMethod } from '../../../types/pos';
 import { ICONS, CURRENCY } from '../../../constants';
+import { shopApi, ShopBankAccount } from '../../../services/shopApi';
 
 const PaymentModal: React.FC = () => {
     const {
@@ -23,6 +23,22 @@ const PaymentModal: React.FC = () => {
 
     const [tenderAmount, setTenderAmount] = useState('0');
     const [selectedMethod, setSelectedMethod] = useState<POSPaymentMethod>(POSPaymentMethod.CASH);
+    const [bankAccounts, setBankAccounts] = useState<ShopBankAccount[]>([]);
+    const [selectedBankId, setSelectedBankId] = useState<string>('');
+
+    const loadBanks = useCallback(async () => {
+        try {
+            const list = await shopApi.getBankAccounts(true);
+            setBankAccounts(Array.isArray(list) ? list : []);
+            setSelectedBankId(prev => (list?.length && (!prev || !list.some((b: ShopBankAccount) => b.id === prev))) ? list[0].id : prev);
+        } catch {
+            setBankAccounts([]);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isPaymentModalOpen) loadBanks();
+    }, [isPaymentModalOpen, loadBanks]);
 
     useEffect(() => {
         if (isPaymentModalOpen) {
@@ -33,7 +49,8 @@ const PaymentModal: React.FC = () => {
     const handleAddPayment = () => {
         const amount = parseFloat(tenderAmount);
         if (amount > 0) {
-            addPayment(selectedMethod, amount);
+            const bank = bankAccounts.find(b => b.id === selectedBankId);
+            addPayment(selectedMethod, amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
             setTenderAmount('0');
         }
     };
@@ -70,6 +87,21 @@ const PaymentModal: React.FC = () => {
                                 </button>
                             ))}
                         </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-xs font-black uppercase text-slate-400 mb-2 tracking-widest">Deposit to account (optional)</h3>
+                        <select
+                            className="block w-full rounded-lg border border-slate-300 bg-white py-2.5 px-3 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                            value={selectedBankId}
+                            onChange={e => setSelectedBankId(e.target.value)}
+                        >
+                            <option value="">— None —</option>
+                            {bankAccounts.map(b => (
+                                <option key={b.id} value={b.id}>{b.name}{b.code ? ` (${b.code})` : ''}</option>
+                            ))}
+                        </select>
+                        <p className="text-[10px] text-slate-500 mt-1">Link this payment to a bank account from Settings → Chart of Accounts.</p>
                     </div>
 
                     <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl">
@@ -127,6 +159,9 @@ const PaymentModal: React.FC = () => {
                                         <div key={p.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm group">
                                             <div className="flex flex-col">
                                                 <span className="text-xs font-black text-slate-800 uppercase tracking-wide">{p.method}</span>
+                                                {p.bankAccountName && (
+                                                    <span className="text-[10px] text-indigo-600 font-medium">{p.bankAccountName}</span>
+                                                )}
                                                 <span className="text-[10px] text-slate-400 font-mono">{p.id.slice(0, 8)}</span>
                                             </div>
                                             <div className="flex items-center gap-3">

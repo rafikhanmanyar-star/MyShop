@@ -31,7 +31,7 @@ interface POSContextType {
     setCustomer: (customer: POSCustomer | null) => void;
 
     payments: POSPayment[];
-    addPayment: (method: POSPaymentMethod, amount: number, reference?: string) => void;
+    addPayment: (method: POSPaymentMethod, amount: number, reference?: string, bankAccount?: { id: string; name: string }) => void;
     removePayment: (paymentId: string) => void;
 
     heldSales: POSHeldSale[];
@@ -302,8 +302,15 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCustomer(null);
     }, []);
 
-    const addPayment = useCallback((method: POSPaymentMethod, amount: number, reference?: string) => {
-        setPayments(prev => [...prev, { id: crypto.randomUUID(), method, amount, reference }]);
+    const addPayment = useCallback((method: POSPaymentMethod, amount: number, reference?: string, bankAccount?: { id: string; name: string }) => {
+        setPayments(prev => [...prev, {
+            id: crypto.randomUUID(),
+            method,
+            amount,
+            reference,
+            bankAccountId: bankAccount?.id,
+            bankAccountName: bankAccount?.name
+        }]);
     }, []);
 
     const removePayment = useCallback((paymentId: string) => {

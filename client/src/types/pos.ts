@@ -49,6 +49,8 @@ export interface POSPayment {
     method: POSPaymentMethod;
     amount: number;
     reference?: string; // e.g. Card last 4, Transaction ID
+    bankAccountId?: string;
+    bankAccountName?: string;
 }
 
 export enum POSPaymentMethod {

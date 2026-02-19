@@ -1,0 +1,72 @@
+{
+  "name": "myshop",
+  "version": "1.0.0",
+  "description": "MyShop - POS & Inventory Management",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm run build",
+    "build:client:cloud": "cd client && npm run build:cloud",
+    "electron": "npm run build && electron .",
+    "electron:dev": "concurrently \"npm run dev:server\" \"wait-on http://localhost:3000/api/health && electron . --dev\"",
+    "electron:cloud": "npm run build:client:cloud && electron . --cloud",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:win:cloud": "npm run build:client:cloud && electron-builder --win -c electron-builder.cloud.json",
+    "postinstall": "cd server && npm install && cd ../client && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.2.0",
+    "electron-builder": "^26.7.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.myshop.app",
+    "productName": "MyShop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "package.json",
+      "electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "server",
+        "to": "server",
+        "filter": [
+          "dist/**",
+          "migrations/**",
+          "package.json",
+          "node_modules/**",
+          ".env"
+        ]
+      },
+      {
+        "from": "client/dist",
+        "to": "client/dist",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "MyShop"
+    }
+  }
+}

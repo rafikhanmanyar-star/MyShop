@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import path from 'path';
 import cors from 'cors';
 import timeout from 'connect-timeout';
 import { getDatabaseService } from '../services/databaseService.js';
@@ -9,6 +10,7 @@ import shopRoutes from './routes/shop.js';
 import { runMigrations } from '../scripts/run-migrations.js';
 
 const app = express();
+const clientDistPath = process.env.CLIENT_DIST_PATH;
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = '0.0.0.0';
 
@@ -19,11 +21,12 @@ const corsOrigins = process.env.CORS_ORIGIN
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || corsOrigins.includes(origin) || corsOrigins.includes('*')) {
+    // Allow requests with no origin (Electron file://, mobile apps, server-to-server)
+    if (!origin || corsOrigins.includes('*') || corsOrigins.includes(origin)) {
       callback(null, true);
     } else {
       console.warn(`⚠️ CORS blocked origin: ${origin}`);
-      callback(null, true); // Allow in dev, tighten in production
+      callback(null, true);
     }
   },
   credentials: true,
@@ -53,6 +56,15 @@ app.use('/api/auth', authRoutes);
 const pool = getDatabaseService().getPool();
 app.use('/api/shop', tenantMiddleware(pool), shopRoutes);
 
+// Serve static client (Electron mode)
+if (clientDistPath) {
+  app.use(express.static(clientDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
+
 // Error handling
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error('❌ Unhandled error:', err);
@@ -66,16 +78,24 @@ async function start() {
     console.log(`📦 Environment: ${process.env.NODE_ENV || 'development'}`);
 
     // Run migrations
-    console.log('🔄 Running database migrations...');
-    await runMigrations();
-    console.log('✅ Migrations complete');
+    try {
+      console.log('🔄 Running database migrations...');
+      await runMigrations();
+      console.log('✅ Migrations complete');
+    } catch (migError) {
+      console.error('⚠️ Migration failed - skipping for now:', migError instanceof Error ? migError.message : migError);
+    }
 
     // Verify DB connection
-    const healthy = await getDatabaseService().healthCheck();
-    if (healthy) {
-      console.log('✅ Database connection verified');
-    } else {
-      console.warn('⚠️ Database connection check failed - server starting anyway');
+    try {
+      const healthy = await getDatabaseService().healthCheck();
+      if (healthy) {
+        console.log('✅ Database connection verified');
+      } else {
+        console.warn('⚠️ Database connection check failed - server starting anyway');
+      }
+    } catch (dbError) {
+      console.warn('⚠️ Database health check threw an error - server starting anyway');
     }
 
     app.listen(PORT, HOST, () => {
@@ -83,7 +103,7 @@ async function start() {
       console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
     });
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    console.error('❌ Critical failure during startup:', error);
     process.exit(1);
   }
 }

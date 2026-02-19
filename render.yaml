@@ -19,4 +19,4 @@ services:
       - key: PORT
         value: 3000
       - key: CORS_ORIGIN
-        value: http://localhost:5173,http://localhost:5174
+        value: "*"

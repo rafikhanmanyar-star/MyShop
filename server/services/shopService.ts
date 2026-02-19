@@ -470,6 +470,86 @@ export class ShopService {
       [categoryId, tenantId]
     );
   }
+
+  // --- Bank Accounts (Chart of Accounts for POS) ---
+  async getBankAccounts(tenantId: string, activeOnly = true) {
+    const clause = activeOnly ? 'AND is_active = TRUE' : '';
+    return this.db.query(
+      `SELECT id, name, code, account_type, currency, is_active, created_at, updated_at
+       FROM shop_bank_accounts WHERE tenant_id = $1 ${clause} ORDER BY name`,
+      [tenantId]
+    );
+  }
+
+  async createBankAccount(tenantId: string, data: { name: string; code?: string; account_type?: string; currency?: string }) {
+    const res = await this.db.query(
+      `INSERT INTO shop_bank_accounts (tenant_id, name, code, account_type, currency)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [tenantId, data.name, data.code || null, data.account_type || 'Bank', data.currency || 'BDT']
+    );
+    return res[0].id;
+  }
+
+  async updateBankAccount(tenantId: string, id: string, data: { name?: string; code?: string; is_active?: boolean }) {
+    await this.db.query(
+      `UPDATE shop_bank_accounts SET name = COALESCE($1, name), code = COALESCE($2, code),
+        is_active = COALESCE($3, is_active), updated_at = NOW()
+       WHERE id = $4 AND tenant_id = $5`,
+      [data.name, data.code, data.is_active, id, tenantId]
+    );
+  }
+
+  async deleteBankAccount(tenantId: string, id: string) {
+    await this.db.query(
+      `UPDATE shop_bank_accounts SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+      [id, tenantId]
+    );
+  }
+
+  // --- Vendors (for Procurement) ---
+  async getVendors(tenantId: string) {
+    return this.db.query(
+      `SELECT id, name, company_name, contact_no, email, address, description, is_active, created_at, updated_at
+       FROM shop_vendors WHERE tenant_id = $1 ORDER BY name`,
+      [tenantId]
+    );
+  }
+
+  async createVendor(tenantId: string, data: { name: string; company_name?: string; contact_no?: string; email?: string; address?: string; description?: string }) {
+    const res = await this.db.query(
+      `INSERT INTO shop_vendors (tenant_id, name, company_name, contact_no, email, address, description)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, name, company_name, contact_no, email, address, description, is_active, created_at, updated_at`,
+      [
+        tenantId,
+        data.name,
+        data.company_name || null,
+        data.contact_no || null,
+        data.email || null,
+        data.address || null,
+        data.description || null
+      ]
+    );
+    return res[0];
+  }
+
+  async updateVendor(tenantId: string, id: string, data: { name?: string; company_name?: string; contact_no?: string; email?: string; address?: string; description?: string; is_active?: boolean }) {
+    await this.db.query(
+      `UPDATE shop_vendors SET
+        name = COALESCE($1, name), company_name = COALESCE($2, company_name),
+        contact_no = COALESCE($3, contact_no), email = COALESCE($4, email),
+        address = COALESCE($5, address), description = COALESCE($6, description),
+        is_active = COALESCE($7, is_active), updated_at = NOW()
+       WHERE id = $8 AND tenant_id = $9`,
+      [data.name, data.company_name, data.contact_no, data.email, data.address, data.description, data.is_active, id, tenantId]
+    );
+  }
+
+  async deleteVendor(tenantId: string, id: string) {
+    await this.db.query(
+      `UPDATE shop_vendors SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+      [id, tenantId]
+    );
+  }
 }
 
 let shopServiceInstance: ShopService | null = null;

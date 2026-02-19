@@ -1,10 +1,11 @@
 import React, { useState, lazy, Suspense } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { AppProvider } from './context/AppContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
-import PlaceholderPage from './pages/PlaceholderPage';
+import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
   BarChart3, BookOpen, Settings, LogOut, Menu, X, Store,
@@ -93,6 +94,7 @@ function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
+    <AppProvider>
     <div className="min-h-screen bg-gray-50">
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
       <main className={`transition-all duration-300 ${sidebarCollapsed ? 'ml-16' : 'ml-60'} p-6`}>
@@ -106,12 +108,13 @@ function AppLayout() {
             <Route path="/multi-store" element={<MultiStorePage />} />
             <Route path="/analytics" element={<BIDashboardsPage />} />
             <Route path="/accounting" element={<AccountingPage />} />
-            <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </main>
     </div>
+    </AppProvider>
   );
 }
 

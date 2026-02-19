@@ -1,12 +1,18 @@
 import React from 'react';
 import { POSProvider } from '../../context/POSContext';
+import { InventoryProvider } from '../../context/InventoryContext';
+import { LoyaltyProvider } from '../../context/LoyaltyContext';
 import POSSalesContent from './POSSalesContent';
 
 function POSSalesPage() {
     return (
-        <POSProvider>
-            <POSSalesContent />
-        </POSProvider>
+        <InventoryProvider>
+            <LoyaltyProvider>
+                <POSProvider>
+                    <POSSalesContent />
+                </POSProvider>
+            </LoyaltyProvider>
+        </InventoryProvider>
     );
 }
 
