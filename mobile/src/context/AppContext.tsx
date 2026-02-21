@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useCallback } from 'react';
 
 // ─── Types ─────────────────────────────────────────────────
 export interface CartItem {
