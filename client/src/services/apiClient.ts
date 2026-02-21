@@ -56,12 +56,13 @@ class ApiClient {
     }
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}, data?: any): Promise<T> {
     this.loadAuth();
 
+    const isFormData = data instanceof FormData;
     const url = `${this.baseUrl}${endpoint}`;
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...options.headers,
     };
 
@@ -70,7 +71,8 @@ class ApiClient {
     }
 
     try {
-      const response = await fetch(url, { ...options, headers });
+      const body = isFormData ? data : (data ? JSON.stringify(data) : undefined);
+      const response = await fetch(url, { ...options, headers, body });
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
@@ -81,24 +83,24 @@ class ApiClient {
         return {} as T;
       }
 
-      const data = await response.json();
+      const responseData = await response.json();
 
       if (response.status === 401) {
         const hadToken = !!this.token;
         if (hadToken) {
           this.clearAuth();
           if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('auth:expired', { detail: data }));
+            window.dispatchEvent(new CustomEvent('auth:expired', { detail: responseData }));
           }
         }
-        throw { error: data.error || 'Unauthorized', message: data.message, status: 401 };
+        throw { error: responseData.error || 'Unauthorized', message: responseData.message, status: 401 };
       }
 
       if (!response.ok) {
-        throw { error: data.error || 'Request failed', message: data.message, status: response.status };
+        throw { error: responseData.error || 'Request failed', message: responseData.message, status: response.status };
       }
 
-      return data as T;
+      return responseData as T;
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.name === 'TypeError') {
@@ -109,16 +111,16 @@ class ApiClient {
     }
   }
 
-  async get<T>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET' });
+  async get<T>(endpoint: string, headers?: HeadersInit): Promise<T> {
+    return this.request<T>(endpoint, { method: 'GET', headers });
   }
 
-  async post<T>(endpoint: string, data?: any): Promise<T> {
-    return this.request<T>(endpoint, { method: 'POST', body: data ? JSON.stringify(data) : undefined });
+  async post<T>(endpoint: string, data?: any, options: { headers?: HeadersInit } = {}): Promise<T> {
+    return this.request<T>(endpoint, { method: 'POST', headers: options.headers }, data);
   }
 
-  async put<T>(endpoint: string, data?: any): Promise<T> {
-    return this.request<T>(endpoint, { method: 'PUT', body: data ? JSON.stringify(data) : undefined });
+  async put<T>(endpoint: string, data?: any, options: { headers?: HeadersInit } = {}): Promise<T> {
+    return this.request<T>(endpoint, { method: 'PUT', headers: options.headers }, data);
   }
 
   async delete<T>(endpoint: string): Promise<T> {

@@ -35,7 +35,8 @@ function mapInventoryItemToPOS(item: InventoryItem): POSProduct {
         taxRate: 0,
         isTaxInclusive: true,
         unit: item.unit || 'pcs',
-        stockLevel: Number(item.onHand) || 0
+        stockLevel: Number(item.onHand) || 0,
+        imageUrl: item.imageUrl
     };
 }
 

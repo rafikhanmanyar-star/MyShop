@@ -80,8 +80,14 @@ app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRout
 // Serve static client (Electron mode)
 if (clientDistPath) {
   app.use(express.static(clientDistPath));
+}
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+if (clientDistPath) {
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
     res.sendFile(path.join(clientDistPath, 'index.html'));
   });
 }

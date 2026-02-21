@@ -71,6 +71,13 @@ export const shopApi = {
   getProducts: () => apiClient.get<ShopProduct[]>('/shop/products'),
   createProduct: (data: any) => apiClient.post('/shop/products', data),
   updateProduct: (id: string, data: any) => apiClient.put(`/shop/products/${id}`, data),
+  uploadImage: (file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return apiClient.post<{ imageUrl: string }>('/shop/upload-image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
 
   getInventory: () => apiClient.get<any[]>('/shop/inventory'),
   adjustInventory: (data: any) => apiClient.post('/shop/inventory/adjust', data),

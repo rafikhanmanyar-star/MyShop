@@ -268,7 +268,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 discountPercentage: 0,
                 taxAmount: tax,
                 taxRate: product.taxRate,
-                categoryId: product.categoryId
+                categoryId: product.categoryId,
+                imageUrl: product.imageUrl
             };
             return [...prev, newItem];
         });

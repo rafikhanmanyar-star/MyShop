@@ -2,6 +2,24 @@ import express from 'express';
 import { getShopService } from '../../services/shopService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
 import * as fs from 'fs';
+import multer from 'multer';
+import path from 'path';
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const uploadDir = path.join(process.cwd(), 'uploads/products');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'product-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage });
 
 const router = express.Router();
 
@@ -197,6 +215,18 @@ router.put('/products/:id', async (req: any, res) => {
   try {
     await getShopService().updateProduct(req.tenantId, req.params.id, req.body);
     res.json({ success: true, message: 'Product updated successfully' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/upload-image', upload.single('image'), (req: any, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const imageUrl = `/uploads/products/${req.file.filename}`;
+    res.json({ imageUrl });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

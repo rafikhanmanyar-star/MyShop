@@ -32,19 +32,31 @@ const StockMaster: React.FC = () => {
                 unit: selectedItem.unit,
                 retailPrice: selectedItem.retailPrice,
                 costPrice: selectedItem.costPrice,
-                reorderPoint: selectedItem.reorderPoint
+                reorderPoint: selectedItem.reorderPoint,
+                imageUrl: selectedItem.imageUrl
             });
+            setImagePreview(selectedItem.imageUrl || null);
+            setSelectedImage(null);
         }
     }, [selectedItem]);
+
+    const [selectedImage, setSelectedImage] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
 
     const handleUpdateItem = async () => {
         if (!selectedItem || !editData) return;
         try {
-            await updateItem(selectedItem.id, editData);
+            let imageUrl = editData.imageUrl;
+            if (selectedImage) {
+                const uploadRes = await shopApi.uploadImage(selectedImage);
+                imageUrl = uploadRes.imageUrl;
+            }
+
+            await updateItem(selectedItem.id, { ...editData, imageUrl });
             setIsEditModalOpen(false);
             // Re-select item to refresh side panel
             const updated = items.find(i => i.id === selectedItem.id);
-            if (updated) setSelectedItem(updated);
+            if (updated) setSelectedItem({ ...updated, imageUrl });
         } catch (error) {
             console.error(error);
         }
@@ -154,8 +166,19 @@ const StockMaster: React.FC = () => {
                                         className={`hover:bg-indigo-50/50 cursor-pointer transition-colors ${selectedItem?.id === item.id ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200' : ''}`}
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="font-bold text-slate-800 text-sm">{item.name}</div>
-                                            <div className="text-[10px] text-slate-400 font-mono italic">SKU: {item.sku}</div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
+                                                    {item.imageUrl ? (
+                                                        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        React.cloneElement(ICONS.image as React.ReactElement, { size: 20, className: "text-slate-300" })
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <div className="font-bold text-slate-800 text-sm">{item.name}</div>
+                                                    <div className="text-[10px] text-slate-400 font-mono italic">SKU: {item.sku}</div>
+                                                </div>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             {item.barcode ? (
@@ -207,6 +230,15 @@ const StockMaster: React.FC = () => {
                             >
                                 {ICONS.x}
                             </button>
+                        </div>
+
+                        {/* Product Image Preview */}
+                        <div className="w-full aspect-video rounded-3xl bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center text-slate-200 shadow-inner">
+                            {selectedItem.imageUrl ? (
+                                <img src={selectedItem.imageUrl} alt={selectedItem.name} className="w-full h-full object-cover" />
+                            ) : (
+                                React.cloneElement(ICONS.image as React.ReactElement, { size: 64 })
+                            )}
                         </div>
 
                         {/* Stock Distribution Matrix */}
@@ -499,6 +531,41 @@ const StockMaster: React.FC = () => {
                                 value={editData.reorderPoint}
                                 onChange={(e) => setEditData({ ...editData, reorderPoint: Number(e.target.value) })}
                             />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium text-slate-700">Product Image</label>
+                            <div className="flex items-center gap-4">
+                                <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden text-slate-300">
+                                    {imagePreview ? (
+                                        <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                    ) : (
+                                        React.cloneElement(ICONS.image as React.ReactElement, { size: 32 })
+                                    )}
+                                </div>
+                                <div className="flex-1">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                setSelectedImage(file);
+                                                setImagePreview(URL.createObjectURL(file));
+                                            }
+                                        }}
+                                        className="hidden"
+                                        id="sku-image-edit-upload"
+                                    />
+                                    <label
+                                        htmlFor="sku-image-edit-upload"
+                                        className="inline-flex items-center px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                                    >
+                                        {imagePreview ? 'Change Image' : 'Upload Image'}
+                                    </label>
+                                    <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
+                                </div>
+                            </div>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
                             <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>

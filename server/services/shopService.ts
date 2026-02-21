@@ -198,12 +198,12 @@ export class ShopService {
         const res = await client.query(`
           INSERT INTO shop_products (
             tenant_id, name, sku, barcode, category_id, unit,
-            cost_price, retail_price, tax_rate, reorder_point, is_active
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id
+            cost_price, retail_price, tax_rate, reorder_point, image_url, is_active
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id
         `, [
           tenantId, data.name, sku, data.barcode || null,
           categoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
-          data.tax_rate || 0, data.reorder_point || 10, true
+          data.tax_rate || 0, data.reorder_point || 10, data.image_url || null, true
         ]);
         const productId = res[0].id;
 
@@ -244,13 +244,13 @@ export class ShopService {
           UPDATE shop_products
           SET name = $1, sku = $2, barcode = $3, category_id = $4, unit = $5,
               cost_price = $6, retail_price = $7, tax_rate = $8, reorder_point = $9,
-              is_active = $10, updated_at = NOW()
-          WHERE id = $11 AND tenant_id = $12
+              image_url = $10, is_active = $11, updated_at = NOW()
+          WHERE id = $12 AND tenant_id = $13
         `, [
           data.name, data.sku, data.barcode, data.category_id || data.categoryId,
           data.unit, data.cost_price || data.cost, data.retail_price || data.price,
           data.tax_rate || data.taxRate, data.reorder_point || data.reorderPoint,
-          data.is_active !== undefined ? data.is_active : true, productId, tenantId
+          data.image_url, data.is_active !== undefined ? data.is_active : true, productId, tenantId
         ]);
         return { success: true };
       } catch (err: any) {

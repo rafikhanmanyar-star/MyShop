@@ -24,8 +24,11 @@ const InventoryContent: React.FC = () => {
         retailPrice: 0,
         costPrice: 0,
         reorderPoint: 10,
-        unit: 'pcs'
+        unit: 'pcs',
+        imageUrl: ''
     });
+    const [selectedImage, setSelectedImage] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
 
     const loadShopCategories = useCallback(async () => {
         try {
@@ -44,6 +47,12 @@ const InventoryContent: React.FC = () => {
 
     const handleCreateSku = async () => {
         try {
+            let imageUrl = '';
+            if (selectedImage) {
+                const uploadRes = await shopApi.uploadImage(selectedImage);
+                imageUrl = uploadRes.imageUrl;
+            }
+
             await addItem({
                 id: '', // Will be generated
                 sku: newItemData.sku || `SKU-${Date.now()}`,
@@ -59,6 +68,7 @@ const InventoryContent: React.FC = () => {
                 damaged: 0,
                 reorderPoint: Number(newItemData.reorderPoint),
                 unit: newItemData.unit,
+                imageUrl,
                 warehouseStock: {}
             });
             setIsNewSkuModalOpen(false);
@@ -70,8 +80,11 @@ const InventoryContent: React.FC = () => {
                 retailPrice: 0,
                 costPrice: 0,
                 reorderPoint: 10,
-                unit: 'pcs'
+                unit: 'pcs',
+                imageUrl: ''
             });
+            setSelectedImage(null);
+            setImagePreview(null);
         } catch (error) {
             // Error already handled in addItem
             console.error('Failed to create SKU:', error);
@@ -206,6 +219,41 @@ const InventoryContent: React.FC = () => {
                             value={newItemData.retailPrice}
                             onChange={(e) => setNewItemData({ ...newItemData, retailPrice: Number(e.target.value) })}
                         />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="block text-sm font-medium text-slate-700">Product Image</label>
+                        <div className="flex items-center gap-4">
+                            <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden text-slate-300">
+                                {imagePreview ? (
+                                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                ) : (
+                                    React.cloneElement(ICONS.image as React.ReactElement, { size: 32 })
+                                )}
+                            </div>
+                            <div className="flex-1">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) {
+                                            setSelectedImage(file);
+                                            setImagePreview(URL.createObjectURL(file));
+                                        }
+                                    }}
+                                    className="hidden"
+                                    id="sku-image-upload"
+                                />
+                                <label
+                                    htmlFor="sku-image-upload"
+                                    className="inline-flex items-center px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                                >
+                                    {imagePreview ? 'Change Image' : 'Upload Image'}
+                                </label>
+                                <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="flex justify-end gap-3 mt-6">

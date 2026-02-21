@@ -34,13 +34,22 @@ const CartGrid: React.FC = () => {
                                 key={item.id}
                                 className="grid grid-cols-[1fr_100px_140px_100px_48px] gap-4 px-6 py-4 hover:bg-blue-50/30 transition-colors group items-center"
                             >
-                                <div className="min-w-0 flex flex-col">
-                                    <div className="text-sm font-semibold text-slate-800 truncate uppercase tracking-tight">{item.name}</div>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">#{item.sku.slice(-6)}</span>
-                                        {item.categoryId && (
-                                            <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap overflow-hidden text-ellipsis italic">in {item.categoryId}</span>
+                                <div className="min-w-0 flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                        {item.imageUrl ? (
+                                            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            React.cloneElement(ICONS.package as React.ReactElement, { size: 16, className: "text-slate-300" })
                                         )}
+                                    </div>
+                                    <div className="min-w-0 flex flex-col">
+                                        <div className="text-sm font-semibold text-slate-800 truncate uppercase tracking-tight">{item.name}</div>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">#{item.sku.slice(-6)}</span>
+                                            {item.categoryId && (
+                                                <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap overflow-hidden text-ellipsis italic">in {item.categoryId}</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 

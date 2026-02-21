@@ -22,6 +22,7 @@ export interface InventoryItem {
     costPrice: number;
     retailPrice: number;
     reorderPoint: number;
+    imageUrl?: string;
     warehouseStock: Record<string, number>; // warehouseId -> quantity
 }
 
