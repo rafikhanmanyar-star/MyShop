@@ -38,6 +38,7 @@ const StockMaster: React.FC = () => {
                 imageUrl: selectedItem.imageUrl
             });
             setImagePreview(selectedItem.imageUrl || null);
+            console.log('🖼️ [StockMaster] Preview URL:', selectedItem.imageUrl);
             setSelectedImage(null);
         }
     }, [selectedItem]);

@@ -22,3 +22,7 @@ services:
         value: "*"
       - key: MOBILE_APP_URL
         value: https://myshop-mobile.onrender.com
+    disk:
+      name: myshop-uploads
+      mountPath: /opt/render/project/src/server/uploads
+      sizeGB: 1

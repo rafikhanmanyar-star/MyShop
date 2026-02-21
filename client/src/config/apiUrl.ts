@@ -22,7 +22,8 @@ export function getApiBaseUrl(): string {
       return `http://localhost:${API_PORT}/api`;
     }
 
-    return `${protocol}//${hostname}:${API_PORT}/api`;
+    // Cloud production: If no env var, assume API is on the same domain or use window origin
+    return `${protocol}//${hostname}${hostname === 'localhost' ? `:${API_PORT}` : ''}/api`;
   }
 
   if (env) {
@@ -33,11 +34,18 @@ export function getApiBaseUrl(): string {
 }
 
 export function getBaseUrl(): string {
-  return getApiBaseUrl().replace(/\/api$/, '');
+  const url = getApiBaseUrl();
+  return url.replace(/\/api$/, '');
 }
 
 export function getFullImageUrl(path: string | undefined): string | undefined {
   if (!path) return undefined;
   if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
-  return `${getBaseUrl()}${path.startsWith('/') ? '' : '/'}${path}`;
+
+  const base = getBaseUrl();
+  // Ensure we don't end up with "//uploads" if base is empty or just "/"
+  const cleanBase = base === '/' ? '' : base;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+  return `${cleanBase}${cleanPath}`;
 }

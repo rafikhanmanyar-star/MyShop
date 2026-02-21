@@ -10,6 +10,11 @@ import shopRoutes from './routes/shop.js';
 import mobileRoutes from './routes/mobile.js';
 import mobileOrdersRoutes from './routes/mobileOrders.js';
 import { runMigrations } from '../scripts/run-migrations.js';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsPath = path.join(__dirname, '..', 'uploads');
 
 const app = express();
 const clientDistPath = process.env.CLIENT_DIST_PATH;
@@ -41,6 +46,10 @@ app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
+
+// Serve uploaded files (HIGHER PRIORITY)
+app.use('/uploads', express.static(uploadsPath));
+console.log('📂 Serving uploads from:', uploadsPath);
 
 // Health check (public)
 app.get('/api/health', async (_req, res) => {
@@ -81,11 +90,6 @@ app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRout
 if (clientDistPath) {
   app.use(express.static(clientDistPath));
 }
-
-// Serve uploaded files
-const uploadsPath = path.resolve(path.dirname(import.meta.url.replace('file:///', '')), '../uploads');
-app.use('/uploads', express.static(uploadsPath));
-console.log('📂 Serving uploads from:', uploadsPath);
 
 if (clientDistPath) {
   app.get('*', (req, res, next) => {
@@ -133,7 +137,6 @@ async function start() {
     });
   } catch (error) {
     console.error('❌ Critical failure during startup:', error);
-    process.exit(1);
   }
 }
 

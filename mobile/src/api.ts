@@ -7,15 +7,26 @@ function getApiBaseUrl(): string {
 }
 
 export function getBaseUrl(): string {
-    return getApiBaseUrl().replace(/\/api$/, '');
+    const apiBase = getApiBaseUrl();
+    if (apiBase === '/api') {
+        // In production cloud, if we only have /api, we must use the window location to get the base domain
+        if (typeof window !== 'undefined') {
+            return `${window.location.protocol}//${window.location.host}`;
+        }
+    }
+    return apiBase.replace(/\/api$/, '');
 }
 
 export function getFullImageUrl(path: string | undefined): string | undefined {
     if (!path) return undefined;
     if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
-    const baseUrl = getBaseUrl();
-    // If baseUrl is just '/', we don't want to double up or handle empty string
-    return `${baseUrl === '/' ? '' : baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+
+    const base = getBaseUrl();
+    // Ensure we don't end up with "//uploads"
+    const cleanBase = base === '/' ? '' : base;
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+    return `${cleanBase}${cleanPath}`;
 }
 
 const API_BASE = `${getApiBaseUrl()}/mobile`;
