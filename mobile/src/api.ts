@@ -8,13 +8,16 @@ function getApiBaseUrl(): string {
 
 export function getBaseUrl(): string {
     const apiBase = getApiBaseUrl();
-    if (apiBase === '/api') {
-        // In production cloud, if we only have /api, we must use the window location to get the base domain
-        if (typeof window !== 'undefined') {
-            return `${window.location.protocol}//${window.location.host}`;
-        }
+    if (apiBase.startsWith('http')) {
+        return apiBase.replace(/\/api$/, '');
     }
-    return apiBase.replace(/\/api$/, '');
+    // If it's just '/api', we need to check if we are in a browser
+    if (typeof window !== 'undefined') {
+        const env = import.meta.env.VITE_API_URL as string | undefined;
+        if (env) return env.replace(/\/api$/, '');
+        return `${window.location.protocol}//${window.location.host}`;
+    }
+    return '';
 }
 
 export function getFullImageUrl(path: string | undefined): string | undefined {

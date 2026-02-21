@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadsPath = path.join(__dirname, '..', 'uploads');
+const uploadsPath = path.resolve(process.cwd(), 'uploads');
 
 const app = express();
 const clientDistPath = process.env.CLIENT_DIST_PATH;
