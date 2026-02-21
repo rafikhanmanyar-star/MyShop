@@ -362,17 +362,42 @@ export class ShopService {
         await client.query(`UPDATE shop_sales SET points_earned = $1 WHERE id = $2`, [pointsEarned, saleId]);
       }
 
+      if (saleData.paymentDetails && Array.isArray(saleData.paymentDetails)) {
+        for (const payment of saleData.paymentDetails) {
+          if (payment.bankAccountId) {
+            await client.query(`
+              UPDATE shop_bank_accounts 
+              SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() 
+              WHERE id = $2 AND tenant_id = $3
+            `, [payment.amount, payment.bankAccountId, tenantId]);
+          }
+        }
+      }
+
       return saleId;
     });
   }
 
   async getSales(tenantId: string) {
     return this.db.query(`
-      SELECT s.*, c.name as customer_name, b.name as branch_name
+      SELECT s.*, c.name as customer_name, b.name as branch_name, 'POS' as source
       FROM shop_sales s
       LEFT JOIN contacts c ON s.customer_id = c.id AND c.tenant_id = $1
       LEFT JOIN shop_branches b ON s.branch_id = b.id AND b.tenant_id = $1
-      WHERE s.tenant_id = $1 ORDER BY s.created_at DESC
+      WHERE s.tenant_id = $1
+      
+      UNION ALL
+      
+      SELECT o.id, o.tenant_id, o.branch_id, NULL as terminal_id, NULL as user_id,
+             o.customer_id, NULL as loyalty_member_id, o.order_number as sale_number,
+             o.subtotal, o.tax_total, o.discount_total, o.grand_total, o.grand_total as total_paid,
+             0 as change_due, o.payment_method, NULL as payment_details, 0 as points_earned, 0 as points_redeemed,
+             o.created_at, o.updated_at, mc.name as customer_name, b.name as branch_name, 'Mobile' as source
+      FROM mobile_orders o
+      LEFT JOIN mobile_customers mc ON o.customer_id = mc.id
+      LEFT JOIN shop_branches b ON o.branch_id = b.id AND b.tenant_id = $1
+      WHERE o.tenant_id = $1 AND o.status = 'Delivered'
+      ORDER BY created_at DESC
     `, [tenantId]);
   }
 
@@ -502,7 +527,7 @@ export class ShopService {
   async getBankAccounts(tenantId: string, activeOnly = true) {
     const clause = activeOnly ? 'AND is_active = TRUE' : '';
     return this.db.query(
-      `SELECT id, name, code, account_type, currency, is_active, created_at, updated_at
+      `SELECT id, name, code, account_type, currency, balance, is_active, created_at, updated_at
        FROM shop_bank_accounts WHERE tenant_id = $1 ${clause} ORDER BY name`,
       [tenantId]
     );

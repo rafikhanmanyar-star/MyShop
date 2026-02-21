@@ -430,6 +430,24 @@ export class MobileOrderService {
             if (newStatus === 'Delivered') {
                 updateFields.push(`delivered_at = NOW()`);
                 updateFields.push(`payment_status = 'Paid'`);
+
+                // Update bank account balance
+                const orderData = await client.query('SELECT grand_total, payment_method FROM mobile_orders WHERE id = $1', [orderId]);
+                if (orderData.length > 0) {
+                    const { grand_total, payment_method } = orderData[0];
+                    const bankRes = await client.query(
+                        `SELECT id FROM shop_bank_accounts WHERE tenant_id = $1 AND (name ILIKE $2 OR account_type ILIKE $2) LIMIT 1`,
+                        [tenantId, `%${payment_method}%`]
+                    );
+                    if (bankRes.length > 0) {
+                        await client.query(`UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, [grand_total, bankRes[0].id, tenantId]);
+                    } else {
+                        const fallbackRes = await client.query(`SELECT id FROM shop_bank_accounts WHERE tenant_id = $1 AND is_active = TRUE LIMIT 1`, [tenantId]);
+                        if (fallbackRes.length > 0) {
+                            await client.query(`UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, [grand_total, fallbackRes[0].id, tenantId]);
+                        }
+                    }
+                }
             }
             if (newStatus === 'Cancelled') {
                 updateFields.push(`cancelled_at = NOW()`);
