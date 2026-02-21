@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { publicApi } from '../api';
+import { publicApi, getFullImageUrl } from '../api';
 
 export default function Products() {
     const { shopSlug } = useParams();
@@ -143,7 +143,7 @@ export default function Products() {
                             <Link key={p.id} to={`/${shopSlug}/products/${p.id}`} className="product-card">
                                 <div className="image-wrap">
                                     {p.image_url ? (
-                                        <img src={p.image_url} alt={p.name} loading="lazy" />
+                                        <img src={getFullImageUrl(p.image_url)} alt={p.name} loading="lazy" />
                                     ) : (
                                         <svg className="placeholder-icon" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
                                     )}

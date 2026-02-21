@@ -31,3 +31,13 @@ export function getApiBaseUrl(): string {
 
   return `http://localhost:${API_PORT}/api`;
 }
+
+export function getBaseUrl(): string {
+  return getApiBaseUrl().replace(/\/api$/, '');
+}
+
+export function getFullImageUrl(path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
+  return `${getBaseUrl()}${path.startsWith('/') ? '' : '/'}${path}`;
+}

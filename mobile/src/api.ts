@@ -6,6 +6,18 @@ function getApiBaseUrl(): string {
     return '/api';
 }
 
+export function getBaseUrl(): string {
+    return getApiBaseUrl().replace(/\/api$/, '');
+}
+
+export function getFullImageUrl(path: string | undefined): string | undefined {
+    if (!path) return undefined;
+    if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
+    const baseUrl = getBaseUrl();
+    // If baseUrl is just '/', we don't want to double up or handle empty string
+    return `${baseUrl === '/' ? '' : baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
 const API_BASE = `${getApiBaseUrl()}/mobile`;
 
 async function request(url: string, options: RequestInit = {}) {

@@ -5,6 +5,7 @@ import { ICONS, CURRENCY } from '../../../constants';
 import { POSProduct } from '../../../types/pos';
 import { InventoryItem } from '../../../types/inventory';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
+import { getFullImageUrl } from '../../../config/apiUrl';
 
 function mapApiProductToPOS(p: any): POSProduct {
     return {
@@ -19,7 +20,7 @@ function mapApiProductToPOS(p: any): POSProduct {
         isTaxInclusive: true,
         unit: p.unit || 'pcs',
         stockLevel: Number(p.stock_quantity) || 0,
-        imageUrl: p.image_url
+        imageUrl: getFullImageUrl(p.image_url)
     };
 }
 

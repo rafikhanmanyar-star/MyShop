@@ -9,6 +9,7 @@ import {
 } from '../types/inventory';
 import { shopApi } from '../services/shopApi';
 import { useAuth } from './AuthContext';
+import { getFullImageUrl } from '../config/apiUrl';
 
 interface InventoryContextType {
     items: InventoryItem[];
@@ -112,7 +113,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     costPrice: parseFloat(p.cost_price || '0'),
                     retailPrice: parseFloat(p.retail_price || '0'),
                     reorderPoint: p.reorder_point || 10,
-                    imageUrl: p.image_url || undefined,
+                    imageUrl: getFullImageUrl(p.image_url) || undefined,
                     warehouseStock: stockMap[p.id]?.byWh || {}
                 }));
 
@@ -182,7 +183,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 costPrice: parseFloat(p.cost_price || '0'),
                 retailPrice: parseFloat(p.retail_price || '0'),
                 reorderPoint: p.reorder_point || 10,
-                imageUrl: p.image_url || undefined,
+                imageUrl: getFullImageUrl(p.image_url) || undefined,
                 warehouseStock: stockMap[p.id]?.byWh || {}
             }));
 

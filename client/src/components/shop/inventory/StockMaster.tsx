@@ -8,6 +8,7 @@ import Input from '../../ui/Input';
 import Button from '../../ui/Button';
 import Select from '../../ui/Select';
 import { shopApi } from '../../../services/shopApi';
+import { getFullImageUrl } from '../../../config/apiUrl';
 
 const StockMaster: React.FC = () => {
     const { items, warehouses, updateStock, requestTransfer } = useInventory();
@@ -50,7 +51,7 @@ const StockMaster: React.FC = () => {
             let imageUrl = editData.imageUrl;
             if (selectedImage) {
                 const uploadRes = await shopApi.uploadImage(selectedImage);
-                imageUrl = uploadRes.imageUrl;
+                imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
             }
 
             await updateItem(selectedItem.id, { ...editData, imageUrl });

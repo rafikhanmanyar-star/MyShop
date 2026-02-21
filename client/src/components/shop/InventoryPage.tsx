@@ -10,6 +10,7 @@ import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { shopApi, ShopProductCategory } from '../../services/shopApi';
+import { getFullImageUrl } from '../../config/apiUrl';
 
 const InventoryContent: React.FC = () => {
     const { addItem, refreshItems } = useInventory();
@@ -50,7 +51,7 @@ const InventoryContent: React.FC = () => {
             let imageUrl = '';
             if (selectedImage) {
                 const uploadRes = await shopApi.uploadImage(selectedImage);
-                imageUrl = uploadRes.imageUrl;
+                imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
             }
 
             await addItem({
