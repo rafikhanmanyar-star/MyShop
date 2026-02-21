@@ -74,9 +74,7 @@ export const shopApi = {
   uploadImage: (file: File) => {
     const formData = new FormData();
     formData.append('image', file);
-    return apiClient.post<{ imageUrl: string }>('/shop/upload-image', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    return apiClient.post<{ imageUrl: string }>('/shop/upload-image', formData);
   },
 
   getInventory: () => apiClient.get<any[]>('/shop/inventory'),

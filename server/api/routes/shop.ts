@@ -7,11 +7,17 @@ import path from 'path';
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    const uploadDir = path.join(process.cwd(), 'uploads/products');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    try {
+      const uploadDir = path.join(process.cwd(), 'uploads/products');
+      if (!fs.existsSync(uploadDir)) {
+        console.log('📂 Creating upload directory:', uploadDir);
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    } catch (err: any) {
+      console.error('❌ Multer destination error:', err);
+      cb(err, '');
     }
-    cb(null, uploadDir);
   },
   filename: (_req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -220,16 +226,28 @@ router.put('/products/:id', async (req: any, res) => {
   }
 });
 
-router.post('/upload-image', upload.single('image'), (req: any, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+router.post('/upload-image', (req, res, next) => {
+  upload.single('image')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      console.error('❌ Multer error:', err);
+      return res.status(400).json({ error: `Multer upload error: ${err.message}` });
+    } else if (err) {
+      console.error('❌ Unknown upload error:', err);
+      return res.status(500).json({ error: `Upload error: ${err.message}` });
     }
-    const imageUrl = `/uploads/products/${req.file.filename}`;
-    res.json({ imageUrl });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+      const imageUrl = `/uploads/products/${req.file.filename}`;
+      console.log('✅ Image uploaded successfully:', imageUrl);
+      res.json({ imageUrl });
+    } catch (error: any) {
+      console.error('❌ Post-upload error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 });
 
 // --- Inventory ---
