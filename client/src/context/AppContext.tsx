@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react';
 import { shopApi, ShopVendor } from '../services/shopApi';
+import { PrintSettings } from '../types';
 
 function mapVendorToState(v: ShopVendor): Record<string, any> {
   return {
@@ -19,13 +20,16 @@ interface AppState {
   categories: any[];
   settings: Record<string, any>;
   vendors: any[];
+  bills: any[];
+  printSettings?: PrintSettings;
 }
 
 type AppAction =
   | { type: 'SET_VENDORS'; payload: any[] }
   | { type: 'ADD_VENDOR'; payload: any }
-  | { type: 'UPDATE_VENDOR'; payload: { id: string; [k: string]: any } }
-  | { type: 'REMOVE_VENDOR'; payload: string };
+  | { type: 'UPDATE_VENDOR'; payload: { id: string;[k: string]: any } }
+  | { type: 'REMOVE_VENDOR'; payload: string }
+  | { type: 'ADD_BILL'; payload: any };
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
@@ -42,6 +46,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'REMOVE_VENDOR':
       return { ...state, vendors: state.vendors.filter((v: any) => v.id !== action.payload) };
+    case 'ADD_BILL':
+      return { ...state, bills: [...state.bills, action.payload] };
     default:
       return state;
   }
@@ -52,6 +58,8 @@ const initialState: AppState = {
   categories: [],
   settings: {},
   vendors: [],
+  bills: [],
+  printSettings: undefined,
 };
 
 interface AppContextValue {
@@ -68,7 +76,8 @@ const defaultValue: AppContextValue = {
   categories: [],
   settings: {},
   state: initialState,
-  dispatch: () => {},
+  dispatch: () => { },
+  printSettings: undefined,
 };
 
 const AppContext = createContext<AppContextValue>(defaultValue);

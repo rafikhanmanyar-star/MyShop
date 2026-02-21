@@ -10,6 +10,7 @@ import HeldSalesModal from './pos/HeldSalesModal';
 import CustomerSelectionModal from './pos/CustomerSelectionModal';
 import SalesHistoryModal from './pos/SalesHistoryModal';
 import { useAppContext } from '../../context/AppContext';
+import './pos/POSStyles.css';
 
 const POSSalesContent: React.FC = () => {
     const { state } = useAppContext();
@@ -25,11 +26,12 @@ const POSSalesContent: React.FC = () => {
         holdSale,
         clearCart,
         completeSale,
-        balanceDue
+        balanceDue,
+        cart
     } = usePOS();
     const mainRef = useRef<HTMLDivElement>(null);
 
-    const isActive = state.currentPage === 'posSales';
+    const isActive = (state as any).currentPage === 'posSales' || true; // Fallback to true if not managed by AppContext
 
     const [isFullScreen, setIsFullScreen] = useState(false);
 
@@ -73,11 +75,17 @@ const POSSalesContent: React.FC = () => {
                 case 'F7': toggleFullScreen(); break;
                 case 'F8': setIsPaymentModalOpen(!isPaymentModalOpen); break;
                 case 'F12':
-                    if (balanceDue <= 0) {
+                    if (balanceDue <= 0 && cart.length > 0) {
                         completeSale();
-                    } else {
+                    } else if (cart.length > 0) {
                         setIsPaymentModalOpen(true);
                     }
+                    break;
+                case 'Escape':
+                    setIsPaymentModalOpen(false);
+                    setIsCustomerModalOpen(false);
+                    setIsHeldSalesModalOpen(false);
+                    setIsSalesHistoryModalOpen(false);
                     break;
                 // Add more as needed
             }
@@ -103,29 +111,45 @@ const POSSalesContent: React.FC = () => {
     ]);
 
     return (
-        <div className="flex flex-col h-full bg-slate-100 -m-4 md:-m-8 overflow-hidden font-sans select-none" ref={mainRef}>
+        <div
+            className="flex flex-col h-full bg-[#f7f9fc] -m-8 overflow-hidden pos-font select-none animate-fade-in relative"
+            ref={mainRef}
+            style={{
+                maxHeight: 'calc(100vh - 4rem)'
+            }}
+        >
+            {/* Background Decorative Elements - Subtle */}
+            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+                <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-white to-transparent opacity-50"></div>
+            </div>
+
             {/* Top Status Bar */}
             <POSHeader />
 
-            <div className="flex flex-1 min-h-0">
+            <div className="flex flex-1 min-h-0 relative p-6 gap-6 z-10">
                 {/* Left Panel: Search & Products */}
-                <div className="w-1/3 lg:w-1/4 flex flex-col bg-white border-r border-slate-200">
+                <div className="w-[32%] flex flex-col bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20">
                     <ProductSearch />
                 </div>
 
-                {/* Center Panel: Cart / Bill Grid */}
-                <div className="flex-1 flex flex-col bg-slate-50 relative">
-                    <CartGrid />
-                </div>
+                {/* Center & Right Panel Container */}
+                <div className="flex-1 flex gap-6 min-w-0">
+                    {/* Center Panel: Cart / Bill Grid */}
+                    <div className="flex-1 flex flex-col bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden">
+                        <CartGrid />
+                    </div>
 
-                {/* Right Panel: Totals & Payments */}
-                <div className="w-80 lg:w-96 flex flex-col bg-white border-l border-slate-200 shadow-xl z-10">
-                    <CheckoutPanel />
+                    {/* Right Panel: Totals & Payments */}
+                    <div className="w-[380px] flex flex-col bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20">
+                        <CheckoutPanel />
+                    </div>
                 </div>
             </div>
 
             {/* Bottom Bar: Action Shortcuts */}
-            <ShortcutBar isFullScreen={isFullScreen} onToggleFullScreen={toggleFullScreen} />
+            <div className="z-30 relative">
+                <ShortcutBar isFullScreen={isFullScreen} onToggleFullScreen={toggleFullScreen} />
+            </div>
 
             {/* Modals */}
             <PaymentModal />

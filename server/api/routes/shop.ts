@@ -1,10 +1,18 @@
 import express from 'express';
 import { getShopService } from '../../services/shopService.js';
+import { checkRole } from '../../middleware/roleMiddleware.js';
+import * as fs from 'fs';
 
 const router = express.Router();
 
-// --- Branches ---
-router.get('/branches', async (req: any, res) => {
+console.log('✅ Shop router initialized');
+
+router.get('/public-test', (_req, res) => {
+  res.json({ message: 'Shop routes are working' });
+});
+
+// --- Branches (Admin Only) ---
+router.get('/branches', checkRole(['admin']), async (req: any, res) => {
   try {
     const branches = await getShopService().getBranches(req.tenantId);
     res.json(branches);
@@ -13,7 +21,7 @@ router.get('/branches', async (req: any, res) => {
   }
 });
 
-router.post('/branches', async (req: any, res) => {
+router.post('/branches', checkRole(['admin']), async (req: any, res) => {
   try {
     const branchId = await getShopService().createBranch(req.tenantId, req.body);
     res.status(201).json({ id: branchId, message: 'Branch registered successfully' });
@@ -22,7 +30,7 @@ router.post('/branches', async (req: any, res) => {
   }
 });
 
-router.put('/branches/:id', async (req: any, res) => {
+router.put('/branches/:id', checkRole(['admin']), async (req: any, res) => {
   try {
     await getShopService().updateBranch(req.tenantId, req.params.id, req.body);
     res.json({ success: true, message: 'Branch updated successfully' });
@@ -127,10 +135,52 @@ router.delete('/categories/:id', async (req: any, res) => {
 // --- Products ---
 router.get('/products', async (req: any, res) => {
   try {
-    const products = await getShopService().getProducts(req.tenantId);
+    console.log('--- GET /api/shop/products ---');
+    console.log('Headers:', {
+      authorization: req.headers.authorization ? 'Bearer ***' : 'none',
+      tenantId: req.headers.tenantid || req.headers.tenant_id,
+      orgId: req.headers.orgid || req.headers.org_id
+    });
+    console.log('Params:', req.params);
+    console.log('Query:', req.query);
+    console.log('Decoded Request User/Tenant:', {
+      tenantId: req.tenantId,
+      userId: req.userId,
+      role: req.userRole
+    });
+
+    if (!req.tenantId) {
+      console.warn('❌ Missing tenantId for products request');
+      return res.status(400).json({ success: false, message: 'Missing tenantId', code: 'MISSING_TENANT' });
+    }
+
+    // Determine tenant fallback (using tenantId instead of organization_id)
+    const tenantId = req.tenantId;
+
+    console.log(`Executing getProducts for tenantId = ${tenantId}`);
+
+    // Attempt DB fetch
+    const products = await getShopService().getProducts(tenantId);
+
+    if (!products) {
+      console.warn('⚠️ No records returned, defaulting to empty array');
+      return res.json([]);
+    }
+
+    console.log(`✅ Loaded ${products.length} products successfully.`);
     res.json(products);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error fetching products:', error);
+    try {
+      fs.appendFileSync('f:/AntiGravity projects/MyShop/server/server_errors.log', '\\nERROR:\\n' + error.stack + '\\n');
+    } catch (e) { }
+
+    // Return structured error as per prompt instruction
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch products',
+      code: 'PRODUCT_FETCH_FAILED'
+    });
   }
 });
 
@@ -182,8 +232,8 @@ router.get('/inventory/movements', async (req: any, res) => {
   }
 });
 
-// --- Sales ---
-router.get('/sales', async (req: any, res) => {
+// --- Sales (Admin/Cashier) ---
+router.get('/sales', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
     const sales = await getShopService().getSales(req.tenantId);
     res.json(sales);
@@ -192,7 +242,7 @@ router.get('/sales', async (req: any, res) => {
   }
 });
 
-router.post('/sales', async (req: any, res) => {
+router.post('/sales', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
   try {
     const body = { ...req.body, userId: req.userId ?? req.body?.userId };
     const saleId = await getShopService().createSale(req.tenantId, body);
@@ -258,8 +308,8 @@ router.post('/policies', async (req: any, res) => {
   }
 });
 
-// --- Bank Accounts (Chart of Accounts for POS) ---
-router.get('/bank-accounts', async (req: any, res) => {
+// --- Bank Accounts (Admin/Accountant) ---
+router.get('/bank-accounts', checkRole(['admin', 'accountant']), async (req: any, res) => {
   try {
     const activeOnly = req.query.activeOnly !== 'false';
     const list = await getShopService().getBankAccounts(req.tenantId, activeOnly);
@@ -269,7 +319,7 @@ router.get('/bank-accounts', async (req: any, res) => {
   }
 });
 
-router.post('/bank-accounts', async (req: any, res) => {
+router.post('/bank-accounts', checkRole(['admin', 'accountant']), async (req: any, res) => {
   try {
     const id = await getShopService().createBankAccount(req.tenantId, req.body);
     res.status(201).json({ id, message: 'Bank account created' });
@@ -328,6 +378,43 @@ router.delete('/vendors/:id', async (req: any, res) => {
   try {
     await getShopService().deleteVendor(req.tenantId, req.params.id);
     res.json({ success: true, message: 'Vendor deactivated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Users (Admin Only) ---
+router.get('/users', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const list = await getShopService().getUsers(req.tenantId);
+    res.json(list);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/users', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const userId = await getShopService().createUser(req.tenantId, req.body);
+    res.status(201).json({ id: userId, message: 'User created' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/users/:id', checkRole(['admin']), async (req: any, res) => {
+  try {
+    await getShopService().updateUser(req.tenantId, req.params.id, req.body);
+    res.json({ success: true, message: 'User updated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/users/:id', checkRole(['admin']), async (req: any, res) => {
+  try {
+    await getShopService().deleteUser(req.tenantId, req.params.id);
+    res.json({ success: true, message: 'User deactivated' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

@@ -40,7 +40,7 @@ export class VendorsApiRepository {
 
   async update(id: string, data: any): Promise<any> {
     await shopApi.updateVendor(id, toApi(data));
-    return { id, ...toState({ ...data, id } as any) };
+    return toState({ ...data, id } as any);
   }
 
   async delete(id: string): Promise<void> {

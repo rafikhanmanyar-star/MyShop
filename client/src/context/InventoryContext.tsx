@@ -286,7 +286,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         } catch (error: any) {
             console.error("Failed to create product:", error);
             const status = error?.status;
-            const msg = error?.message || (typeof error === 'string' ? error : 'Check your SKU uniqueness or category.');
+            const msg = error?.error || error?.message || (typeof error === 'string' ? error : 'Check your SKU uniqueness or category.');
             if (status === 401 || /authentication token|session.*expired|not logged in/i.test(String(msg))) {
                 alert('Session expired or not logged in. Please log in again to create products.');
             } else {

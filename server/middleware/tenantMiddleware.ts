@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { Pool } from 'pg';
+import { IDatabaseService } from '../services/databaseService.js';
 import { runWithTenantContext } from '../services/tenantContext.js';
 
 export interface TenantRequest extends Record<string, any> {
@@ -14,7 +14,7 @@ export interface TenantRequest extends Record<string, any> {
   };
 }
 
-export function tenantMiddleware(pool: Pool) {
+export function tenantMiddleware(db: IDatabaseService) {
   return async (req: TenantRequest, res: Response, next: NextFunction) => {
     try {
       const token = req.headers.authorization?.replace('Bearer ', '');
@@ -49,7 +49,7 @@ export function tenantMiddleware(pool: Pool) {
 
       // Verify user exists and belongs to the tenant
       try {
-        const result = await pool.query(
+        const result = await db.query(
           `SELECT u.id AS user_id, u.tenant_id AS user_tenant_id, u.is_active,
                   s.user_id AS session_user_id, s.expires_at
            FROM users u
@@ -58,11 +58,11 @@ export function tenantMiddleware(pool: Pool) {
           [decoded.userId, token]
         );
 
-        if (result.rows.length === 0) {
+        if (result.length === 0) {
           return res.status(401).json({ error: 'User not found', code: 'USER_NOT_FOUND' });
         }
 
-        const row = result.rows[0];
+        const row = result[0];
 
         if (row.user_tenant_id !== decoded.tenantId) {
           return res.status(403).json({ error: 'Tenant mismatch', code: 'TENANT_MISMATCH' });
@@ -76,19 +76,20 @@ export function tenantMiddleware(pool: Pool) {
         if (row.session_user_id) {
           const expiresAt = new Date(row.expires_at);
           if (expiresAt <= new Date()) {
-            pool.query('DELETE FROM user_sessions WHERE token = $1', [token]).catch(() => {});
+            db.execute('DELETE FROM user_sessions WHERE token = $1', [token]).catch(() => { });
             return res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
           }
-          pool.query('UPDATE user_sessions SET last_activity = NOW() WHERE token = $1', [token]).catch(() => {});
+          db.execute('UPDATE user_sessions SET last_activity = NOW() WHERE token = $1', [token]).catch(() => { });
         } else if (row.is_active) {
           // Recover missing session
           const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           const expiresAt = new Date();
           expiresAt.setDate(expiresAt.getDate() + 30);
-          await pool.query(
+          await db.execute(
             `INSERT INTO user_sessions (id, user_id, tenant_id, token, expires_at, last_activity)
              VALUES ($1, $2, $3, $4, $5, NOW())
-             ON CONFLICT (user_id, tenant_id) DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, last_activity = NOW()`,
+             ON CONFLICT (user_id, tenant_id) DO UPDATE 
+             SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, last_activity = NOW()`,
             [sessionId, decoded.userId, decoded.tenantId, token, expiresAt]
           );
         }

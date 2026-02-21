@@ -46,17 +46,33 @@ const PaymentModal: React.FC = () => {
         }
     }, [isPaymentModalOpen, balanceDue]);
 
-    const handleAddPayment = () => {
+    const handleAddPayment = async () => {
         const amount = parseFloat(tenderAmount);
         if (amount > 0) {
             const bank = bankAccounts.find(b => b.id === selectedBankId);
+
+            // Add payment first ensuring balance is correctly updated
             addPayment(selectedMethod, amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
-            setTenderAmount('0');
+
+            // If this payment covers the rest of the balance, finalize instantly
+            if (amount >= balanceDue) {
+                try {
+                    const sale = await completeSale();
+                    setTimeout(() => {
+                        printReceipt(sale);
+                    }, 500); // Wait a half-second for the success screen to hit before triggering print dialog
+                } catch (e) {
+                    console.error("Sale complete failed", e);
+                }
+            } else {
+                setTenderAmount('0');
+            }
         }
     };
 
     const handleQuickAmount = (amt: number) => {
-        setTenderAmount(amt.toString());
+        const current = parseFloat(tenderAmount) || 0;
+        setTenderAmount((current + amt).toString());
     };
 
     if (!isPaymentModalOpen) return null;
@@ -64,114 +80,201 @@ const PaymentModal: React.FC = () => {
     return (
         <Modal
             isOpen={isPaymentModalOpen}
-            onClose={() => setIsPaymentModalOpen(false)}
-            title="Finalize Payment & Checkout"
+            onClose={() => {
+                if (!lastCompletedSale) setIsPaymentModalOpen(false);
+            }}
+            title={<div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl pos-gradient-dark flex items-center justify-center text-white shadow-none">
+                    {ICONS.creditCard}
+                </div>
+                <div>
+                    <h2 className="text-2xl font-black text-slate-900 leading-none tracking-tight">Checkout Terminal</h2>
+                    <div className="flex items-center gap-2 mt-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Secure Transaction Session</span>
+                    </div>
+                </div>
+            </div>}
             size="xl"
+            hideClose={!!lastCompletedSale}
         >
-            <div className="flex gap-6 min-h-[450px]">
+            <div className="flex flex-col lg:flex-row gap-10 items-stretch max-h-[85vh] overflow-hidden p-2">
                 {/* Left Side: Method Selection & Tendering */}
-                <div className="flex-1 space-y-6">
-                    <div>
-                        <h3 className="text-xs font-black uppercase text-slate-400 mb-4 tracking-widest">Select Tender Type</h3>
-                        <div className="grid grid-cols-2 gap-3">
-                            {Object.values(POSPaymentMethod).map(method => (
+                <div className="flex-1 space-y-10 overflow-y-auto pr-4 pos-scrollbar pb-10">
+                    {!lastCompletedSale ? (
+                        <>
+                            <div>
+                                <h3 className="text-[11px] font-black uppercase text-slate-400 mb-5 tracking-[0.25em] flex items-center gap-3">
+                                    <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-[10px]">1</span>
+                                    Payment Mode
+                                </h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
+                                    {Object.values(POSPaymentMethod).map(method => (
+                                        <button
+                                            key={method}
+                                            onClick={() => setSelectedMethod(method)}
+                                            className={`flex flex-col items-center justify-center p-6 rounded-3xl border-2 transition-all relative group overflow-hidden ${selectedMethod === method
+                                                ? 'border-indigo-600 bg-indigo-50 shadow-none shadow-none-100'
+                                                : 'border-slate-50 bg-white text-slate-500 hover:border-slate-200 hover:bg-slate-50'
+                                                }`}
+                                        >
+                                            <div className={`mb-4 transition-transform group-hover:scale-110 ${selectedMethod === method ? 'text-indigo-600' : 'text-slate-300'}`}>
+                                                {method === POSPaymentMethod.CASH ? ICONS.dollarSign : (method === POSPaymentMethod.CARD ? ICONS.creditCard : ICONS.wallet)}
+                                            </div>
+                                            <span className="text-[11px] font-black uppercase tracking-widest leading-none">{method}</span>
+                                            {selectedMethod === method && (
+                                                <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-indigo-600 rounded-full animate-pulse shadow-none shadow-none-600/50"></div>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <h3 className="text-[11px] font-black uppercase text-slate-400 mb-4 tracking-[0.25em] flex items-center gap-3">
+                                    <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-[10px]">2</span>
+                                    Banking Source
+                                </h3>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600">
+                                        {ICONS.briefcase}
+                                    </div>
+                                    <select
+                                        className="block w-full rounded-[1.5rem] border-2 border-slate-50 bg-[#f8fafc] pl-14 pr-6 py-5 text-sm font-black text-slate-800 transition-all outline-none focus:bg-white focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 appearance-none"
+                                        value={selectedBankId}
+                                        onChange={e => setSelectedBankId(e.target.value)}
+                                    >
+                                        <option value="">Manual Cash Processing (No Bank)</option>
+                                        {bankAccounts.map(b => (
+                                            <option key={b.id} value={b.id}>{b.name}{b.code ? ` — ${b.code}` : ''}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">
+                                        {ICONS.chevronDown}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-[#f8fafc] rounded-[2.5rem] p-10 border border-slate-50 relative overflow-hidden group shadow-none">
+                                <div className="absolute -top-4 -right-4 p-12 opacity-[0.03] text-slate-900 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-1000">
+                                    {React.cloneElement(ICONS.shoppingCart as React.ReactElement, { size: 160 })}
+                                </div>
+                                <label className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-400 mb-4 block leading-none">Amount to Tender</label>
+                                <div className="flex items-center gap-6 relative z-10">
+                                    <span className="text-5xl font-black text-slate-300 font-mono tracking-tighter">{CURRENCY}</span>
+                                    <input
+                                        type="text"
+                                        className="bg-transparent border-none text-7xl font-black text-slate-900 focus:ring-0 w-full p-0 font-mono tracking-[-0.05em] select-all"
+                                        value={tenderAmount}
+                                        onChange={(e) => setTenderAmount(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-4 gap-4 mt-10 relative z-10">
+                                    {[100, 500, 1000, 5000].map(amt => (
+                                        <button
+                                            key={amt}
+                                            onClick={() => handleQuickAmount(amt)}
+                                            className="group relative py-4 rounded-2xl bg-white border border-slate-100 text-sm font-black text-slate-900 shadow-none hover:border-indigo-500 hover:text-indigo-600 transition-all overflow-hidden"
+                                        >
+                                            <div className="absolute inset-0 bg-indigo-600 scale-0 group-hover:scale-100 opacity-0 group-hover:opacity-[0.03] transition-transform"></div>
+                                            +{amt}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleAddPayment}
+                                disabled={parseFloat(tenderAmount) <= 0}
+                                className="w-full py-7 pos-gradient-dark hover:opacity-95 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-[2rem] font-black text-2xl transition-all shadow-none shadow-none-200 uppercase tracking-[0.2em] relative overflow-hidden group"
+                            >
+                                <div className="absolute inset-x-0 h-px top-0 bg-white/20"></div>
+                                <span className="relative z-10 flex items-center justify-center gap-4">
+                                    PAY & PRINT TICKET
+                                    <kbd className="kbd-tag !bg-white/10 !border-white/10 !text-white !px-3 font-mono opacity-60">F12</kbd>
+                                </span>
+                            </button>
+                        </>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full py-20 text-center animate-scale-in">
+                            <div className="w-32 h-32 pos-gradient-success text-white rounded-[2.5rem] flex items-center justify-center mb-10 relative shadow-none shadow-none-500/20">
+                                <div className="absolute inset-0 bg-emerald-500 rounded-[2.5rem] animate-ping opacity-10"></div>
+                                {React.cloneElement(ICONS.checkCircle as React.ReactElement, { size: 64 })}
+                            </div>
+                            <h2 className="text-4xl font-black text-slate-900 tracking-[-0.04em] mb-4 uppercase">Success</h2>
+                            <p className="text-slate-500 font-bold mb-14 max-w-sm text-lg leading-relaxed">The transaction has been successfully authorized and recorded.</p>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full">
                                 <button
-                                    key={method}
-                                    onClick={() => setSelectedMethod(method)}
-                                    className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${selectedMethod === method
-                                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-lg shadow-indigo-100'
-                                        : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
-                                        }`}
+                                    onClick={() => printReceipt()}
+                                    className="flex items-center justify-center gap-4 py-6 pos-gradient-primary text-white rounded-3xl font-black uppercase tracking-widest transition-all shadow-none shadow-none-500/20 active:scale-[0.97]"
                                 >
-                                    <span className="text-xs font-black uppercase tracking-wide">{method}</span>
+                                    {ICONS.print}
+                                    PRINT SLIP
                                 </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div>
-                        <h3 className="text-xs font-black uppercase text-slate-400 mb-2 tracking-widest">Deposit to account (optional)</h3>
-                        <select
-                            className="block w-full rounded-lg border border-slate-300 bg-white py-2.5 px-3 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                            value={selectedBankId}
-                            onChange={e => setSelectedBankId(e.target.value)}
-                        >
-                            <option value="">— None —</option>
-                            {bankAccounts.map(b => (
-                                <option key={b.id} value={b.id}>{b.name}{b.code ? ` (${b.code})` : ''}</option>
-                            ))}
-                        </select>
-                        <p className="text-[10px] text-slate-500 mt-1">Link this payment to a bank account from Settings → Chart of Accounts.</p>
-                    </div>
-
-                    <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl">
-                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2 block">Amount to Tender</label>
-                        <div className="flex items-center gap-4">
-                            <span className="text-3xl font-black text-slate-500">{CURRENCY}</span>
-                            <input
-                                type="text"
-                                className="bg-transparent border-none text-5xl font-black text-white focus:ring-0 w-full p-0 font-mono tracking-tighter"
-                                value={tenderAmount}
-                                onChange={(e) => setTenderAmount(e.target.value)}
-                                autoFocus
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-4 gap-2 mt-6">
-                            {[100, 500, 1000, 5000].map(amt => (
                                 <button
-                                    key={amt}
-                                    onClick={() => handleQuickAmount(amt)}
-                                    className="py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold border border-slate-700 transition-colors"
+                                    onClick={() => {
+                                        setIsPaymentModalOpen(false);
+                                        setLastCompletedSale(null);
+                                    }}
+                                    className="flex items-center justify-center gap-4 py-6 bg-slate-100 text-slate-900 hover:bg-slate-200 rounded-3xl font-black uppercase tracking-widest transition-all shadow-none active:scale-[0.97]"
                                 >
-                                    +{amt}
+                                    {ICONS.refresh}
+                                    NEW ORDER
                                 </button>
-                            ))}
+                            </div>
                         </div>
-                    </div>
-
-                    <button
-                        onClick={handleAddPayment}
-                        disabled={parseFloat(tenderAmount) <= 0}
-                        className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-200 text-white rounded-xl font-black text-lg shadow-lg shadow-indigo-200 transition-all uppercase tracking-widest"
-                    >
-                        Add {selectedMethod} Payment
-                    </button>
+                    )}
                 </div>
 
-                {/* Right Side: Payment Summary */}
-                <div className="w-80 bg-slate-50 rounded-2xl border border-slate-200 p-6 flex flex-col">
-                    <div className="space-y-4 mb-auto">
-                        <div className="flex justify-between items-center text-slate-500 text-sm font-bold uppercase tracking-widest">
-                            <span>Grand Total</span>
-                            <span className="text-slate-900 font-mono text-xl">{grandTotal.toLocaleString()}</span>
+                {/* Right Side: Order Summary Audit */}
+                <div className="w-full lg:w-[400px] bg-[#f8fafc] rounded-[3rem] border border-slate-100 p-10 flex flex-col shadow-none relative">
+                    <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-indigo-500/5 to-transparent rounded-t-[3rem] pointer-events-none"></div>
+
+                    <div className="space-y-8 mb-auto overflow-y-auto pos-scrollbar relative z-10">
+                        <div className="border-b-2 border-slate-200 border-dashed pb-8 px-2 flex flex-col gap-5">
+                            <div className="flex flex-col">
+                                <span className="text-[11px] font-black uppercase text-slate-400 tracking-[0.4em]">Audit Summary</span>
+                                <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-2">Sale Reference: #{Math.random().toString(36).substring(7).toUpperCase()}</span>
+                            </div>
+                            <div className="flex items-baseline gap-2">
+                                <span className="text-2xl font-black text-slate-300 font-mono tracking-tighter">{CURRENCY}</span>
+                                <span className="text-6xl font-black text-slate-900 font-mono tracking-[-0.05em]">{grandTotal.toLocaleString()}</span>
+                            </div>
                         </div>
 
-                        <div className="h-px bg-slate-200"></div>
-
-                        <div className="space-y-3">
-                            <h4 className="text-[10px] font-black uppercase text-slate-400">Tenders Received</h4>
+                        <div className="space-y-5">
+                            <h4 className="text-[11px] font-black uppercase text-slate-400 px-2 tracking-[0.3em]">Captured Funds</h4>
                             {payments.length === 0 ? (
-                                <div className="text-sm italic text-slate-400 py-4 text-center">No payments added yet</div>
+                                <div className="py-12 rounded-[2rem] border-2 border-slate-200 border-dashed flex flex-col items-center justify-center text-slate-300 bg-white/50">
+                                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-none border border-slate-100">
+                                        {React.cloneElement(ICONS.creditCard as React.ReactElement, { size: 24 })}
+                                    </div>
+                                    <span className="text-[11px] uppercase font-black tracking-widest">Waiting...</span>
+                                </div>
                             ) : (
-                                <div className="space-y-2">
+                                <div className="space-y-3">
                                     {payments.map(p => (
-                                        <div key={p.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm group">
+                                        <div key={p.id} className="flex justify-between items-center bg-white p-5 rounded-3xl border border-slate-50 shadow-none group animate-slide-up">
                                             <div className="flex flex-col">
-                                                <span className="text-xs font-black text-slate-800 uppercase tracking-wide">{p.method}</span>
-                                                {p.bankAccountName && (
-                                                    <span className="text-[10px] text-indigo-600 font-medium">{p.bankAccountName}</span>
-                                                )}
-                                                <span className="text-[10px] text-slate-400 font-mono">{p.id.slice(0, 8)}</span>
+                                                <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider mb-1">{p.method}</span>
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-1.5">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
+                                                    {p.bankAccountName || 'PRIMARY TILL'}
+                                                </span>
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-sm font-black font-mono">{p.amount.toLocaleString()}</span>
-                                                <button
-                                                    onClick={() => removePayment(p.id)}
-                                                    className="text-slate-300 hover:text-rose-500 transition-colors"
-                                                >
-                                                    {ICONS.x}
-                                                </button>
+                                            <div className="flex items-center gap-5">
+                                                <span className="text-lg font-black font-mono text-slate-900 tracking-tighter">{p.amount.toLocaleString()}</span>
+                                                {!lastCompletedSale && (
+                                                    <button
+                                                        onClick={() => removePayment(p.id)}
+                                                        className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-rose-500 transition-all opacity-0 group-hover:opacity-100"
+                                                    >
+                                                        {ICONS.x}
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -180,69 +283,52 @@ const PaymentModal: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="mt-8 space-y-4">
-                        <div className="bg-white p-4 rounded-xl border-2 border-slate-100 space-y-3">
+                    <div className="mt-10 space-y-6 relative z-10">
+                        <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-none shadow-none-200/50 space-y-8">
                             <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-black uppercase text-slate-400">Balance Due</span>
-                                <span className={`text-2xl font-black font-mono ${balanceDue > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                <span className="text-[11px] font-black uppercase text-slate-400 tracking-[0.25em]">Balance</span>
+                                <span className={`text-4xl font-black font-mono tracking-tighter ${balanceDue > 0 ? 'text-rose-600' : 'text-emerald-500'}`}>
                                     {balanceDue.toLocaleString()}
                                 </span>
                             </div>
 
                             {changeDue > 0 && (
-                                <>
-                                    <div className="h-px bg-gradient-to-r from-transparent via-amber-200 to-transparent"></div>
-                                    <div className="flex justify-between items-center bg-gradient-to-r from-amber-50 to-orange-50 -mx-4 -mb-4 px-4 py-4 rounded-b-xl border-t-2 border-amber-200">
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] font-black uppercase text-amber-600 tracking-widest">Change to Return</span>
-                                            <span className="text-[8px] uppercase text-amber-500 tracking-wider">Customer Refund</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
-                                            <span className="text-3xl font-black font-mono text-amber-600">
-                                                {CURRENCY} {changeDue.toLocaleString()}
+                                <div className="pt-8 border-t-2 border-slate-50 border-dashed">
+                                    <div className="flex flex-col items-center justify-center p-6 bg-amber-50 rounded-[2rem] border border-amber-100">
+                                        <span className="text-[10px] font-black uppercase text-amber-600 tracking-[0.3em] mb-3">Tender Change</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm font-black text-amber-300 font-mono">{CURRENCY}</span>
+                                            <span className="text-5xl font-black font-mono text-amber-600 tracking-tighter">
+                                                {changeDue.toLocaleString()}
                                             </span>
                                         </div>
                                     </div>
-                                </>
+                                </div>
                             )}
                         </div>
 
-                        <button
-                            disabled={balanceDue > 0 || lastCompletedSale !== null}
-                            onClick={completeSale}
-                            className={`w-full py-5 rounded-2xl font-black text-xl shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-3 ${balanceDue > 0 || lastCompletedSale !== null
-                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-200'
-                                }`}
-                        >
-                            {ICONS.checkCircle}
-                            {lastCompletedSale ? 'ORDER COMPLETED' : 'COMPLETE ORDER'}
-                        </button>
-
-                        {lastCompletedSale && (
-                            <>
-                                <button
-                                    onClick={() => printReceipt()}
-                                    className="w-full py-5 rounded-2xl font-black text-xl shadow-2xl transition-all active:scale-95 flex items-center justify-center gap-3 bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-200 animate-pulse"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                                    </svg>
-                                    PRINT RECEIPT
-                                </button>
-
-                                <button
-                                    onClick={() => {
-                                        setIsPaymentModalOpen(false);
-                                        setLastCompletedSale(null);
-                                    }}
-                                    className="w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 bg-slate-600 hover:bg-slate-500 text-white"
-                                >
-                                    {ICONS.x}
-                                    CLOSE & NEW SALE
-                                </button>
-                            </>
+                        {!lastCompletedSale && (
+                            <button
+                                disabled={balanceDue > 0}
+                                onClick={async () => {
+                                    try {
+                                        const sale = await completeSale();
+                                        setTimeout(() => printReceipt(sale), 500);
+                                    } catch (e) {
+                                        console.error("Sale failed", e);
+                                    }
+                                }}
+                                className={`w-full py-8 rounded-[2.5rem] font-black text-2xl transition-all active:scale-[0.97] flex items-center justify-center gap-4 relative overflow-hidden group shadow-none ${balanceDue > 0
+                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none hidden'
+                                    : 'pos-gradient-success text-white shadow-none-500/20 hover:shadow-none-500/40'
+                                    }`}
+                            >
+                                <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
+                                <span className="relative z-10 flex items-center justify-center gap-4 leading-none uppercase tracking-[0.1em]">
+                                    {ICONS.checkCircle}
+                                    Complete & Print
+                                </span>
+                            </button>
                         )}
                     </div>
                 </div>
@@ -252,3 +338,4 @@ const PaymentModal: React.FC = () => {
 };
 
 export default PaymentModal;
+

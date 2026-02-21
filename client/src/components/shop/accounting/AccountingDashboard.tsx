@@ -5,7 +5,7 @@ import { CURRENCY, ICONS } from '../../../constants';
 import Card from '../../ui/Card';
 
 const AccountingDashboard: React.FC = () => {
-    const { totalRevenue, grossProfit, netMargin, receivablesTotal, payablesTotal } = useAccounting();
+    const { accounts, totalRevenue, grossProfit, netMargin, receivablesTotal, payablesTotal } = useAccounting();
 
     const metrics = [
         { label: 'Total Revenue', value: totalRevenue, icon: ICONS.trendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -56,29 +56,33 @@ const AccountingDashboard: React.FC = () => {
                 </Card>
 
                 {/* Cash & Bank Summary */}
-                <Card className="border-none shadow-sm p-6 space-y-6">
+                <Card className="border-none shadow-sm p-6 space-y-6 flex flex-col">
                     <h3 className="font-bold text-slate-800">Cash & Bank Balances</h3>
-                    <div className="space-y-4">
-                        {[
-                            { name: 'Cash in Hand', balance: 45000, icon: ICONS.wallet },
-                            { name: 'Main Bank (HBL)', balance: 850000, icon: ICONS.building },
-                            { name: 'POS Settlement', balance: 125000, icon: ICONS.creditCard }
-                        ].map((acc, i) => (
-                            <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-indigo-600">
-                                        {React.cloneElement(acc.icon as React.ReactElement<any>, { width: 18, height: 18 })}
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-slate-800">{acc.name}</p>
-                                        <p className="text-[10px] text-slate-400 font-medium uppercase">Active</p>
-                                    </div>
-                                </div>
-                                <div className="text-sm font-black text-slate-900 font-mono">
-                                    {acc.balance.toLocaleString()}
-                                </div>
+                    <div className="space-y-4 flex-1 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
+                        {accounts.length === 0 ? (
+                            <div className="p-8 text-center text-slate-400 text-xs font-medium">
+                                No bank accounts linked yet. Use Settings to create them.
                             </div>
-                        ))}
+                        ) : (
+                            accounts
+                                .filter(acc => acc.type === 'Asset' || acc.type === 'Bank')
+                                .map((acc, i) => (
+                                    <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-indigo-600">
+                                                {acc.type === 'Asset' ? ICONS.wallet : ICONS.building}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-bold text-slate-800 truncate">{acc.name}</p>
+                                                <p className="text-[10px] text-slate-400 font-medium uppercase">{acc.code}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-sm font-black text-slate-900 font-mono">
+                                            {acc.balance.toLocaleString()}
+                                        </div>
+                                    </div>
+                                ))
+                        )}
                     </div>
 
                     <button className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-[0.2em] border border-dashed border-slate-200 hover:bg-slate-100 transition-all flex items-center justify-center gap-2">

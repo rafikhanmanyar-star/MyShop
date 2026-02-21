@@ -7,6 +7,8 @@ import { getDatabaseService } from '../services/databaseService.js';
 import { tenantMiddleware } from '../middleware/tenantMiddleware.js';
 import authRoutes from './routes/auth.js';
 import shopRoutes from './routes/shop.js';
+import mobileRoutes from './routes/mobile.js';
+import mobileOrdersRoutes from './routes/mobileOrders.js';
 import { runMigrations } from '../scripts/run-migrations.js';
 
 const app = express();
@@ -35,6 +37,11 @@ app.use(cors({
 app.use(timeout('30s'));
 app.use(express.json({ limit: '10mb' }));
 
+app.use((req, _res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 // Health check (public)
 app.get('/api/health', async (_req, res) => {
   try {
@@ -49,12 +56,26 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
+app.get('/api/test', (_req, res) => {
+  res.json({ message: 'API is working' });
+});
+
 // Public routes (no auth required)
 app.use('/api/auth', authRoutes);
 
+// Mobile ordering routes (mix of public + customer-authenticated)
+app.use('/api/mobile', mobileRoutes);
+
+app.get('/api/shop-test', (_req, res) => {
+  res.json({ message: 'Public shop test works' });
+});
+
 // Protected routes (auth required)
-const pool = getDatabaseService().getPool();
-app.use('/api/shop', tenantMiddleware(pool), shopRoutes);
+const dbService = getDatabaseService();
+app.use('/api/shop', tenantMiddleware(dbService), shopRoutes);
+
+// POS-side mobile order management (requires shop auth)
+app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRoutes);
 
 // Serve static client (Electron mode)
 if (clientDistPath) {

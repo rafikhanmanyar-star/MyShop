@@ -101,3 +101,21 @@ export const shopApi = {
   updateVendor: (id: string, data: Partial<ShopVendor>) => apiClient.put(`/shop/vendors/${id}`, data),
   deleteVendor: (id: string) => apiClient.delete(`/shop/vendors/${id}`),
 };
+
+export interface ShopUser {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+  email?: string;
+  is_active: boolean;
+  login_status: boolean;
+  created_at?: string;
+}
+
+export const shopUserApi = {
+  getUsers: () => apiClient.get<ShopUser[]>('/shop/users'),
+  createUser: (data: any) => apiClient.post<{ id: string }>('/shop/users', data),
+  updateUser: (id: string, data: any) => apiClient.put(`/shop/users/${id}`, data),
+  deleteUser: (id: string) => apiClient.delete(`/shop/users/${id}`),
+};

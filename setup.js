@@ -37,12 +37,13 @@ async function main() {
 
   console.log('Database Configuration Options:\n');
   console.log('1. Use Render Cloud Database (current - may not be accessible)');
-  console.log('2. Use Local PostgreSQL (recommended for development)');
-  console.log('3. Disable Migrations (test mode - no database)');
-  console.log('4. Keep Current Configuration');
+  console.log('2. Use Local PostgreSQL (recommended for heavy development)');
+  console.log('3. Use SQLite (best for standalone/offline - no server needed)');
+  console.log('4. Disable Migrations (test mode - no database)');
+  console.log('5. Keep Current Configuration');
   console.log('');
 
-  const choice = await question('Select option (1-4): ');
+  const choice = await question('Select option (1-5): ');
 
   let envContent = '';
 
@@ -76,6 +77,18 @@ NODE_ENV=development
       break;
 
     case '3':
+      const dbFile = await question('Database file path (default: myshop.db): ') || 'myshop.db';
+      envContent = `# SQLite Local Configuration
+DATABASE_URL=sqlite://${dbFile}
+JWT_SECRET=myshop-dev-secret-change-in-production
+PORT=3000
+CORS_ORIGIN=http://localhost:5173,http://localhost:5174
+NODE_ENV=development
+`;
+      console.log('✓ Configured for SQLite Local');
+      break;
+
+    case '4':
       envContent = `# Development Mode - Migrations Disabled
 DATABASE_URL=postgresql://localhost/myshop_local
 DISABLE_MIGRATIONS=true
@@ -87,7 +100,7 @@ NODE_ENV=development
       console.log('✓ Configured for Test Mode (No Database)');
       break;
 
-    case '4':
+    case '5':
       console.log('Keeping current configuration');
       rl.close();
       return;

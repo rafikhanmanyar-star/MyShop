@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
+  title: ReactNode;
   children: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   disableScroll?: boolean;
@@ -13,6 +13,7 @@ interface ModalProps {
   maxContentHeight?: number; // Optional max content height in pixels
   className?: string; // Optional custom classes
   hideHeader?: boolean; // Optional to hide the default header
+  hideClose?: boolean; // Optional to hide the close button
 }
 
 const Modal: React.FC<ModalProps> = ({
@@ -25,7 +26,8 @@ const Modal: React.FC<ModalProps> = ({
   fullScreen = false,
   maxContentHeight,
   className,
-  hideHeader = false
+  hideHeader = false,
+  hideClose = false
 }) => {
   const [mounted, setMounted] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -183,14 +185,16 @@ const Modal: React.FC<ModalProps> = ({
       >
         {!hideHeader && (
           <div className="flex justify-between items-center p-3 sm:p-4 border-b border-gray-200 flex-shrink-0 bg-white">
-            <h2 id="modal-title" className="text-base sm:text-lg font-bold text-gray-800 truncate pr-2 sm:pr-4">{title}</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-800 p-2 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200 min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
-              aria-label="Close modal"
-            >
-              <span className="text-2xl leading-none">&times;</span>
-            </button>
+            <div id="modal-title" className="text-base sm:text-lg font-bold text-gray-800 truncate pr-2 sm:pr-4 flex-grow">{title}</div>
+            {!hideClose && (
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-800 p-2 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200 min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
+                aria-label="Close modal"
+              >
+                <span className="text-2xl leading-none">&times;</span>
+              </button>
+            )}
           </div>
         )}
         <div

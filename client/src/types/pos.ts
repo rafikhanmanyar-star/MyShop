@@ -42,6 +42,7 @@ export interface POSCartItem {
     notes?: string;
     isFree?: boolean;
     priceOverridden?: boolean;
+    categoryId?: string;
 }
 
 export interface POSPayment {

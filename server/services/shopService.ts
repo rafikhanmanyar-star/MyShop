@@ -65,7 +65,7 @@ export class ShopService {
         data.openTime || '09:00', data.closeTime || '21:00', data.location || ''
       ]);
 
-      const branchId = res.rows[0].id;
+      const branchId = res[0].id;
 
       await client.query(`
         INSERT INTO shop_terminals (tenant_id, branch_id, name, code)
@@ -158,7 +158,7 @@ export class ShopService {
       INSERT INTO shop_terminals (tenant_id, branch_id, name, code, status, version, ip_address)
       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
     `, [tenantId, data.branchId, data.name, data.code || `T-${Date.now().toString().slice(-4)}`,
-        data.status || 'Offline', data.version || '1.0.0', data.ipAddress || '0.0.0.0']);
+      data.status || 'Offline', data.version || '1.0.0', data.ipAddress || '0.0.0.0']);
     return res[0].id;
   }
 
@@ -188,24 +188,51 @@ export class ShopService {
           'SELECT id FROM categories WHERE tenant_id = $1 AND name ILIKE $2 LIMIT 1',
           [tenantId, categoryId]
         );
-        categoryId = catRes.rows.length > 0 ? catRes.rows[0].id : null;
+        categoryId = catRes.length > 0 ? catRes[0].id : null;
       }
 
       try {
+        const sku = data.sku || `SKU-${Date.now()}`;
+
+        // 1. Ensure product is created
         const res = await client.query(`
           INSERT INTO shop_products (
             tenant_id, name, sku, barcode, category_id, unit,
             cost_price, retail_price, tax_rate, reorder_point, is_active
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id
         `, [
-          tenantId, data.name, data.sku || `SKU-${Date.now()}`, data.barcode || null,
+          tenantId, data.name, sku, data.barcode || null,
           categoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
           data.tax_rate || 0, data.reorder_point || 10, true
         ]);
-        return res.rows[0].id;
+        const productId = res[0].id;
+
+        // 2. Ensure default warehouse exists and link product to it
+        let whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
+        let warehouseId;
+
+        if (whRes.length === 0) {
+          const newWh = await client.query(`
+            INSERT INTO shop_warehouses (tenant_id, name, code, location, is_active)
+            VALUES ($1, 'Main Warehouse', 'MAIN', 'Default Location', TRUE) RETURNING id
+          `, [tenantId]);
+          warehouseId = newWh[0].id;
+        } else {
+          warehouseId = whRes[0].id;
+        }
+
+        // 3. Create initial inventory record
+        await client.query(`
+          INSERT INTO shop_inventory (tenant_id, product_id, warehouse_id, quantity_on_hand)
+          VALUES ($1, $2, $3, 0)
+          ON CONFLICT (tenant_id, product_id, warehouse_id) DO NOTHING
+        `, [tenantId, productId, warehouseId]);
+
+        return productId;
       } catch (err: any) {
-        if (err.code === '23505') throw new Error(`SKU "${data.sku}" already exists.`);
-        throw new Error(`Failed to create product: ${err.message}`);
+        console.error('❌ [ShopService] createProduct failed:', err);
+        if (err.code === '23505') throw new Error(`SKU already exists.`);
+        throw new Error(err.message || 'Unknown database error');
       }
     });
   }
@@ -277,9 +304,9 @@ export class ShopService {
         INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, reason)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `, [tenantId, data.productId, data.warehouseId, data.type, data.quantity,
-          data.referenceId || `adj-${Date.now()}`, data.userId, data.reason]);
+        data.referenceId || `adj-${Date.now()}`, data.userId, data.reason]);
 
-      return updateRes.rows[0];
+      return updateRes[0];
     });
   }
 
@@ -302,7 +329,7 @@ export class ShopService {
         saleData.paymentMethod, JSON.stringify(saleData.paymentDetails)
       ]);
 
-      const saleId = saleRes.rows[0].id;
+      const saleId = saleRes[0].id;
 
       for (const item of saleData.items) {
         await client.query(`
@@ -311,8 +338,8 @@ export class ShopService {
         `, [tenantId, saleId, item.productId, item.quantity, item.unitPrice, item.taxAmount, item.discountAmount, item.subtotal]);
 
         const whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
-        if (whRes.rows.length > 0) {
-          const warehouseId = whRes.rows[0].id;
+        if (whRes.length > 0) {
+          const warehouseId = whRes[0].id;
           await client.query(`
             UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand - $1
             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4
@@ -368,7 +395,7 @@ export class ShopService {
           'SELECT id FROM contacts WHERE tenant_id = $1 AND contact_no = $2 LIMIT 1',
           [tenantId, data.phone]
         );
-        if (existing.rows.length > 0) customerId = existing.rows[0].id;
+        if (existing.length > 0) customerId = existing[0].id;
       }
 
       if (!customerId) {
@@ -377,14 +404,14 @@ export class ShopService {
           INSERT INTO contacts (id, tenant_id, name, type, contact_no, address)
           VALUES ($1, $2, $3, 'Customer', $4, $5) RETURNING id
         `, [newContactId, tenantId, data.name, data.phone, data.email]);
-        customerId = newContact.rows[0].id;
+        customerId = newContact[0].id;
       }
 
       const res = await client.query(`
         INSERT INTO shop_loyalty_members (tenant_id, customer_id, card_number, tier, status)
         VALUES ($1, $2, $3, 'Silver', 'Active') RETURNING id
       `, [tenantId, customerId, data.cardNumber || `L-${Date.now()}`]);
-      return res.rows[0].id;
+      return res[0].id;
     });
   }
 
@@ -428,7 +455,7 @@ export class ShopService {
         updated_at = NOW()
       RETURNING *
     `, [tenantId, data.allowNegativeStock, data.universalPricing, data.taxInclusive,
-        data.defaultTaxRate, data.requireManagerApproval, data.loyaltyRedemptionRatio]);
+      data.defaultTaxRate, data.requireManagerApproval, data.loyaltyRedemptionRatio]);
     return res[0];
   }
 
@@ -548,6 +575,56 @@ export class ShopService {
     await this.db.query(
       `UPDATE shop_vendors SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
       [id, tenantId]
+    );
+  }
+
+  // --- User Management ---
+  async getUsers(tenantId: string) {
+    return this.db.query(
+      `SELECT id, username, name, role, email, is_active, login_status, created_at
+       FROM users WHERE tenant_id = $1 ORDER BY name ASC`,
+      [tenantId]
+    );
+  }
+
+  async createUser(tenantId: string, data: any) {
+    const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const bcrypt = await import('bcryptjs');
+    const hashedPassword = await bcrypt.default.hash(data.password, 10);
+
+    await this.db.execute(
+      `INSERT INTO users (id, tenant_id, username, name, role, password, email, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
+      [userId, tenantId, data.username, data.name, data.role, hashedPassword, data.email]
+    );
+    return userId;
+  }
+
+  async updateUser(tenantId: string, userId: string, data: any) {
+    let hashedPassword = undefined;
+    if (data.password) {
+      const bcrypt = await import('bcryptjs');
+      hashedPassword = await bcrypt.default.hash(data.password, 10);
+    }
+
+    await this.db.execute(
+      `UPDATE users
+       SET name = COALESCE($1, name),
+           role = COALESCE($2, role),
+           email = COALESCE($3, email),
+           is_active = COALESCE($4, is_active),
+           password = COALESCE($5, password),
+           updated_at = NOW()
+       WHERE id = $6 AND tenant_id = $7`,
+      [data.name, data.role, data.email, data.is_active, hashedPassword, userId, tenantId]
+    );
+  }
+
+  async deleteUser(tenantId: string, userId: string) {
+    await this.db.execute(
+      `UPDATE users SET is_active = FALSE, updated_at = NOW()
+       WHERE id = $1 AND tenant_id = $2`,
+      [userId, tenantId]
     );
   }
 }

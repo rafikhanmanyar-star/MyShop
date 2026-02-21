@@ -61,7 +61,7 @@ interface POSContextType {
     isSalesHistoryModalOpen: boolean;
     setIsSalesHistoryModalOpen: (isOpen: boolean) => void;
 
-    completeSale: () => Promise<void>;
+    completeSale: () => Promise<any>;
     printReceipt: (saleData?: any) => Promise<void>;
     lastCompletedSale: any | null;
     setLastCompletedSale: (sale: any | null) => void;
@@ -188,10 +188,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
 
             const receiptData: ReceiptData = {
-                storeName: 'PBooks Pro Store',
-                storeAddress: 'Karachi, Pakistan',
-                storePhone: '+92-XXX-XXXXXXX',
-                taxId: 'TAX-ID-XXXXX',
+                storeName: state.printSettings?.posShopName || 'My Shop',
+                storeAddress: state.printSettings?.posShopAddress || 'Shop Address',
+                storePhone: state.printSettings?.posShopPhone || 'Shop Phone',
+                taxId: state.printSettings?.taxId || 'TAX-ID-XXXXX',
                 receiptNumber: dataToUse.saleNumber,
                 date: new Date(dataToUse.createdAt || Date.now()).toLocaleDateString(),
                 time: new Date(dataToUse.createdAt || Date.now()).toLocaleTimeString(),
@@ -213,7 +213,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     amount: p.amount
                 })),
                 change: dataToUse.changeDue > 0 ? dataToUse.changeDue : undefined,
-                footer: 'Thank you for shopping with us!'
+                footer: state.printSettings?.posReceiptFooter || 'Thank you for shopping with us!',
+                showBarcode: state.printSettings?.posShowBarcode ?? true // Default to true if not set
             };
 
             if (thermalPrinterRef.current) {
@@ -267,6 +268,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 discountPercentage: 0,
                 taxAmount: tax,
                 taxRate: product.taxRate,
+                categoryId: product.categoryId
             };
             return [...prev, newItem];
         });
@@ -402,17 +404,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             clearCart();
             // Keep modal open so user can print receipt
-            // setIsPaymentModalOpen(false);
 
-            // Show success message with change due if applicable
-            if (totals.changeDue > 0) {
-                alert(`Sale completed!\n\nChange to return: ${CURRENCY} ${totals.changeDue.toLocaleString()}\n\nYou can now print the receipt.`);
-            } else {
-                alert('Sale completed successfully!\n\nYou can now print the receipt.');
-            }
+            return saleData;
         } catch (error: any) {
             console.error('Failed to complete sale:', error);
             alert('Error completing sale: ' + (error.message || 'Unknown error'));
+            throw error;
         }
     }, [cart, customer, payments, totals, clearCart, currentUserId]);
 

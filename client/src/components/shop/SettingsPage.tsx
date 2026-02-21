@@ -24,7 +24,7 @@ function toState(v: ShopVendor) {
 
 const SettingsContent: React.FC = () => {
     const { dispatch } = useAppContext();
-    const [activeTab, setActiveTab] = useState<'coa' | 'vendors'>('coa');
+    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users'>('coa');
 
     const [vendors, setVendors] = useState<ShopVendor[]>([]);
     const [vendorsLoading, setVendorsLoading] = useState(true);
@@ -32,6 +32,14 @@ const SettingsContent: React.FC = () => {
     const [editingVendor, setEditingVendor] = useState<ShopVendor | null>(null);
     const [vendorForm, setVendorForm] = useState({
         name: '', company_name: '', contact_no: '', email: '', address: '', description: ''
+    });
+
+    const [users, setUsers] = useState<any[]>([]);
+    const [usersLoading, setUsersLoading] = useState(true);
+    const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<any | null>(null);
+    const [userForm, setUserForm] = useState({
+        username: '', name: '', email: '', password: '', role: 'pos_cashier'
     });
 
     const loadVendors = useCallback(async () => {
@@ -46,9 +54,23 @@ const SettingsContent: React.FC = () => {
         }
     }, []);
 
+    const loadUsers = useCallback(async () => {
+        try {
+            const { shopUserApi } = await import('../../services/shopApi');
+            setUsersLoading(true);
+            const list = await shopUserApi.getUsers();
+            setUsers(Array.isArray(list) ? list : []);
+        } catch {
+            setUsers([]);
+        } finally {
+            setUsersLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         if (activeTab === 'vendors') loadVendors();
-    }, [activeTab, loadVendors]);
+        if (activeTab === 'users') loadUsers();
+    }, [activeTab, loadVendors, loadUsers]);
 
     const openNewVendor = () => {
         setEditingVendor(null);
@@ -69,6 +91,24 @@ const SettingsContent: React.FC = () => {
         setIsVendorModalOpen(true);
     };
 
+    const openNewUser = () => {
+        setEditingUser(null);
+        setUserForm({ username: '', name: '', email: '', password: '', role: 'pos_cashier' });
+        setIsUserModalOpen(true);
+    };
+
+    const openEditUser = (u: any) => {
+        setEditingUser(u);
+        setUserForm({
+            username: u.username,
+            name: u.name,
+            email: u.email || '',
+            password: '',
+            role: u.role
+        });
+        setIsUserModalOpen(true);
+    };
+
     const handleSaveVendor = async () => {
         if (!vendorForm.name.trim()) return;
         try {
@@ -86,6 +126,25 @@ const SettingsContent: React.FC = () => {
         }
     };
 
+    const handleSaveUser = async () => {
+        if (!userForm.username || !userForm.name || (!editingUser && !userForm.password)) {
+            alert('Please fill in all required fields');
+            return;
+        }
+        try {
+            const { shopUserApi } = await import('../../services/shopApi');
+            if (editingUser) {
+                await shopUserApi.updateUser(editingUser.id, userForm);
+            } else {
+                await shopUserApi.createUser(userForm);
+            }
+            setIsUserModalOpen(false);
+            loadUsers();
+        } catch (e: any) {
+            alert(e?.message || 'Failed to save user');
+        }
+    };
+
     const handleDeactivateVendor = async (id: string) => {
         if (!confirm('Deactivate this vendor? They will no longer appear in Procurement.')) return;
         try {
@@ -96,9 +155,21 @@ const SettingsContent: React.FC = () => {
         }
     };
 
+    const handleDeactivateUser = async (id: string) => {
+        if (!confirm('Deactivate this user? They will no longer be able to login.')) return;
+        try {
+            const { shopUserApi } = await import('../../services/shopApi');
+            await shopUserApi.deleteUser(id);
+            loadUsers();
+        } catch (e: any) {
+            alert(e?.message || 'Failed to deactivate');
+        }
+    };
+
     const tabs = [
         { id: 'coa' as const, label: 'Chart of Accounts', icon: ICONS.list },
         { id: 'vendors' as const, label: 'Vendor Management', icon: ICONS.briefcase },
+        { id: 'users' as const, label: 'User Management', icon: ICONS.users },
     ];
 
     return (
@@ -106,7 +177,7 @@ const SettingsContent: React.FC = () => {
             <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10">
                 <div className="mb-6">
                     <h1 className="text-2xl font-black text-slate-800 tracking-tight">Settings</h1>
-                    <p className="text-slate-500 text-sm font-medium">Chart of accounts and vendor management for procurement.</p>
+                    <p className="text-slate-500 text-sm font-medium">Chart of accounts, vendor management, and team roles.</p>
                 </div>
                 <div className="flex gap-8">
                     {tabs.map(tab => (
@@ -198,7 +269,140 @@ const SettingsContent: React.FC = () => {
                         </Card>
                     </div>
                 )}
+
+                {activeTab === 'users' && (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                            <p className="text-slate-600 text-sm">Manage team members and their access roles (Admin, Accountant, POS Cashier).</p>
+                            <Button onClick={openNewUser} className="flex items-center gap-2">
+                                {ICONS.plus} New User
+                            </Button>
+                        </div>
+                        <Card className="border-none shadow-sm overflow-hidden">
+                            {usersLoading ? (
+                                <div className="p-12 text-center text-slate-400">Loading users...</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                                            <tr>
+                                                <th className="px-6 py-4">Name / Username</th>
+                                                <th className="px-6 py-4">Role</th>
+                                                <th className="px-6 py-4">Email</th>
+                                                <th className="px-6 py-4">Status</th>
+                                                <th className="px-6 py-4 text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {users.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500 text-sm">
+                                                        No users found.
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                users.map(u => (
+                                                    <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                                                        <td className="px-6 py-4">
+                                                            <div className="font-bold text-slate-800">{u.name}</div>
+                                                            <div className="text-[10px] text-slate-400 font-mono">@{u.username}</div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded shadow-sm ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' :
+                                                                    u.role === 'accountant' ? 'bg-amber-100 text-amber-700' :
+                                                                        'bg-slate-100 text-slate-700'
+                                                                }`}>
+                                                                {u.role.replace('_', ' ')}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-slate-600">{u.email || '—'}</td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${u.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                                {u.is_active ? 'Active' : 'Inactive'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                                <button onClick={() => openEditUser(u)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors">
+                                                                    {ICONS.edit}
+                                                                </button>
+                                                                {u.is_active && u.role !== 'admin' && (
+                                                                    <button onClick={() => handleDeactivateUser(u.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
+                                                                        {ICONS.trash}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </Card>
+                    </div>
+                )}
             </div>
+
+            {/* User Modal */}
+            <Modal
+                isOpen={isUserModalOpen}
+                onClose={() => setIsUserModalOpen(false)}
+                title={editingUser ? 'Edit User' : 'New User'}
+                size="lg"
+            >
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Full Name"
+                            placeholder="e.g. John Doe"
+                            value={userForm.name}
+                            onChange={e => setUserForm({ ...userForm, name: e.target.value })}
+                        />
+                        <Input
+                            label="Username"
+                            placeholder="e.g. johndoe"
+                            value={userForm.username}
+                            onChange={e => setUserForm({ ...userForm, username: e.target.value })}
+                            disabled={!!editingUser}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Email Address"
+                            placeholder="Optional"
+                            value={userForm.email}
+                            onChange={e => setUserForm({ ...userForm, email: e.target.value })}
+                        />
+                        <div>
+                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Role</label>
+                            <select
+                                className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all appearance-none"
+                                value={userForm.role}
+                                onChange={e => setUserForm({ ...userForm, role: e.target.value })}
+                            >
+                                <option value="admin">Admin</option>
+                                <option value="accountant">Accountant</option>
+                                <option value="pos_cashier">POS Cashier</option>
+                            </select>
+                        </div>
+                    </div>
+                    <Input
+                        label={editingUser ? 'Change Password (leave blank to keep current)' : 'Password'}
+                        type="password"
+                        placeholder="••••••••"
+                        value={userForm.password}
+                        onChange={e => setUserForm({ ...userForm, password: e.target.value })}
+                    />
+                    <div className="flex justify-end gap-3 mt-4">
+                        <Button variant="secondary" onClick={() => setIsUserModalOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSaveUser}>
+                            {editingUser ? 'Update' : 'Create'}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
 
             {/* Vendor Modal */}
             <Modal
