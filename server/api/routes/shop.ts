@@ -8,7 +8,8 @@ import path from 'path';
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     try {
-      const uploadDir = path.join(process.cwd(), 'uploads/products');
+      console.log('📂 Current working directory:', process.cwd());
+      const uploadDir = path.resolve(process.cwd(), 'uploads/product');
       if (!fs.existsSync(uploadDir)) {
         console.log('📂 Creating upload directory:', uploadDir);
         fs.mkdirSync(uploadDir, { recursive: true });
@@ -240,7 +241,7 @@ router.post('/upload-image', (req, res, next) => {
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
-      const imageUrl = `/uploads/products/${req.file.filename}`;
+      const imageUrl = `/uploads/product/${req.file.filename}`;
       console.log('✅ Image uploaded successfully:', imageUrl);
       res.json({ imageUrl });
     } catch (error: any) {
@@ -248,6 +249,36 @@ router.post('/upload-image', (req, res, next) => {
       res.status(500).json({ error: error.message });
     }
   });
+});
+
+router.get('/debug-uploads', (req: any, res) => {
+  try {
+    const uploadDir = path.resolve(process.cwd(), 'uploads/product');
+    const exists = fs.existsSync(uploadDir);
+    if (!exists) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Test write
+    const testFile = path.join(uploadDir, 'test-write.txt');
+    fs.writeFileSync(testFile, 'Test write at ' + new Date().toISOString());
+
+    const files = fs.readdirSync(uploadDir);
+    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+    const allFolders = fs.existsSync(uploadsRoot) ? fs.readdirSync(uploadsRoot) : [];
+
+    res.json({
+      cwd: process.cwd(),
+      uploadDir,
+      exists,
+      allFoldersInUploads: allFolders,
+      filesInProductFolder: files,
+      testFileCreated: fs.existsSync(testFile),
+      tenantId: req.tenantId
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Inventory ---

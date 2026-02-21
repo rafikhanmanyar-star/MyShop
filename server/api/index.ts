@@ -83,7 +83,9 @@ if (clientDistPath) {
 }
 
 // Serve uploaded files
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+const uploadsPath = path.resolve(path.dirname(import.meta.url.replace('file:///', '')), '../uploads');
+app.use('/uploads', express.static(uploadsPath));
+console.log('📂 Serving uploads from:', uploadsPath);
 
 if (clientDistPath) {
   app.get('*', (req, res, next) => {

@@ -270,7 +270,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 retail_price: item.retailPrice,
                 cost_price: item.costPrice,
                 unit: item.unit,
-                reorder_point: item.reorderPoint
+                reorder_point: item.reorderPoint,
+                image_url: item.imageUrl
             };
 
             const response = await shopApi.createProduct(payload) as any;
@@ -310,6 +311,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (updates.costPrice !== undefined) payload.cost_price = updates.costPrice;
             if (updates.unit) payload.unit = updates.unit;
             if (updates.reorderPoint !== undefined) payload.reorder_point = updates.reorderPoint;
+            if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
 
             await shopApi.updateProduct(id, payload);
 
