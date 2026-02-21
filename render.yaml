@@ -20,3 +20,5 @@ services:
         value: 3000
       - key: CORS_ORIGIN
         value: "*"
+      - key: MOBILE_APP_URL
+        value: https://myshop-mobile.onrender.com
