@@ -18,7 +18,11 @@ export default function Checkout() {
     const tax = state.cart.reduce((sum, i) => sum + i.price * i.quantity * (i.tax_rate / 100), 0);
     const grandTotal = cartTotal + tax + actualDelivery;
 
-    const formatPrice = (p: number) => `Rs. ${p.toLocaleString()}`;
+    const formatPrice = (p: number | string | null | undefined) => {
+        if (p === null || p === undefined) return 'Rs. 0';
+        const num = typeof p === 'string' ? parseFloat(p) : p;
+        return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
+    };
 
     const handlePlaceOrder = async () => {
         if (!address.trim()) {

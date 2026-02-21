@@ -62,7 +62,11 @@ export default function OrderDetail() {
         }
     };
 
-    const formatPrice = (p: number) => `Rs. ${parseFloat(p as any).toLocaleString()}`;
+    const formatPrice = (p: number | string | null | undefined) => {
+        if (p === null || p === undefined) return 'Rs. 0';
+        const num = typeof p === 'string' ? parseFloat(p) : p;
+        return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
+    };
     const formatDate = (d: string) => new Date(d).toLocaleDateString('en-PK', {
         day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     });

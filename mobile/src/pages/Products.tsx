@@ -85,7 +85,11 @@ export default function Products() {
         showToast(`${product.name} added to cart`);
     };
 
-    const formatPrice = (p: number) => `Rs. ${p.toLocaleString()}`;
+    const formatPrice = (p: number | string | null | undefined) => {
+        if (p === null || p === undefined) return 'Rs. 0';
+        const num = typeof p === 'string' ? parseFloat(p) : p;
+        return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
+    };
 
     return (
         <div className="page fade-in">

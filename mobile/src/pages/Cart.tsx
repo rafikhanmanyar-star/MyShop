@@ -7,7 +7,11 @@ export default function Cart() {
     const navigate = useNavigate();
     const { state, dispatch, cartTotal, cartCount } = useApp();
 
-    const formatPrice = (p: number) => `Rs. ${p.toLocaleString()}`;
+    const formatPrice = (p: number | string | null | undefined) => {
+        if (p === null || p === undefined) return 'Rs. 0';
+        const num = typeof p === 'string' ? parseFloat(p) : p;
+        return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
+    };
 
     const deliveryFee = state.settings?.delivery_fee || 0;
     const freeAbove = state.settings?.free_delivery_above;
