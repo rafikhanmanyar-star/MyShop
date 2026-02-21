@@ -7,6 +7,7 @@ import Modal from '../../ui/Modal';
 import Input from '../../ui/Input';
 import Button from '../../ui/Button';
 import Select from '../../ui/Select';
+import { shopApi } from '../../../services/shopApi';
 
 const StockMaster: React.FC = () => {
     const { items, warehouses, updateStock, requestTransfer } = useInventory();
