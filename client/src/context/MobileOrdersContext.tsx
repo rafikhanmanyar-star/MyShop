@@ -33,7 +33,6 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sseConnected, setSseConnected] = useState(false);
-    const eventSourceRef = useRef<EventSource | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     // Create notification sound using Web Audio API
@@ -73,7 +72,6 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
         const url = `${baseUrl}/shop/mobile-orders/stream`;
 
         const connect = () => {
-            const es = new EventSource(url, { withCredentials: false });
 
             // We need to add auth header - EventSource doesn't support headers natively
             // So we use fetch-based SSE instead
@@ -146,7 +144,6 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
 
         return () => {
             controller?.abort?.();
-            eventSourceRef.current?.close();
         };
     }, []);
 
