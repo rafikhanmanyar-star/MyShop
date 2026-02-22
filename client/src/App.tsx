@@ -8,7 +8,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone,
+  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain
 } from 'lucide-react';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
@@ -19,6 +19,7 @@ const MultiStorePage = lazy(() => import('./components/shop/MultiStorePage'));
 const BIDashboardsPage = lazy(() => import('./components/shop/BIDashboardsPage'));
 const AccountingPage = lazy(() => import('./components/shop/AccountingPage'));
 const MobileOrdersPage = lazy(() => import('./components/shop/MobileOrdersPage'));
+const ForecastPage = lazy(() => import('./components/shop/ForecastPage'));
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant'] },
@@ -30,6 +31,7 @@ const navItems = [
   { path: '/multi-store', label: 'Multi-Store', icon: Building2, roles: ['admin'] },
   { path: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin', 'accountant'] },
   { path: '/accounting', label: 'Accounting', icon: BookOpen, roles: ['admin', 'accountant'] },
+  { path: '/forecast', label: 'Forecasting', icon: Brain, roles: ['admin', 'accountant'] },
   { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
 ];
 
@@ -159,6 +161,7 @@ function AppLayout() {
               <Route path="/multi-store" element={role === 'admin' ? <MultiStorePage /> : <Navigate to="/" replace />} />
               <Route path="/analytics" element={['admin', 'accountant'].includes(role) ? <BIDashboardsPage /> : <Navigate to="/" replace />} />
               <Route path="/accounting" element={['admin', 'accountant'].includes(role) ? <AccountingPage /> : <Navigate to="/" replace />} />
+              <Route path="/forecast" element={['admin', 'accountant'].includes(role) ? <ForecastPage /> : <Navigate to="/" replace />} />
               <Route path="/settings" element={role === 'admin' ? <SettingsPage /> : <Navigate to="/" replace />} />
 
               <Route path="*" element={<Navigate to={role === 'pos_cashier' ? '/pos' : '/'} replace />} />

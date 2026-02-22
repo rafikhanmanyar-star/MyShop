@@ -7,6 +7,7 @@ import { getDatabaseService } from '../services/databaseService.js';
 import { tenantMiddleware } from '../middleware/tenantMiddleware.js';
 import authRoutes from './routes/auth.js';
 import shopRoutes from './routes/shop.js';
+import forecastRoutes from './routes/forecast.js';
 import mobileRoutes from './routes/mobile.js';
 import mobileOrdersRoutes from './routes/mobileOrders.js';
 import { runMigrations } from '../scripts/run-migrations.js';
@@ -82,6 +83,7 @@ app.get('/api/shop-test', (_req, res) => {
 // Protected routes (auth required)
 const dbService = getDatabaseService();
 app.use('/api/shop', tenantMiddleware(dbService), shopRoutes);
+app.use('/api/shop/forecast', tenantMiddleware(dbService), forecastRoutes);
 
 // POS-side mobile order management (requires shop auth)
 app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRoutes);
