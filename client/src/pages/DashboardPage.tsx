@@ -26,7 +26,7 @@ export default function DashboardPage() {
           shopApi.getInventory().catch(() => []),
         ]);
 
-        const totalRevenue = (sales as any[]).reduce((sum: number, s: any) => sum + parseFloat(s.grand_total || 0), 0);
+        const totalRevenue = (sales as any[]).reduce((sum: number, s: any) => sum + parseFloat(s.grandTotal || s.grand_total || 0), 0);
         const lowStockItems = (inventory as any[]).filter((i: any) => parseFloat(i.quantity_on_hand) <= 10).length;
 
         setStats({

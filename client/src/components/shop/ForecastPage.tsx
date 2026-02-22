@@ -21,8 +21,45 @@ const ForecastPage: React.FC = () => {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const res = await forecastApi.getDashboard(month, year);
-            setData(res as any);
+            const res = await forecastApi.getDashboard(month, year) as any;
+
+            // Sanitize numerical data (Decimals come as strings from DB)
+            if (res?.summary) {
+                res.summary.confidence_score = Number(res.summary.confidence_score) || 0;
+                res.summary.total_projected_revenue = Number(res.summary.total_projected_revenue) || 0;
+                res.summary.total_projected_profit = Number(res.summary.total_projected_profit) || 0;
+            }
+            if (res?.categories) {
+                res.categories = res.categories.map((c: any) => ({
+                    ...c,
+                    forecast_revenue: Number(c.forecast_revenue) || 0,
+                    forecast_profit: Number(c.forecast_profit) || 0
+                }));
+            }
+            if (res?.products) {
+                res.products = res.products.map((p: any) => ({
+                    ...p,
+                    planned_quantity: Number(p.planned_quantity) || 0,
+                    historical_avg_quantity: Number(p.historical_avg_quantity) || 0,
+                    forecast_quantity: Number(p.forecast_quantity) || 0,
+                    forecast_revenue: Number(p.forecast_revenue) || 0,
+                    forecast_profit: Number(p.forecast_profit) || 0
+                }));
+            }
+            if (res?.cashFlow) {
+                res.cashFlow.projected_inflow = Number(res.cashFlow.projected_inflow) || 0;
+                res.cashFlow.projected_outflow = Number(res.cashFlow.projected_outflow) || 0;
+                res.cashFlow.working_capital_requirement = Number(res.cashFlow.working_capital_requirement) || 0;
+            }
+            if (res?.inventoryRisks) {
+                res.inventoryRisks = res.inventoryRisks.map((r: any) => ({
+                    ...r,
+                    forecast_revenue: Number(r.forecast_revenue) || 0,
+                    stock_out_risk_percent: Number(r.stock_out_risk_percent) || 0
+                }));
+            }
+
+            setData(res);
         } catch (error) {
             console.error('Error fetching forecast:', error);
         } finally {
@@ -147,7 +184,7 @@ const ForecastPage: React.FC = () => {
                         </div>
                     </div>
                     <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Projected Revenue</p>
-                    <h3 className="text-2xl font-black text-slate-900">{formatCurrency(data?.summary.total_projected_revenue || 0)}</h3>
+                    <h3 className="text-2xl font-black text-slate-900">{formatCurrency(Number(data?.summary?.total_projected_revenue) || 0)}</h3>
                 </div>
 
                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
@@ -161,7 +198,7 @@ const ForecastPage: React.FC = () => {
                         </div>
                     </div>
                     <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Expected Profit</p>
-                    <h3 className="text-2xl font-black text-slate-900">{formatCurrency(data?.summary.total_projected_profit || 0)}</h3>
+                    <h3 className="text-2xl font-black text-slate-900">{formatCurrency(Number(data?.summary?.total_projected_profit) || 0)}</h3>
                 </div>
 
                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
@@ -175,7 +212,7 @@ const ForecastPage: React.FC = () => {
                         </div>
                     </div>
                     <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Inventory Alert</p>
-                    <h3 className="text-2xl font-black text-slate-900">{data?.inventoryRisks.length} Items</h3>
+                    <h3 className="text-2xl font-black text-slate-900">{data?.inventoryRisks?.length || 0} Items</h3>
                 </div>
 
                 <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
@@ -189,11 +226,11 @@ const ForecastPage: React.FC = () => {
                     </div>
                     <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Forecast Accuracy</p>
                     <div className="flex items-end gap-3">
-                        <h3 className="text-2xl font-black text-slate-900">{(data?.summary.confidence_score || 0).toFixed(0)}%</h3>
+                        <h3 className="text-2xl font-black text-slate-900">{Number(data?.summary?.confidence_score || 0).toFixed(0)}%</h3>
                         <div className="flex-1 h-3 bg-slate-100 rounded-full mb-1.5 overflow-hidden">
                             <div
                                 className="h-full bg-gradient-to-r from-blue-500 to-indigo-500"
-                                style={{ width: `${data?.summary.confidence_score}%` }}
+                                style={{ width: `${Number(data?.summary?.confidence_score || 0)}%` }}
                             />
                         </div>
                     </div>
@@ -231,7 +268,7 @@ const ForecastPage: React.FC = () => {
                                     contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                                 />
                                 <Bar dataKey="forecast_revenue" radius={[0, 8, 8, 0]} barSize={24}>
-                                    {data?.categories.map((entry, index) => (
+                                    {data?.categories?.map((entry: any, index: number) => (
                                         <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#4f46e5' : '#8b5cf6'} />
                                     ))}
                                 </Bar>
@@ -247,11 +284,11 @@ const ForecastPage: React.FC = () => {
                             <h3 className="text-xl font-black text-slate-900 tracking-tight">Liquidity Forecast</h3>
                             <p className="text-slate-500 text-sm">Cash Flow Impact Analysis.</p>
                         </div>
-                        <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${data?.cashFlow.liquidity_risk_level === 'Low' ? 'bg-emerald-50 text-emerald-600' :
-                                data?.cashFlow.liquidity_risk_level === 'Medium' ? 'bg-amber-50 text-amber-600' :
-                                    'bg-rose-50 text-rose-600'
+                        <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${data?.cashFlow?.liquidity_risk_level === 'Low' ? 'bg-emerald-50 text-emerald-600' :
+                            data?.cashFlow?.liquidity_risk_level === 'Medium' ? 'bg-amber-50 text-amber-600' :
+                                'bg-rose-50 text-rose-600'
                             }`}>
-                            {data?.cashFlow.liquidity_risk_level} Risk
+                            {data?.cashFlow?.liquidity_risk_level} Risk
                         </div>
                     </div>
                     <div className="h-[300px]">
@@ -294,7 +331,7 @@ const ForecastPage: React.FC = () => {
                         <h3 className="text-xl font-black text-slate-900 tracking-tight">Stock Risks</h3>
                     </div>
                     <div className="space-y-4 flex-1">
-                        {data?.inventoryRisks.map((risk, i) => (
+                        {data?.inventoryRisks?.map((risk: any, i: number) => (
                             <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                 <div>
                                     <p className="text-sm font-bold text-slate-800 line-clamp-1">{risk.product_name}</p>
@@ -304,7 +341,7 @@ const ForecastPage: React.FC = () => {
                                     </p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs font-black text-slate-900">{formatCurrency(risk.forecast_revenue)}</p>
+                                    <p className="text-xs font-black text-slate-900">{formatCurrency(Number(risk.forecast_revenue))}</p>
                                     <p className="text-[10px] font-medium text-slate-400">Projected Revenue</p>
                                 </div>
                             </div>
@@ -333,7 +370,7 @@ const ForecastPage: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {data?.products.map((prod, i) => (
+                                {data?.products?.map((prod: any, i: number) => (
                                     <tr key={i} className="border-t border-slate-50 group hover:bg-slate-50/50 transition-colors">
                                         <td className="py-4">
                                             <p className="text-sm font-bold text-slate-800">{prod.product_name}</p>
@@ -346,7 +383,7 @@ const ForecastPage: React.FC = () => {
                                                 {Number(prod.forecast_quantity).toFixed(1)}
                                             </span>
                                         </td>
-                                        <td className="py-4 text-right font-black text-sm text-slate-900">{formatCurrency(prod.forecast_revenue)}</td>
+                                        <td className="py-4 text-right font-black text-sm text-slate-900">{formatCurrency(Number(prod.forecast_revenue))}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -379,7 +416,7 @@ const ForecastPage: React.FC = () => {
                     <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
                         <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Risk Mitigation</p>
                         <p className="text-sm font-medium leading-relaxed">
-                            Stock-out risk detected for <span className="text-amber-400 font-bold">5 high-demand items</span>. Working capital requirement will increase by {formatCurrency(data?.cashFlow.working_capital_requirement || 0)}.
+                            Stock-out risk detected for <span className="text-amber-400 font-bold">5 high-demand items</span>. Working capital requirement will increase by {formatCurrency(Number(data?.cashFlow?.working_capital_requirement) || 0)}.
                         </p>
                     </div>
                 </div>

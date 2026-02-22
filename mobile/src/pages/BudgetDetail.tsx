@@ -23,7 +23,11 @@ export default function BudgetDetail() {
         load();
     }, [id, shopSlug]);
 
-    const formatPrice = (n: number | string) => `Rs. ${Math.abs(Number(n)).toLocaleString()}`;
+    const formatPrice = (n: any) => {
+        const val = parseFloat(n);
+        if (isNaN(val)) return 'Rs. 0';
+        return `Rs. ${Math.abs(val).toLocaleString()}`;
+    };
 
     const handleClone = async () => {
         if (!budget) return;
@@ -89,8 +93,8 @@ export default function BudgetDetail() {
     if (!budget) return null;
 
     const insights = generateInsights(budget);
-    const totalActual = budget.items.reduce((acc: number, i: any) => acc + parseFloat(i.actual_amount), 0);
-    const totalPlanned = parseFloat(budget.total_budget_amount);
+    const totalActual = budget.items.reduce((acc: number, i: any) => acc + (parseFloat(i.actual_amount) || 0), 0);
+    const totalPlanned = parseFloat(budget.total_budget_amount) || 0;
     const variance = totalPlanned - totalActual;
 
     return (
@@ -155,8 +159,8 @@ export default function BudgetDetail() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                     {budget.items.map((item: any) => {
-                        const actual = parseFloat(item.actual_amount);
-                        const planned = parseFloat(item.planned_total);
+                        const actual = parseFloat(item.actual_amount) || 0;
+                        const planned = parseFloat(item.planned_total) || 0;
                         const status = actual > planned ? 'over' : actual > 0 ? 'under' : 'pending';
 
                         return (

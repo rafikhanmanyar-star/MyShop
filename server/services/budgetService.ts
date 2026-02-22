@@ -25,20 +25,22 @@ export class BudgetService {
             for (const item of input.items) {
                 // Get current product price if not provided
                 let price = item.plannedPrice;
-                if (price === undefined || price === null) {
+                if (price === undefined || price === null || isNaN(Number(price))) {
                     const prodRes = await client.query(
                         'SELECT retail_price FROM shop_products WHERE id = $1 AND tenant_id = $2',
                         [item.productId, tenantId]
                     );
                     price = prodRes.length > 0 ? parseFloat(prodRes[0].retail_price) : 0;
                 }
-                const itemTotal = price * item.plannedQuantity;
+                const p = Number(price) || 0;
+                const q = Number(item.plannedQuantity) || 0;
+                const itemTotal = p * q;
                 totalAmount += itemTotal;
 
                 itemsToInsert.push({
                     productId: item.productId,
-                    plannedQuantity: item.plannedQuantity,
-                    plannedPrice: price,
+                    plannedQuantity: q,
+                    plannedPrice: p,
                     plannedTotal: itemTotal
                 });
             }

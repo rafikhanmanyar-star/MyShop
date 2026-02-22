@@ -479,7 +479,30 @@ export class ShopService {
 
   async getSales(tenantId: string) {
     return this.db.query(`
-      SELECT s.*, c.name as customer_name, b.name as branch_name, 'POS' as source
+      SELECT 
+        s.id, s.tenant_id as "tenantId", s.branch_id as "branchId", s.terminal_id as "terminalId", 
+        s.user_id as "userId", s.customer_id as "customerId", s.loyalty_member_id as "loyaltyMemberId", 
+        s.sale_number as "saleNumber", s.subtotal, s.tax_total as "taxTotal", 
+        s.discount_total as "discountTotal", s.grand_total as "grandTotal", 
+        s.total_paid as "totalPaid", s.change_due as "changeDue", 
+        s.payment_method as "paymentMethod", s.payment_details as "paymentDetails", 
+        s.status, s.points_earned as "pointsEarned", s.points_redeemed as "pointsRedeemed", 
+        s.created_at as "createdAt", s.updated_at as "updatedAt",
+        c.name as "customerName", b.name as "branchName", 'POS' as source,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'productId', si.product_id,
+            'name', COALESCE(p.name, 'Unknown Product'),
+            'quantity', si.quantity,
+            'unitPrice', si.unit_price,
+            'taxAmount', si.tax_amount,
+            'discountAmount', si.discount_amount,
+            'subtotal', si.subtotal
+          ))
+          FROM shop_sale_items si
+          LEFT JOIN shop_products p ON si.product_id = p.id
+          WHERE si.sale_id = s.id
+        ), '[]'::json) as items
       FROM shop_sales s
       LEFT JOIN contacts c ON s.customer_id = c.id AND c.tenant_id = $1
       LEFT JOIN shop_branches b ON s.branch_id = b.id AND b.tenant_id = $1
@@ -487,16 +510,34 @@ export class ShopService {
       
       UNION ALL
       
-      SELECT o.id, o.tenant_id, o.branch_id, NULL as terminal_id, NULL as user_id,
-             o.customer_id, NULL as loyalty_member_id, o.order_number as sale_number,
-             o.subtotal, o.tax_total, o.discount_total, o.grand_total, o.grand_total as total_paid,
-             0 as change_due, o.payment_method, NULL as payment_details, 0 as points_earned, 0 as points_redeemed,
-             o.created_at, o.updated_at, mc.name as customer_name, b.name as branch_name, 'Mobile' as source
+      SELECT 
+        o.id, o.tenant_id as "tenantId", o.branch_id as "branchId", NULL as "terminalId", 
+        NULL as "userId", o.customer_id as "customerId", NULL as "loyaltyMemberId", 
+        o.order_number as "saleNumber", o.subtotal, o.tax_total as "taxTotal", 
+        o.discount_total as "discountTotal", o.grand_total as "grandTotal", 
+        o.grand_total as "totalPaid", 0 as "changeDue", 
+        o.payment_method as "paymentMethod", NULL as "paymentDetails", 
+        o.status, 0 as "pointsEarned", 0 as "pointsRedeemed", 
+        o.created_at as "createdAt", o.updated_at as "updatedAt",
+        mc.name as "customerName", b.name as "branchName", 'Mobile' as source,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'productId', oi.product_id,
+            'name', oi.product_name,
+            'quantity', oi.quantity,
+            'unitPrice', oi.unit_price,
+            'taxAmount', oi.tax_amount,
+            'discountAmount', oi.discount_amount,
+            'subtotal', oi.subtotal
+          ))
+          FROM mobile_order_items oi
+          WHERE oi.order_id = o.id
+        ), '[]'::json) as items
       FROM mobile_orders o
       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id
       LEFT JOIN shop_branches b ON o.branch_id = b.id AND b.tenant_id = $1
       WHERE o.tenant_id = $1 AND o.status = 'Delivered'
-      ORDER BY created_at DESC
+      ORDER BY "createdAt" DESC
     `, [tenantId]);
   }
 

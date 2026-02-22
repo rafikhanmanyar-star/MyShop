@@ -160,10 +160,10 @@ export default function BudgetCreation() {
         }
     };
 
-    const formatPrice = (p: number | string | null | undefined) => {
-        if (p === null || p === undefined) return 'Rs. 0';
-        const num = typeof p === 'string' ? parseFloat(p) : p;
-        return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
+    const formatPrice = (p: any) => {
+        const num = parseFloat(p);
+        if (isNaN(num)) return 'Rs. 0';
+        return `Rs. ${num.toLocaleString()}`;
     };
 
     const getMonthName = (m: number) => {

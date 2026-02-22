@@ -100,8 +100,8 @@ export class MobileOrderService {
         const hasMore = rows.length > limit;
         const items = rows.slice(0, limit).map((r: any) => ({
             ...r,
-            price: r.mobile_price != null ? parseFloat(r.mobile_price) : parseFloat(r.retail_price),
-            available_stock: parseFloat(r.available_stock),
+            price: r.mobile_price != null ? (parseFloat(r.mobile_price) || 0) : (parseFloat(r.retail_price) || 0),
+            available_stock: parseFloat(r.available_stock) || 0,
         }));
 
         let nextCursor: string | null = null;
