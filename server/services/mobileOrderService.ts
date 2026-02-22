@@ -432,20 +432,43 @@ export class MobileOrderService {
                 updateFields.push(`payment_status = 'Paid'`);
 
                 // Update bank account balance
-                const orderData = await client.query('SELECT grand_total, payment_method FROM mobile_orders WHERE id = $1', [orderId]);
+                const orderData = await client.query('SELECT grand_total, payment_method, order_number, subtotal, tax_total FROM mobile_orders WHERE id = $1', [orderId]);
                 if (orderData.length > 0) {
-                    const { grand_total, payment_method } = orderData[0];
+                    const { grand_total, payment_method, order_number, subtotal, tax_total } = orderData[0];
+                    let bankAccountId: string | null = null;
+
                     const bankRes = await client.query(
                         `SELECT id FROM shop_bank_accounts WHERE tenant_id = $1 AND (name ILIKE $2 OR account_type ILIKE $2) LIMIT 1`,
                         [tenantId, `%${payment_method}%`]
                     );
                     if (bankRes.length > 0) {
-                        await client.query(`UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, [grand_total, bankRes[0].id, tenantId]);
+                        bankAccountId = bankRes[0].id;
                     } else {
                         const fallbackRes = await client.query(`SELECT id FROM shop_bank_accounts WHERE tenant_id = $1 AND is_active = TRUE LIMIT 1`, [tenantId]);
                         if (fallbackRes.length > 0) {
-                            await client.query(`UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, [grand_total, fallbackRes[0].id, tenantId]);
+                            bankAccountId = fallbackRes[0].id;
                         }
+                    }
+
+                    if (bankAccountId) {
+                        await client.query(`UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, [grand_total, bankAccountId, tenantId]);
+                    }
+
+                    // --- POST TO DOUBLE-ENTRY ACCOUNTING (Journal + Ledger) ---
+                    try {
+                        const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1', [orderId]);
+                        await this.postMobileOrderToAccounting(client, orderId, tenantId, {
+                            orderNumber: order_number,
+                            grandTotal: parseFloat(grand_total),
+                            subtotal: parseFloat(subtotal),
+                            taxTotal: parseFloat(tax_total),
+                            paymentMethod: payment_method,
+                            bankAccountId,
+                            items: orderItems,
+                            customerId: orders[0].customer_id,
+                        });
+                    } catch (accErr) {
+                        console.error('⚠️ Failed to post mobile order to accounting:', accErr);
                     }
 
                     // --- UPDATE BUDGET ACTUALS ---
@@ -601,6 +624,91 @@ export class MobileOrderService {
             'UPDATE mobile_orders SET pos_synced = TRUE, pos_synced_at = NOW() WHERE id = $1 AND tenant_id = $2',
             [orderId, tenantId]
         );
+    }
+
+    // ─── Double-entry accounting for mobile orders (on Delivery) ──────
+
+    private async postMobileOrderToAccounting(client: any, orderId: string, tenantId: string, data: {
+        orderNumber: string;
+        grandTotal: number;
+        subtotal: number;
+        taxTotal: number;
+        paymentMethod: string;
+        bankAccountId: string | null;
+        items: any[];
+        customerId: string;
+    }) {
+        // Create journal entry
+        const journalRes = await client.query(`
+            INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+            VALUES ($1, NOW(), $2, $3, 'MobileApp', $4, 'Posted')
+            RETURNING id
+        `, [tenantId, data.orderNumber, `Mobile Order ${data.orderNumber}`, orderId]);
+
+        if (journalRes.length === 0) return;
+        const journalId = journalRes[0].id;
+
+        // Helper to get or create account
+        const getAccount = async (name: string, type: string, code: string) => {
+            let accRes = await client.query('SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2 LIMIT 1', [tenantId, code]);
+            if (accRes.length === 0) {
+                accRes = await client.query(
+                    'INSERT INTO accounts (tenant_id, name, code, type, balance) VALUES ($1, $2, $3, $4, 0) RETURNING id',
+                    [tenantId, name, code, type]
+                );
+            }
+            return accRes[0].id;
+        };
+
+        // 1. Credit Revenue
+        const revenueAcc = await getAccount('Sales Revenue', 'Income', 'INC-400');
+        await client.query(
+            'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
+            [tenantId, journalId, revenueAcc, data.grandTotal]
+        );
+
+        // 2. Debit Cash/Bank
+        let debitAccId: string;
+        if (data.bankAccountId) {
+            const bankInfo = await client.query('SELECT name, account_type FROM shop_bank_accounts WHERE id = $1', [data.bankAccountId]);
+            const bank = bankInfo[0];
+            const accName = bank?.name || 'Bank';
+            const accCode = bank?.account_type === 'Cash' ? 'AST-100' : 'AST-101';
+            debitAccId = await getAccount(accName, 'Asset', accCode);
+        } else {
+            debitAccId = await getAccount('Cash', 'Asset', 'AST-100');
+        }
+
+        await client.query(
+            'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
+            [tenantId, journalId, debitAccId, data.grandTotal]
+        );
+
+        // 3. COGS vs Inventory
+        let totalCogs = 0;
+        for (const item of data.items) {
+            const prodRes = await client.query('SELECT cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1', [item.product_id, tenantId]);
+            if (prodRes.length > 0 && prodRes[0].cost_price) {
+                totalCogs += (Number(prodRes[0].cost_price) * Number(item.quantity));
+            }
+        }
+
+        if (totalCogs > 0) {
+            const cogsAcc = await getAccount('Cost of Goods Sold', 'Expense', 'EXP-500');
+            const invAssetAcc = await getAccount('Inventory Asset', 'Asset', 'AST-110');
+
+            await client.query(
+                'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
+                [tenantId, journalId, cogsAcc, totalCogs]
+            );
+            await client.query(
+                'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
+                [tenantId, journalId, invAssetAcc, totalCogs]
+            );
+        }
+
+        // 4. Invalidate report aggregates
+        await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
     }
 }
 

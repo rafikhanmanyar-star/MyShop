@@ -124,3 +124,16 @@ export const shopUserApi = {
   updateUser: (id: string, data: any) => apiClient.put(`/shop/users/${id}`, data),
   deleteUser: (id: string) => apiClient.delete(`/shop/users/${id}`),
 };
+
+// --- Accounting API ---
+export const accountingApi = {
+  getAccounts: () => apiClient.get<any[]>('/shop/accounting/accounts'),
+  getJournalEntries: (limit = 200) => apiClient.get<any[]>(`/shop/accounting/journal-entries?limit=${limit}`),
+  postJournalEntry: (data: any) => apiClient.post('/shop/accounting/journal-entries', data),
+  getFinancialSummary: () => apiClient.get<any>('/shop/accounting/summary'),
+  getBankBalances: () => apiClient.get<any[]>('/shop/accounting/bank-balances'),
+  getSalesBySource: () => apiClient.get<any>('/shop/accounting/sales-by-source'),
+  getDailyTrend: (days = 30) => apiClient.get<any>(`/shop/accounting/daily-trend?days=${days}`),
+  getCategoryPerformance: () => apiClient.get<any[]>('/shop/accounting/category-performance'),
+  getTransactions: (limit = 50) => apiClient.get<any[]>(`/shop/accounting/transactions?limit=${limit}`),
+};
