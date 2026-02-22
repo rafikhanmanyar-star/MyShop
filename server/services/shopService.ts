@@ -374,8 +374,107 @@ export class ShopService {
         }
       }
 
+      await this.postSaleToAccounting(client, saleId, tenantId, saleData);
+
+      // --- UPDATE BUDGET ACTUALS (if customer linked) ---
+      if (saleData.customerId) {
+        try {
+          const { getBudgetService } = await import('./budgetService.js');
+          await getBudgetService().updateActualsFromOrder(client, tenantId, saleData.customerId, saleData.items.map(i => ({
+            productId: i.productId,
+            quantity: i.quantity,
+            subtotal: i.subtotal
+          })));
+        } catch (budgetErr) {
+          console.error('⚠️ Failed to update POS budget actuals:', budgetErr);
+        }
+      }
+
       return saleId;
     });
+  }
+
+  // Double-entry accounting for Sales
+  private async postSaleToAccounting(client: any, saleId: string, tenantId: string, saleData: ShopSale) {
+    const journalIdResult = await client.query(`
+      INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+      VALUES ($1, NOW(), $2, $3, 'POS', $4, 'Posted')
+      RETURNING id
+    `, [tenantId, saleData.saleNumber, `Sale ${saleData.saleNumber}`, saleId]);
+
+    if (journalIdResult.length === 0) return; // Silent return for missing tables if not migrated yet
+    const journalId = journalIdResult[0].id;
+
+    // Helper to get or create account
+    const getAccount = async (name: string, type: string, code: string) => {
+      let accRes = await client.query('SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2 LIMIT 1', [tenantId, code]);
+      if (accRes.length === 0) {
+        accRes = await client.query(
+          'INSERT INTO accounts (tenant_id, name, code, type, balance) VALUES ($1, $2, $3, $4, 0) RETURNING id',
+          [tenantId, name, code, type]
+        );
+      }
+      return accRes[0].id;
+    };
+
+    const isCredit = saleData.paymentMethod === 'Credit';
+
+    // Revenue Ledger (Credit)
+    const revenueAcc = await getAccount('Sales Revenue', 'Income', 'INC-400');
+    await client.query(
+      'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
+      [tenantId, journalId, revenueAcc, saleData.grandTotal]
+    );
+
+    // Asset/Cash Ledger (Debit)
+    if (isCredit) {
+      if (!saleData.customerId) throw new Error('Customer required for credit sale');
+      const arAcc = await getAccount('Accounts Receivable', 'Asset', 'AST-120');
+      await client.query(
+        'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
+        [tenantId, journalId, arAcc, saleData.grandTotal]
+      );
+      // Update customer balance
+      await client.query(`
+        INSERT INTO customer_balance (tenant_id, customer_id, balance) VALUES ($1, $2, $3)
+        ON CONFLICT (tenant_id, customer_id) DO UPDATE SET balance = customer_balance.balance + $3, updated_at = NOW()
+      `, [tenantId, saleData.customerId, saleData.grandTotal]);
+    } else {
+      const cashAcc = await getAccount('Cash', 'Asset', 'AST-100');
+      await client.query(
+        'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
+        [tenantId, journalId, cashAcc, saleData.grandTotal]
+      );
+    }
+
+    // COGS vs Inventory (Only if items exist with cost prices)
+    // To properly calculate COGS, we sum up max(cost_price, 0) * qty
+    let totalCogs = 0;
+    for (const item of saleData.items) {
+      const prodRes = await client.query('SELECT cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1', [item.productId, tenantId]);
+      if (prodRes.length > 0 && prodRes[0].cost_price) {
+        totalCogs += (Number(prodRes[0].cost_price) * item.quantity);
+      }
+    }
+
+    if (totalCogs > 0) {
+      const cogsAcc = await getAccount('Cost of Goods Sold', 'Expense', 'EXP-500');
+      const invAssetAcc = await getAccount('Inventory Asset', 'Asset', 'AST-110');
+
+      // Debit COGS
+      await client.query(
+        'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
+        [tenantId, journalId, cogsAcc, totalCogs]
+      );
+      // Credit Inventory
+      await client.query(
+        'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
+        [tenantId, journalId, invAssetAcc, totalCogs]
+      );
+    }
+
+    // Invalidate report aggregates
+    await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
   }
 
   async getSales(tenantId: string) {

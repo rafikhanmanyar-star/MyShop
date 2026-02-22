@@ -22,6 +22,19 @@ const StockMaster: React.FC = () => {
     const { movements, updateItem } = useInventory();
     const itemHistory = movements.filter(m => m.itemId === selectedItem?.id);
     const [editData, setEditData] = useState<any>(null);
+    const [categories, setCategories] = useState<any[]>([]);
+
+    React.useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                const res = await shopApi.getShopCategories();
+                setCategories(res);
+            } catch (err) {
+                console.error('Failed to fetch categories:', err);
+            }
+        };
+        fetchCategories();
+    }, []);
 
     // Initialize edit data when selected item changes
     React.useEffect(() => {
@@ -496,6 +509,16 @@ const StockMaster: React.FC = () => {
                             value={editData.name}
                             onChange={(e) => setEditData({ ...editData, name: e.target.value })}
                         />
+                        <Select
+                            label="Category"
+                            value={editData.category || 'General'}
+                            onChange={(e) => setEditData({ ...editData, category: e.target.value })}
+                        >
+                            <option value="General">General</option>
+                            {categories.map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                        </Select>
                         <div className="grid grid-cols-2 gap-4">
                             <Input
                                 label="SKU"

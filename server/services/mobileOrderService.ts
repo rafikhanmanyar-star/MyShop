@@ -447,6 +447,19 @@ export class MobileOrderService {
                             await client.query(`UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, [grand_total, fallbackRes[0].id, tenantId]);
                         }
                     }
+
+                    // --- UPDATE BUDGET ACTUALS ---
+                    try {
+                        const { getBudgetService } = await import('./budgetService.js');
+                        const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1', [orderId]);
+                        await getBudgetService().updateActualsFromOrder(client, tenantId, orders[0].customer_id, orderItems.map((i: any) => ({
+                            productId: i.product_id,
+                            quantity: i.quantity,
+                            subtotal: i.subtotal
+                        })));
+                    } catch (budgetErr) {
+                        console.error('⚠️ Failed to update budget actuals:', budgetErr);
+                    }
                 }
             }
             if (newStatus === 'Cancelled') {

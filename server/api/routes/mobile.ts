@@ -268,4 +268,56 @@ router.post('/orders/:id/cancel', mobileAuthMiddleware(db), async (req: any, res
     }
 });
 
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  BUDGET MANAGEMENT ROUTES                                       ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+// Get budgets list
+router.get('/budgets', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getBudgetService } = await import('../../services/budgetService.js');
+        const budgets = await getBudgetService().getBudgets(req.tenantId, req.customerId);
+        res.json(budgets);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get budget detail inclusive items and actuals
+router.get('/budgets/:id', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getBudgetService } = await import('../../services/budgetService.js');
+        const budget = await getBudgetService().getBudgetDetail(req.tenantId, req.params.id);
+        if (!budget) return res.status(404).json({ error: 'Budget not found' });
+        if (budget.customer_id !== req.customerId) return res.status(403).json({ error: 'Access denied' });
+        res.json(budget);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get current month summary
+router.get('/budget-summary', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getBudgetService } = await import('../../services/budgetService.js');
+        const month = parseInt(req.query.month as string) || (new Date().getMonth() + 1);
+        const year = parseInt(req.query.year as string) || (new Date().getFullYear());
+        const summary = await getBudgetService().getMonthlySummary(req.tenantId, req.customerId, month, year);
+        res.json(summary || { message: 'No budget found for this month' });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Create or update budget
+router.post('/budgets', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getBudgetService } = await import('../../services/budgetService.js');
+        const budget = await getBudgetService().createOrUpdateBudget(req.tenantId, req.customerId, req.body);
+        res.status(201).json(budget);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 export default router;

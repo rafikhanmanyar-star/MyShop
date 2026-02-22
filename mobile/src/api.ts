@@ -92,4 +92,15 @@ export const customerApi = {
             method: 'POST',
             body: JSON.stringify({ reason }),
         }),
+    getBudgets: () => request(`${API_BASE}/budgets`),
+    getBudget: (id: string) => request(`${API_BASE}/budgets/${id}`),
+    getBudgetSummary: (month?: number, year?: number) => {
+        const params = new URLSearchParams();
+        if (month) params.append('month', month.toString());
+        if (year) params.append('year', year.toString());
+        const qs = params.toString();
+        return request(`${API_BASE}/budget-summary${qs ? `?${qs}` : ''}`);
+    },
+    createBudget: (data: any) =>
+        request(`${API_BASE}/budgets`, { method: 'POST', body: JSON.stringify(data) }),
 };
