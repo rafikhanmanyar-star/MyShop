@@ -25,6 +25,31 @@ export default function BudgetDetail() {
 
     const formatPrice = (n: number | string) => `Rs. ${Math.abs(Number(n)).toLocaleString()}`;
 
+    const handleClone = async () => {
+        if (!budget) return;
+        const confirmClone = window.confirm(`Copy this budget to the next month?`);
+        if (!confirmClone) return;
+
+        try {
+            setLoading(true);
+            // Calculate next month
+            let nextMonth = budget.month + 1;
+            let nextYear = budget.year;
+            if (nextMonth > 12) {
+                nextMonth = 1;
+                nextYear++;
+            }
+
+            await customerApi.cloneBudget(budget.id, nextMonth, nextYear);
+            alert(`Budget successfully copied to ${new Date(nextYear, nextMonth - 1).toLocaleString('default', { month: 'long' })}!`);
+            navigate(`/${shopSlug}/budget`);
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const generateInsights = (budget: any) => {
         const insights = [];
         const overspentItems = budget.items.filter((i: any) => parseFloat(i.actual_amount) > parseFloat(i.planned_total));
@@ -71,11 +96,24 @@ export default function BudgetDetail() {
     return (
         <div className="page fade-in">
             <div style={{ marginBottom: 24 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                    <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0 }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', padding: 0 }}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+                        </button>
+                        <h1 style={{ fontSize: 22, fontWeight: 800 }}>Analysis</h1>
+                    </div>
+                    <button
+                        onClick={handleClone}
+                        style={{
+                            fontSize: 12, fontWeight: 700, color: 'var(--primary)', background: 'white',
+                            border: '1.5px solid var(--primary)', borderRadius: 'var(--radius-md)', padding: '6px 12px',
+                            display: 'flex', alignItems: 'center', gap: 6
+                        }}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="M12 11h4" /><path d="M12 16h4" /><path d="M8 11h.01" /><path d="M8 16h.01" /></svg>
+                        Copy to Next Month
                     </button>
-                    <h1 style={{ fontSize: 22, fontWeight: 800 }}>Analysis</h1>
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: 14, marginLeft: 36 }}>
                     {new Date(budget.year, budget.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}

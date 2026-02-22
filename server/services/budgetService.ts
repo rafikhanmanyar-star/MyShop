@@ -229,6 +229,37 @@ export class BudgetService {
             }
         }
     }
+
+    async cloneBudget(tenantId: string, customerId: string, sourceBudgetId: string, targetMonth: number, targetYear: number) {
+        return this.db.transaction(async (client) => {
+            // 1. Fetch source budget and items
+            const sourceBudget = await client.query(
+                'SELECT * FROM budgets WHERE id = $1 AND tenant_id = $2 AND customer_id = $3',
+                [sourceBudgetId, tenantId, customerId]
+            );
+            if (sourceBudget.length === 0) throw new Error('Source budget not found');
+
+            const sourceItems = await client.query(
+                'SELECT * FROM budget_items WHERE budget_id = $1',
+                [sourceBudgetId]
+            );
+
+            // 2. Prepare target budget data
+            const input: BudgetCreateInput = {
+                month: targetMonth,
+                year: targetYear,
+                type: sourceBudget[0].budget_type,
+                items: sourceItems.map((i: any) => ({
+                    productId: i.product_id,
+                    plannedQuantity: i.planned_quantity,
+                    plannedPrice: i.planned_price
+                }))
+            };
+
+            // 3. Reuse createOrUpdateBudget logic
+            return this.createOrUpdateBudget(tenantId, customerId, input);
+        });
+    }
 }
 
 let budgetServiceInstance: BudgetService | null = null;

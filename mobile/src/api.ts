@@ -103,4 +103,9 @@ export const customerApi = {
     },
     createBudget: (data: any) =>
         request(`${API_BASE}/budgets`, { method: 'POST', body: JSON.stringify(data) }),
+    cloneBudget: (id: string, targetMonth: number, targetYear: number) =>
+        request(`${API_BASE}/budgets/${id}/clone`, {
+            method: 'POST',
+            body: JSON.stringify({ targetMonth, targetYear })
+        }),
 };

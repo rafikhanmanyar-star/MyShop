@@ -320,4 +320,24 @@ router.post('/budgets', mobileAuthMiddleware(db), async (req: any, res) => {
     }
 });
 
+// Clone budget to another month
+router.post('/budgets/:id/clone', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getBudgetService } = await import('../../services/budgetService.js');
+        const { targetMonth, targetYear } = req.body;
+        if (!targetMonth || !targetYear) throw new Error('targetMonth and targetYear are required');
+
+        const budget = await getBudgetService().cloneBudget(
+            req.tenantId,
+            req.customerId,
+            req.params.id,
+            targetMonth,
+            targetYear
+        );
+        res.json(budget);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 export default router;
