@@ -306,6 +306,24 @@ export class AccountingService {
   }
 
   /**
+   * Create a new chart-of-accounts entry (account)
+   */
+  async createAccount(tenantId: string, data: {
+    name: string;
+    code: string;
+    type: string;
+    description?: string;
+    isActive?: boolean;
+  }) {
+    const result = await this.db.query(`
+      INSERT INTO accounts (tenant_id, name, code, type, is_active)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, name, code, type, is_active, balance, created_at
+    `, [tenantId, data.name, data.code, data.type, data.isActive !== false]);
+    return result[0];
+  }
+
+  /**
    * Post journal entry + ledger for a manual entry (from UI)
    */
   async postManualJournalEntry(tenantId: string, data: {

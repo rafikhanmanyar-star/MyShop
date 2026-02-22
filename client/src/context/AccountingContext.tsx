@@ -120,7 +120,7 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
 
   const createAccount = async (data: any) => {
     try {
-      const result = await accountingApi.postJournalEntry(data); // Uses manual entry endpoint
+      const result = await accountingApi.createAccount(data);
       await refreshAll();
       return result;
     } catch (error) {

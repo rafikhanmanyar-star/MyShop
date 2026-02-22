@@ -17,6 +17,23 @@ router.get('/accounts', checkRole(['admin', 'accountant']), async (req: any, res
     }
 });
 
+// --- Create New Account (Chart of Accounts) ---
+router.post('/accounts', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const { name, code, type, description, isActive } = req.body;
+        if (!name || !type) {
+            return res.status(400).json({ error: 'Name and type are required' });
+        }
+        const account = await getAccountingService().createAccount(req.tenantId, {
+            name, code, type, description, isActive
+        });
+        res.status(201).json(account);
+    } catch (error: any) {
+        console.error('❌ Error creating account:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- Journal Entries with Ledger Lines ---
 router.get('/journal-entries', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {

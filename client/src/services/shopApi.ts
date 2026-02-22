@@ -128,6 +128,7 @@ export const shopUserApi = {
 // --- Accounting API ---
 export const accountingApi = {
   getAccounts: () => apiClient.get<any[]>('/shop/accounting/accounts'),
+  createAccount: (data: any) => apiClient.post('/shop/accounting/accounts', data),
   getJournalEntries: (limit = 200) => apiClient.get<any[]>(`/shop/accounting/journal-entries?limit=${limit}`),
   postJournalEntry: (data: any) => apiClient.post('/shop/accounting/journal-entries', data),
   getFinancialSummary: () => apiClient.get<any>('/shop/accounting/summary'),
