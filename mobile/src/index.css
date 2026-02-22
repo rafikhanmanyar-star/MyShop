@@ -895,3 +895,45 @@ img {
 .budget-item-row:last-child {
   border-bottom: none;
 }
+
+/* ─── PWA Animations & Styles ─────────────────────────────── */
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Standalone (installed) mode adjustments */
+@media all and (display-mode: standalone) {
+  .page {
+    padding-top: env(safe-area-inset-top, 16px);
+  }
+
+  .bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Offline indicator */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, #F59E0B, #D97706);
+  color: white;
+  text-align: center;
+  padding: 6px 16px;
+  padding-top: calc(6px + env(safe-area-inset-top, 0px));
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 10001;
+  animation: slideDown 0.3s ease-out;
+}

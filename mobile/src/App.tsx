@@ -14,6 +14,8 @@ import LandingPage from './pages/LandingPage';
 import BudgetDashboard from './pages/BudgetDashboard';
 import BudgetCreation from './pages/BudgetCreation';
 import BudgetDetail from './pages/BudgetDetail';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
+import PWAReloadPrompt from './components/PWAReloadPrompt';
 
 export default function App() {
   return (
@@ -40,6 +42,10 @@ export default function App() {
         {/* Landing page — auto-discovers shops or allows manual entry */}
         <Route path="*" element={<LandingPage />} />
       </Routes>
+
+      {/* PWA Install & Update Prompts */}
+      <PWAInstallPrompt />
+      <PWAReloadPrompt />
     </AppProvider>
   );
 }

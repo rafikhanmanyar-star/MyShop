@@ -363,13 +363,19 @@ export class ShopService {
       }
 
       if (saleData.paymentDetails && Array.isArray(saleData.paymentDetails)) {
+        // Only record the actual sale amount (grandTotal) in bank accounts, not the full tendered amount.
+        // If customer pays 1000 for a 250 item, only 250 goes into the cash account.
+        // The 750 change/refund is physical cash returned and should NOT inflate the books.
+        let remainingToAllocate = saleData.grandTotal;
         for (const payment of saleData.paymentDetails) {
-          if (payment.bankAccountId) {
+          if (payment.bankAccountId && remainingToAllocate > 0) {
+            const effectiveAmount = Math.min(payment.amount, remainingToAllocate);
+            remainingToAllocate -= effectiveAmount;
             await client.query(`
               UPDATE shop_bank_accounts 
               SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() 
               WHERE id = $2 AND tenant_id = $3
-            `, [payment.amount, payment.bankAccountId, tenantId]);
+            `, [effectiveAmount, payment.bankAccountId, tenantId]);
           }
         }
       }
@@ -440,10 +446,17 @@ export class ShopService {
         ON CONFLICT (tenant_id, customer_id) DO UPDATE SET balance = customer_balance.balance + $3, updated_at = NOW()
       `, [tenantId, saleData.customerId, saleData.grandTotal]);
     } else {
-      // Debit each payment into its respective account
+      // Debit each payment into its respective account.
+      // Only record the actual sale amount (grandTotal), not the full tendered amount.
+      // Change/refund given back to the customer should NOT be recorded in the ledger.
       const payments = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [{ method: 'Cash', amount: saleData.grandTotal }];
+      let remainingToAllocate = saleData.grandTotal;
 
       for (const p of payments) {
+        if (remainingToAllocate <= 0) break;
+        const effectiveAmount = Math.min(p.amount, remainingToAllocate);
+        remainingToAllocate -= effectiveAmount;
+
         let debitAccId;
         if (p.bankAccountId) {
           // Fetch bank info to maintain ledger naming consistency
@@ -457,7 +470,7 @@ export class ShopService {
 
         await client.query(
           'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
-          [tenantId, journalId, debitAccId, p.amount]
+          [tenantId, journalId, debitAccId, effectiveAmount]
         );
       }
     }
