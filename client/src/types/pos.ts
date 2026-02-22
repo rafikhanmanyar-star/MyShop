@@ -57,12 +57,7 @@ export interface POSPayment {
 
 export enum POSPaymentMethod {
     CASH = 'Cash',
-    CARD = 'Card',
-    WALLET = 'Wallet',
-    QR = 'QR',
-    STORE_CREDIT = 'Store Credit',
-    LOYALTY_POINTS = 'Loyalty Points',
-    GIFT_CARD = 'Gift Card'
+    ONLINE = 'Online'
 }
 
 export interface POSHeldSale {

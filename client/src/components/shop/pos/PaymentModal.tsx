@@ -50,29 +50,13 @@ const PaymentModal: React.FC = () => {
         const amount = parseFloat(tenderAmount);
         if (amount > 0) {
             const bank = bankAccounts.find(b => b.id === selectedBankId);
-
-            // Add payment first ensuring balance is correctly updated
             addPayment(selectedMethod, amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
-
-            // If this payment covers the rest of the balance, finalize instantly
-            if (amount >= balanceDue) {
-                try {
-                    const sale = await completeSale();
-                    setTimeout(() => {
-                        printReceipt(sale);
-                    }, 500); // Wait a half-second for the success screen to hit before triggering print dialog
-                } catch (e) {
-                    console.error("Sale complete failed", e);
-                }
-            } else {
-                setTenderAmount('0');
-            }
+            setTenderAmount('0');
         }
     };
 
     const handleQuickAmount = (amt: number) => {
-        const current = parseFloat(tenderAmount) || 0;
-        setTenderAmount((current + amt).toString());
+        setTenderAmount(amt.toString());
     };
 
     if (!isPaymentModalOpen) return null;
@@ -109,22 +93,32 @@ const PaymentModal: React.FC = () => {
                                     <span className="w-5 h-5 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-[10px]">1</span>
                                     Payment Mode
                                 </h3>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div className="grid grid-cols-2 gap-4">
                                     {Object.values(POSPaymentMethod).map(method => (
                                         <button
                                             key={method}
-                                            onClick={() => setSelectedMethod(method)}
-                                            className={`flex flex-col items-center justify-center p-6 rounded-3xl border-2 transition-all relative group overflow-hidden ${selectedMethod === method
-                                                ? 'border-indigo-600 bg-indigo-50 shadow-none shadow-none-100'
+                                            onClick={() => {
+                                                setSelectedMethod(method);
+                                                if (method === POSPaymentMethod.CASH) {
+                                                    const cashBank = bankAccounts.find(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'));
+                                                    if (cashBank) setSelectedBankId(cashBank.id);
+                                                } else {
+                                                    const firstOnline = bankAccounts.find(b => b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash'));
+                                                    if (firstOnline) setSelectedBankId(firstOnline.id);
+                                                    else setSelectedBankId('');
+                                                }
+                                            }}
+                                            className={`flex flex-col items-center justify-center p-8 rounded-3xl border-2 transition-all relative group overflow-hidden ${selectedMethod === method
+                                                ? 'border-indigo-600 bg-indigo-50 shadow-sm'
                                                 : 'border-slate-50 bg-white text-slate-500 hover:border-slate-200 hover:bg-slate-50'
                                                 }`}
                                         >
-                                            <div className={`mb-2 transition-transform group-hover:scale-110 ${selectedMethod === method ? 'text-indigo-600' : 'text-slate-300'}`}>
-                                                {method === POSPaymentMethod.CASH ? ICONS.dollarSign : (method === POSPaymentMethod.CARD ? ICONS.creditCard : ICONS.wallet)}
+                                            <div className={`mb-3 transition-transform group-hover:scale-110 ${selectedMethod === method ? 'text-indigo-600' : 'text-slate-300'}`}>
+                                                {method === POSPaymentMethod.CASH ? ICONS.dollarSign : ICONS.creditCard}
                                             </div>
-                                            <span className="text-[11px] font-black uppercase tracking-widest leading-none">{method}</span>
+                                            <span className="text-xs font-black uppercase tracking-widest leading-none">{method}</span>
                                             {selectedMethod === method && (
-                                                <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-indigo-600 rounded-full animate-pulse shadow-none shadow-none-600/50"></div>
+                                                <div className="absolute top-4 right-4 w-3 h-3 bg-indigo-600 rounded-full animate-pulse"></div>
                                             )}
                                         </button>
                                     ))}
@@ -144,11 +138,14 @@ const PaymentModal: React.FC = () => {
                                         className="block w-full rounded-[1.25rem] border-2 border-slate-50 bg-[#f8fafc] pl-14 pr-6 py-3 text-sm font-black text-slate-800 transition-all outline-none focus:bg-white focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 appearance-none"
                                         value={selectedBankId}
                                         onChange={e => setSelectedBankId(e.target.value)}
+                                        disabled={selectedMethod === POSPaymentMethod.CASH && bankAccounts.some(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'))}
                                     >
-                                        <option value="">Manual Cash Processing (No Bank)</option>
-                                        {bankAccounts.map(b => (
-                                            <option key={b.id} value={b.id}>{b.name}{b.code ? ` — ${b.code}` : ''}</option>
-                                        ))}
+                                        <option value="">{selectedMethod === POSPaymentMethod.CASH ? 'Primary Cash Account' : 'Choose Online Account'}</option>
+                                        {bankAccounts
+                                            .filter(b => selectedMethod === POSPaymentMethod.CASH ? (b.account_type === 'Cash' || b.name.toLowerCase().includes('cash')) : (b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash')))
+                                            .map(b => (
+                                                <option key={b.id} value={b.id}>{b.name}{b.code ? ` — ${b.code}` : ''}</option>
+                                            ))}
                                     </select>
                                     <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">
                                         {ICONS.chevronDown}
@@ -193,7 +190,7 @@ const PaymentModal: React.FC = () => {
                             >
                                 <div className="absolute inset-x-0 h-px top-0 bg-white/20"></div>
                                 <span className="relative z-10 flex items-center justify-center gap-4">
-                                    PAY & PRINT TICKET
+                                    ADD AMOUNT
                                     <kbd className="kbd-tag !bg-white/10 !border-white/10 !text-white !px-3 font-mono opacity-60">F12</kbd>
                                 </span>
                             </button>
@@ -295,12 +292,26 @@ const PaymentModal: React.FC = () => {
 
                             {changeDue > 0 && (
                                 <div className="pt-6 border-t-2 border-slate-50 border-dashed">
+                                    <div className="flex flex-col items-center justify-center p-4 bg-emerald-50 rounded-[1.5rem] border border-emerald-100">
+                                        <span className="text-[10px] font-black uppercase text-emerald-600 tracking-[0.3em] mb-2">Refund Amount</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm font-black text-emerald-300 font-mono">{CURRENCY}</span>
+                                            <span className="text-4xl font-black font-mono text-emerald-600 tracking-tighter">
+                                                {changeDue.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {parseFloat(tenderAmount) > balanceDue && balanceDue > 0 && (
+                                <div className="pt-6 border-t-2 border-slate-50 border-dashed animate-pulse">
                                     <div className="flex flex-col items-center justify-center p-4 bg-amber-50 rounded-[1.5rem] border border-amber-100">
-                                        <span className="text-[10px] font-black uppercase text-amber-600 tracking-[0.3em] mb-2">Tender Change</span>
+                                        <span className="text-[10px] font-black uppercase text-amber-600 tracking-[0.3em] mb-2">Projected Refund</span>
                                         <div className="flex items-center gap-3">
                                             <span className="text-sm font-black text-amber-300 font-mono">{CURRENCY}</span>
                                             <span className="text-4xl font-black font-mono text-amber-600 tracking-tighter">
-                                                {changeDue.toLocaleString()}
+                                                {(parseFloat(tenderAmount) - balanceDue).toLocaleString()}
                                             </span>
                                         </div>
                                     </div>
@@ -320,14 +331,14 @@ const PaymentModal: React.FC = () => {
                                     }
                                 }}
                                 className={`w-full py-5 rounded-[2rem] font-black text-xl transition-all active:scale-[0.97] flex items-center justify-center gap-4 relative overflow-hidden group shadow-none ${balanceDue > 0
-                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none hidden'
+                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                                     : 'pos-gradient-success text-white shadow-none-500/20 hover:shadow-none-500/40'
                                     }`}
                             >
                                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
                                 <span className="relative z-10 flex items-center justify-center gap-4 leading-none uppercase tracking-[0.1em]">
                                     {ICONS.checkCircle}
-                                    Complete & Print
+                                    PAY & PRINT
                                 </span>
                             </button>
                         )}

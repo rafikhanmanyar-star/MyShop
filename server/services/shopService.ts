@@ -440,11 +440,26 @@ export class ShopService {
         ON CONFLICT (tenant_id, customer_id) DO UPDATE SET balance = customer_balance.balance + $3, updated_at = NOW()
       `, [tenantId, saleData.customerId, saleData.grandTotal]);
     } else {
-      const cashAcc = await getAccount('Cash', 'Asset', 'AST-100');
-      await client.query(
-        'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
-        [tenantId, journalId, cashAcc, saleData.grandTotal]
-      );
+      // Debit each payment into its respective account
+      const payments = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [{ method: 'Cash', amount: saleData.grandTotal }];
+
+      for (const p of payments) {
+        let debitAccId;
+        if (p.bankAccountId) {
+          // Fetch bank info to maintain ledger naming consistency
+          const [bank] = await client.query('SELECT name, account_type FROM shop_bank_accounts WHERE id = $1', [p.bankAccountId]);
+          const accName = bank?.name || 'Bank';
+          const accCode = bank?.account_type === 'Cash' ? 'AST-100' : 'AST-101';
+          debitAccId = await getAccount(accName, 'Asset', accCode);
+        } else {
+          debitAccId = await getAccount('Cash', 'Asset', 'AST-100');
+        }
+
+        await client.query(
+          'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
+          [tenantId, journalId, debitAccId, p.amount]
+        );
+      }
     }
 
     // COGS vs Inventory (Only if items exist with cost prices)
@@ -666,11 +681,28 @@ export class ShopService {
   // --- Bank Accounts (Chart of Accounts for POS) ---
   async getBankAccounts(tenantId: string, activeOnly = true) {
     const clause = activeOnly ? 'AND is_active = TRUE' : '';
-    return this.db.query(
+    let accounts = await this.db.query(
       `SELECT id, name, code, account_type, currency, balance, is_active, created_at, updated_at
        FROM shop_bank_accounts WHERE tenant_id = $1 ${clause} ORDER BY name`,
       [tenantId]
     );
+
+    // Ensure at least one Cash account exists for POS
+    if (accounts.length === 0 && activeOnly) {
+      await this.createBankAccount(tenantId, {
+        name: 'Main Cash Account',
+        code: 'CASH-01',
+        account_type: 'Cash',
+        currency: 'PKR'
+      });
+      accounts = await this.db.query(
+        `SELECT id, name, code, account_type, currency, balance, is_active, created_at, updated_at
+         FROM shop_bank_accounts WHERE tenant_id = $1 ${clause} ORDER BY name`,
+        [tenantId]
+      );
+    }
+
+    return accounts;
   }
 
   async createBankAccount(tenantId: string, data: { name: string; code?: string; account_type?: string; currency?: string }) {
