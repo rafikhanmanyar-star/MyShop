@@ -11,6 +11,11 @@ function generateOrderNumber(): string {
     return `MO-${datePart}-${randPart}`;
 }
 
+function safeNum(v: any): number {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+}
+
 const VALID_STATUSES = ['Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Cancelled'] as const;
 type OrderStatus = typeof VALID_STATUSES[number];
 type PaymentStatus = 'Unpaid' | 'Paid';
@@ -335,9 +340,15 @@ export class MobileOrderService {
                     throw new Error(`Product not found: ${item.productId}`);
                 }
                 const product = prodRes[0];
-                const unitPrice = product.mobile_price != null
+                const rawPrice = product.mobile_price != null
                     ? parseFloat(product.mobile_price)
                     : parseFloat(product.retail_price);
+                const unitPrice = Number.isFinite(rawPrice) ? rawPrice : 0;
+                if (unitPrice <= 0) {
+                    throw new Error(
+                        `Product "${product.name}" (SKU: ${product.sku}) has no valid price. Set retail price or mobile price in product settings.`
+                    );
+                }
                 const taxRate = parseFloat(product.tax_rate) || 0;
 
                 // Total available across all warehouses (same as mobile catalog)
@@ -550,7 +561,33 @@ export class MobileOrderService {
             [orderId, tenantId]
         );
 
-        return { ...orders[0], items, status_history: history };
+        const order = orders[0];
+        const normalizedItems = (items as any[]).map((i: any) => ({
+            ...i,
+            unit_price: safeNum(i.unit_price),
+            subtotal: safeNum(i.subtotal),
+            tax_amount: safeNum(i.tax_amount),
+            discount_amount: safeNum(i.discount_amount),
+        }));
+        let subtotal = safeNum(order.subtotal);
+        let tax_total = safeNum(order.tax_total);
+        let delivery_fee = safeNum(order.delivery_fee);
+        let grand_total = safeNum(order.grand_total);
+        if (!Number.isFinite(Number(order.subtotal)) || !Number.isFinite(Number(order.grand_total))) {
+            subtotal = normalizedItems.reduce((sum, i) => sum + i.subtotal, 0);
+            tax_total = safeNum(order.tax_total) || normalizedItems.reduce((sum, i) => sum + i.tax_amount, 0);
+            grand_total = Math.round((subtotal + tax_total + delivery_fee) * 100) / 100;
+        }
+        return {
+            ...order,
+            subtotal,
+            tax_total,
+            discount_total: safeNum(order.discount_total),
+            delivery_fee,
+            grand_total,
+            items: normalizedItems,
+            status_history: history,
+        };
     }
 
     // ─── Status Updates (POS side) ─────────────────────────────────────
@@ -801,7 +838,15 @@ export class MobileOrderService {
         }
 
         query += ` ORDER BY o.created_at DESC LIMIT 200`;
-        return this.db.query(query, params);
+        const rows = await this.db.query(query, params);
+        return (rows as any[]).map((o: any) => ({
+            ...o,
+            subtotal: safeNum(o.subtotal),
+            tax_total: safeNum(o.tax_total),
+            discount_total: safeNum(o.discount_total),
+            delivery_fee: safeNum(o.delivery_fee),
+            grand_total: safeNum(o.grand_total),
+        }));
     }
 
     async getUnsyncedOrders(tenantId: string) {

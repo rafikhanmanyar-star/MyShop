@@ -125,7 +125,11 @@ function MobileOrdersPageContent() {
         setActionLoading('');
     };
 
-    const formatPrice = (p: any) => `PKR ${parseFloat(p).toLocaleString()}`;
+    const formatPrice = (p: any) => {
+        const n = Number(p);
+        const value = Number.isFinite(n) ? n : 0;
+        return `PKR ${value.toLocaleString()}`;
+    };
     const formatDate = (d: string) => new Date(d).toLocaleString('en-PK', {
         day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
     });
