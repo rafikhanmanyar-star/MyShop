@@ -1,5 +1,6 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { InventoryProvider, useInventory } from '../../context/InventoryContext';
 import { AccountingProvider, useAccounting } from '../../context/AccountingContext';
 import { useAppContext } from '../../context/AppContext';
@@ -58,6 +59,9 @@ const ProcurementContent: React.FC = () => {
     const [isVendorDropdownOpen, setIsVendorDropdownOpen] = useState(false);
     const [productSearchQuery, setProductSearchQuery] = useState('');
     const [isSubmitLoading, setIsSubmitLoading] = useState(false);
+    const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+    const productSearchRef = useRef<HTMLDivElement>(null);
+    const [productDropdownStyle, setProductDropdownStyle] = useState<{ top: number; left: number; width: number } | null>(null);
 
     const vendors = useMemo(() =>
         state.vendors || [],
@@ -70,16 +74,30 @@ const ProcurementContent: React.FC = () => {
     );
 
     const filteredProducts = useMemo(() => {
-        const query = productSearchQuery.toLowerCase();
+        const query = productSearchQuery.toLowerCase().trim();
         if (!query) {
-            // Show first 5 items by default so the list isn't empty
-            return items.slice(0, 5);
+            return items;
         }
         return items.filter(i =>
             i.name.toLowerCase().includes(query) ||
             i.sku.toLowerCase().includes(query)
-        ).slice(0, 10);
+        );
     }, [items, productSearchQuery]);
+
+    // Position product dropdown so it is not clipped by parent overflow
+    useEffect(() => {
+        if (!isProductDropdownOpen || !productSearchRef.current) {
+            setProductDropdownStyle(null);
+            return;
+        }
+        const el = productSearchRef.current;
+        const rect = el.getBoundingClientRect();
+        setProductDropdownStyle({
+            top: rect.bottom + 8,
+            left: rect.left,
+            width: Math.max(rect.width, 320)
+        });
+    }, [isProductDropdownOpen, productSearchQuery, filteredProducts.length]);
 
     const handleAddItem = (inventoryItem: any) => {
         const existing = purchaseItems.find(i => i.id === inventoryItem.id);
@@ -440,8 +458,8 @@ const ProcurementContent: React.FC = () => {
                             <h2 className="font-bold text-slate-800">2. Select Products</h2>
                         </div>
 
-                        <div className="relative group">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                        <div ref={productSearchRef} className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                                 {ICONS.search}
                             </span>
                             <input
@@ -450,75 +468,93 @@ const ProcurementContent: React.FC = () => {
                                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm"
                                 value={productSearchQuery}
                                 onChange={(e) => setProductSearchQuery(e.target.value)}
+                                onFocus={() => setIsProductDropdownOpen(true)}
+                                onBlur={() => setTimeout(() => setIsProductDropdownOpen(false), 150)}
                             />
 
-                            {/* Dropdown Results for Products */}
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-2xl z-40 max-h-[400px] overflow-y-auto p-2 custom-scrollbar animate-in fade-in zoom-in-95 duration-200 hidden group-focus-within:block">
-                                <div className="p-2 border-b border-slate-50 mb-2 flex justify-between items-center">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                        {productSearchQuery ? `Matches (${filteredProducts.length})` : 'Catalog Preview'}
-                                    </span>
-                                    <button
-                                        onMouseDown={(e) => {
-                                            e.preventDefault();
-                                            setIsCreateProductModalOpen(true);
+                            {/* Product dropdown rendered in portal so it is not clipped by parent overflow */}
+                            {isProductDropdownOpen && productDropdownStyle && typeof document !== 'undefined' && createPortal(
+                                <>
+                                    <div
+                                        className="fixed inset-0 z-[100]"
+                                        aria-hidden
+                                        onClick={() => setIsProductDropdownOpen(false)}
+                                    />
+                                    <div
+                                        className="fixed z-[101] bg-white border border-slate-200 shadow-2xl rounded-2xl p-2 custom-scrollbar animate-in fade-in zoom-in-95 duration-200"
+                                        style={{
+                                            top: productDropdownStyle.top,
+                                            left: productDropdownStyle.left,
+                                            width: productDropdownStyle.width,
+                                            maxHeight: 'min(70vh, 480px)',
+                                            overflowY: 'auto'
                                         }}
-                                        className="text-[10px] font-black text-indigo-600 uppercase hover:text-indigo-700"
                                     >
-                                        + New Product
-                                    </button>
-                                </div>
+                                        <div className="p-2 border-b border-slate-50 mb-2 flex justify-between items-center sticky top-0 bg-white z-10">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                {productSearchQuery ? `Matches (${filteredProducts.length})` : `Catalog (${filteredProducts.length} items)`}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    setIsCreateProductModalOpen(true);
+                                                }}
+                                                className="text-[10px] font-black text-indigo-600 uppercase hover:text-indigo-700"
+                                            >
+                                                + New Product
+                                            </button>
+                                        </div>
 
-                                {filteredProducts.length === 0 ? (
-                                    <div className="p-8 text-center text-slate-400">
-                                        <p className="text-xs font-bold italic mb-3">No products found "{productSearchQuery}"</p>
-                                        <button
-                                            onMouseDown={(e) => {
-                                                e.preventDefault();
-                                                setNewItemData(prev => ({ ...prev, name: productSearchQuery }));
-                                                setIsCreateProductModalOpen(true);
-                                            }}
-                                            className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all"
-                                        >
-                                            Create "{productSearchQuery}"
-                                        </button>
-                                    </div>
-                                ) : (
-                                    filteredProducts.map(item => (
-                                        <button
-                                            key={item.id}
-                                            onMouseDown={(e) => {
-                                                e.preventDefault(); // Prevent focus loss before click
-                                                handleAddItem(item);
-                                                setProductSearchQuery('');
-                                            }}
-                                            className="w-full flex items-center justify-between p-3 hover:bg-indigo-50 rounded-xl transition-all text-left border border-transparent hover:border-indigo-100 shadow-sm mb-1"
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
-                                                    {ICONS.package}
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-slate-800 text-xs truncate max-w-[150px]">{item.name}</div>
-                                                    <div className="text-[9px] text-slate-500 font-mono uppercase">{item.sku}</div>
-                                                </div>
+                                        {filteredProducts.length === 0 ? (
+                                            <div className="p-8 text-center text-slate-400">
+                                                <p className="text-xs font-bold italic mb-3">No products found &quot;{productSearchQuery}&quot;</p>
+                                                <button
+                                                    type="button"
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        setNewItemData(prev => ({ ...prev, name: productSearchQuery }));
+                                                        setIsCreateProductModalOpen(true);
+                                                    }}
+                                                    className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-all"
+                                                >
+                                                    Create &quot;{productSearchQuery}&quot;
+                                                </button>
                                             </div>
-                                            <div className="text-right">
-                                                <div className="text-[9px] font-black text-slate-400 uppercase">Stock: {item.onHand}</div>
-                                                <div className="text-xs font-black text-indigo-600">{CURRENCY} {item.costPrice.toLocaleString()}</div>
+                                        ) : (
+                                            <div className="max-h-[min(60vh,400px)] overflow-y-auto">
+                                                {filteredProducts.map(item => (
+                                                    <button
+                                                        key={item.id}
+                                                        type="button"
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault();
+                                                            handleAddItem(item);
+                                                            setProductSearchQuery('');
+                                                        }}
+                                                        className="w-full flex items-center justify-between p-3 hover:bg-indigo-50 rounded-xl transition-all text-left border border-transparent hover:border-indigo-100 shadow-sm mb-1"
+                                                    >
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 flex-shrink-0">
+                                                                {ICONS.package}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <div className="font-bold text-slate-800 text-xs truncate">{item.name}</div>
+                                                                <div className="text-[9px] text-slate-500 font-mono uppercase truncate">{item.sku}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right flex-shrink-0 ml-2">
+                                                            <div className="text-[9px] font-black text-slate-400 uppercase">Stock: {item.onHand}</div>
+                                                            <div className="text-xs font-black text-indigo-600">{CURRENCY} {item.costPrice.toLocaleString()}</div>
+                                                        </div>
+                                                    </button>
+                                                ))}
                                             </div>
-                                        </button>
-                                    ))
-                                )}
-
-                                {!productSearchQuery && items.length > filteredProducts.length && (
-                                    <div className="p-3 text-center bg-slate-50 rounded-xl">
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">
-                                            + {items.length - filteredProducts.length} more in catalog
-                                        </p>
+                                        )}
                                     </div>
-                                )}
-                            </div>
+                                </>,
+                                document.body
+                            )}
                         </div>
                     </div>
                 </div>

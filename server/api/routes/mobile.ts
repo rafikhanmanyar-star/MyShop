@@ -199,6 +199,9 @@ router.post('/auth/register', async (req: any, res) => {
         const result = await getMobileCustomerService().register(shop.id, phone, name, addressLine1, password);
         res.json(result);
     } catch (error: any) {
+        if (error.message === 'PHONE_ALREADY_REGISTERED') {
+            return res.status(409).json({ error: 'This mobile number is already registered. Please login instead.' });
+        }
         res.status(400).json({ error: error.message });
     }
 });

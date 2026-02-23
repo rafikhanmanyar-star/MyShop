@@ -17,6 +17,7 @@ interface MobileOrdersContextType extends MobileOrdersState {
     loadSettings: () => Promise<void>;
     loadBranding: () => Promise<void>;
     updateOrderStatus: (orderId: string, status: string, note?: string) => Promise<void>;
+    collectPayment: (orderId: string, bankAccountId: string) => Promise<void>;
     updateSettings: (data: Partial<MobileOrderingSettings>) => Promise<void>;
     updateBranding: (data: Partial<ShopBranding>) => Promise<void>;
     clearNewOrderCount: () => void;
@@ -180,6 +181,11 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
         await loadOrders();
     }, [loadOrders]);
 
+    const collectPayment = useCallback(async (orderId: string, bankAccountId: string) => {
+        await mobileOrdersApi.collectPayment(orderId, bankAccountId);
+        await loadOrders();
+    }, [loadOrders]);
+
     const updateSettings = useCallback(async (data: Partial<MobileOrderingSettings>) => {
         const updated = await mobileOrdersApi.updateSettings(data);
         setSettings(updated);
@@ -197,7 +203,7 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
         <MobileOrdersContext.Provider value={{
             orders, settings, branding, newOrderCount, loading, error, sseConnected,
             loadOrders, loadSettings, loadBranding,
-            updateOrderStatus, updateSettings, updateBranding,
+            updateOrderStatus, collectPayment, updateSettings, updateBranding,
             clearNewOrderCount, refreshOrders,
         }}>
             {children}

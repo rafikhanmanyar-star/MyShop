@@ -99,6 +99,13 @@ const AccountingDashboard: React.FC = () => {
                                 <div className="h-3 bg-slate-50 rounded-full overflow-hidden">
                                     <div className="h-full bg-emerald-500 transition-all duration-1000 rounded-full" style={{ width: `${mobilePercent}%` }}></div>
                                 </div>
+                                {(salesBySource?.mobile?.unpaidCount || 0) > 0 && (
+                                    <div className="flex items-center gap-2 mt-1 px-3 py-1.5 bg-orange-50 rounded-lg border border-orange-100">
+                                        <span className="text-[10px] font-bold text-orange-600">
+                                            {salesBySource?.mobile?.unpaidCount} unpaid — {CURRENCY} {(salesBySource?.mobile?.unpaidTotal || 0).toLocaleString()} receivable
+                                        </span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Avg Order Value Comparison */}

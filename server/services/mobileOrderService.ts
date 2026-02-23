@@ -13,13 +13,14 @@ function generateOrderNumber(): string {
 
 const VALID_STATUSES = ['Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Cancelled'] as const;
 type OrderStatus = typeof VALID_STATUSES[number];
+type PaymentStatus = 'Unpaid' | 'Paid';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
     Pending: ['Confirmed', 'Cancelled'],
     Confirmed: ['Packed', 'Cancelled'],
     Packed: ['OutForDelivery', 'Cancelled'],
     OutForDelivery: ['Delivered', 'Cancelled'],
-    Delivered: [],   // terminal
+    Delivered: [],   // terminal — payment collected separately via collectPayment()
     Cancelled: [],   // terminal
 };
 
@@ -537,49 +538,29 @@ export class MobileOrderService {
 
             if (newStatus === 'Delivered') {
                 updateFields.push(`delivered_at = NOW()`);
-                updateFields.push(`payment_status = 'Paid'`);
+                // payment_status stays 'Unpaid' — payment is collected separately via collectPayment()
 
-                // Update bank account balance
                 const orderData = await client.query('SELECT grand_total, payment_method, order_number, subtotal, tax_total FROM mobile_orders WHERE id = $1', [orderId]);
                 if (orderData.length > 0) {
-                    const { grand_total, payment_method, order_number, subtotal, tax_total } = orderData[0];
-                    let bankAccountId: string | null = null;
+                    const { grand_total, order_number, subtotal, tax_total, payment_method } = orderData[0];
 
-                    const bankRes = await client.query(
-                        `SELECT id FROM shop_bank_accounts WHERE tenant_id = $1 AND (name ILIKE $2 OR account_type ILIKE $2) LIMIT 1`,
-                        [tenantId, `%${payment_method}%`]
-                    );
-                    if (bankRes.length > 0) {
-                        bankAccountId = bankRes[0].id;
-                    } else {
-                        const fallbackRes = await client.query(`SELECT id FROM shop_bank_accounts WHERE tenant_id = $1 AND is_active = TRUE LIMIT 1`, [tenantId]);
-                        if (fallbackRes.length > 0) {
-                            bankAccountId = fallbackRes[0].id;
-                        }
-                    }
-
-                    if (bankAccountId) {
-                        await client.query(`UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, [grand_total, bankAccountId, tenantId]);
-                    }
-
-                    // --- POST TO DOUBLE-ENTRY ACCOUNTING (Journal + Ledger) ---
+                    // Revenue recognition: Debit Accounts Receivable, Credit Revenue + COGS entries
                     try {
                         const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1', [orderId]);
-                        await this.postMobileOrderToAccounting(client, orderId, tenantId, {
+                        await this.postMobileDeliveryToAccounting(client, orderId, tenantId, {
                             orderNumber: order_number,
                             grandTotal: parseFloat(grand_total),
                             subtotal: parseFloat(subtotal),
                             taxTotal: parseFloat(tax_total),
                             paymentMethod: payment_method,
-                            bankAccountId,
                             items: orderItems,
                             customerId: orders[0].customer_id,
                         });
                     } catch (accErr) {
-                        console.error('⚠️ Failed to post mobile order to accounting:', accErr);
+                        console.error('⚠️ Failed to post mobile delivery to accounting:', accErr);
                     }
 
-                    // --- UPDATE BUDGET ACTUALS ---
+                    // Update budget actuals
                     try {
                         const { getBudgetService } = await import('./budgetService.js');
                         const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1', [orderId]);
@@ -696,6 +677,69 @@ export class MobileOrderService {
         return this.updateOrderStatus(tenantId, orderId, 'Cancelled', customerId, 'customer', reason || 'Cancelled by customer');
     }
 
+    // ─── Collect Payment (Delivered → Paid) ────────────────────────────
+
+    async collectPayment(tenantId: string, orderId: string, bankAccountId: string, changedBy: string) {
+        const orders = await this.db.query(
+            'SELECT id, status, payment_status, customer_id, grand_total, order_number FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
+            [orderId, tenantId]
+        );
+        if (orders.length === 0) throw new Error('Order not found');
+        const order = orders[0];
+
+        if (order.status !== 'Delivered') {
+            throw new Error('Only delivered orders can have payment collected');
+        }
+        if (order.payment_status === 'Paid') {
+            throw new Error('Payment has already been collected for this order');
+        }
+
+        // Validate bank account
+        const bankRes = await this.db.query(
+            'SELECT id, name, account_type FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE',
+            [bankAccountId, tenantId]
+        );
+        if (bankRes.length === 0) throw new Error('Bank account not found or inactive');
+
+        const grandTotal = parseFloat(order.grand_total);
+
+        return this.db.transaction(async (client: any) => {
+            // 1. Update payment status
+            await client.query(
+                `UPDATE mobile_orders SET payment_status = 'Paid', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+                [orderId, tenantId]
+            );
+
+            // 2. Update bank account balance
+            await client.query(
+                `UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`,
+                [grandTotal, bankAccountId, tenantId]
+            );
+
+            // 3. Post payment accounting: Debit Bank/Cash, Credit Accounts Receivable
+            try {
+                await this.postMobilePaymentToAccounting(client, orderId, tenantId, {
+                    orderNumber: order.order_number,
+                    grandTotal,
+                    bankAccountId,
+                    bankName: bankRes[0].name,
+                    bankType: bankRes[0].account_type,
+                });
+            } catch (accErr) {
+                console.error('⚠️ Failed to post mobile payment to accounting:', accErr);
+            }
+
+            // 4. Record in status history
+            await client.query(
+                `INSERT INTO mobile_order_status_history (id, tenant_id, order_id, from_status, to_status, changed_by, changed_by_type, note)
+         VALUES ($1, $2, $3, 'Unpaid', 'Paid', $4, 'shop_user', $5)`,
+                [generateId('mosh'), tenantId, orderId, changedBy, `Payment collected to ${bankRes[0].name}`]
+            );
+
+            return { success: true, orderId, paymentStatus: 'Paid', bankAccountId };
+        });
+    }
+
     // ─── POS-side queries ──────────────────────────────────────────────
 
     async getMobileOrdersForPOS(tenantId: string, status?: string) {
@@ -707,7 +751,9 @@ export class MobileOrderService {
     `;
         const params: any[] = [tenantId];
 
-        if (status) {
+        if (status === 'Unpaid') {
+            query += ` AND o.status = 'Delivered' AND o.payment_status = 'Unpaid'`;
+        } else if (status) {
             query += ` AND o.status = $2`;
             params.push(status);
         }
@@ -734,62 +780,52 @@ export class MobileOrderService {
         );
     }
 
-    // ─── Double-entry accounting for mobile orders (on Delivery) ──────
+    // ─── Accounting helper: get or create account ──────────────────────
 
-    private async postMobileOrderToAccounting(client: any, orderId: string, tenantId: string, data: {
+    private async getOrCreateAccount(client: any, tenantId: string, name: string, type: string, code: string): Promise<string> {
+        let accRes = await client.query('SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2 LIMIT 1', [tenantId, code]);
+        if (accRes.length === 0) {
+            accRes = await client.query(
+                'INSERT INTO accounts (tenant_id, name, code, type, balance) VALUES ($1, $2, $3, $4, 0) RETURNING id',
+                [tenantId, name, code, type]
+            );
+        }
+        return accRes[0].id;
+    }
+
+    // ─── Double-entry: Revenue recognition on delivery ──────────────────
+    // Debit Accounts Receivable, Credit Revenue; Debit COGS, Credit Inventory
+
+    private async postMobileDeliveryToAccounting(client: any, orderId: string, tenantId: string, data: {
         orderNumber: string;
         grandTotal: number;
         subtotal: number;
         taxTotal: number;
         paymentMethod: string;
-        bankAccountId: string | null;
         items: any[];
         customerId: string;
     }) {
-        // Create journal entry
         const journalRes = await client.query(`
             INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
             VALUES ($1, NOW(), $2, $3, 'MobileApp', $4, 'Posted')
             RETURNING id
-        `, [tenantId, data.orderNumber, `Mobile Order ${data.orderNumber}`, orderId]);
+        `, [tenantId, data.orderNumber, `Mobile Delivery ${data.orderNumber}`, orderId]);
 
         if (journalRes.length === 0) return;
         const journalId = journalRes[0].id;
 
-        // Helper to get or create account
-        const getAccount = async (name: string, type: string, code: string) => {
-            let accRes = await client.query('SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2 LIMIT 1', [tenantId, code]);
-            if (accRes.length === 0) {
-                accRes = await client.query(
-                    'INSERT INTO accounts (tenant_id, name, code, type, balance) VALUES ($1, $2, $3, $4, 0) RETURNING id',
-                    [tenantId, name, code, type]
-                );
-            }
-            return accRes[0].id;
-        };
-
         // 1. Credit Revenue
-        const revenueAcc = await getAccount('Sales Revenue', 'Income', 'INC-400');
+        const revenueAcc = await this.getOrCreateAccount(client, tenantId, 'Sales Revenue', 'Income', 'INC-400');
         await client.query(
             'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
             [tenantId, journalId, revenueAcc, data.grandTotal]
         );
 
-        // 2. Debit Cash/Bank
-        let debitAccId: string;
-        if (data.bankAccountId) {
-            const bankInfo = await client.query('SELECT name, account_type FROM shop_bank_accounts WHERE id = $1', [data.bankAccountId]);
-            const bank = bankInfo[0];
-            const accName = bank?.name || 'Bank';
-            const accCode = bank?.account_type === 'Cash' ? 'AST-100' : 'AST-101';
-            debitAccId = await getAccount(accName, 'Asset', accCode);
-        } else {
-            debitAccId = await getAccount('Cash', 'Asset', 'AST-100');
-        }
-
+        // 2. Debit Accounts Receivable (payment collected later)
+        const receivableAcc = await this.getOrCreateAccount(client, tenantId, 'Accounts Receivable', 'Asset', 'AST-120');
         await client.query(
             'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
-            [tenantId, journalId, debitAccId, data.grandTotal]
+            [tenantId, journalId, receivableAcc, data.grandTotal]
         );
 
         // 3. COGS vs Inventory
@@ -802,8 +838,8 @@ export class MobileOrderService {
         }
 
         if (totalCogs > 0) {
-            const cogsAcc = await getAccount('Cost of Goods Sold', 'Expense', 'EXP-500');
-            const invAssetAcc = await getAccount('Inventory Asset', 'Asset', 'AST-110');
+            const cogsAcc = await this.getOrCreateAccount(client, tenantId, 'Cost of Goods Sold', 'Expense', 'EXP-500');
+            const invAssetAcc = await this.getOrCreateAccount(client, tenantId, 'Inventory Asset', 'Asset', 'AST-110');
 
             await client.query(
                 'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
@@ -815,7 +851,43 @@ export class MobileOrderService {
             );
         }
 
-        // 4. Invalidate report aggregates
+        await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+    }
+
+    // ─── Double-entry: Payment collection ───────────────────────────────
+    // Debit Cash/Bank, Credit Accounts Receivable
+
+    private async postMobilePaymentToAccounting(client: any, orderId: string, tenantId: string, data: {
+        orderNumber: string;
+        grandTotal: number;
+        bankAccountId: string;
+        bankName: string;
+        bankType: string;
+    }) {
+        const journalRes = await client.query(`
+            INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+            VALUES ($1, NOW(), $2, $3, 'MobileApp', $4, 'Posted')
+            RETURNING id
+        `, [tenantId, `PMT-${data.orderNumber}`, `Mobile Payment ${data.orderNumber}`, orderId]);
+
+        if (journalRes.length === 0) return;
+        const journalId = journalRes[0].id;
+
+        // 1. Debit Cash/Bank
+        const accCode = data.bankType === 'Cash' ? 'AST-100' : 'AST-101';
+        const bankAccId = await this.getOrCreateAccount(client, tenantId, data.bankName, 'Asset', accCode);
+        await client.query(
+            'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
+            [tenantId, journalId, bankAccId, data.grandTotal]
+        );
+
+        // 2. Credit Accounts Receivable
+        const receivableAcc = await this.getOrCreateAccount(client, tenantId, 'Accounts Receivable', 'Asset', 'AST-120');
+        await client.query(
+            'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
+            [tenantId, journalId, receivableAcc, data.grandTotal]
+        );
+
         await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
     }
 }

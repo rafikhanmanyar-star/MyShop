@@ -258,6 +258,14 @@ export class AccountingService {
       }
     }
 
+    // Count of delivered-but-unpaid mobile orders (receivables)
+    const unpaidRes = await this.db.query(`
+      SELECT COUNT(*) as unpaid_count, COALESCE(SUM(grand_total), 0) as unpaid_total
+      FROM mobile_orders
+      WHERE tenant_id = $1 AND status = 'Delivered' AND payment_status = 'Unpaid'
+    `, [tenantId]);
+    const unpaidRow = unpaidRes[0] ?? {};
+
     return {
       pos: {
         totalOrders: Math.max(0, parseInt(String(posRow.total_orders ?? posRow.totalOrders), 10) || 0),
@@ -268,6 +276,8 @@ export class AccountingService {
         totalOrders: mobileOrders,
         totalRevenue: mobileRevenue,
         avgOrderValue: mobileAvg,
+        unpaidCount: Math.max(0, parseInt(String(unpaidRow.unpaid_count ?? unpaidRow.unpaidCount), 10) || 0),
+        unpaidTotal: toNum(unpaidRow.unpaid_total ?? unpaidRow.unpaidTotal),
       },
     };
   }

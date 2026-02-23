@@ -169,21 +169,34 @@ export class MobileCustomerService {
     // ─── Authentication ─────────────────────────────────────────────
 
     async register(tenantId: string, phone: string, name: string, addressLine1: string, passwordString: string) {
-        // Upsert mobile_customer
+        const existing = await this.db.query(
+            'SELECT id FROM mobile_customers WHERE tenant_id = $1 AND phone = $2',
+            [tenantId, phone]
+        );
+        if (existing.length > 0) {
+            throw new Error('PHONE_ALREADY_REGISTERED');
+        }
+
         const customerId = generateId('mcust');
         const hashedPassword = await bcrypt.hash(passwordString, 10);
 
         await this.db.execute(
             `INSERT INTO mobile_customers (id, tenant_id, phone, name, address_line1, password, is_verified, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, TRUE, NOW())
-       ON CONFLICT (tenant_id, phone) DO UPDATE SET
-         name = COALESCE(EXCLUDED.name, mobile_customers.name),
-         address_line1 = COALESCE(EXCLUDED.address_line1, mobile_customers.address_line1),
-         password = EXCLUDED.password,
-         is_verified = TRUE,
-         updated_at = NOW()`,
+       VALUES ($1, $2, $3, $4, $5, $6, TRUE, NOW())`,
             [customerId, tenantId, phone, name, addressLine1, hashedPassword]
         );
+
+        // Auto-enroll in the loyalty program as a new customer
+        try {
+            const { getShopService } = await import('./shopService.js');
+            await getShopService().createLoyaltyMember(tenantId, {
+                name,
+                phone,
+                cardNumber: `L-${phone.replace(/\D/g, '').slice(-8)}`,
+            });
+        } catch (_loyaltyErr) {
+            // Loyalty enrollment is best-effort; don't block registration
+        }
 
         return this.login(tenantId, phone, passwordString);
     }

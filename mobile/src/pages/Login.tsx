@@ -56,6 +56,9 @@ export default function Login() {
             navigate(`/${shopSlug}/${redirect || ''}`, { replace: true });
         } catch (err: any) {
             showToast(err.message);
+            if (err.message?.includes('already registered')) {
+                setMode('login');
+            }
         } finally {
             setLoading(false);
         }

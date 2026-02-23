@@ -7,6 +7,7 @@ import {
     ChevronRight, WifiOff, Wifi, QrCode, Settings as SettingsIcon,
     Filter, Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
     Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
+    Banknote, Building2, Wallet,
 } from 'lucide-react';
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
@@ -18,6 +19,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
     Packed: { label: 'Packed', color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200', icon: Package },
     OutForDelivery: { label: 'Out for Delivery', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', icon: Truck },
     Delivered: { label: 'Delivered', color: 'text-green-700', bg: 'bg-green-50 border-green-200', icon: Check },
+    Unpaid: { label: 'Unpaid', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200', icon: Banknote },
     Cancelled: { label: 'Cancelled', color: 'text-red-700', bg: 'bg-red-50 border-red-200', icon: X },
 };
 
@@ -28,13 +30,13 @@ const NEXT_STATUS: Record<string, string> = {
     OutForDelivery: 'Delivered',
 };
 
-const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Cancelled'];
+const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Unpaid', 'Cancelled'];
 
 // ─── Main Page ────────────────────────────────────────────
 function MobileOrdersPageContent() {
     const {
         orders, loading, error, sseConnected, newOrderCount, branding,
-        loadOrders, clearNewOrderCount, updateOrderStatus, loadBranding
+        loadOrders, clearNewOrderCount, updateOrderStatus, collectPayment, loadBranding
     } = useMobileOrders();
 
     useEffect(() => {
@@ -47,6 +49,14 @@ function MobileOrdersPageContent() {
     const [detailLoading, setDetailLoading] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [actionLoading, setActionLoading] = useState('');
+    const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+    const [paymentModal, setPaymentModal] = useState<{ orderId: string; orderNumber: string; grandTotal: number } | null>(null);
+    const [selectedBankAccount, setSelectedBankAccount] = useState('');
+    const [paymentLoading, setPaymentLoading] = useState(false);
+
+    useEffect(() => {
+        shopApi.getBankAccounts().then(setBankAccounts).catch(() => {});
+    }, []);
 
     useEffect(() => {
         loadOrders(statusFilter === 'All' ? undefined : statusFilter);
@@ -178,7 +188,11 @@ function MobileOrdersPageContent() {
             <div className="flex gap-2 overflow-x-auto pb-1">
                 {STATUS_FILTERS.map(s => {
                     const cfg = STATUS_CONFIG[s];
-                    const count = s === 'All' ? orders.length : orders.filter(o => o.status === s).length;
+                    const count = s === 'All'
+                        ? orders.length
+                        : s === 'Unpaid'
+                            ? orders.filter(o => o.status === 'Delivered' && o.payment_status !== 'Paid').length
+                            : orders.filter(o => o.status === s).length;
                     return (
                         <button
                             key={s}
@@ -248,7 +262,7 @@ function MobileOrdersPageContent() {
                                         <span className="flex items-center gap-1">
                                             <Phone className="w-3 h-3" />{order.customer_phone}
                                         </span>
-                                        <span className={`flex items-center gap-1 font-medium ${order.payment_status === 'Paid' ? 'text-green-600' : ''}`}>
+                                        <span className={`flex items-center gap-1 font-medium ${order.payment_status === 'Paid' ? 'text-green-600' : 'text-orange-600'}`}>
                                             <FileText className="w-3 h-3" />{order.payment_method} ({order.payment_status || 'Unpaid'})
                                         </span>
                                     </div>
@@ -266,7 +280,7 @@ function MobileOrdersPageContent() {
                                                 ) : (
                                                     <Check className="w-3.5 h-3.5" />
                                                 )}
-                                                {nextStatus === 'Delivered' ? 'Mark Paid & Delivered' : STATUS_CONFIG[nextStatus]?.label || nextStatus}
+                                                {nextStatus === 'Delivered' ? 'Mark Delivered' : STATUS_CONFIG[nextStatus]?.label || nextStatus}
                                             </button>
                                             {order.status === 'Pending' && (
                                                 <button
@@ -277,6 +291,22 @@ function MobileOrdersPageContent() {
                                                     <X className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
+                                        </div>
+                                    )}
+                                    {/* Collect Payment button for Delivered + Unpaid */}
+                                    {order.status === 'Delivered' && order.payment_status !== 'Paid' && (
+                                        <div className="mt-3 pt-3 border-t border-gray-50">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setPaymentModal({ orderId: order.id, orderNumber: order.order_number, grandTotal: parseFloat(String(order.grand_total)) });
+                                                    setSelectedBankAccount('');
+                                                }}
+                                                className="w-full flex items-center justify-center gap-1.5 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors"
+                                            >
+                                                <Banknote className="w-3.5 h-3.5" />
+                                                Collect Payment
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -295,6 +325,10 @@ function MobileOrdersPageContent() {
                         <OrderDetailPanel
                             order={detailOrder}
                             onStatusUpdate={handleStatusUpdate}
+                            onCollectPayment={(o) => {
+                                setPaymentModal({ orderId: o.id, orderNumber: o.order_number, grandTotal: parseFloat(String(o.grand_total)) });
+                                setSelectedBankAccount('');
+                            }}
                             actionLoading={actionLoading}
                             formatPrice={formatPrice}
                             formatDate={formatFullDate}
@@ -308,22 +342,120 @@ function MobileOrdersPageContent() {
                     )}
                 </div>
             </div>
+
+            {/* Payment Collection Modal */}
+            {paymentModal && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setPaymentModal(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                                    <Banknote className="w-5 h-5 text-orange-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-gray-900">Collect Payment</h3>
+                                    <p className="text-xs text-gray-500">{paymentModal.orderNumber}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6 space-y-5">
+                            <div className="p-4 bg-gray-50 rounded-xl flex justify-between items-center">
+                                <span className="text-sm text-gray-600 font-medium">Amount Due</span>
+                                <span className="text-xl font-black text-gray-900">{formatPrice(paymentModal.grandTotal)}</span>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Deposit To Account</label>
+                                {bankAccounts.length === 0 ? (
+                                    <p className="text-sm text-red-500">No bank accounts found. Create one in Settings first.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {bankAccounts.map((acc: any) => (
+                                            <label
+                                                key={acc.id}
+                                                className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                                                    selectedBankAccount === acc.id
+                                                        ? 'border-orange-400 bg-orange-50'
+                                                        : 'border-gray-100 hover:border-orange-200'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="bankAccount"
+                                                    value={acc.id}
+                                                    checked={selectedBankAccount === acc.id}
+                                                    onChange={() => setSelectedBankAccount(acc.id)}
+                                                    className="sr-only"
+                                                />
+                                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                                                    selectedBankAccount === acc.id ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-400'
+                                                }`}>
+                                                    {acc.account_type === 'Cash' ? <Wallet className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-bold text-gray-800 truncate">{acc.name}</p>
+                                                    <p className="text-[10px] text-gray-400 uppercase">{acc.account_type} {acc.code ? `• ${acc.code}` : ''}</p>
+                                                </div>
+                                                <span className="text-xs font-mono font-bold text-gray-600">
+                                                    PKR {(parseFloat(acc.balance) || 0).toLocaleString()}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-gray-100 flex gap-3">
+                            <button
+                                onClick={() => setPaymentModal(null)}
+                                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (!selectedBankAccount) { alert('Please select a deposit account'); return; }
+                                    setPaymentLoading(true);
+                                    try {
+                                        await collectPayment(paymentModal.orderId, selectedBankAccount);
+                                        setPaymentModal(null);
+                                        if (detailOrder?.id === paymentModal.orderId) {
+                                            const updated = await mobileOrdersApi.getOrder(paymentModal.orderId);
+                                            setDetailOrder(updated);
+                                        }
+                                    } catch (err: any) {
+                                        alert(err.error || err.message || 'Failed to collect payment');
+                                    }
+                                    setPaymentLoading(false);
+                                }}
+                                disabled={!selectedBankAccount || paymentLoading}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 transition-colors disabled:opacity-50"
+                            >
+                                {paymentLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                Confirm Payment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
 // ─── Order Detail Panel ───────────────────────────────────
 function OrderDetailPanel({
-    order, onStatusUpdate, actionLoading, formatPrice, formatDate,
+    order, onStatusUpdate, onCollectPayment, actionLoading, formatPrice, formatDate,
 }: {
     order: MobileOrder;
     onStatusUpdate: (id: string, status: string) => void;
+    onCollectPayment: (order: MobileOrder) => void;
     actionLoading: string;
     formatPrice: (p: any) => string;
     formatDate: (d: string) => string;
 }) {
     const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Pending;
     const nextStatus = NEXT_STATUS[order.status];
+    const isUnpaid = order.status === 'Delivered' && order.payment_status !== 'Paid';
 
     return (
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
@@ -331,10 +463,18 @@ function OrderDetailPanel({
             <div className="p-5 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
                 <div className="flex items-center justify-between mb-2">
                     <span className="font-bold text-lg text-gray-900">{order.order_number}</span>
-                    <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border ${cfg.bg} ${cfg.color}`}>
-                        <cfg.icon className="w-3 h-3" />
-                        {cfg.label}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        {isUnpaid && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border bg-orange-50 border-orange-200 text-orange-700">
+                                <Banknote className="w-3 h-3" />
+                                Unpaid
+                            </span>
+                        )}
+                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border ${cfg.bg} ${cfg.color}`}>
+                            <cfg.icon className="w-3 h-3" />
+                            {cfg.label}
+                        </span>
+                    </div>
                 </div>
                 <p className="text-xs text-gray-500">{formatDate(order.created_at)}</p>
             </div>
@@ -352,6 +492,17 @@ function OrderDetailPanel({
                         <div className="flex items-center gap-2 text-gray-700">
                             <Phone className="w-4 h-4 text-gray-400" />{order.customer_phone}
                         </div>
+                    </div>
+                </div>
+
+                {/* Payment Status */}
+                <div>
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Payment</h4>
+                    <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-700">{order.payment_method}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${order.payment_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                            {order.payment_status || 'Unpaid'}
+                        </span>
                     </div>
                 </div>
 
@@ -439,7 +590,7 @@ function OrderDetailPanel({
                         ) : (
                             <Check className="w-4 h-4" />
                         )}
-                        {nextStatus === 'Delivered' ? 'Mark as Paid & Delivered' : `Mark as ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
+                        {nextStatus === 'Delivered' ? 'Mark Delivered' : `Mark as ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
                     </button>
                     {order.status === 'Pending' && (
                         <button
@@ -450,6 +601,17 @@ function OrderDetailPanel({
                             Cancel
                         </button>
                     )}
+                </div>
+            )}
+            {isUnpaid && (
+                <div className="p-4 border-t border-gray-100">
+                    <button
+                        onClick={() => onCollectPayment(order)}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors"
+                    >
+                        <Banknote className="w-4 h-4" />
+                        Collect Payment — {formatPrice(order.grand_total)}
+                    </button>
                 </div>
             )}
         </div>

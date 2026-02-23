@@ -230,6 +230,21 @@ router.get('/', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: a
     }
 });
 
+// ─── Collect Payment (Delivered → Paid) ─────────────────────────────
+router.put('/:id/collect-payment', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const { bankAccountId } = req.body;
+        if (!bankAccountId) return res.status(400).json({ error: 'bankAccountId is required' });
+
+        const result = await getMobileOrderService().collectPayment(
+            req.tenantId, req.params.id, bankAccountId, req.userId
+        );
+        res.json(result);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 // ════════════════════════════════════════════════════════════════════
 // /:id wildcard routes — MUST be LAST to avoid shadowing named routes
 // ════════════════════════════════════════════════════════════════════

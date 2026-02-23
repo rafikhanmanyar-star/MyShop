@@ -82,6 +82,8 @@ export const mobileOrdersApi = {
         apiClient.get<MobileOrder>(`/shop/mobile-orders/${id}`),
     updateStatus: (id: string, status: string, note?: string) =>
         apiClient.put(`/shop/mobile-orders/${id}/status`, { status, note }),
+    collectPayment: (id: string, bankAccountId: string) =>
+        apiClient.put(`/shop/mobile-orders/${id}/collect-payment`, { bankAccountId }),
     markSynced: (id: string) =>
         apiClient.put(`/shop/mobile-orders/${id}/synced`),
 
