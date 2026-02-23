@@ -155,4 +155,5 @@ export const accountingApi = {
   getDailyTrend: (days = 30) => apiClient.get<any>(`/shop/accounting/daily-trend?days=${days}`),
   getCategoryPerformance: () => apiClient.get<any[]>('/shop/accounting/category-performance'),
   getTransactions: (limit = 50) => apiClient.get<any[]>(`/shop/accounting/transactions?limit=${limit}`),
+  clearAllTransactions: () => apiClient.post<{ success: boolean; message: string }>('/shop/accounting/clear-transactions'),
 };

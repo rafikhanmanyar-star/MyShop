@@ -132,4 +132,15 @@ router.get('/transactions', checkRole(['admin', 'accountant']), async (req: any,
     }
 });
 
+// --- Clear all transactions (admin only; keeps settings, accounts, users, vendors) ---
+router.post('/clear-transactions', checkRole(['admin']), async (req: any, res) => {
+    try {
+        await getAccountingService().clearAllTransactions(req.tenantId);
+        res.json({ success: true, message: 'All transactions have been cleared.' });
+    } catch (error: any) {
+        console.error('❌ Error clearing transactions:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

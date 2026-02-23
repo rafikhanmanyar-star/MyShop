@@ -471,6 +471,24 @@ export class AccountingService {
       return { journalId };
     });
   }
+
+  /**
+   * Clear all sales transaction data for the tenant. Keeps settings, accounts, users, vendors,
+   * bank accounts, products, and all inventory data (stock levels and movement history).
+   * Removes: sales, journal/ledger entries, transactions table, mobile orders, customer balances,
+   * and report aggregates.
+   */
+  async clearAllTransactions(tenantId: string): Promise<void> {
+    await this.db.transaction(async (client) => {
+      // Parent tables only; child rows removed by CASCADE. Inventories (shop_inventory, shop_inventory_movements) are not touched.
+      await client.execute('DELETE FROM shop_sales WHERE tenant_id = $1', [tenantId]);
+      await client.execute('DELETE FROM journal_entries WHERE tenant_id = $1', [tenantId]);
+      await client.execute('DELETE FROM transactions WHERE tenant_id = $1', [tenantId]);
+      await client.execute('DELETE FROM mobile_orders WHERE tenant_id = $1', [tenantId]);
+      await client.execute('DELETE FROM customer_balance WHERE tenant_id = $1', [tenantId]);
+      await client.execute('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+    });
+  }
 }
 
 let accountingServiceInstance: AccountingService | null = null;

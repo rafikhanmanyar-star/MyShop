@@ -5,7 +5,7 @@ import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
-import { shopApi, ShopBankAccount, ShopVendor } from '../../services/shopApi';
+import { shopApi, accountingApi, ShopBankAccount, ShopVendor } from '../../services/shopApi';
 import Card from '../ui/Card';
 import { AccountingProvider } from '../../context/AccountingContext';
 import ChartOfAccounts from './accounting/ChartOfAccounts';
@@ -36,7 +36,7 @@ declare global {
 
 const SettingsContent: React.FC = () => {
     const { dispatch } = useAppContext();
-    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'app'>('coa');
+    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'app' | 'data'>('coa');
 
     const [vendors, setVendors] = useState<ShopVendor[]>([]);
     const [vendorsLoading, setVendorsLoading] = useState(true);
@@ -57,6 +57,9 @@ const SettingsContent: React.FC = () => {
     const [appVersion, setAppVersion] = useState<string | null>(null);
     const [updateStatus, setUpdateStatus] = useState<{ status: string; message?: string; version?: string; percent?: number } | null>(null);
     const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
+
+    const [clearTransactionsConfirm, setClearTransactionsConfirm] = useState(false);
+    const [clearingTransactions, setClearingTransactions] = useState(false);
 
     useEffect(() => {
         if (!isElectron || !window.electronAPI) return;
@@ -209,10 +212,24 @@ const SettingsContent: React.FC = () => {
         }
     };
 
+    const handleClearAllTransactions = async () => {
+        setClearingTransactions(true);
+        try {
+            await accountingApi.clearAllTransactions();
+            setClearTransactionsConfirm(false);
+            alert('All transactions have been cleared. The app now has a fresh look.');
+        } catch (e: any) {
+            alert(e?.message || 'Failed to clear transactions');
+        } finally {
+            setClearingTransactions(false);
+        }
+    };
+
     const tabs = [
         { id: 'coa' as const, label: 'Chart of Accounts', icon: ICONS.list },
         { id: 'vendors' as const, label: 'Vendor Management', icon: ICONS.briefcase },
         { id: 'users' as const, label: 'User Management', icon: ICONS.users },
+        { id: 'data' as const, label: 'Data', icon: ICONS.trash },
         { id: 'app' as const, label: 'App', icon: ICONS.download },
     ];
 
@@ -247,6 +264,25 @@ const SettingsContent: React.FC = () => {
 
                 {activeTab === 'coa' && (
                     <ChartOfAccounts />
+                )}
+
+                {activeTab === 'data' && (
+                    <div className="space-y-6 max-w-xl">
+                        <Card className="border-none shadow-sm p-6">
+                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Clear all transactions</h3>
+                            <p className="text-slate-600 text-sm mb-4">
+                                Remove all sales transactions, orders, journal entries, and transaction history. Settings, chart of accounts, bank accounts, users, vendors, products, and inventories (stock levels and movement history) are kept.
+                            </p>
+                            <Button
+                                variant="secondary"
+                                onClick={() => setClearTransactionsConfirm(true)}
+                                disabled={clearingTransactions}
+                                className="border-amber-200 text-amber-700 hover:bg-amber-50 hover:border-amber-300"
+                            >
+                                {clearingTransactions ? 'Clearing…' : 'Clear all transactions'}
+                            </Button>
+                        </Card>
+                    </div>
                 )}
 
                 {activeTab === 'app' && (
@@ -495,6 +531,32 @@ const SettingsContent: React.FC = () => {
                         <Button variant="secondary" onClick={() => setIsUserModalOpen(false)}>Cancel</Button>
                         <Button onClick={handleSaveUser}>
                             {editingUser ? 'Update' : 'Create'}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Clear transactions confirmation */}
+            <Modal
+                isOpen={clearTransactionsConfirm}
+                onClose={() => !clearingTransactions && setClearTransactionsConfirm(false)}
+                title="Clear all transactions?"
+                size="md"
+            >
+                <div className="space-y-4">
+                    <p className="text-slate-600 text-sm">
+                        This will permanently delete all sales transactions, orders, journal entries, ledger entries, and transaction history. Settings, chart of accounts, bank accounts, users, vendors, products, and inventories will be kept.
+                    </p>
+                    <div className="flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setClearTransactionsConfirm(false)} disabled={clearingTransactions}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleClearAllTransactions}
+                            disabled={clearingTransactions}
+                            className="bg-amber-600 hover:bg-amber-700 border-amber-600"
+                        >
+                            {clearingTransactions ? 'Clearing…' : 'Clear all transactions'}
                         </Button>
                     </div>
                 </div>
