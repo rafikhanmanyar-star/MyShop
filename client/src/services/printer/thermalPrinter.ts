@@ -167,12 +167,12 @@ export function createThermalPrinter(config?: any): ThermalPrinter {
 
           <div class="border-top text-center" style="margin-top: 4mm;">
             ${data.showBarcode && data.receiptNumber ? `
-              <div style="margin-bottom: 4mm;">
-                <img src="https://bwipjs-api.metafloor.com/?bcid=code128&text=${data.receiptNumber}&scale=2&rotate=N&includetext=true" 
-                     style="max-width: 100%; height: auto; min-height: 40px;" 
+              <div style="margin-bottom: 2mm;">
+                <img src="https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(data.receiptNumber)}&scale=1&rotate=N&includetext=true" 
+                     style="max-width: 50mm; width: 100%; height: auto; min-height: 20px;" 
                      alt="Barcode" 
                 />
-                <div style="font-size: 8px; margin-top: 1mm;">${data.receiptNumber}</div>
+                <div style="font-size: 7px; margin-top: 1mm;">${data.receiptNumber}</div>
               </div>
             ` : ''}
             ${data.footer || 'Thank you for your business!'}

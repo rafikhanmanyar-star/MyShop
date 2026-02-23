@@ -186,6 +186,11 @@ export default function LandingPage() {
                     </button>
                 </div>
             </div>
+
+            {/* Version */}
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 24, opacity: 0.8 }}>
+                MyShop Mobile v{__APP_VERSION__}
+            </p>
         </div>
     );
 }

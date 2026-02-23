@@ -98,6 +98,7 @@ export default function ShopLoader() {
             <Header />
             <Outlet />
             <BottomNav />
+            <p className="app-version">v{__APP_VERSION__}</p>
         </>
     );
 }

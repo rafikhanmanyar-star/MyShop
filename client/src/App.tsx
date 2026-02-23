@@ -118,13 +118,21 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
             {!collapsed && <span className="font-semibold text-xs tracking-wide">Sign out</span>}
           </button>
+          {!collapsed && (
+            <p className="text-[10px] text-slate-500 text-center mt-3 pt-2 border-t border-slate-700/50">
+              v{__APP_VERSION__}
+            </p>
+          )}
         </div>
       </div>
 
       {collapsed && (
-        <button onClick={onToggle} className="mb-6 mx-auto p-2.5 bg-slate-800/50 rounded-xl text-slate-400 hover:text-white hover:bg-indigo-600 transition-all">
-          <Menu className="w-5 h-5" />
-        </button>
+        <>
+          <button onClick={onToggle} className="mb-2 mx-auto p-2.5 bg-slate-800/50 rounded-xl text-slate-400 hover:text-white hover:bg-indigo-600 transition-all">
+            <Menu className="w-5 h-5" />
+          </button>
+          <p className="text-[9px] text-slate-500 text-center pb-2">v{__APP_VERSION__}</p>
+        </>
       )}
     </aside>
   );

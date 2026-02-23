@@ -202,27 +202,40 @@ export class AccountingService {
       WHERE tenant_id = $1 AND status = 'Completed'
     `, [tenantId]);
 
-    // Mobile sales (delivered)
+    // Mobile sales (delivered) — use grand_total, fallback to (subtotal - discount + tax + delivery) if grand_total is 0
     const mobileSales = await this.db.query(`
       SELECT
         COUNT(*) as total_orders,
-        COALESCE(SUM(grand_total), 0) as total_revenue,
-        COALESCE(AVG(grand_total), 0) as avg_order_value,
+        COALESCE(
+          NULLIF(SUM(grand_total), 0),
+          SUM(subtotal - discount_total + tax_total + delivery_fee),
+          0
+        ) as total_revenue,
+        COALESCE(
+          NULLIF(AVG(grand_total), 0),
+          AVG(subtotal - discount_total + tax_total + delivery_fee),
+          0
+        ) as avg_order_value,
         'Mobile' as source
       FROM mobile_orders
       WHERE tenant_id = $1 AND status = 'Delivered'
     `, [tenantId]);
 
+    const toNum = (v: unknown): number => (v === null || v === undefined) ? 0 : Number(v);
+    const row = (r: any) => r ?? {};
+    const posRow = row(posSales[0]);
+    const mobileRow = row(mobileSales[0]);
+
     return {
       pos: {
-        totalOrders: parseInt(posSales[0]?.total_orders) || 0,
-        totalRevenue: parseFloat(posSales[0]?.total_revenue) || 0,
-        avgOrderValue: parseFloat(posSales[0]?.avg_order_value) || 0,
+        totalOrders: Math.max(0, parseInt(String(posRow.total_orders ?? posRow.totalOrders), 10) || 0),
+        totalRevenue: toNum(posRow.total_revenue ?? posRow.totalRevenue),
+        avgOrderValue: toNum(posRow.avg_order_value ?? posRow.avgOrderValue),
       },
       mobile: {
-        totalOrders: parseInt(mobileSales[0]?.total_orders) || 0,
-        totalRevenue: parseFloat(mobileSales[0]?.total_revenue) || 0,
-        avgOrderValue: parseFloat(mobileSales[0]?.avg_order_value) || 0,
+        totalOrders: Math.max(0, parseInt(String(mobileRow.total_orders ?? mobileRow.totalOrders), 10) || 0),
+        totalRevenue: toNum(mobileRow.total_revenue ?? mobileRow.totalRevenue),
+        avgOrderValue: toNum(mobileRow.avg_order_value ?? mobileRow.avgOrderValue),
       },
     };
   }
