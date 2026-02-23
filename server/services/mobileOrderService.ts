@@ -266,8 +266,8 @@ export class MobileOrderService {
         // Idempotency check
         if (input.idempotencyKey) {
             const existing = await this.db.query(
-                'SELECT id, order_number, status, grand_total FROM mobile_orders WHERE idempotency_key = $1',
-                [input.idempotencyKey]
+                'SELECT id, order_number, status, grand_total FROM mobile_orders WHERE tenant_id = $1 AND idempotency_key = $2',
+                [tenantId, input.idempotencyKey]
             );
             if (existing.length > 0) {
                 return { order: existing[0], duplicate: true };
@@ -545,7 +545,7 @@ export class MobileOrderService {
         const orders = await this.db.query(
             `SELECT o.*, mc.phone as customer_phone, mc.name as customer_name
        FROM mobile_orders o
-       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id
+       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $2
        WHERE o.id = $1 AND o.tenant_id = $2`,
             [orderId, tenantId]
         );
@@ -619,13 +619,13 @@ export class MobileOrderService {
                 updateFields.push(`delivered_at = NOW()`);
                 // payment_status stays 'Unpaid' — payment is collected separately via collectPayment()
 
-                const orderData = await client.query('SELECT grand_total, payment_method, order_number, subtotal, tax_total FROM mobile_orders WHERE id = $1', [orderId]);
+                const orderData = await client.query('SELECT grand_total, payment_method, order_number, subtotal, tax_total FROM mobile_orders WHERE id = $1 AND tenant_id = $2', [orderId, tenantId]);
                 if (orderData.length > 0) {
                     const { grand_total, order_number, subtotal, tax_total, payment_method } = orderData[0];
 
                     // Revenue recognition: Debit Accounts Receivable, Credit Revenue + COGS entries
                     try {
-                        const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1', [orderId]);
+                        const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1 AND tenant_id = $2', [orderId, tenantId]);
                         await this.postMobileDeliveryToAccounting(client, orderId, tenantId, {
                             orderNumber: order_number,
                             grandTotal: parseFloat(grand_total),
@@ -642,7 +642,7 @@ export class MobileOrderService {
                     // Update budget actuals
                     try {
                         const { getBudgetService } = await import('./budgetService.js');
-                        const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1', [orderId]);
+                        const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1 AND tenant_id = $2', [orderId, tenantId]);
                         await getBudgetService().updateActualsFromOrder(client, tenantId, orders[0].customer_id, orderItems.map((i: any) => ({
                             productId: i.product_id,
                             quantity: i.quantity,
@@ -825,7 +825,7 @@ export class MobileOrderService {
         let query = `
       SELECT o.*, mc.phone as customer_phone, mc.name as customer_name
       FROM mobile_orders o
-      LEFT JOIN mobile_customers mc ON o.customer_id = mc.id
+      LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $1
       WHERE o.tenant_id = $1
     `;
         const params: any[] = [tenantId];
@@ -853,7 +853,7 @@ export class MobileOrderService {
         return this.db.query(
             `SELECT o.*, mc.phone as customer_phone, mc.name as customer_name
        FROM mobile_orders o
-       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id
+       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $1
        WHERE o.tenant_id = $1 AND o.pos_synced = FALSE
        ORDER BY o.created_at ASC`,
             [tenantId]

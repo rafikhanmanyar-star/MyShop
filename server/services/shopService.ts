@@ -42,7 +42,7 @@ export class ShopService {
         location: 'Head Office',
         timezone: 'GMT+5'
       });
-      return this.db.query('SELECT * FROM shop_branches WHERE id = $1', [branchId]);
+      return this.db.query('SELECT * FROM shop_branches WHERE id = $1 AND tenant_id = $2', [branchId, tenantId]);
     }
     return branches;
   }
@@ -385,9 +385,9 @@ export class ShopService {
         await client.query(`
           UPDATE shop_loyalty_members
           SET points_balance = points_balance + $1, total_spend = total_spend + $2, visit_count = visit_count + 1
-          WHERE id = $3
-        `, [pointsEarned, saleData.grandTotal, saleData.loyaltyMemberId]);
-        await client.query(`UPDATE shop_sales SET points_earned = $1 WHERE id = $2`, [pointsEarned, saleId]);
+          WHERE id = $3 AND tenant_id = $4
+        `, [pointsEarned, saleData.grandTotal, saleData.loyaltyMemberId, tenantId]);
+        await client.query(`UPDATE shop_sales SET points_earned = $1 WHERE id = $2 AND tenant_id = $3`, [pointsEarned, saleId, tenantId]);
       }
 
       if (saleData.paymentDetails && Array.isArray(saleData.paymentDetails)) {
@@ -488,8 +488,8 @@ export class ShopService {
         let debitAccId;
         if (p.bankAccountId) {
           const [bank] = await client.query(
-            'SELECT name, account_type, chart_account_id FROM shop_bank_accounts WHERE id = $1',
-            [p.bankAccountId]
+            'SELECT name, account_type, chart_account_id FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2',
+            [p.bankAccountId, tenantId]
           );
           if (bank?.chart_account_id) {
             debitAccId = bank.chart_account_id;
@@ -571,8 +571,8 @@ export class ShopService {
             'subtotal', si.subtotal
           ))
           FROM shop_sale_items si
-          LEFT JOIN shop_products p ON si.product_id = p.id
-          WHERE si.sale_id = s.id
+          LEFT JOIN shop_products p ON si.product_id = p.id AND p.tenant_id = $1
+          WHERE si.sale_id = s.id AND si.tenant_id = $1
         ), '[]'::json) as items
       FROM shop_sales s
       LEFT JOIN contacts c ON s.customer_id = c.id AND c.tenant_id = $1
@@ -602,10 +602,10 @@ export class ShopService {
             'subtotal', oi.subtotal
           ))
           FROM mobile_order_items oi
-          WHERE oi.order_id = o.id
+          WHERE oi.order_id = o.id AND oi.tenant_id = $1
         ), '[]'::json) as items
       FROM mobile_orders o
-      LEFT JOIN mobile_customers mc ON o.customer_id = mc.id
+      LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $1
       LEFT JOIN shop_branches b ON o.branch_id = b.id AND b.tenant_id = $1
       WHERE o.tenant_id = $1 AND o.status = 'Delivered'
       ORDER BY "createdAt" DESC

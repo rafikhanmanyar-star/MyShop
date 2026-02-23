@@ -54,7 +54,7 @@ export class AccountingService {
         a.name as account_name, a.code as account_code, a.type as account_type,
         le.debit, le.credit
       FROM ledger_entries le
-      JOIN accounts a ON le.account_id = a.id
+      JOIN accounts a ON le.account_id = a.id AND a.tenant_id = $1
       WHERE le.tenant_id = $1
       ORDER BY le.created_at ASC
     `, [tenantId]);
@@ -141,7 +141,7 @@ export class AccountingService {
     const cogsResult = await this.db.query(`
       SELECT COALESCE(SUM(le.debit) - SUM(le.credit), 0) as cogs
       FROM ledger_entries le
-      JOIN accounts a ON le.account_id = a.id
+      JOIN accounts a ON le.account_id = a.id AND a.tenant_id = $1
       WHERE le.tenant_id = $1 AND a.code = 'EXP-500'
     `, [tenantId]);
     totalCOGS = parseFloat(cogsResult[0]?.cogs) || 0;
@@ -150,7 +150,7 @@ export class AccountingService {
     const arResult = await this.db.query(`
       SELECT COALESCE(SUM(le.debit) - SUM(le.credit), 0) as ar_balance
       FROM ledger_entries le
-      JOIN accounts a ON le.account_id = a.id
+      JOIN accounts a ON le.account_id = a.id AND a.tenant_id = $1
       WHERE le.tenant_id = $1 AND a.code = 'AST-120'
     `, [tenantId]);
     receivablesTotal = parseFloat(arResult[0]?.ar_balance) || 0;
@@ -505,7 +505,7 @@ export class AccountingService {
               END
               FROM accounts a2
               LEFT JOIN ledger_entries le ON le.account_id = a2.id AND le.tenant_id = $1
-              WHERE a2.id = $2
+              WHERE a2.id = $2 AND a2.tenant_id = $1
             ),
             updated_at = NOW()
             WHERE id = $2 AND tenant_id = $1

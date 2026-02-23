@@ -64,7 +64,7 @@ export class ForecastService {
             let totalProjectedProfit = 0;
 
             // 3. Process Product Forecasts
-            await client.query('DELETE FROM product_forecasts WHERE forecast_id = $1', [forecastId]);
+            await client.query('DELETE FROM product_forecasts WHERE forecast_id = $1 AND tenant_id = $2', [forecastId, tenantId]);
 
             for (const prod of products) {
                 const planned = plannedMap.get(prod.id) || 0;
@@ -114,13 +114,13 @@ export class ForecastService {
             }
 
             // 4. Aggregate by Category
-            await client.query('DELETE FROM category_forecasts WHERE forecast_id = $1', [forecastId]);
+            await client.query('DELETE FROM category_forecasts WHERE forecast_id = $1 AND tenant_id = $2', [forecastId, tenantId]);
             await client.query(`
                 INSERT INTO category_forecasts (forecast_id, tenant_id, category_id, forecast_revenue, forecast_profit)
                 SELECT $1, $2, p.category_id, SUM(pf.forecast_revenue), SUM(pf.forecast_profit)
                 FROM product_forecasts pf
-                JOIN shop_products p ON pf.product_id = p.id
-                WHERE pf.forecast_id = $1 AND p.category_id IS NOT NULL
+                JOIN shop_products p ON pf.product_id = p.id AND p.tenant_id = $2
+                WHERE pf.forecast_id = $1 AND pf.tenant_id = $2 AND p.category_id IS NOT NULL
                 GROUP BY p.category_id
             `, [forecastId, tenantId]);
 
@@ -131,14 +131,14 @@ export class ForecastService {
             const reorderCosts = await client.query(`
                 SELECT SUM(pf.reorder_recommendation * p.cost_price) as total_reorder_cost
                 FROM product_forecasts pf
-                JOIN shop_products p ON pf.product_id = p.id
-                WHERE pf.forecast_id = $1
-            `, [forecastId]);
+                JOIN shop_products p ON pf.product_id = p.id AND p.tenant_id = $2
+                WHERE pf.forecast_id = $1 AND pf.tenant_id = $2
+            `, [forecastId, tenantId]);
 
             const inflow = totalProjectedRevenue;
             const outflow = (totalProjectedRevenue - totalProjectedProfit) + (parseFloat(reorderCosts[0].total_reorder_cost) || 0);
 
-            await client.query('DELETE FROM cash_flow_forecasts WHERE forecast_id = $1', [forecastId]);
+            await client.query('DELETE FROM cash_flow_forecasts WHERE forecast_id = $1 AND tenant_id = $2', [forecastId, tenantId]);
             await client.query(`
                 INSERT INTO cash_flow_forecasts (
                     forecast_id, tenant_id, projected_inflow, projected_outflow, working_capital_requirement, liquidity_risk_level
@@ -157,8 +157,8 @@ export class ForecastService {
                     COUNT(*) FILTER (WHERE planned_quantity > 0 AND historical_avg_quantity > 0) as both_data,
                     COUNT(*) as total_products
                 FROM product_forecasts
-                WHERE forecast_id = $1
-            `, [forecastId]);
+                WHERE forecast_id = $1 AND tenant_id = $2
+            `, [forecastId, tenantId]);
 
             const bothData = parseInt(stats[0].both_data) || 1;
             const totalProducts = parseInt(stats[0].total_products) || 1;
@@ -169,8 +169,8 @@ export class ForecastService {
                 SET total_projected_revenue = $1,
                     total_projected_profit = $2,
                     confidence_score = $3
-                WHERE id = $4
-            `, [totalProjectedRevenue, totalProjectedProfit, confidenceScore, forecastId]);
+                WHERE id = $4 AND tenant_id = $5
+            `, [totalProjectedRevenue, totalProjectedProfit, confidenceScore, forecastId, tenantId]);
 
             return {
                 forecastId,
@@ -194,33 +194,33 @@ export class ForecastService {
         const productForecasts = await this.db.query(`
             SELECT pf.*, p.name as product_name, p.sku as product_sku, c.name as category_name
             FROM product_forecasts pf
-            JOIN shop_products p ON pf.product_id = p.id
-            LEFT JOIN categories c ON p.category_id = c.id
-            WHERE pf.forecast_id = $1
+            JOIN shop_products p ON pf.product_id = p.id AND p.tenant_id = $2
+            LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $2
+            WHERE pf.forecast_id = $1 AND pf.tenant_id = $2
             ORDER BY pf.forecast_revenue DESC
             LIMIT 20
-        `, [forecastId]);
+        `, [forecastId, tenantId]);
 
         const categoryForecasts = await this.db.query(`
             SELECT cf.*, c.name as category_name
             FROM category_forecasts cf
-            JOIN categories c ON cf.category_id = c.id
-            WHERE cf.forecast_id = $1
+            JOIN categories c ON cf.category_id = c.id AND c.tenant_id = $2
+            WHERE cf.forecast_id = $1 AND cf.tenant_id = $2
             ORDER BY cf.forecast_revenue DESC
-        `, [forecastId]);
+        `, [forecastId, tenantId]);
 
         const cashFlow = await this.db.query(`
-            SELECT * FROM cash_flow_forecasts WHERE forecast_id = $1
-        `, [forecastId]);
+            SELECT * FROM cash_flow_forecasts WHERE forecast_id = $1 AND tenant_id = $2
+        `, [forecastId, tenantId]);
 
         const inventoryRisks = await this.db.query(`
             SELECT pf.*, p.name as product_name
             FROM product_forecasts pf
-            JOIN shop_products p ON pf.product_id = p.id
-            WHERE pf.forecast_id = $1 AND pf.stock_risk_level != 'Normal'
+            JOIN shop_products p ON pf.product_id = p.id AND p.tenant_id = $2
+            WHERE pf.forecast_id = $1 AND pf.tenant_id = $2 AND pf.stock_risk_level != 'Normal'
             ORDER BY pf.stock_out_risk_percent DESC
             LIMIT 10
-        `, [forecastId]);
+        `, [forecastId, tenantId]);
 
         return {
             summary: run[0],

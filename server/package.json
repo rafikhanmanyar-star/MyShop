@@ -1,6 +1,6 @@
 {
   "name": "myshop-api",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "MyShop API Server - Standalone Shop & POS Application",
   "type": "module",
   "main": "dist/api/index.js",

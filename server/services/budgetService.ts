@@ -61,7 +61,7 @@ export class BudgetService {
             const budgetId = budgetRes[0].id;
 
             // 3. Clear existing items and re-insert (simplest for update)
-            await client.query('DELETE FROM budget_items WHERE budget_id = $1', [budgetId]);
+            await client.query('DELETE FROM budget_items WHERE budget_id = $1 AND tenant_id = $2', [budgetId, tenantId]);
 
             for (const item of itemsToInsert) {
                 await client.query(`
@@ -93,8 +93,8 @@ export class BudgetService {
         if (budgets.length === 0) return null;
 
         const items = await this.db.query(
-            `SELECT v.* FROM budget_vs_actual_view v WHERE v.budget_id = $1`,
-            [budgetId]
+            `SELECT v.* FROM budget_vs_actual_view v WHERE v.budget_id = $1 AND v.tenant_id = $2`,
+            [budgetId, tenantId]
         );
 
         return { ...budgets[0], items };
@@ -115,8 +115,8 @@ export class BudgetService {
                 SUM(CASE WHEN actual_amount < planned_total THEN planned_total - actual_amount ELSE 0 END) as total_saved,
                 SUM(CASE WHEN actual_amount > planned_total THEN actual_amount - planned_total ELSE 0 END) as total_overspent
             FROM budget_items 
-            WHERE budget_id = $1
-        `, [budget.id]);
+            WHERE budget_id = $1 AND tenant_id = $2
+        `, [budget.id, tenantId]);
 
         const stats = res[0];
         const totalActual = parseFloat(stats.total_actual) || 0;
@@ -158,8 +158,8 @@ export class BudgetService {
             // I'll update budget_items if it exists, otherwise I'll insert a new item with 0 planned.
 
             const existing = await client.query(
-                'SELECT id FROM budget_items WHERE budget_id = $1 AND product_id = $2',
-                [budgetId, item.productId]
+                'SELECT id FROM budget_items WHERE budget_id = $1 AND product_id = $2 AND tenant_id = $3',
+                [budgetId, item.productId, tenantId]
             );
 
             if (existing.length > 0) {
@@ -168,10 +168,9 @@ export class BudgetService {
                     SET actual_quantity = actual_quantity + $1,
                         actual_amount = actual_amount + $2,
                         updated_at = NOW()
-                    WHERE id = $3
-                `, [item.quantity, item.subtotal, existing[0].id]);
+                    WHERE id = $3 AND tenant_id = $4
+                `, [item.quantity, item.subtotal, existing[0].id, tenantId]);
             } else {
-                // Not in budget, but still tracking actual
                 await client.query(`
                     INSERT INTO budget_items (
                         tenant_id, budget_id, product_id, planned_quantity, planned_price, planned_total,
@@ -183,9 +182,8 @@ export class BudgetService {
     }
 
     private async reconcileBudgetActuals(client: any, tenantId: string, customerId: string, month: number, year: number, budgetId: string) {
-        // This method resets actuals and re-calculates them from all completed orders/sales this month
         // 1. Reset actuals
-        await client.query('UPDATE budget_items SET actual_quantity = 0, actual_amount = 0 WHERE budget_id = $1', [budgetId]);
+        await client.query('UPDATE budget_items SET actual_quantity = 0, actual_amount = 0 WHERE budget_id = $1 AND tenant_id = $2', [budgetId, tenantId]);
 
         // 2. Fetch mobile orders (Delivered)
         const mobileOrders = await client.query(`
@@ -209,8 +207,8 @@ export class BudgetService {
 
         for (const item of allItems) {
             const existing = await client.query(
-                'SELECT id FROM budget_items WHERE budget_id = $1 AND product_id = $2',
-                [budgetId, item.product_id]
+                'SELECT id FROM budget_items WHERE budget_id = $1 AND product_id = $2 AND tenant_id = $3',
+                [budgetId, item.product_id, tenantId]
             );
 
             if (existing.length > 0) {
@@ -219,8 +217,8 @@ export class BudgetService {
                     SET actual_quantity = actual_quantity + $1,
                         actual_amount = actual_amount + $2,
                         updated_at = NOW()
-                    WHERE id = $3
-                `, [item.quantity, item.subtotal, existing[0].id]);
+                    WHERE id = $3 AND tenant_id = $4
+                `, [item.quantity, item.subtotal, existing[0].id, tenantId]);
             } else {
                 await client.query(`
                     INSERT INTO budget_items (
@@ -242,8 +240,8 @@ export class BudgetService {
             if (sourceBudget.length === 0) throw new Error('Source budget not found');
 
             const sourceItems = await client.query(
-                'SELECT * FROM budget_items WHERE budget_id = $1',
-                [sourceBudgetId]
+                'SELECT * FROM budget_items WHERE budget_id = $1 AND tenant_id = $2',
+                [sourceBudgetId, tenantId]
             );
 
             // 2. Prepare target budget data

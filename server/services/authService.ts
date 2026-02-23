@@ -55,34 +55,43 @@ export class AuthService {
       throw new Error('Invalid username or password');
     }
 
-    const user = users[0];
-    if (!user.is_active) {
-      throw new Error('Account is deactivated. Contact your administrator.');
+    // Check password against all matching users (handles same username across tenants)
+    let matchedUser = null;
+    for (const user of users) {
+      if (!user.is_active) continue;
+      const valid = await bcrypt.compare(data.password, user.password);
+      if (valid) {
+        matchedUser = user;
+        break;
+      }
     }
 
-    const validPassword = await bcrypt.compare(data.password, user.password);
-    if (!validPassword) {
+    if (!matchedUser) {
+      const hasInactive = users.some((u: any) => !u.is_active);
+      if (hasInactive && users.every((u: any) => !u.is_active)) {
+        throw new Error('Account is deactivated. Contact your administrator.');
+      }
       throw new Error('Invalid username or password');
     }
 
-    const token = this.generateToken(user.id, user.tenant_id, user.username, user.role);
-    await this.createSession(user.id, user.tenant_id, token);
+    const token = this.generateToken(matchedUser.id, matchedUser.tenant_id, matchedUser.username, matchedUser.role);
+    await this.createSession(matchedUser.id, matchedUser.tenant_id, token);
 
-    await this.db.execute('UPDATE users SET login_status = TRUE WHERE id = $1', [user.id]);
+    await this.db.execute('UPDATE users SET login_status = TRUE WHERE id = $1 AND tenant_id = $2', [matchedUser.id, matchedUser.tenant_id]);
 
     return {
       token,
-      tenantId: user.tenant_id,
-      userId: user.id,
-      username: user.username,
-      role: user.role,
-      name: user.name,
+      tenantId: matchedUser.tenant_id,
+      userId: matchedUser.id,
+      username: matchedUser.username,
+      role: matchedUser.role,
+      name: matchedUser.name,
     };
   }
 
   async logout(userId: string, tenantId: string) {
     await this.db.execute('DELETE FROM user_sessions WHERE user_id = $1 AND tenant_id = $2', [userId, tenantId]);
-    await this.db.execute('UPDATE users SET login_status = FALSE WHERE id = $1', [userId]);
+    await this.db.execute('UPDATE users SET login_status = FALSE WHERE id = $1 AND tenant_id = $2', [userId, tenantId]);
   }
 
   private generateToken(userId: string, tenantId: string, username: string, role: string): string {

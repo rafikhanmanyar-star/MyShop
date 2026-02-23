@@ -53,9 +53,9 @@ export function tenantMiddleware(db: IDatabaseService) {
           `SELECT u.id AS user_id, u.tenant_id AS user_tenant_id, u.is_active,
                   s.user_id AS session_user_id, s.expires_at
            FROM users u
-           LEFT JOIN user_sessions s ON s.token = $2
-           WHERE u.id = $1`,
-          [decoded.userId, token]
+           LEFT JOIN user_sessions s ON s.token = $2 AND s.tenant_id = $3
+           WHERE u.id = $1 AND u.tenant_id = $3`,
+          [decoded.userId, token, decoded.tenantId]
         );
 
         if (result.length === 0) {
@@ -76,10 +76,10 @@ export function tenantMiddleware(db: IDatabaseService) {
         if (row.session_user_id) {
           const expiresAt = new Date(row.expires_at);
           if (expiresAt <= new Date()) {
-            db.execute('DELETE FROM user_sessions WHERE token = $1', [token]).catch(() => { });
+            db.execute('DELETE FROM user_sessions WHERE token = $1 AND tenant_id = $2', [token, decoded.tenantId]).catch(() => { });
             return res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
           }
-          db.execute('UPDATE user_sessions SET last_activity = NOW() WHERE token = $1', [token]).catch(() => { });
+          db.execute('UPDATE user_sessions SET last_activity = NOW() WHERE token = $1 AND tenant_id = $2', [token, decoded.tenantId]).catch(() => { });
         } else if (row.is_active) {
           // Recover missing session
           const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
