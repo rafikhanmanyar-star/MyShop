@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const src = path.join(__dirname, '..', 'migrations');
 const dst = path.join(__dirname, '..', 'dist', 'migrations');
+if (fs.existsSync(dst)) {
+  fs.rmSync(dst, { recursive: true, force: true });
+}
 fs.mkdirSync(dst, { recursive: true });
 fs.readdirSync(src)
   .filter(f => f.endsWith('.sql'))

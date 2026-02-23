@@ -119,12 +119,11 @@ export default function BudgetCreation() {
     const updateQuantity = (productId: string, q: number) => {
         const newItems = selectedItems.map(item => {
             if (item.productId === productId) {
-                const newQ = Math.max(0, q); // Allow 0 to remove? Let's keep 0.1 min for budget
-                const clampedQ = newQ < 0.1 && newQ > 0 ? 0.1 : newQ;
-                return { ...item, quantity: clampedQ, total: item.price * clampedQ };
+                const newQ = Math.max(0, isNaN(q) ? 0 : q);
+                return { ...item, quantity: newQ, total: item.price * newQ };
             }
             return item;
-        }).filter(item => item.quantity > 0);
+        });
         setSelectedItems(newItems);
     };
 

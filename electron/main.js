@@ -80,14 +80,22 @@ function startServer() {
     });
 
     serverProcess.stdout.on('data', (data) => {
-      console.log(`[Server] ${data.toString().trim()}`);
+      const msg = `[Server] ${data.toString().trim()}`;
+      console.log(msg);
+      fs.appendFileSync(path.join(path.dirname(app.getPath('exe')), 'server_logs.txt'), msg + '\n');
     });
     serverProcess.stderr.on('data', (data) => {
-      console.error(`[Server] ${data.toString().trim()}`);
+      const msg = `[Server ERROR] ${data.toString().trim()}`;
+      console.error(msg);
+      fs.appendFileSync(path.join(path.dirname(app.getPath('exe')), 'server_logs.txt'), msg + '\n');
     });
-    serverProcess.on('error', reject);
+    serverProcess.on('error', (err) => {
+      fs.appendFileSync(path.join(path.dirname(app.getPath('exe')), 'server_logs.txt'), `[Server Spawn Error] ${err}\n`);
+      reject(err);
+    });
     serverProcess.on('close', (code) => {
       if (code !== 0 && code !== null) {
+        fs.appendFileSync(path.join(path.dirname(app.getPath('exe')), 'server_logs.txt'), `[Server] Exited with code ${code}\n`);
         console.error(`[Server] Exited with code ${code}`);
       }
     });
