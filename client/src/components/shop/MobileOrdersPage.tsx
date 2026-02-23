@@ -33,9 +33,13 @@ const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Packed', 'OutForDelivery
 // ─── Main Page ────────────────────────────────────────────
 function MobileOrdersPageContent() {
     const {
-        orders, loading, error, sseConnected, newOrderCount,
-        loadOrders, clearNewOrderCount, updateOrderStatus,
+        orders, loading, error, sseConnected, newOrderCount, branding,
+        loadOrders, clearNewOrderCount, updateOrderStatus, loadBranding
     } = useMobileOrders();
+
+    useEffect(() => {
+        loadBranding();
+    }, [loadBranding]);
 
     const [statusFilter, setStatusFilter] = useState('All');
     const [selectedOrder, setSelectedOrder] = useState<MobileOrder | null>(null);
@@ -68,9 +72,42 @@ function MobileOrdersPageContent() {
         setActionLoading(orderId);
         try {
             await updateOrderStatus(orderId, newStatus);
+            let updatedOrderData: MobileOrder | null = null;
             if (detailOrder?.id === orderId) {
-                const updated = await mobileOrdersApi.getOrder(orderId);
-                setDetailOrder(updated);
+                updatedOrderData = await mobileOrdersApi.getOrder(orderId);
+                setDetailOrder(updatedOrderData);
+            }
+
+            if (newStatus === 'Confirmed') {
+                const orderToPrint = updatedOrderData || await mobileOrdersApi.getOrder(orderId);
+                const { createThermalPrinter } = await import('../../services/printer/thermalPrinter');
+                const printer = createThermalPrinter();
+
+                await printer.printReceipt({
+                    storeName: branding?.company_name || 'My Shop',
+                    storeAddress: branding?.address || '',
+                    receiptNumber: orderToPrint.order_number,
+                    date: new Date(orderToPrint.created_at).toLocaleDateString(),
+                    time: new Date(orderToPrint.created_at).toLocaleTimeString(),
+                    cashier: 'Mobile Order',
+                    customer: `${orderToPrint.customer_name || ''} - ${orderToPrint.customer_phone || ''}`,
+                    items: (orderToPrint.items || []).map(item => ({
+                        name: item.product_name,
+                        quantity: parseFloat(String(item.quantity)),
+                        unitPrice: parseFloat(String(item.unit_price)),
+                        total: parseFloat(String(item.subtotal)),
+                        discount: parseFloat(String(item.discount_amount || 0)),
+                    })),
+                    subtotal: parseFloat(String(orderToPrint.subtotal)),
+                    discount: 0,
+                    tax: parseFloat(String(orderToPrint.tax_total)),
+                    total: parseFloat(String(orderToPrint.grand_total)),
+                    payments: [
+                        { method: orderToPrint.payment_method, amount: parseFloat(String(orderToPrint.grand_total)) }
+                    ],
+                    footer: `UNPAID RECEIPT\nDelivery Fee: ${orderToPrint.delivery_fee}\n${orderToPrint.delivery_notes || ''}`,
+                    showBarcode: true
+                });
             }
         } catch (err: any) {
             alert(err.error || err.message || 'Failed to update status');
@@ -211,8 +248,8 @@ function MobileOrdersPageContent() {
                                         <span className="flex items-center gap-1">
                                             <Phone className="w-3 h-3" />{order.customer_phone}
                                         </span>
-                                        <span className="flex items-center gap-1">
-                                            <FileText className="w-3 h-3" />{order.payment_method}
+                                        <span className={`flex items-center gap-1 font-medium ${order.payment_status === 'Paid' ? 'text-green-600' : ''}`}>
+                                            <FileText className="w-3 h-3" />{order.payment_method} ({order.payment_status || 'Unpaid'})
                                         </span>
                                     </div>
 
@@ -229,7 +266,7 @@ function MobileOrdersPageContent() {
                                                 ) : (
                                                     <Check className="w-3.5 h-3.5" />
                                                 )}
-                                                {STATUS_CONFIG[nextStatus]?.label || nextStatus}
+                                                {nextStatus === 'Delivered' ? 'Mark Paid & Delivered' : STATUS_CONFIG[nextStatus]?.label || nextStatus}
                                             </button>
                                             {order.status === 'Pending' && (
                                                 <button
@@ -402,7 +439,7 @@ function OrderDetailPanel({
                         ) : (
                             <Check className="w-4 h-4" />
                         )}
-                        Mark as {STATUS_CONFIG[nextStatus]?.label || nextStatus}
+                        {nextStatus === 'Delivered' ? 'Mark as Paid & Delivered' : `Mark as ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
                     </button>
                     {order.status === 'Pending' && (
                         <button

@@ -171,7 +171,7 @@ export default function BudgetCreation() {
     };
 
     return (
-        <div className="page fade-in" style={{ paddingBottom: 120 }}>
+        <div className="page fade-in" style={{ paddingBottom: 180 }}>
             {/* Header Area */}
             <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
@@ -373,7 +373,7 @@ export default function BudgetCreation() {
 
             {/* Sticky Bottom Bar */}
             <div style={{
-                position: 'fixed', bottom: 70, left: 0, right: 0, padding: '16px 20px', background: 'white',
+                position: 'fixed', bottom: 'calc(64px + var(--safe-bottom))', left: 0, right: 0, padding: '16px 20px', background: 'white',
                 borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 boxShadow: '0 -4px 15px rgba(0,0,0,0.05)', zIndex: 100
             }}>

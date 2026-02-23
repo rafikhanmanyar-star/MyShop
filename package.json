@@ -1,6 +1,6 @@
 {
   "name": "myshop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "MyShop - POS & Inventory Management",
   "main": "electron/main.js",
   "private": true,
@@ -19,6 +19,9 @@
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
     "dist:win:cloud": "npm run build:client:cloud && electron-builder --win -c electron-builder.cloud.json",
+    "release": "powershell -ExecutionPolicy Bypass -File ./build-and-push.ps1",
+    "release:minor": "powershell -ExecutionPolicy Bypass -File ./build-and-push.ps1 -BumpType minor",
+    "release:major": "powershell -ExecutionPolicy Bypass -File ./build-and-push.ps1 -BumpType major",
     "postinstall": "cd server && npm install && cd ../client && npm install"
   },
   "devDependencies": {

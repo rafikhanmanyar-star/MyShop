@@ -1029,7 +1029,7 @@ img {
   box-shadow: var(--shadow-xl);
   border: 1px solid var(--border-light);
   overflow: hidden;
-  z-index: 1001;
+  z-index: 2001;
   transform-origin: top right;
 }
 
@@ -1099,8 +1099,18 @@ img {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.05);
-  z-index: 1000;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 2000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.menu-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Page margin adjustment for fixed header */

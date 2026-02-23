@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { getFullImageUrl } from '../api';
@@ -7,6 +7,22 @@ export default function Header() {
     const { shopSlug } = useParams();
     const { state, dispatch } = useApp();
     const [showMenu, setShowMenu] = useState(false);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        if (!showMenu) return;
+
+        const handleClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            // If the click is not on the button or its children, and not on the menu or its children
+            if (!target.closest('.user-section')) {
+                setShowMenu(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [showMenu]);
 
     if (!shopSlug) return null;
 
@@ -17,11 +33,22 @@ export default function Header() {
         <header className="main-header">
             <div className="header-content">
                 <Link to={`/${shopSlug}`} className="shop-logo-link">
-                    {state.branding?.logo_url ? (
+                    {(state.branding?.logo_url || state.shop?.logo_url) ? (
                         <img
-                            src={getFullImageUrl(state.branding.logo_url)}
+                            src={getFullImageUrl(state.branding?.logo_url || state.shop?.logo_url || undefined)}
                             alt="Logo"
                             className="header-logo"
+                            onError={(e) => {
+                                // If image fails to load, hide it and show text
+                                (e.target as HTMLImageElement).style.display = 'none';
+                                const parent = (e.target as HTMLImageElement).parentElement;
+                                if (parent) {
+                                    const text = document.createElement('span');
+                                    text.className = 'header-shop-name';
+                                    text.innerText = state.shop?.company_name || state.shop?.name || 'MyShop';
+                                    parent.appendChild(text);
+                                }
+                            }}
                         />
                     ) : (
                         <span className="header-shop-name">{state.shop?.company_name || state.shop?.name || 'MyShop'}</span>
@@ -79,7 +106,7 @@ export default function Header() {
                                     </>
                                 )}
                             </div>
-                            <div className="menu-overlay" onClick={() => setShowMenu(false)} />
+                            <div className="menu-overlay active" onClick={() => setShowMenu(false)} />
                         </>
                     )}
                 </div>
