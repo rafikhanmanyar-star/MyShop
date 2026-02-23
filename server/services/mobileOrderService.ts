@@ -873,12 +873,21 @@ export class MobileOrderService {
         if (journalRes.length === 0) return;
         const journalId = journalRes[0].id;
 
-        // 1. Debit Cash/Bank
-        const accCode = data.bankType === 'Cash' ? 'AST-100' : 'AST-101';
-        const bankAccId = await this.getOrCreateAccount(client, tenantId, data.bankName, 'Asset', accCode);
+        // 1. Debit Cash/Bank - use linked chart account if available
+        const bankLinkRes = await client.query(
+            'SELECT chart_account_id FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2',
+            [data.bankAccountId, tenantId]
+        );
+        let bankChartAccId: string;
+        if (bankLinkRes.length > 0 && bankLinkRes[0].chart_account_id) {
+            bankChartAccId = bankLinkRes[0].chart_account_id;
+        } else {
+            const accCode = data.bankType === 'Cash' ? 'AST-100' : 'AST-101';
+            bankChartAccId = await this.getOrCreateAccount(client, tenantId, data.bankName, 'Asset', accCode);
+        }
         await client.query(
             'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
-            [tenantId, journalId, bankAccId, data.grandTotal]
+            [tenantId, journalId, bankChartAccId, data.grandTotal]
         );
 
         // 2. Credit Accounts Receivable

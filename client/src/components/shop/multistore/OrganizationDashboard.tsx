@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useMultiStore } from '../../../context/MultiStoreContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
@@ -7,11 +7,13 @@ import Card from '../../ui/Card';
 const OrganizationDashboard: React.FC = () => {
     const { organization, consolidatedRevenue, activeTerminalsCount, stores, performance } = useMultiStore();
 
+    const activeBranches = stores.filter(s => s.status === 'Active').length;
+
     const stats = [
         { label: 'Network Revenue', value: `${CURRENCY} ${consolidatedRevenue.toLocaleString()}`, icon: ICONS.trendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { label: 'Active Branches', value: stores.filter(s => s.status === 'Active').length, icon: ICONS.building, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+        { label: 'Active Branches', value: activeBranches, icon: ICONS.building, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         { label: 'POS Terminals', value: activeTerminalsCount, icon: ICONS.history, color: 'text-amber-600', bg: 'bg-amber-50' },
-        { label: 'Health Index', value: '94%', icon: ICONS.heart, color: 'text-rose-600', bg: 'bg-rose-50' },
+        { label: 'Total Stores', value: stores.length, icon: ICONS.heart, color: 'text-rose-600', bg: 'bg-rose-50' },
     ];
 
     // Top branches by performance
@@ -82,42 +84,48 @@ const OrganizationDashboard: React.FC = () => {
                 <Card className="border-none shadow-sm p-8 flex flex-col gap-8">
                     <h3 className="font-bold text-slate-800">Regional Footprint</h3>
                     <div className="flex-1 flex items-center justify-center relative">
-                        {/* Mock Map / Radial Visual */}
                         <div className="w-48 h-48 rounded-full border-8 border-slate-50 flex items-center justify-center relative">
-                            <div className="absolute inset-0 rounded-full border-t-8 border-indigo-600 rotate-45"></div>
-                            <div className="absolute inset-0 rounded-full border-r-8 border-emerald-500 -rotate-12"></div>
                             <div className="text-center">
-                                <p className="text-3xl font-black text-slate-800">12</p>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">Active Nodes</p>
+                                <p className="text-3xl font-black text-slate-800">{activeBranches}</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">Active Branches</p>
                             </div>
                         </div>
                     </div>
 
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-indigo-600"></div>
-                                <span className="text-xs font-bold text-slate-600">South Region</span>
-                            </div>
-                            <span className="text-xs font-black text-slate-800 font-mono">5 Stores</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                <span className="text-xs font-bold text-slate-600">Central Region</span>
-                            </div>
-                            <span className="text-xs font-black text-slate-800 font-mono">4 Stores</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-amber-400"></div>
-                                <span className="text-xs font-bold text-slate-600">North Region</span>
-                            </div>
-                            <span className="text-xs font-black text-slate-800 font-mono">3 Stores</span>
-                        </div>
-                    </div>
+                    <RegionalBreakdown stores={stores} />
                 </Card>
             </div>
+        </div>
+    );
+};
+
+const regionColors = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-400', 'bg-rose-400', 'bg-purple-500'];
+
+const RegionalBreakdown: React.FC<{ stores: any[] }> = ({ stores }) => {
+    const regionMap = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const store of stores) {
+            const region = store.region || 'Unassigned';
+            map.set(region, (map.get(region) || 0) + 1);
+        }
+        return Array.from(map.entries()).map(([name, count]) => ({ name, count }));
+    }, [stores]);
+
+    if (regionMap.length === 0) {
+        return <p className="text-xs text-slate-400 text-center py-4">No branches added yet</p>;
+    }
+
+    return (
+        <div className="space-y-4">
+            {regionMap.map((region, i) => (
+                <div key={region.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${regionColors[i % regionColors.length]}`}></div>
+                        <span className="text-xs font-bold text-slate-600">{region.name}</span>
+                    </div>
+                    <span className="text-xs font-black text-slate-800 font-mono">{region.count} {region.count === 1 ? 'Store' : 'Stores'}</span>
+                </div>
+            ))}
         </div>
     );
 };

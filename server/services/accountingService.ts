@@ -10,7 +10,7 @@ export class AccountingService {
   async getAccountsWithBalances(tenantId: string) {
     return this.db.query(`
       SELECT
-        a.id, a.name, a.code, a.type, a.is_active,
+        a.id, a.name, a.code, a.type, a.description, a.is_active,
         COALESCE(SUM(le.debit), 0) as total_debit,
         COALESCE(SUM(le.credit), 0) as total_credit,
         CASE
@@ -22,7 +22,7 @@ export class AccountingService {
       FROM accounts a
       LEFT JOIN ledger_entries le ON le.account_id = a.id AND le.tenant_id = $1
       WHERE a.tenant_id = $1
-      GROUP BY a.id, a.name, a.code, a.type, a.is_active
+      GROUP BY a.id, a.name, a.code, a.type, a.description, a.is_active
       ORDER BY a.code ASC
     `, [tenantId]);
   }
@@ -362,7 +362,30 @@ export class AccountingService {
   }
 
   /**
-   * Create a new chart-of-accounts entry (account)
+   * Check if an account with the same name or code already exists for this tenant.
+   * Returns { field, value } if duplicate found, null otherwise.
+   */
+  async checkDuplicate(tenantId: string, name: string, code?: string, excludeId?: string): Promise<{ field: string; value: string } | null> {
+    const nameCheck = await this.db.query(
+      `SELECT id FROM accounts WHERE tenant_id = $1 AND LOWER(name) = LOWER($2)${excludeId ? ' AND id <> $3' : ''} LIMIT 1`,
+      excludeId ? [tenantId, name, excludeId] : [tenantId, name]
+    );
+    if (nameCheck.length > 0) return { field: 'name', value: name };
+
+    if (code && code.trim() !== '') {
+      const codeCheck = await this.db.query(
+        `SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2${excludeId ? ' AND id <> $3' : ''} LIMIT 1`,
+        excludeId ? [tenantId, code, excludeId] : [tenantId, code]
+      );
+      if (codeCheck.length > 0) return { field: 'code', value: code };
+    }
+
+    return null;
+  }
+
+  /**
+   * Create a new chart-of-accounts entry (account).
+   * Validates name/code uniqueness per tenant before inserting.
    */
   async createAccount(tenantId: string, data: {
     name: string;
@@ -371,11 +394,20 @@ export class AccountingService {
     description?: string;
     isActive?: boolean;
   }) {
+    const duplicate = await this.checkDuplicate(tenantId, data.name, data.code);
+    if (duplicate) {
+      const err: any = new Error(
+        `An account with this ${duplicate.field} already exists: "${duplicate.value}"`
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+
     const result = await this.db.query(`
-      INSERT INTO accounts (tenant_id, name, code, type, is_active)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, name, code, type, is_active, balance, created_at
-    `, [tenantId, data.name, data.code, data.type, data.isActive !== false]);
+      INSERT INTO accounts (tenant_id, name, code, type, description, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id, name, code, type, description, is_active, balance, created_at
+    `, [tenantId, data.name, data.code, data.type, data.description || null, data.isActive !== false]);
     return result[0];
   }
 

@@ -24,11 +24,18 @@ router.post('/accounts', checkRole(['admin', 'accountant']), async (req: any, re
         if (!name || !type) {
             return res.status(400).json({ error: 'Name and type are required' });
         }
+        if (!code || code.trim() === '') {
+            return res.status(400).json({ error: 'Account code is required' });
+        }
         const account = await getAccountingService().createAccount(req.tenantId, {
-            name, code, type, description, isActive
+            name: name.trim(), code: code.trim(), type, description, isActive
         });
         res.status(201).json(account);
     } catch (error: any) {
+        const status = error.statusCode || 500;
+        if (status !== 500) {
+            return res.status(status).json({ error: error.message });
+        }
         console.error('❌ Error creating account:', error);
         res.status(500).json({ error: error.message });
     }

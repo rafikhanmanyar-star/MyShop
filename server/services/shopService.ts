@@ -477,9 +477,6 @@ export class ShopService {
         ON CONFLICT (tenant_id, customer_id) DO UPDATE SET balance = customer_balance.balance + $3, updated_at = NOW()
       `, [tenantId, saleData.customerId, saleData.grandTotal]);
     } else {
-      // Debit each payment into its respective account.
-      // Only record the actual sale amount (grandTotal), not the full tendered amount.
-      // Change/refund given back to the customer should NOT be recorded in the ledger.
       const payments = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [{ method: 'Cash', amount: saleData.grandTotal }];
       let remainingToAllocate = saleData.grandTotal;
 
@@ -490,11 +487,17 @@ export class ShopService {
 
         let debitAccId;
         if (p.bankAccountId) {
-          // Fetch bank info to maintain ledger naming consistency
-          const [bank] = await client.query('SELECT name, account_type FROM shop_bank_accounts WHERE id = $1', [p.bankAccountId]);
-          const accName = bank?.name || 'Bank';
-          const accCode = bank?.account_type === 'Cash' ? 'AST-100' : 'AST-101';
-          debitAccId = await getAccount(accName, 'Asset', accCode);
+          const [bank] = await client.query(
+            'SELECT name, account_type, chart_account_id FROM shop_bank_accounts WHERE id = $1',
+            [p.bankAccountId]
+          );
+          if (bank?.chart_account_id) {
+            debitAccId = bank.chart_account_id;
+          } else {
+            const accName = bank?.name || 'Bank';
+            const accCode = bank?.account_type === 'Cash' ? 'AST-100' : 'AST-101';
+            debitAccId = await getAccount(accName, 'Asset', accCode);
+          }
         } else {
           debitAccId = await getAccount('Cash', 'Asset', 'AST-100');
         }
@@ -750,12 +753,40 @@ export class ShopService {
   }
 
   async createBankAccount(tenantId: string, data: { name: string; code?: string; account_type?: string; currency?: string }) {
-    const res = await this.db.query(
-      `INSERT INTO shop_bank_accounts (tenant_id, name, code, account_type, currency)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [tenantId, data.name, data.code || null, data.account_type || 'Bank', data.currency || 'BDT']
-    );
-    return res[0].id;
+    return this.db.transaction(async (client) => {
+      const accountType = data.account_type || 'Bank';
+
+      // Auto-create a linked chart-of-accounts entry (Asset)
+      const baseCode = accountType === 'Cash' ? 'AST-100' : 'AST-101';
+      const existingCodes = await client.query(
+        `SELECT code FROM accounts WHERE tenant_id = $1 AND code LIKE $2`,
+        [tenantId, baseCode + '%']
+      );
+      const chartCode = existingCodes.length === 0 ? baseCode : `${baseCode}-${existingCodes.length + 1}`;
+
+      let chartAccId: string | null = null;
+      const existingAcc = await client.query(
+        'SELECT id FROM accounts WHERE tenant_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1',
+        [tenantId, data.name]
+      );
+      if (existingAcc.length > 0) {
+        chartAccId = existingAcc[0].id;
+      } else {
+        const accRes = await client.query(
+          `INSERT INTO accounts (tenant_id, name, code, type, balance, is_active, description)
+           VALUES ($1, $2, $3, 'Asset', 0, TRUE, $4) RETURNING id`,
+          [tenantId, data.name, chartCode, `Linked bank account: ${data.name}`]
+        );
+        chartAccId = accRes[0].id;
+      }
+
+      const res = await client.query(
+        `INSERT INTO shop_bank_accounts (tenant_id, name, code, account_type, currency, chart_account_id)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [tenantId, data.name, data.code || null, accountType, data.currency || 'BDT', chartAccId]
+      );
+      return res[0].id;
+    });
   }
 
   async updateBankAccount(tenantId: string, id: string, data: { name?: string; code?: string; is_active?: boolean }) {

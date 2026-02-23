@@ -12,6 +12,8 @@ const ChartOfAccounts: React.FC = () => {
     const { accounts, createAccount } = useAccounting();
     const [filter, setFilter] = useState<string>('All');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [formError, setFormError] = useState<string>('');
+    const [creating, setCreating] = useState(false);
     const [newAccount, setNewAccount] = useState({
         code: '',
         name: '',
@@ -20,17 +22,40 @@ const ChartOfAccounts: React.FC = () => {
         isControlAccount: false
     });
 
+    const clientSideDuplicateCheck = (): string | null => {
+        const trimmedName = newAccount.name.trim().toLowerCase();
+        const trimmedCode = newAccount.code.trim();
+        if (accounts.some(a => a.name.toLowerCase() === trimmedName)) {
+            return `An account with the name "${newAccount.name.trim()}" already exists`;
+        }
+        if (trimmedCode && accounts.some(a => a.code === trimmedCode)) {
+            return `An account with the code "${trimmedCode}" already exists`;
+        }
+        return null;
+    };
+
     const handleCreate = async () => {
+        setFormError('');
+        const localErr = clientSideDuplicateCheck();
+        if (localErr) { setFormError(localErr); return; }
+
+        setCreating(true);
         try {
             await createAccount({
                 ...newAccount,
+                name: newAccount.name.trim(),
+                code: newAccount.code.trim(),
                 balance: 0,
                 isActive: true
             });
             setIsModalOpen(false);
+            setFormError('');
             setNewAccount({ code: '', name: '', type: 'Asset', description: '', isControlAccount: false });
-        } catch (e) {
-            alert('Failed to create account');
+        } catch (e: any) {
+            const msg = e?.error || e?.message || 'Failed to create account';
+            setFormError(msg);
+        } finally {
+            setCreating(false);
         }
     };
 
@@ -171,9 +196,17 @@ const ChartOfAccounts: React.FC = () => {
                         <label htmlFor="isControl" className="text-sm text-slate-600 font-medium">Control Account (System use)</label>
                     </div>
 
+                    {formError && (
+                        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-lg text-sm font-medium">
+                            {formError}
+                        </div>
+                    )}
+
                     <div className="flex justify-end gap-3 mt-4">
-                        <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                        <Button onClick={handleCreate} disabled={!newAccount.code || !newAccount.name}>Create Account</Button>
+                        <Button variant="secondary" onClick={() => { setIsModalOpen(false); setFormError(''); }}>Cancel</Button>
+                        <Button onClick={handleCreate} disabled={!newAccount.code.trim() || !newAccount.name.trim() || creating}>
+                            {creating ? 'Creating...' : 'Create Account'}
+                        </Button>
                     </div>
                 </div>
             </Modal>

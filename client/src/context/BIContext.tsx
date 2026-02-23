@@ -141,7 +141,7 @@ export function BIProvider({ children }: { children: ReactNode }) {
         .map((s, i) => ({
           storeName: s.name,
           revenue: s.rev,
-          growth: Math.max(1, Math.floor(Math.random() * 20)),
+          growth: 0,
           rank: i + 1,
         }));
       setStoreRankings(rankings.length > 0 ? rankings : defaultStoreRankings());

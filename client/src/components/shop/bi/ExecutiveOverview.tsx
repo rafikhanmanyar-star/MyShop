@@ -25,7 +25,6 @@ const ExecutiveOverview: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Mock Sparkline */}
                         <div className="h-12 flex items-end gap-1 px-1">
                             {kpi.sparkline.map((val, idx) => (
                                 <div
@@ -56,17 +55,20 @@ const ExecutiveOverview: React.FC = () => {
                     </div>
 
                     <div className="h-64 flex items-end gap-2 group/chart border-b border-slate-100 relative">
-                        {salesTrend.map((data, idx) => (
-                            <div key={idx} className="flex-1 flex flex-col items-center gap-2 relative group cursor-pointer h-full justify-end">
-                                <div
-                                    className="w-full bg-slate-50 border border-slate-100 rounded-t-lg transition-all duration-700 min-h-[4px] relative overflow-hidden"
-                                    style={{ height: `${(data.revenue / 1200000) * 100}%` }}
-                                >
-                                    <div className="absolute inset-0 bg-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        {salesTrend.map((data, idx) => {
+                            const maxRevenue = Math.max(...salesTrend.map((d: any) => d.revenue || 0), 1);
+                            return (
+                                <div key={idx} className="flex-1 flex flex-col items-center gap-2 relative group cursor-pointer h-full justify-end">
+                                    <div
+                                        className="w-full bg-slate-50 border border-slate-100 rounded-t-lg transition-all duration-700 min-h-[4px] relative overflow-hidden"
+                                        style={{ height: `${(data.revenue / maxRevenue) * 100}%` }}
+                                    >
+                                        <div className="absolute inset-0 bg-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    </div>
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{data.timestamp}</span>
                                 </div>
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{data.timestamp}</span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </Card>
 
@@ -100,24 +102,12 @@ const ExecutiveOverview: React.FC = () => {
                 </Card>
             </div>
 
-            {/* AI Insights & Anomalies */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[
-                    { type: 'insight', title: 'Weekend Uplift Predicted', desc: 'Category "CP Fittings" expected to surge by 15% this Saturday based on historical data.', color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                    { type: 'alert', title: 'Margin Erosion Alert', desc: 'Islamabad branch showing 4% lower margin on specific sanitary ware batches.', color: 'text-rose-600', bg: 'bg-rose-50' },
-                    { type: 'opportunity', title: 'Inventory Optimization', desc: 'Overstock of "Ceramic Tiles" in Central Warehouse could fulfill Lahore Express deficit.', color: 'text-emerald-600', bg: 'bg-emerald-50' }
-                ].map((item, i) => (
-                    <div key={i} className={`p-5 rounded-2xl border ${item.bg.replace('bg-', 'border-')} ${item.bg} flex items-start gap-4 shadow-sm`}>
-                        <div className={`p-2 rounded-lg ${item.color.replace('text-', 'bg-')} bg-opacity-10 ${item.color}`}>
-                            {i === 0 ? ICONS.target : i === 1 ? ICONS.alertTriangle : ICONS.trendingUp}
-                        </div>
-                        <div>
-                            <p className={`text-xs font-black uppercase tracking-widest ${item.color}`}>{item.title}</p>
-                            <p className="text-xs text-slate-600 leading-relaxed mt-1">{item.desc}</p>
-                        </div>
-                    </div>
-                ))}
-            </div>
+            {/* AI Insights - populated when enough data is available */}
+            {salesTrend.some((d: any) => d.revenue > 0) ? null : (
+                <div className="p-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center">
+                    <p className="text-xs font-bold text-slate-400">Insights will appear here once enough sales data is collected.</p>
+                </div>
+            )}
         </div>
     );
 };
