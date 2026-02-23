@@ -1,9 +1,13 @@
 {
   "name": "myshop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "MyShop - POS & Inventory Management",
   "main": "electron/main.js",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rafikhanmanyar-star/MyShop.git"
+  },
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
@@ -15,10 +19,12 @@
     "electron": "npm run build && electron .",
     "electron:dev": "concurrently \"npm run dev:server\" \"wait-on http://localhost:3000/api/health && electron . --dev\"",
     "electron:cloud": "npm run build:client:cloud && electron . --cloud",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win",
-    "dist:win:cloud": "npm run build:client:cloud && electron-builder --win -c electron-builder.cloud.json",
+    "pack": "npm run build:client:cloud && electron-builder --dir -c electron-builder.cloud.json",
+    "pack:local": "npm run build && electron-builder --dir",
+    "dist": "npm run build:client:cloud && electron-builder -c electron-builder.cloud.json",
+    "dist:win": "npm run build:client:cloud && electron-builder --win -c electron-builder.cloud.json",
+    "dist:local": "npm run build && electron-builder",
+    "dist:win:local": "npm run build && electron-builder --win",
     "release": "powershell -ExecutionPolicy Bypass -File ./build-and-push.ps1",
     "release:minor": "powershell -ExecutionPolicy Bypass -File ./build-and-push.ps1 -BumpType minor",
     "release:major": "powershell -ExecutionPolicy Bypass -File ./build-and-push.ps1 -BumpType major",
@@ -30,6 +36,9 @@
     "electron": "^28.2.0",
     "electron-builder": "^26.7.0",
     "wait-on": "^7.2.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   },
   "build": {
     "appId": "com.myshop.app",

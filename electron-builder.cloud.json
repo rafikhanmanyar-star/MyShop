@@ -1,6 +1,9 @@
 {
   "appId": "com.myshop.app",
   "productName": "MyShop",
+  "publish": {
+    "provider": "github"
+  },
   "directories": {
     "output": "release"
   },

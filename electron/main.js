@@ -1,9 +1,22 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 
 let serverProcess = null;
+let mainWindow = null;
+let autoUpdater = null;
+if (app.isPackaged) {
+  try {
+    autoUpdater = require('electron-updater').autoUpdater;
+  } catch (_) {}
+}
+
+function sendUpdateStatus(...args) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-status', ...args);
+  }
+}
 const PORT = 3000;
 const isDev = process.argv.includes('--dev');
 
@@ -120,6 +133,7 @@ function startServer() {
 }
 
 function createWindow() {
+  const preloadPath = path.join(__dirname, 'preload.js');
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -128,9 +142,11 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: preloadPath,
     },
     show: false,
   });
+  mainWindow = win;
 
   if (isCloud) {
     const clientPath = getClientDistPath();
@@ -142,11 +158,53 @@ function createWindow() {
 
   win.once('ready-to-show', () => win.show());
   win.on('closed', () => {
+    mainWindow = null;
     if (serverProcess) {
       serverProcess.kill();
       serverProcess = null;
     }
   });
+}
+
+function setupUpdaterIPC() {
+  ipcMain.handle('get-app-version', () => app.getVersion());
+  ipcMain.handle('check-for-updates', async () => {
+    if (!app.isPackaged || !autoUpdater) {
+      sendUpdateStatus({ status: 'unavailable', message: 'Updates only work in the installed app.' });
+      return;
+    }
+    try {
+      sendUpdateStatus({ status: 'checking' });
+      await autoUpdater.checkForUpdates();
+    } catch (err) {
+      sendUpdateStatus({ status: 'error', message: err && err.message ? err.message : String(err) });
+    }
+  });
+  ipcMain.handle('start-update-download', () => {
+    if (autoUpdater) return autoUpdater.downloadUpdate();
+  });
+  ipcMain.handle('quit-and-install', () => {
+    if (autoUpdater) autoUpdater.quitAndInstall(false, true);
+  });
+
+  if (autoUpdater) {
+    autoUpdater.autoDownload = false;
+    autoUpdater.on('update-available', (info) => {
+      sendUpdateStatus({ status: 'available', version: info.version });
+    });
+    autoUpdater.on('update-not-available', () => {
+      sendUpdateStatus({ status: 'not-available' });
+    });
+    autoUpdater.on('download-progress', (p) => {
+      sendUpdateStatus({ status: 'downloading', percent: p.percent });
+    });
+    autoUpdater.on('update-downloaded', () => {
+      sendUpdateStatus({ status: 'downloaded' });
+    });
+    autoUpdater.on('error', (err) => {
+      sendUpdateStatus({ status: 'error', message: err && err.message ? err.message : String(err) });
+    });
+  }
 }
 
 app.whenReady().then(async () => {
@@ -172,8 +230,11 @@ app.whenReady().then(async () => {
       });
     }
     createWindow();
+    setupUpdaterIPC();
   } catch (err) {
     console.error('Failed to start:', err);
+    const message = err && err.message ? err.message : String(err);
+    dialog.showErrorBox('MyShop failed to start', message + '\n\nFrom project root run: npm run build then npm run electron');
     app.quit();
   }
 });

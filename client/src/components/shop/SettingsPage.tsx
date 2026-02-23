@@ -22,9 +22,21 @@ function toState(v: ShopVendor) {
     };
 }
 
+declare global {
+    interface Window {
+        electronAPI?: {
+            getAppVersion: () => Promise<string>;
+            checkForUpdates: () => Promise<void>;
+            onUpdateStatus: (cb: (payload: { status: string; message?: string; version?: string; percent?: number }) => void) => () => void;
+            startUpdateDownload: () => Promise<void>;
+            quitAndInstall: () => Promise<void>;
+        };
+    }
+}
+
 const SettingsContent: React.FC = () => {
     const { dispatch } = useAppContext();
-    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users'>('coa');
+    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'app'>('coa');
 
     const [vendors, setVendors] = useState<ShopVendor[]>([]);
     const [vendorsLoading, setVendorsLoading] = useState(true);
@@ -41,6 +53,37 @@ const SettingsContent: React.FC = () => {
     const [userForm, setUserForm] = useState({
         username: '', name: '', email: '', password: '', role: 'pos_cashier'
     });
+
+    const [appVersion, setAppVersion] = useState<string | null>(null);
+    const [updateStatus, setUpdateStatus] = useState<{ status: string; message?: string; version?: string; percent?: number } | null>(null);
+    const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
+
+    useEffect(() => {
+        if (!isElectron || !window.electronAPI) return;
+        window.electronAPI.getAppVersion().then(setAppVersion);
+    }, [isElectron]);
+
+    useEffect(() => {
+        if (!isElectron || !window.electronAPI) return;
+        const unsub = window.electronAPI.onUpdateStatus((payload) => setUpdateStatus(payload));
+        return unsub;
+    }, [isElectron]);
+
+    const handleCheckForUpdates = useCallback(() => {
+        if (!window.electronAPI) return;
+        setUpdateStatus({ status: 'checking' });
+        window.electronAPI.checkForUpdates();
+    }, []);
+
+    const handleDownloadUpdate = useCallback(() => {
+        if (!window.electronAPI) return;
+        window.electronAPI.startUpdateDownload();
+    }, []);
+
+    const handleQuitAndInstall = useCallback(() => {
+        if (!window.electronAPI) return;
+        window.electronAPI.quitAndInstall();
+    }, []);
 
     const loadVendors = useCallback(async () => {
         try {
@@ -170,6 +213,7 @@ const SettingsContent: React.FC = () => {
         { id: 'coa' as const, label: 'Chart of Accounts', icon: ICONS.list },
         { id: 'vendors' as const, label: 'Vendor Management', icon: ICONS.briefcase },
         { id: 'users' as const, label: 'User Management', icon: ICONS.users },
+        { id: 'app' as const, label: 'App', icon: ICONS.download },
     ];
 
     return (
@@ -203,6 +247,57 @@ const SettingsContent: React.FC = () => {
 
                 {activeTab === 'coa' && (
                     <ChartOfAccounts />
+                )}
+
+                {activeTab === 'app' && (
+                    <div className="space-y-6 max-w-xl">
+                        <Card className="border-none shadow-sm p-6">
+                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Desktop app</h3>
+                            {appVersion != null && (
+                                <p className="text-slate-600 text-sm mb-4">Current version: <span className="font-bold text-slate-800">{appVersion}</span></p>
+                            )}
+                            {isElectron ? (
+                                <div className="space-y-3">
+                                    <Button
+                                        onClick={handleCheckForUpdates}
+                                        disabled={updateStatus?.status === 'checking' || updateStatus?.status === 'downloading'}
+                                        className="flex items-center gap-2"
+                                    >
+                                        {updateStatus?.status === 'checking' || updateStatus?.status === 'downloading' ? (
+                                            <>Checking…</>
+                                        ) : (
+                                            <>Check for updates</>
+                                        )}
+                                    </Button>
+                                    {updateStatus?.status === 'available' && updateStatus?.version && (
+                                        <div className="flex items-center gap-3 pt-2">
+                                            <p className="text-emerald-600 text-sm font-medium">New version {updateStatus.version} available.</p>
+                                            <Button variant="secondary" onClick={handleDownloadUpdate}>Download and install</Button>
+                                        </div>
+                                    )}
+                                    {updateStatus?.status === 'downloading' && (
+                                        <p className="text-slate-600 text-sm">
+                                            Downloading… {updateStatus.percent != null ? `${Math.round(updateStatus.percent)}%` : ''}
+                                        </p>
+                                    )}
+                                    {updateStatus?.status === 'downloaded' && (
+                                        <div className="flex items-center gap-3 pt-2">
+                                            <p className="text-emerald-600 text-sm font-medium">Update ready. Restart the app to install.</p>
+                                            <Button onClick={handleQuitAndInstall}>Restart to install</Button>
+                                        </div>
+                                    )}
+                                    {updateStatus?.status === 'not-available' && (
+                                        <p className="text-slate-500 text-sm pt-2">You’re on the latest version.</p>
+                                    )}
+                                    {(updateStatus?.status === 'error' || updateStatus?.status === 'unavailable') && updateStatus?.message && (
+                                        <p className="text-amber-600 text-sm pt-2">{updateStatus.message}</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="text-slate-500 text-sm">Update check is available in the installed desktop app only.</p>
+                            )}
+                        </Card>
+                    </div>
                 )}
 
                 {activeTab === 'vendors' && (

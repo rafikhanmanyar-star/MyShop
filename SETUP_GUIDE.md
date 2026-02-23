@@ -76,11 +76,12 @@ npm run build
 npm run electron
 ```
 
-### Option D: Cloud Mode
+### Option D: Cloud Mode (desktop app — client only; API on Render)
 ```powershell
+# Set client/.env.cloud with VITE_API_URL=https://your-api.onrender.com
 npm run electron:cloud
-# Connects to Render API for production deployment
 ```
+The **installable** (e.g. `npm run dist:win`) is **client-only**; API and mobile run on Render. No local server is bundled.
 
 ---
 
@@ -143,9 +144,16 @@ npm run electron:cloud
 
 ### Build
 ```bash
-npm run build              # Build server + client
+npm run build              # Build server + client (for local Electron)
+npm run build:client:cloud # Build client only for Render API (for installable)
 npm run build:server       # Build server only
 npm run build:client       # Build client only
+```
+
+### Installable (client-only; API & mobile on Render)
+```bash
+npm run dist:win           # Windows installer (client-only, uses Render API)
+npm run dist:win:local     # Windows installer with embedded server (local DB)
 ```
 
 ### Run

@@ -67,37 +67,43 @@ DATABASE_URL=postgresql://myshop_db_staging_user:PASSWORD@dpg-xxx-a.region-postg
 DISABLE_MIGRATIONS=true
 ```
 
-### 3. Install and run
+### 3. Install dependencies
 
 ```bash
 npm install
+```
+
+### 4. Run the Electron desktop app
+
+**You must build before the first run** (builds the server and client):
+
+```bash
 npm run build
 npm run electron
 ```
 
-### 3. Start the API server
+Use `npm run electron` whenever you want to start the app. If you change server or client code, run `npm run build` again before `npm run electron`.
 
-```bash
-cd server
-npm install
-npm run dev
-```
+### Alternative: Run in browser (development)
 
-The server starts on http://localhost:3000 and auto-runs migrations.
+Instead of the Electron app, you can run the API and frontend separately:
 
-### 4. Start the frontend
+1. **Start the API server**
+   ```bash
+   cd server
+   npm run dev
+   ```
+   The server runs at http://localhost:3000 and runs migrations automatically.
 
-```bash
-cd client
-npm install
-npm run dev
-```
+2. **Start the frontend**
+   ```bash
+   cd client
+   npm run dev
+   ```
+   The frontend runs at http://localhost:5173 with API proxy to port 3000.
 
-The frontend starts on http://localhost:5173 with API proxy to port 3000.
-
-### 5. Register an account
-
-Open http://localhost:5173, click "Create one", and register your first account. This creates a tenant with an admin user.
+3. **Register an account**  
+   Open http://localhost:5173, click "Create one", and register. This creates a tenant with an admin user.
 
 ## Local frontend + Cloud server
 
@@ -157,52 +163,65 @@ You do **not** need to run the server or PostgreSQL locally; only run the client
 
 ## Desktop App (Electron)
 
-You can build MyShop as an installable desktop application for Windows.
+The **installable desktop app is client-only**. The API server and mobile app run on Render; the desktop app talks to your Render API. No local server or database is bundled or required on the user’s machine.
 
-### Option A: Cloud mode (API & DB on Render) — recommended
-
-Connects to your deployed API and database on Render. No local server or Node.js needed on the target machine.
+### Build the installable (client-only, for Render)
 
 1. **Set your Render API URL**
 
-   Copy `client/.env.cloud.example` to `client/.env.cloud` and set your API URL:
+   Copy `client/.env.cloud.example` to `client/.env.cloud` and set:
 
    ```
-   VITE_API_URL=https://myshop-api-9pd4.onrender.com
+   VITE_API_URL=https://your-api-service.onrender.com
    ```
 
    (Use your actual Render API URL from the Render dashboard.)
 
-2. **Run the app**
+2. **Run the desktop app locally**
 
    ```bash
    npm install
    npm run electron:cloud
    ```
 
-3. **Create the installer**
+3. **Create the Windows installer**
 
    ```bash
-   npm run dist:win:cloud
+   npm run dist:win
    ```
 
-   The installer is in `release/` (e.g. `MyShop Setup 1.0.0.exe`).
+   The installer is in `release/` (e.g. `MyShop Setup 1.0.0.exe`). Users only need the installer; they do not need Node.js or PostgreSQL.
 
-### Option B: Standalone mode (local server + DB)
+### Single command: version bump, build, push, and GitHub release
 
-Runs the API server and PostgreSQL locally. Requires Node.js and PostgreSQL on the target machine.
+From the project root, one command does everything:
 
-1. Configure the server with your database (create `server/.env` from `.env.example`).
+```bash
+npm run release
+```
 
-2. Build and run:
+This runs the release script which:
 
-   ```bash
-   npm install
-   npm run build
-   npm run electron
-   ```
+1. Bumps the patch version (e.g. 1.0.3 → 1.0.4)
+2. Builds the client (cloud mode) and the Windows installer
+3. Commits and pushes to GitHub
+4. Creates a GitHub Release and uploads the installer (requires [GitHub CLI](https://cli.github.com/) installed and `gh auth login`)
 
-3. Create installer: `npm run dist:win`
+Options:
+
+- `npm run release:minor` — bump minor version (1.0.0 → 1.1.0)
+- `npm run release:major` — bump major version (1.0.0 → 2.0.0)
+- `.\build-and-push.ps1 -SkipRelease` — do not create a GitHub release (e.g. if `gh` is not installed)
+
+**Required for in-app updates:** In `package.json`, set `repository.url` to your real GitHub repo (e.g. `https://github.com/your-org/MyShop.git`). The desktop app uses this to find new releases when users click **Settings → App → Check for updates**.
+
+### Optional: Standalone mode (local server + DB)
+
+To build an installable that runs the API and DB locally (not recommended for distribution):
+
+1. Configure `server/.env` (e.g. from `.env.example`).
+2. Build and run: `npm run build` then `npm run electron`.
+3. Create installer: `npm run dist:win:local`
 
 ### Development (with hot reload)
 
