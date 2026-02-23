@@ -270,7 +270,19 @@ export class MobileOrderService {
         }
 
         return this.db.transaction(async (client: any) => {
-            // 1. Resolve warehouse (use first branch warehouse)
+            // 1. Get all products and lock inventory rows for order products (for consistent stock check)
+            const productIds = [...new Set(input.items.map((i: any) => i.productId))];
+            const invRows = productIds.length > 0
+                ? await client.query(
+                    `SELECT product_id, warehouse_id, quantity_on_hand, quantity_reserved
+             FROM shop_inventory
+             WHERE tenant_id = $1 AND product_id = ANY($2)
+             FOR UPDATE`,
+                    [tenantId, productIds]
+                )
+                : [];
+
+            // 2. Resolve warehouse: one that has enough stock for ALL items (so we can reserve from it)
             let warehouseId: string | null = null;
             if (input.branchId) {
                 const whRes = await client.query(
@@ -280,20 +292,39 @@ export class MobileOrderService {
                 if (whRes.length > 0) warehouseId = whRes[0].id;
             }
             if (!warehouseId) {
-                const whRes = await client.query(
-                    'SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1',
+                // Find first warehouse that can fulfill every line item that has tracked inventory
+                const warehouses = await client.query(
+                    'SELECT id FROM shop_warehouses WHERE tenant_id = $1 ORDER BY id',
                     [tenantId]
                 );
-                if (whRes.length > 0) warehouseId = whRes[0].id;
+                for (const wh of warehouses) {
+                    const wid = wh.id;
+                    let canFulfill = true;
+                    for (const item of input.items) {
+                        const productRows = invRows.filter((r: any) => r.product_id === item.productId);
+                        if (productRows.length === 0) continue; // stock not tracked for this product
+                        const row = productRows.find((r: any) => r.warehouse_id === wid);
+                        const available = row
+                            ? Math.max(0, parseFloat(row.quantity_on_hand) - parseFloat(row.quantity_reserved))
+                            : 0;
+                        if (available < item.quantity) {
+                            canFulfill = false;
+                            break;
+                        }
+                    }
+                    if (canFulfill) {
+                        warehouseId = wid;
+                        break;
+                    }
+                }
             }
 
-            // 2. Validate & price each item, check stock
+            // 3. Validate & price each item; check stock using TOTAL across warehouses (matches catalog)
             let subtotal = 0;
             let taxTotal = 0;
             const resolvedItems: any[] = [];
 
             for (const item of input.items) {
-                // Get product info
                 const prodRes = await client.query(
                     `SELECT id, name, sku, retail_price, mobile_price, tax_rate
            FROM shop_products
@@ -309,26 +340,31 @@ export class MobileOrderService {
                     : parseFloat(product.retail_price);
                 const taxRate = parseFloat(product.tax_rate) || 0;
 
-                // Check stock availability (with lock)
-                if (warehouseId) {
-                    const invRes = await client.query(
-                        `SELECT quantity_on_hand, quantity_reserved
-             FROM shop_inventory
-             WHERE product_id = $1 AND warehouse_id = $2 AND tenant_id = $3
-             FOR UPDATE`,
-                        [item.productId, warehouseId, tenantId]
-                    );
+                // Total available across all warehouses (same as mobile catalog)
+                const productInvRows = invRows.filter((r: any) => r.product_id === item.productId);
+                const totalAvailable = productInvRows.reduce(
+                    (sum: number, r: any) =>
+                        sum + Math.max(0, parseFloat(r.quantity_on_hand) - parseFloat(r.quantity_reserved)),
+                    0
+                );
 
-                    if (invRes.length > 0) {
-                        const inv = invRes[0];
-                        const available = parseFloat(inv.quantity_on_hand) - parseFloat(inv.quantity_reserved);
-                        if (available < item.quantity) {
-                            throw new Error(
-                                `Insufficient stock for "${product.name}". Available: ${Math.max(0, available)}, Requested: ${item.quantity}`
-                            );
-                        }
+                if (productInvRows.length > 0 && totalAvailable < item.quantity) {
+                    throw new Error(
+                        `Insufficient stock for "${product.name}". Available: ${Math.max(0, Math.round(totalAvailable * 100) / 100)}, Requested: ${item.quantity}`
+                    );
+                }
+
+                // If a specific warehouse was chosen, ensure it has enough (we reserve from one warehouse)
+                if (warehouseId && productInvRows.length > 0) {
+                    const atWh = productInvRows.find((r: any) => r.warehouse_id === warehouseId);
+                    const availableAtWh = atWh
+                        ? Math.max(0, parseFloat(atWh.quantity_on_hand) - parseFloat(atWh.quantity_reserved))
+                        : 0;
+                    if (availableAtWh < item.quantity) {
+                        throw new Error(
+                            `Insufficient stock for "${product.name}" at selected branch. Available at branch: ${Math.max(0, availableAtWh)}, Requested: ${item.quantity}. Try another branch or leave branch unselected.`
+                        );
                     }
-                    // If no inventory record exists, allow order (stock not tracked for this product/warehouse)
                 }
 
                 const itemTax = unitPrice * item.quantity * (taxRate / 100);
@@ -347,6 +383,12 @@ export class MobileOrderService {
 
                 subtotal += itemSubtotal;
                 taxTotal += itemTax;
+            }
+
+            if (!warehouseId && invRows.length > 0) {
+                throw new Error(
+                    'Insufficient stock at a single location; stock is spread across branches. Please select a branch that has all items in stock.'
+                );
             }
 
             // 3. Get delivery fee from settings
