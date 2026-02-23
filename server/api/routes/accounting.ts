@@ -41,6 +41,25 @@ router.post('/accounts', checkRole(['admin', 'accountant']), async (req: any, re
     }
 });
 
+// --- Update Account (Chart of Accounts) ---
+router.put('/accounts/:id', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const { id } = req.params;
+        const { name, code, type, description, isActive } = req.body;
+        const account = await getAccountingService().updateAccount(req.tenantId, id, {
+            name, code, type, description, isActive
+        });
+        res.json(account);
+    } catch (error: any) {
+        const status = error.statusCode || 500;
+        if (status !== 500) {
+            return res.status(status).json({ error: error.message });
+        }
+        console.error('❌ Error updating account:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- Journal Entries with Ledger Lines ---
 router.get('/journal-entries', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {

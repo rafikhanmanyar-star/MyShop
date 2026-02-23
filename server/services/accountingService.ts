@@ -412,6 +412,54 @@ export class AccountingService {
   }
 
   /**
+   * Update an existing chart-of-accounts entry.
+   * Validates name/code uniqueness (excluding current account) before updating.
+   */
+  async updateAccount(tenantId: string, accountId: string, data: {
+    name?: string;
+    code?: string;
+    type?: string;
+    description?: string;
+    isActive?: boolean;
+  }) {
+    const existing = await this.db.query(
+      `SELECT id, name, code, type, description, is_active FROM accounts WHERE id = $1 AND tenant_id = $2`,
+      [accountId, tenantId]
+    );
+    if (!existing.length) {
+      const err: any = new Error('Account not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    const current = existing[0];
+    const name = data.name !== undefined ? data.name.trim() : current.name;
+    const code = data.code !== undefined ? (data.code || '').trim() : (current.code || '');
+    const type = data.type !== undefined ? data.type : current.type;
+    const description = data.description !== undefined ? data.description : current.description;
+    const isActive = data.isActive !== undefined ? data.isActive : current.is_active;
+
+    const duplicate = await this.checkDuplicate(tenantId, name, code || undefined, accountId);
+    if (duplicate) {
+      const err: any = new Error(
+        `An account with this ${duplicate.field} already exists: "${duplicate.value}"`
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+
+    await this.db.query(`
+      UPDATE accounts
+      SET name = $1, code = $2, type = $3, description = $4, is_active = $5, updated_at = NOW()
+      WHERE id = $6 AND tenant_id = $7
+    `, [name, code || null, type, description || null, isActive, accountId, tenantId]);
+    const updated = await this.db.query(
+      `SELECT id, name, code, type, description, is_active, balance, created_at, updated_at FROM accounts WHERE id = $1 AND tenant_id = $2`,
+      [accountId, tenantId]
+    );
+    return updated[0];
+  }
+
+  /**
    * Post journal entry + ledger for a manual entry (from UI)
    */
   async postManualJournalEntry(tenantId: string, data: {

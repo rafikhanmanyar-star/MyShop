@@ -1,6 +1,7 @@
 {
   "appId": "com.myshop.app",
   "productName": "MyShop",
+  "icon": "build/icon.png",
   "publish": {
     "provider": "github"
   },

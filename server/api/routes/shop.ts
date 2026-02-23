@@ -413,7 +413,8 @@ router.post('/bank-accounts', checkRole(['admin', 'accountant']), async (req: an
     const id = await getShopService().createBankAccount(req.tenantId, req.body);
     res.status(201).json({ id, message: 'Bank account created' });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const status = error.statusCode === 409 ? 409 : 500;
+    res.status(status).json({ error: error.message });
   }
 });
 

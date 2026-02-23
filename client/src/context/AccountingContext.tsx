@@ -22,6 +22,7 @@ interface AccountingContextValue {
   refreshAccounts: () => Promise<void>;
   refreshAll: () => Promise<void>;
   createAccount: (data: any) => Promise<any>;
+  updateAccount: (id: string, data: any) => Promise<any>;
   postJournalEntry: (data: any) => Promise<any>;
   [key: string]: any;
 }
@@ -35,6 +36,7 @@ const defaultValue: AccountingContextValue = {
   refreshAccounts: async () => { },
   refreshAll: async () => { },
   createAccount: async () => ({}),
+  updateAccount: async () => ({}),
   postJournalEntry: async () => ({}),
 };
 
@@ -129,6 +131,17 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const updateAccount = async (id: string, data: any) => {
+    try {
+      const result = await accountingApi.updateAccount(id, data);
+      await refreshAll();
+      return result;
+    } catch (error) {
+      console.error('Failed to update account:', error);
+      throw error;
+    }
+  };
+
   const postJournalEntry = async (data: any) => {
     try {
       const result = await accountingApi.postJournalEntry(data);
@@ -166,6 +179,7 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
     refreshAccounts,
     refreshAll,
     createAccount,
+    updateAccount,
     postJournalEntry,
   };
 

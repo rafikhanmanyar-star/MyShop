@@ -499,7 +499,16 @@ export class ShopService {
             debitAccId = await getAccount(accName, 'Asset', accCode);
           }
         } else {
-          debitAccId = await getAccount('Cash', 'Asset', 'AST-100');
+          // Use the chart account linked to the first Cash-type bank account to avoid creating a duplicate Cash account
+          const cashBank = await client.query(
+            `SELECT chart_account_id FROM shop_bank_accounts WHERE tenant_id = $1 AND account_type = 'Cash' AND is_active = TRUE ORDER BY name LIMIT 1`,
+            [tenantId]
+          );
+          if (cashBank.length > 0 && cashBank[0].chart_account_id) {
+            debitAccId = cashBank[0].chart_account_id;
+          } else {
+            debitAccId = await getAccount('Cash', 'Asset', 'AST-100');
+          }
         }
 
         await client.query(
@@ -754,6 +763,17 @@ export class ShopService {
 
   async createBankAccount(tenantId: string, data: { name: string; code?: string; account_type?: string; currency?: string }) {
     return this.db.transaction(async (client) => {
+      // Reject if a bank account with the same name already exists (case-insensitive)
+      const existingBank = await client.query(
+        `SELECT id FROM shop_bank_accounts WHERE tenant_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2)) LIMIT 1`,
+        [tenantId, data.name]
+      );
+      if (existingBank.length > 0) {
+        const err: any = new Error(`A bank or cash account with this name already exists: "${data.name.trim()}"`);
+        err.statusCode = 409;
+        throw err;
+      }
+
       const accountType = data.account_type || 'Bank';
 
       // Auto-create a linked chart-of-accounts entry (Asset)

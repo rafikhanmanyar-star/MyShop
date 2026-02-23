@@ -8,12 +8,16 @@ import Input from '../../ui/Input';
 import Select from '../../ui/Select';
 import Button from '../../ui/Button';
 
+type AccountRow = { id: string; code: string; name: string; type: string; description?: string; isControlAccount?: boolean; balance: number };
+
 const ChartOfAccounts: React.FC = () => {
-    const { accounts, createAccount } = useAccounting();
+    const { accounts, createAccount, updateAccount } = useAccounting();
     const [filter, setFilter] = useState<string>('All');
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingAccount, setEditingAccount] = useState<AccountRow | null>(null);
     const [formError, setFormError] = useState<string>('');
     const [creating, setCreating] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [newAccount, setNewAccount] = useState({
         code: '',
         name: '',
@@ -22,16 +26,36 @@ const ChartOfAccounts: React.FC = () => {
         isControlAccount: false
     });
 
-    const clientSideDuplicateCheck = (): string | null => {
+    const clientSideDuplicateCheck = (excludeId?: string): string | null => {
         const trimmedName = newAccount.name.trim().toLowerCase();
         const trimmedCode = newAccount.code.trim();
-        if (accounts.some(a => a.name.toLowerCase() === trimmedName)) {
+        if (accounts.some(a => a.name.toLowerCase() === trimmedName && a.id !== excludeId)) {
             return `An account with the name "${newAccount.name.trim()}" already exists`;
         }
-        if (trimmedCode && accounts.some(a => a.code === trimmedCode)) {
+        if (trimmedCode && accounts.some(a => a.code === trimmedCode && a.id !== excludeId)) {
             return `An account with the code "${trimmedCode}" already exists`;
         }
         return null;
+    };
+
+    const openEditModal = (acc: AccountRow) => {
+        setEditingAccount(acc);
+        setNewAccount({
+            code: acc.code || '',
+            name: acc.name,
+            type: (acc.type || 'Asset') as any,
+            description: (acc as any).description || '',
+            isControlAccount: !!(acc as any).isControlAccount
+        });
+        setFormError('');
+        setIsModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setIsModalOpen(false);
+        setEditingAccount(null);
+        setFormError('');
+        setNewAccount({ code: '', name: '', type: 'Asset', description: '', isControlAccount: false });
     };
 
     const handleCreate = async () => {
@@ -48,14 +72,36 @@ const ChartOfAccounts: React.FC = () => {
                 balance: 0,
                 isActive: true
             });
-            setIsModalOpen(false);
-            setFormError('');
-            setNewAccount({ code: '', name: '', type: 'Asset', description: '', isControlAccount: false });
+            closeModal();
         } catch (e: any) {
             const msg = e?.error || e?.message || 'Failed to create account';
             setFormError(msg);
         } finally {
             setCreating(false);
+        }
+    };
+
+    const handleUpdate = async () => {
+        if (!editingAccount) return;
+        setFormError('');
+        const localErr = clientSideDuplicateCheck(editingAccount.id);
+        if (localErr) { setFormError(localErr); return; }
+
+        setSaving(true);
+        try {
+            await updateAccount(editingAccount.id, {
+                name: newAccount.name.trim(),
+                code: newAccount.code.trim(),
+                type: newAccount.type,
+                description: newAccount.description || undefined,
+                isActive: true
+            });
+            closeModal();
+        } catch (e: any) {
+            const msg = e?.error || e?.message || 'Failed to update account';
+            setFormError(msg);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -83,7 +129,8 @@ const ChartOfAccounts: React.FC = () => {
                     ))}
                 </div>
                 <button
-                    onClick={() => setIsModalOpen(true)}
+                    type="button"
+                    onClick={() => { setEditingAccount(null); setNewAccount({ code: '', name: '', type: 'Asset', description: '', isControlAccount: false }); setFormError(''); setIsModalOpen(true); }}
                     className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-bold hover:bg-indigo-100 transition-colors"
                 >
                     {ICONS.plus} New Account
@@ -136,7 +183,12 @@ const ChartOfAccounts: React.FC = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <button className="p-2 text-slate-300 hover:text-indigo-600 transition-colors">
+                                        <button
+                                            type="button"
+                                            onClick={() => openEditModal(acc)}
+                                            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+                                            aria-label={`Edit ${acc.name}`}
+                                        >
                                             {ICONS.edit}
                                         </button>
                                     </td>
@@ -149,8 +201,8 @@ const ChartOfAccounts: React.FC = () => {
 
             <Modal
                 isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                title="Create New Account"
+                onClose={closeModal}
+                title={editingAccount ? 'Edit Account' : 'Create New Account'}
             >
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -203,10 +255,16 @@ const ChartOfAccounts: React.FC = () => {
                     )}
 
                     <div className="flex justify-end gap-3 mt-4">
-                        <Button variant="secondary" onClick={() => { setIsModalOpen(false); setFormError(''); }}>Cancel</Button>
-                        <Button onClick={handleCreate} disabled={!newAccount.code.trim() || !newAccount.name.trim() || creating}>
-                            {creating ? 'Creating...' : 'Create Account'}
-                        </Button>
+                        <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+                        {editingAccount ? (
+                            <Button onClick={handleUpdate} disabled={!newAccount.code.trim() || !newAccount.name.trim() || saving}>
+                                {saving ? 'Saving...' : 'Save Changes'}
+                            </Button>
+                        ) : (
+                            <Button onClick={handleCreate} disabled={!newAccount.code.trim() || !newAccount.name.trim() || creating}>
+                                {creating ? 'Creating...' : 'Create Account'}
+                            </Button>
+                        )}
                     </div>
                 </div>
             </Modal>

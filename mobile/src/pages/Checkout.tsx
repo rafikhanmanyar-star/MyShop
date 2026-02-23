@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { customerApi } from '../api';
@@ -11,6 +11,25 @@ export default function Checkout() {
     const [address, setAddress] = useState('');
     const [notes, setNotes] = useState('');
     const [loading, setLoading] = useState(false);
+    const defaultAddressFetched = useRef(false);
+
+    // Populate delivery address with user's default address from registration
+    useEffect(() => {
+        if (!state.customerId || defaultAddressFetched.current) return;
+        defaultAddressFetched.current = true;
+        customerApi.getProfile()
+            .then((profile: { address_line1?: string; address_line2?: string; city?: string; postal_code?: string }) => {
+                const parts = [
+                    profile.address_line1,
+                    profile.address_line2,
+                    profile.city,
+                    profile.postal_code,
+                ].filter(Boolean);
+                const defaultAddr = parts.join(', ').trim();
+                if (defaultAddr) setAddress(defaultAddr);
+            })
+            .catch(() => {});
+    }, [state.customerId]);
 
     const deliveryFee = state.settings?.delivery_fee || 0;
     const freeAbove = state.settings?.free_delivery_above;
@@ -84,6 +103,9 @@ export default function Checkout() {
                     onChange={e => setAddress(e.target.value)}
                     style={{ resize: 'none' }}
                 />
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                    Your default address from registration is shown. You can edit it for this order.
+                </p>
 
                 <div className="input-group" style={{ marginTop: 12, marginBottom: 0 }}>
                     <label>Delivery Notes (optional)</label>
