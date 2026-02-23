@@ -177,7 +177,35 @@ export class ShopService {
 
   // --- Product Methods ---
   async getProducts(tenantId: string) {
-    return this.db.query('SELECT * FROM shop_products WHERE tenant_id = $1 AND is_active = TRUE', [tenantId]);
+    return this.db.query('SELECT * FROM shop_products WHERE tenant_id = $1 AND is_active = TRUE ORDER BY popularity_score DESC, name ASC', [tenantId]);
+  }
+
+  async getPopularProducts(tenantId: string, limit = 10) {
+    return this.db.query(`
+      SELECT p.*, SUM(si.quantity) as total_sold
+      FROM shop_products p
+      JOIN shop_sale_items si ON p.id = si.product_id AND si.tenant_id = $1
+      WHERE p.tenant_id = $1 AND p.is_active = TRUE
+      GROUP BY p.id
+      ORDER BY total_sold DESC
+      LIMIT $2
+    `, [tenantId, limit]);
+  }
+
+  async recalculatePopularityScores(tenantId: string) {
+    return this.db.execute(`
+      WITH product_sales AS (
+        SELECT product_id, SUM(quantity) as total_sold
+        FROM shop_sale_items
+        WHERE tenant_id = $1
+        GROUP BY product_id
+      )
+      UPDATE shop_products
+      SET popularity_score = COALESCE(ps.total_sold, 0),
+          updated_at = NOW()
+      FROM product_sales ps
+      WHERE id = ps.product_id AND tenant_id = $1
+    `, [tenantId]);
   }
 
   async createProduct(tenantId: string, data: any) {
@@ -395,6 +423,9 @@ export class ShopService {
           console.error('⚠️ Failed to update POS budget actuals:', budgetErr);
         }
       }
+
+      // Update popularity scores after sale
+      await this.recalculatePopularityScores(tenantId).catch(err => console.error('PopScore Error:', err));
 
       return saleId;
     });
@@ -836,6 +867,51 @@ export class ShopService {
        WHERE id = $1 AND tenant_id = $2`,
       [userId, tenantId]
     );
+  }
+
+  // --- Tenant Branding ---
+  async getTenantBranding(tenantId: string) {
+    const res = await this.db.query(
+      `SELECT * FROM tenant_branding WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    if (res.length === 0) {
+      // Create default branding
+      const defaultRes = await this.db.query(
+        `INSERT INTO tenant_branding (tenant_id) VALUES ($1) RETURNING *`,
+        [tenantId]
+      );
+      return defaultRes[0];
+    }
+    return res[0];
+  }
+
+  async updateTenantBranding(tenantId: string, data: any) {
+    const res = await this.db.query(
+      `INSERT INTO tenant_branding (
+        tenant_id, logo_url, logo_dark_url, primary_color, secondary_color,
+        accent_color, font_family, theme_mode, address, lat, lng, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+      ON CONFLICT (tenant_id) DO UPDATE SET
+        logo_url = EXCLUDED.logo_url,
+        logo_dark_url = EXCLUDED.logo_dark_url,
+        primary_color = EXCLUDED.primary_color,
+        secondary_color = EXCLUDED.secondary_color,
+        accent_color = EXCLUDED.accent_color,
+        font_family = EXCLUDED.font_family,
+        theme_mode = EXCLUDED.theme_mode,
+        address = EXCLUDED.address,
+        lat = EXCLUDED.lat,
+        lng = EXCLUDED.lng,
+        updated_at = NOW()
+      RETURNING *`,
+      [
+        tenantId, data.logo_url, data.logo_dark_url, data.primary_color,
+        data.secondary_color, data.accent_color, data.font_family, data.theme_mode,
+        data.address, data.lat, data.lng
+      ]
+    );
+    return res[0];
   }
 }
 

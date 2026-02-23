@@ -27,7 +27,9 @@ const POSSalesContent: React.FC = () => {
         clearCart,
         completeSale,
         balanceDue,
-        cart
+        cart,
+        isDenseMode,
+        setIsDenseMode
     } = usePOS();
     const mainRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +67,7 @@ const POSSalesContent: React.FC = () => {
                 case 'F1': clearCart(); break;
                 case 'F2': holdSale(`Hold-${new Date().toLocaleTimeString()}`); break;
                 case 'F3': setIsHeldSalesModalOpen(!isHeldSalesModalOpen); break;
-                case 'F4': { // Search focus is handled by ProductSearch autoFocus or ref
+                case 'F4': {
                     const searchInput = document.getElementById('pos-product-search');
                     if (searchInput) searchInput.focus();
                     break;
@@ -81,13 +83,25 @@ const POSSalesContent: React.FC = () => {
                         setIsPaymentModalOpen(true);
                     }
                     break;
+                case 'd':
+                    if (e.altKey) {
+                        e.preventDefault();
+                        setIsDenseMode(!isDenseMode);
+                    }
+                    break;
+                case 'f':
+                    if (e.ctrlKey) {
+                        e.preventDefault();
+                        const searchInput = document.getElementById('pos-product-search');
+                        if (searchInput) searchInput.focus();
+                    }
+                    break;
                 case 'Escape':
                     setIsPaymentModalOpen(false);
                     setIsCustomerModalOpen(false);
                     setIsHeldSalesModalOpen(false);
                     setIsSalesHistoryModalOpen(false);
                     break;
-                // Add more as needed
             }
         };
 
@@ -107,7 +121,9 @@ const POSSalesContent: React.FC = () => {
         setIsPaymentModalOpen,
         balanceDue,
         completeSale,
-        toggleFullScreen
+        toggleFullScreen,
+        isDenseMode,
+        setIsDenseMode
     ]);
 
     return (

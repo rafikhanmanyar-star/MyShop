@@ -20,6 +20,16 @@ export interface ShopInfo {
     slug: string;
 }
 
+export interface TenantBranding {
+    logo_url: string | null;
+    logo_dark_url: string | null;
+    primary_color: string;
+    secondary_color: string;
+    accent_color: string;
+    font_family: string;
+    theme_mode: string;
+}
+
 export interface ShopSettings {
     minimum_order_amount: number;
     delivery_fee: number;
@@ -33,20 +43,22 @@ interface AppState {
     shopSlug: string | null;
     shop: ShopInfo | null;
     settings: ShopSettings | null;
+    branding: TenantBranding | null;
     cart: CartItem[];
     isLoggedIn: boolean;
     customerId: string | null;
     customerPhone: string | null;
+    customerName: string | null;
     toast: string | null;
 }
 
 type Action =
-    | { type: 'SET_SHOP'; slug: string; shop: ShopInfo; settings: ShopSettings }
+    | { type: 'SET_SHOP'; slug: string; shop: ShopInfo; settings: ShopSettings; branding: TenantBranding }
     | { type: 'ADD_TO_CART'; item: CartItem }
     | { type: 'UPDATE_QTY'; productId: string; quantity: number }
     | { type: 'REMOVE_FROM_CART'; productId: string }
     | { type: 'CLEAR_CART' }
-    | { type: 'LOGIN'; customerId: string; phone: string; token: string }
+    | { type: 'LOGIN'; customerId: string; phone: string; name: string | null; token: string }
     | { type: 'LOGOUT' }
     | { type: 'SHOW_TOAST'; message: string }
     | { type: 'HIDE_TOAST' };
@@ -66,16 +78,16 @@ function saveCart(cart: CartItem[]) {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
 }
 
-function loadAuth(): { isLoggedIn: boolean; customerId: string | null; phone: string | null } {
+function loadAuth(): { isLoggedIn: boolean; customerId: string | null; phone: string | null; name: string | null } {
     const token = localStorage.getItem(AUTH_KEY);
     const customer = localStorage.getItem(CUSTOMER_KEY);
     if (token && customer) {
         try {
             const c = JSON.parse(customer);
-            return { isLoggedIn: true, customerId: c.id, phone: c.phone };
+            return { isLoggedIn: true, customerId: c.id, phone: c.phone, name: c.name || null };
         } catch { /* fall through */ }
     }
-    return { isLoggedIn: false, customerId: null, phone: null };
+    return { isLoggedIn: false, customerId: null, phone: null, name: null };
 }
 
 const initialAuth = loadAuth();
@@ -84,17 +96,19 @@ const initialState: AppState = {
     shopSlug: null,
     shop: null,
     settings: null,
+    branding: null,
     cart: loadCart(),
     isLoggedIn: initialAuth.isLoggedIn,
     customerId: initialAuth.customerId,
     customerPhone: initialAuth.phone,
+    customerName: initialAuth.name,
     toast: null,
 };
 
 function reducer(state: AppState, action: Action): AppState {
     switch (action.type) {
         case 'SET_SHOP':
-            return { ...state, shopSlug: action.slug, shop: action.shop, settings: action.settings };
+            return { ...state, shopSlug: action.slug, shop: action.shop, settings: action.settings, branding: action.branding };
 
         case 'ADD_TO_CART': {
             const existing = state.cart.find(i => i.productId === action.item.productId);
@@ -132,13 +146,13 @@ function reducer(state: AppState, action: Action): AppState {
 
         case 'LOGIN':
             localStorage.setItem(AUTH_KEY, action.token);
-            localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ id: action.customerId, phone: action.phone }));
-            return { ...state, isLoggedIn: true, customerId: action.customerId, customerPhone: action.phone };
+            localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ id: action.customerId, phone: action.phone, name: action.name }));
+            return { ...state, isLoggedIn: true, customerId: action.customerId, customerPhone: action.phone, customerName: action.name };
 
         case 'LOGOUT':
             localStorage.removeItem(AUTH_KEY);
             localStorage.removeItem(CUSTOMER_KEY);
-            return { ...state, isLoggedIn: false, customerId: null, customerPhone: null };
+            return { ...state, isLoggedIn: false, customerId: null, customerPhone: null, customerName: null };
 
         case 'SHOW_TOAST':
             return { ...state, toast: action.message };

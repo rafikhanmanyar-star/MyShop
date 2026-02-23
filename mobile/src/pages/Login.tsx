@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { authApi } from '../api';
+import { authApi, getFullImageUrl } from '../api';
 
 type Mode = 'login' | 'register';
 
@@ -9,7 +9,7 @@ export default function Login() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const { dispatch, showToast } = useApp();
+    const { state, dispatch, showToast } = useApp();
 
     const [mode, setMode] = useState<Mode>('login');
     const [phone, setPhone] = useState('');
@@ -50,6 +50,7 @@ export default function Login() {
                 type: 'LOGIN',
                 customerId: result.customerId,
                 phone: result.phone,
+                name: result.name || null,
                 token: result.token,
             });
             navigate(`/${shopSlug}/${redirect || ''}`, { replace: true });
@@ -64,17 +65,29 @@ export default function Login() {
         <div className="page slide-up">
             <div style={{ textAlign: 'center', paddingTop: 40 }}>
                 {/* Header */}
-                <div style={{
-                    width: 72, height: 72, borderRadius: '50%',
-                    background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    margin: '0 auto 20px', color: 'white', fontSize: 32,
-                }}>
-                    📱
-                </div>
+                {state.branding?.logo_url ? (
+                    <img
+                        src={getFullImageUrl(state.branding.logo_url)}
+                        alt="Shop Logo"
+                        style={{
+                            width: 100, height: 100, borderRadius: '20%',
+                            objectFit: 'cover', margin: '0 auto 20px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                        }}
+                    />
+                ) : (
+                    <div style={{
+                        width: 72, height: 72, borderRadius: '50%',
+                        background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 20px', color: 'white', fontSize: 32,
+                    }}>
+                        📱
+                    </div>
+                )}
 
                 <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
-                    {mode === 'login' ? 'Welcome Back' : 'Create an Account'}
+                    {state.shop ? state.shop.company_name || state.shop.name : 'Welcome'}
                 </h1>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: 32, fontSize: 14 }}>
                     {mode === 'login' ? 'Login with your phone and password' : 'Register with your details to continue'}

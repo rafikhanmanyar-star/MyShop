@@ -6,6 +6,9 @@ import { POSProduct } from '../../../types/pos';
 import { InventoryItem } from '../../../types/inventory';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
 import { getFullImageUrl } from '../../../config/apiUrl';
+import { FixedSizeList } from 'react-window';
+import Fuse from 'fuse.js';
+import { debounce } from 'lodash-es';
 
 function mapApiProductToPOS(p: any): POSProduct {
     return {
@@ -20,7 +23,8 @@ function mapApiProductToPOS(p: any): POSProduct {
         isTaxInclusive: true,
         unit: p.unit || 'pcs',
         stockLevel: Number(p.stock_quantity) || 0,
-        imageUrl: getFullImageUrl(p.image_url)
+        imageUrl: getFullImageUrl(p.image_url),
+        popularityScore: p.popularity_score || 0
     };
 }
 
@@ -37,12 +41,22 @@ function mapInventoryItemToPOS(item: InventoryItem): POSProduct {
         isTaxInclusive: true,
         unit: item.unit || 'pcs',
         stockLevel: Number(item.onHand) || 0,
-        imageUrl: item.imageUrl
+        imageUrl: item.imageUrl,
+        popularityScore: 0
     };
 }
 
 const ProductSearch: React.FC = () => {
-    const { addToCart, searchQuery, setSearchQuery } = usePOS();
+    const {
+        addToCart,
+        searchQuery,
+        setSearchQuery,
+        isDenseMode,
+        isHeldSalesModalOpen,
+        isPaymentModalOpen,
+        isCustomerModalOpen,
+        isSalesHistoryModalOpen
+    } = usePOS();
     const { items: inventoryItems } = useInventory();
     const inventoryItemsRef = useRef(inventoryItems);
     inventoryItemsRef.current = inventoryItems;
@@ -50,9 +64,24 @@ const ProductSearch: React.FC = () => {
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [shopCategories, setShopCategories] = useState<ShopProductCategory[]>([]);
     const [products, setProducts] = useState<POSProduct[]>([]);
+    const [popularProducts, setPopularProducts] = useState<POSProduct[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [keyboardIndex, setKeyboardIndex] = useState(-1);
+    const [showFilters, setShowFilters] = useState(false);
+
+    // Internal search state for debouncing
+    const [localQuery, setLocalQuery] = useState(searchQuery);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const listRef = useRef<FixedSizeList>(null);
+    const categoryContainerRef = useRef<HTMLDivElement>(null);
+
+    const scrollCategories = (direction: 'left' | 'right') => {
+        if (categoryContainerRef.current) {
+            const scrollAmount = 250;
+            categoryContainerRef.current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
+        }
+    };
 
     const loadShopCategories = useCallback(async () => {
         try {
@@ -87,200 +116,354 @@ const ProductSearch: React.FC = () => {
         }
     }, []);
 
+    const loadPopularProducts = useCallback(async () => {
+        try {
+            const response = await shopApi.getPopularProducts(6);
+            if (response && Array.isArray(response)) {
+                setPopularProducts(response.map(mapApiProductToPOS));
+            }
+        } catch (error) {
+            console.error('Failed to load popular products:', error);
+        }
+    }, []);
+
     useEffect(() => {
         loadProducts();
         loadShopCategories();
-    }, [loadProducts, loadShopCategories]);
+        loadPopularProducts();
+    }, [loadProducts, loadShopCategories, loadPopularProducts]);
 
-    // Keep focus on search input for barcode scanner
+    // Update local query when external search query changes (e.g. from barcode scanner)
+    useEffect(() => {
+        setLocalQuery(searchQuery);
+    }, [searchQuery]);
+
+    // Handle debounced search
+    const debouncedSetGlobalSearch = useMemo(
+        () => debounce((q: string) => setSearchQuery(q), 150),
+        [setSearchQuery]
+    );
+
+    const handleSearchChange = (val: string) => {
+        setLocalQuery(val);
+        debouncedSetGlobalSearch(val);
+        setKeyboardIndex(-1);
+    };
+
+    // Keep focus on search input
     useEffect(() => {
         const interval = setInterval(() => {
             if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+                if (!isHeldSalesModalOpen && !isPaymentModalOpen && !isCustomerModalOpen && !isSalesHistoryModalOpen) {
+                    // Only focus if no other modal is open (checking some global states if possible)
+                }
                 searchInputRef.current?.focus();
             }
-        }, 1000);
+        }, 3000);
         return () => clearInterval(interval);
     }, []);
 
-    const categoryTabs = useMemo(() => {
-        const all: { id: string; name: string }[] = [{ id: 'all', name: 'All' }];
-        const cats = (shopCategories || []).map(c => ({ id: c.id, name: c.name }));
-        return [...all, ...cats];
-    }, [shopCategories]);
+    const [gridHeight, setGridHeight] = useState(600);
+    const gridContainerRef = useRef<HTMLDivElement>(null);
 
-    const matchesCategory = useCallback((p: POSProduct) => {
-        if (selectedCategory === 'all') return true;
-        if (p.categoryId === selectedCategory) return true;
-        const cat = shopCategories.find(c => c.id === selectedCategory);
-        return cat ? p.categoryId === cat.name : false;
-    }, [selectedCategory, shopCategories]);
+    useEffect(() => {
+        const obs = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                setGridHeight(entry.contentRect.height);
+            }
+        });
+        if (gridContainerRef.current) obs.observe(gridContainerRef.current);
+        return () => obs.disconnect();
+    }, []);
+
+    const fuse = useMemo(() => {
+        return new Fuse(products, {
+            keys: ['name', 'sku', 'barcode', 'categoryId'],
+            threshold: 0.3,
+            distance: 100,
+            ignoreLocation: true,
+        });
+    }, [products]);
 
     const filteredProducts = useMemo(() => {
-        const query = searchQuery.toLowerCase().trim();
-        if (!query) return products.filter(p => matchesCategory(p));
+        let result = products;
 
-        return products.filter(p => {
-            const barcode = (p.barcode || '').toLowerCase();
-            const sku = (p.sku || '').toLowerCase();
-            const name = (p.name || '').toLowerCase();
+        // Category Filter
+        if (selectedCategory !== 'all') {
+            result = result.filter(p => {
+                if (p.categoryId === selectedCategory) return true;
+                const cat = shopCategories.find(c => c.id === selectedCategory);
+                return cat ? p.categoryId === cat.name : false;
+            });
+        }
 
-            if (barcode === query) return true;
-            if (barcode.includes(query)) return true;
+        // Search Query
+        const query = localQuery.toLowerCase().trim();
+        if (query) {
+            // Check for exact barcode match first (Speed optimization)
+            const exactBarcode = products.find(p => p.barcode && p.barcode.toLowerCase() === query);
+            if (exactBarcode) return [exactBarcode];
 
-            const matchesOther = name.includes(query) ||
-                sku.includes(query) ||
-                (p.categoryId && p.categoryId.toLowerCase().includes(query)) ||
-                p.price.toString().includes(query) ||
-                p.unit.toLowerCase().includes(query);
+            // Fuzzy match
+            const fuzzyResults = fuse.search(query);
+            result = fuzzyResults.map(r => r.item);
+        }
 
-            return matchesOther && matchesCategory(p);
-        }).sort((a, b) => {
-            const aBarcode = (a.barcode || '').toLowerCase();
-            const bBarcode = (b.barcode || '').toLowerCase();
+        return result;
+    }, [products, selectedCategory, localQuery, fuse, shopCategories]);
 
-            if (aBarcode === query && bBarcode !== query) return -1;
-            if (bBarcode === query && aBarcode !== query) return 1;
+    // Keyboard navigation
+    useEffect(() => {
+        const handleKeys = (e: KeyboardEvent) => {
+            if (document.activeElement !== searchInputRef.current) return;
 
-            const aPartial = aBarcode.includes(query);
-            const bPartial = bBarcode.includes(query);
-            if (aPartial && !bPartial) return -1;
-            if (bPartial && !aPartial) return 1;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setKeyboardIndex(prev => {
+                    const next = Math.min(prev + 1, filteredProducts.length - 1);
+                    const nextRow = Math.floor(next / columnCount);
+                    listRef.current?.scrollToItem(nextRow);
+                    return next;
+                });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setKeyboardIndex(prev => {
+                    const next = Math.max(prev - 1, -1);
+                    if (next >= 0) {
+                        const nextRow = Math.floor(next / columnCount);
+                        listRef.current?.scrollToItem(nextRow);
+                    }
+                    return next;
+                });
+            } else if (e.key === 'Enter') {
+                if (keyboardIndex >= 0 && filteredProducts[keyboardIndex]) {
+                    addToCart(filteredProducts[keyboardIndex]);
+                    setKeyboardIndex(-1);
+                    setLocalQuery('');
+                    setSearchQuery('');
+                } else if (filteredProducts.length === 1) {
+                    addToCart(filteredProducts[0]);
+                    setLocalQuery('');
+                    setSearchQuery('');
+                }
+            } else if (e.key === 'Escape') {
+                setLocalQuery('');
+                setSearchQuery('');
+                setKeyboardIndex(-1);
+            }
+        };
 
-            return a.name.localeCompare(b.name);
-        });
-    }, [searchQuery, selectedCategory, products, matchesCategory]);
+        window.addEventListener('keydown', handleKeys);
+        return () => window.removeEventListener('keydown', handleKeys);
+    }, [filteredProducts, keyboardIndex, addToCart, setSearchQuery]);
 
     // Handle barcode "instant add"
     useEffect(() => {
-        const query = searchQuery.trim();
+        const query = localQuery.trim();
         if (!query || query.length < 3) return;
 
-        const exactMatch = products.find(p => p.barcode && p.barcode.toLowerCase() === query.toLowerCase());
-        if (exactMatch) {
-            addToCart(exactMatch);
+        // Only auto-add if it looks like a barcode (all numeric or specific format)
+        const isNumeric = /^\d+$/.test(query);
+        if (isNumeric) {
+            const exactMatch = products.find(p => p.barcode === query);
+            if (exactMatch) {
+                addToCart(exactMatch);
+                setLocalQuery('');
+                setSearchQuery('');
+            }
         }
-    }, [searchQuery, addToCart, products]);
+    }, [localQuery, products, addToCart, setSearchQuery]);
 
-    return (
-        <div className="flex flex-col h-full bg-white relative">
-            {/* Search Bar Area */}
-            <div className="p-5 border-b border-slate-100">
-                <div className="relative group/search">
-                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within/search:text-blue-600 transition-colors">
-                        {React.cloneElement(ICONS.search as React.ReactElement, { size: 20 })}
-                    </div>
-                    <input
-                        ref={searchInputRef}
-                        id="pos-product-search"
-                        type="text"
-                        className="block w-full pl-12 pr-14 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
-                        placeholder="Search products or scan barcode..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <div className="absolute inset-y-0 right-4 flex items-center">
-                        <kbd className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-400 shadow-sm">F4</kbd>
-                    </div>
-                </div>
+    // Virtualized Grid Setup
+    const columnCount = isDenseMode ? 3 : 2;
+    const rowCount = Math.ceil(filteredProducts.length / columnCount);
 
-                {/* Category Pills */}
-                <div className="flex gap-2 overflow-x-auto mt-4 no-scrollbar">
-                    {categoryTabs.map(cat => (
+    const ProductRow = ({ index, style }: { index: number; style: React.CSSProperties }) => {
+        const rowItems: any[] = [];
+        for (let i = 0; i < columnCount; i++) {
+            const itemIndex = index * columnCount + i;
+            if (itemIndex < filteredProducts.length) {
+                const product = filteredProducts[itemIndex];
+                const isSelected = keyboardIndex === itemIndex;
+                rowItems.push(
+                    <div key={product.id} className={`p-2 w-full ${columnCount === 2 ? 'w-1/2' : 'w-1/3'}`}>
                         <button
-                            key={cat.id}
-                            onClick={() => setSelectedCategory(cat.id)}
-                            className={`whitespace-nowrap px-4 py-2 rounded-lg text-xs font-semibold transition-all ${selectedCategory === cat.id
-                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            onClick={() => addToCart(product)}
+                            className={`group w-full relative flex flex-col p-3 bg-white border rounded-2xl text-left transition-all hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 active:scale-95 ${isSelected ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-100'
                                 }`}
                         >
-                            {cat.name}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Product Grid */}
-            <div className="flex-1 overflow-y-auto p-5 pos-scrollbar bg-slate-50/30">
-                <div className="grid grid-cols-2 gap-4">
-                    {loadError && (
-                        <div className="col-span-full p-8 rounded-2xl bg-rose-50 border border-rose-100 text-center">
-                            <h3 className="text-sm font-bold text-rose-900 mb-2">Failed to load products</h3>
-                            <button
-                                onClick={() => loadProducts()}
-                                className="px-4 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-colors"
-                            >
-                                Retry Connection
-                            </button>
-                        </div>
-                    )}
-
-                    {isLoading && Array(8).fill(0).map((_, i) => (
-                        <div key={i} className="bg-white rounded-2xl p-4 border border-slate-100 animate-pulse">
-                            <div className="aspect-square bg-slate-100 rounded-xl mb-3"></div>
-                            <div className="h-4 bg-slate-100 rounded-full w-3/4 mb-2"></div>
-                            <div className="h-4 bg-slate-100 rounded-full w-1/2"></div>
-                        </div>
-                    ))}
-
-                    {!isLoading && filteredProducts.map(product => (
-                        <button
-                            key={product.id}
-                            onClick={() => addToCart(product)}
-                            className="group relative flex flex-col p-4 bg-white border border-slate-100 rounded-2xl text-left transition-all hover:border-blue-300 hover:shadow-lg hover:shadow-blue-500/5 hover:-translate-y-1 active:scale-[0.98]"
-                        >
-                            <div className="mb-3 w-full aspect-square bg-slate-50 rounded-xl flex items-center justify-center border border-slate-50 overflow-hidden relative">
+                            <div className={`w-full bg-slate-50 rounded-xl flex items-center justify-center border border-slate-50 overflow-hidden relative ${isDenseMode ? 'aspect-video' : 'aspect-square'}`}>
                                 {product.imageUrl ? (
-                                    <img src={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-110 transition-transform duration-500" />
+                                    <img src={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
                                 ) : (
-                                    <div className="text-slate-200 group-hover:text-blue-300 transition-colors">
-                                        {React.cloneElement(ICONS.package as React.ReactElement, { size: 40 })}
+                                    <div className="text-slate-200">
+                                        {React.cloneElement(ICONS.package as any, { size: isDenseMode ? 24 : 40 })}
                                     </div>
                                 )}
-
-                                {product.stockLevel < 5 && (
-                                    <div className="absolute top-2 right-2 px-2 py-1 bg-rose-500 text-white rounded-md text-[9px] font-bold uppercase tracking-wider shadow-sm">
-                                        Low Stock
+                                {product.stockLevel <= (product.reorderPoint || 10) && (
+                                    <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-rose-500 text-white rounded text-[8px] font-bold uppercase tracking-wider shadow-sm">
+                                        {product.stockLevel <= 0 ? 'Out of Stock' : 'Low Stock'}
                                     </div>
                                 )}
                             </div>
 
-                            <div className="text-[14px] font-semibold text-slate-900 line-clamp-2 leading-tight mb-2 min-h-[2.5rem] group-hover:text-blue-600 transition-colors">
+                            <div className={`font-bold text-slate-800 line-clamp-2 leading-tight mt-2 ${isDenseMode ? 'text-[11px] h-[1.75rem]' : 'text-[13px] h-[2.5rem]'}`}>
                                 {product.name}
                             </div>
 
-                            <div className="flex items-center justify-between mt-auto">
-                                <span className="text-base font-bold text-slate-900">
-                                    {CURRENCY}{product.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            <div className="flex items-center justify-between mt-1">
+                                <span className={`font-black text-blue-600 ${isDenseMode ? 'text-xs' : 'text-sm'}`}>
+                                    {CURRENCY}{product.price.toLocaleString()}
                                 </span>
-                                <div className={`px-2 py-1 rounded-md text-[10px] font-bold ${product.stockLevel < 10 ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-500'}`}>
+                                <span className="text-[10px] text-slate-400">
                                     Qty: {product.stockLevel}
-                                </div>
-                            </div>
-
-                            {/* Quick Add Indicator */}
-                            <div className="absolute bottom-4 right-4 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 shadow-lg shadow-blue-500/40">
-                                {React.cloneElement(ICONS.plus as React.ReactElement, { size: 16 })}
+                                </span>
                             </div>
                         </button>
-                    ))}
+                    </div>
+                );
+            } else {
+                rowItems.push(<div key={`empty-${i}`} className={`p-2 ${columnCount === 2 ? 'w-1/2' : 'w-1/3'}`}></div>);
+            }
+        }
+        return <div style={style} className="flex px-3">{rowItems}</div>;
+    };
 
-                    {!isLoading && filteredProducts.length === 0 && (
-                        <div className="col-span-full py-20 text-center">
-                            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
-                                {React.cloneElement(ICONS.search as React.ReactElement, { size: 32 })}
-                            </div>
-                            <h3 className="text-base font-semibold text-slate-900 mb-1">No products found</h3>
-                            <p className="text-sm text-slate-500 mb-6">Try searching for something else</p>
-                            <button
-                                onClick={() => setSearchQuery('')}
-                                className="px-6 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors"
-                            >
-                                Clear Search
+    return (
+        <div className="flex flex-col h-full bg-white relative">
+            {/* Search Bar - Premium Fixed Header */}
+            <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100 p-4">
+                <div className="relative group">
+                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600 transition-colors">
+                        {React.cloneElement(ICONS.search as any, { size: 18 })}
+                    </div>
+                    <input
+                        ref={searchInputRef}
+                        type="text"
+                        className="w-full pl-11 pr-24 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 transition-all"
+                        placeholder="Search Products (Ctrl+F)"
+                        value={localQuery}
+                        onChange={(e) => handleSearchChange(e.target.value)}
+                    />
+                    <div className="absolute inset-y-0 right-4 flex items-center gap-2">
+                        {localQuery && (
+                            <button onClick={() => handleSearchChange('')} className="p-1 hover:bg-slate-200 rounded-full text-slate-400">
+                                {React.cloneElement(ICONS.x as any, { size: 14 })}
                             </button>
-                        </div>
-                    )}
+                        )}
+                        <span className="kbd-tag bg-white shadow-sm border-slate-200">F4</span>
+                    </div>
                 </div>
+
+                {/* Categories - Scalable Redesign */}
+                <div className="mt-4 flex items-center gap-2 relative">
+                    <button
+                        onClick={() => scrollCategories('left')}
+                        className="flex-shrink-0 p-2 rounded-xl border bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm z-10"
+                    >
+                        {React.cloneElement(ICONS.chevronLeft as any, { size: 16 })}
+                    </button>
+
+                    <div ref={categoryContainerRef} className="flex-1 flex gap-2 overflow-x-auto pos-scrollbar pb-2 pt-1 px-1 scroll-smooth">
+                        <button
+                            onClick={() => setSelectedCategory('all')}
+                            className={`whitespace-nowrap px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${selectedCategory === 'all' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                        >
+                            All Products
+                        </button>
+                        {shopCategories.map(cat => (
+                            <button
+                                key={cat.id}
+                                onClick={() => setSelectedCategory(cat.id)}
+                                className={`whitespace-nowrap px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${selectedCategory === cat.id ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                            >
+                                {cat.name}
+                            </button>
+                        ))}
+                    </div>
+
+                    <button
+                        onClick={() => scrollCategories('right')}
+                        className="flex-shrink-0 p-2 rounded-xl border bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm z-10"
+                    >
+                        {React.cloneElement(ICONS.chevronRight as any, { size: 16 })}
+                    </button>
+                </div>
+            </div>
+
+            {/* Popular / Frequent Items Section */}
+            {!localQuery && selectedCategory === 'all' && popularProducts.length > 0 && (
+                <div className="px-4 py-3 bg-indigo-50/50 border-b border-indigo-100/50">
+                    <div className="flex items-center gap-2 mb-3 px-1">
+                        <div className="w-1 h-4 bg-indigo-500 rounded-full"></div>
+                        <h3 className="text-[11px] font-black text-indigo-900 uppercase tracking-wider">Fast Moving Items</h3>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                        {popularProducts.map(p => (
+                            <button
+                                key={p.id}
+                                onClick={() => addToCart(p)}
+                                className="flex flex-col items-center p-2 bg-white rounded-xl border border-indigo-100 hover:border-indigo-400 hover:shadow-md transition-all active:scale-95"
+                            >
+                                <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center mb-1 overflow-hidden">
+                                    {p.imageUrl ? (
+                                        <img src={p.imageUrl} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="text-indigo-200">
+                                            {React.cloneElement(ICONS.package as any, { size: 16 })}
+                                        </div>
+                                    )}
+                                </div>
+                                <span className="text-[9px] font-bold text-slate-700 truncate w-full text-center">{p.name}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Main Product Grid - Virtualized */}
+            <div ref={gridContainerRef} className="flex-1 overflow-hidden pointer-events-auto">
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-300">
+                        <div className="w-10 h-10 border-4 border-slate-100 border-t-blue-500 rounded-full animate-spin"></div>
+                        <span className="text-[11px] font-bold uppercase tracking-widest">Loading Catalog...</span>
+                    </div>
+                ) : filteredProducts.length > 0 ? (
+                    <FixedSizeList
+                        ref={listRef}
+                        height={gridHeight}
+                        itemCount={rowCount}
+                        itemSize={isDenseMode ? 140 : 200}
+                        width="100%"
+                        className="pos-scrollbar"
+                    >
+                        {ProductRow}
+                    </FixedSizeList>
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-full p-10 text-center">
+                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4 text-slate-200">
+                            {React.cloneElement(ICONS.search as any, { size: 32 })}
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900">No products found</h4>
+                        <p className="text-xs text-slate-500 mt-1 max-w-[180px]">Try adjusting your search query or category filters</p>
+                        <button
+                            onClick={() => { setLocalQuery(''); setSearchQuery(''); setSelectedCategory('all'); }}
+                            className="mt-6 px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-800 transition-all shadow-lg"
+                        >
+                            Reset Catalog
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Bottom Status / Mode Toggle */}
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-bold text-slate-500">Items: <span className="text-slate-900">{filteredProducts.length}</span></span>
+                </div>
+                {/* Dense Mode Toggle is handled by ShortcutBar, but we can add minor UI here if needed */}
             </div>
         </div>
     );

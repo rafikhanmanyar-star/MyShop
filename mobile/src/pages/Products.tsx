@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi, getFullImageUrl } from '../api';
+import FilterPanel from '../components/FilterPanel';
 
 export default function Products() {
     const { shopSlug } = useParams();
@@ -10,20 +11,42 @@ export default function Products() {
 
     const [products, setProducts] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
+    const [brands, setBrands] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [cursor, setCursor] = useState<string | null>(null);
     const [hasMore, setHasMore] = useState(false);
     const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-    const activeCategory = searchParams.get('category') || '';
+    // Debounce timer
+    const searchTimeout = useRef<any>(null);
 
-    const loadProducts = useCallback(async (reset = false) => {
+    // Filter state from URL
+    const filters = {
+        categoryIds: searchParams.getAll('categoryIds[]').length > 0 ? searchParams.getAll('categoryIds[]') : (searchParams.get('category') ? [searchParams.get('category') as string] : []),
+        subcategoryIds: searchParams.getAll('subcategoryIds[]'),
+        brandIds: searchParams.getAll('brandIds[]'),
+        minPrice: searchParams.get('minPrice'),
+        maxPrice: searchParams.get('maxPrice'),
+        availability: searchParams.get('availability'),
+        onSale: searchParams.get('onSale') === 'true',
+        sortBy: searchParams.get('sortBy') || 'newest',
+        search: searchParams.get('search') || '',
+    };
+
+    const loadProducts = useCallback(async (reset = false, customParams?: any) => {
         if (!shopSlug) return;
-        const params: Record<string, string> = { limit: '20' };
-        if (activeCategory) params.category = activeCategory;
-        if (searchTerm) params.search = searchTerm;
+
+        const currentFilters = customParams || filters;
+        const params: Record<string, any> = {
+            limit: '20',
+            ...currentFilters,
+            search: searchTerm // prioritize current input
+        };
+
         if (!reset && cursor) params.cursor = cursor;
+        else if (reset) delete params.cursor;
 
         if (reset) setLoading(true);
         else setLoadingMore(true);
@@ -43,23 +66,69 @@ export default function Products() {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [shopSlug, activeCategory, searchTerm, cursor]);
+    }, [shopSlug, JSON.stringify(filters), searchTerm, cursor]);
 
     useEffect(() => {
         if (!shopSlug) return;
-        publicApi.getCategories(shopSlug).then(setCategories).catch(() => { });
+        Promise.all([
+            publicApi.getCategories(shopSlug),
+            publicApi.getBrands(shopSlug)
+        ]).then(([cats, bnds]) => {
+            setCategories(cats);
+            setBrands(bnds);
+        }).catch(() => { });
     }, [shopSlug]);
 
     useEffect(() => {
         setCursor(null);
         loadProducts(true);
-    }, [shopSlug, activeCategory, searchTerm]);
+    }, [shopSlug, JSON.stringify(filters)]);
 
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSearchChange = (val: string) => {
+        setSearchTerm(val);
+        if (searchTimeout.current) clearTimeout(searchTimeout.current);
+        searchTimeout.current = setTimeout(() => {
+            setSearchParams(prev => {
+                if (val) prev.set('search', val);
+                else prev.delete('search');
+                return prev;
+            });
+        }, 300);
+    };
+
+    const applyFilters = (newFilters: any) => {
         setSearchParams(prev => {
-            if (searchTerm) prev.set('search', searchTerm);
-            else prev.delete('search');
+            // Clear current param lists
+            const keysToDelete = ['categoryIds[]', 'subcategoryIds[]', 'brandIds[]', 'category'];
+            keysToDelete.forEach(k => prev.delete(k));
+
+            Object.entries(newFilters).forEach(([key, value]) => {
+                if (Array.isArray(value)) {
+                    value.forEach(v => prev.append(`${key}[]`, v));
+                } else if (value) {
+                    prev.set(key, value.toString());
+                } else {
+                    prev.delete(key);
+                }
+            });
+            return prev;
+        });
+    };
+
+    const clearFilters = () => {
+        setSearchParams(new URLSearchParams());
+        setSearchTerm('');
+    };
+
+    const removeFilter = (key: string, value?: string) => {
+        setSearchParams(prev => {
+            if (value) {
+                const current = prev.getAll(key).filter(v => v !== value);
+                prev.delete(key);
+                current.forEach(v => prev.append(key, v));
+            } else {
+                prev.delete(key);
+            }
             return prev;
         });
     };
@@ -91,33 +160,81 @@ export default function Products() {
         return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
     };
 
+    const renderStars = (rating: number) => {
+        return (
+            <div className="rating-stars">
+                {[1, 2, 3, 4, 5].map(s => (
+                    <svg key={s} xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill={s <= rating ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                ))}
+            </div>
+        );
+    };
+
     return (
         <div className="page fade-in">
             {/* Search */}
-            <form className="search-bar" onSubmit={handleSearch}>
+            <div className="search-bar">
                 <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
                 <input
                     type="search"
                     placeholder="Search products..."
                     value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
+                    onChange={e => handleSearchChange(e.target.value)}
                 />
-            </form>
+            </div>
 
-            {/* Categories */}
-            {categories.length > 0 && (
-                <div className="category-pills">
-                    <button
-                        className={`category-pill ${!activeCategory ? 'active' : ''}`}
-                        onClick={() => setSearchParams(prev => { prev.delete('category'); return prev; })}
-                    >All</button>
-                    {categories.map((c: any) => (
-                        <button
-                            key={c.id}
-                            className={`category-pill ${activeCategory === c.id ? 'active' : ''}`}
-                            onClick={() => setSearchParams(prev => { prev.set('category', c.id); return prev; })}
-                        >{c.name}</button>
-                    ))}
+            {/* Filter & Sort Controls */}
+            <div className="filter-controls">
+                <button className={`filter-btn ${(filters.categoryIds.length > 0 || filters.brandIds.length > 0 || filters.minPrice || filters.maxPrice || filters.onSale) ? 'active' : ''}`} onClick={() => setIsFilterOpen(true)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" /></svg>
+                    Filters {(filters.categoryIds.length + filters.brandIds.length + (filters.minPrice || filters.maxPrice ? 1 : 0) + (filters.onSale ? 1 : 0)) > 0 && `(${filters.categoryIds.length + filters.brandIds.length + (filters.minPrice || filters.maxPrice ? 1 : 0) + (filters.onSale ? 1 : 0)})`}
+                </button>
+                <select className="sort-btn" value={filters.sortBy} onChange={e => applyFilters({ ...filters, sortBy: e.target.value })}>
+                    <option value="newest">Newest First</option>
+                    <option value="popularity">Most Popular</option>
+                    <option value="price_low_high">Price: Low to High</option>
+                    <option value="price_high_low">Price: High to Low</option>
+                    <option value="top_rated">Highest Rated</option>
+                    <option value="best_selling">Best Selling</option>
+                    <option value="a_z">A-Z</option>
+                    <option value="z_a">Z-A</option>
+                </select>
+            </div>
+
+            {/* Active Filter Chips */}
+            {(filters.categoryIds.length > 0 || filters.brandIds.length > 0 || filters.minPrice || filters.maxPrice || filters.onSale) && (
+                <div className="active-filters">
+                    {filters.categoryIds.map(id => {
+                        const cat = categories.find(c => c.id === id);
+                        return cat && (
+                            <div key={id} className="filter-chip">
+                                {cat.name}
+                                <button onClick={() => removeFilter('categoryIds[]', id)}>×</button>
+                            </div>
+                        );
+                    })}
+                    {filters.brandIds.map(id => {
+                        const brand = brands.find(b => b.id === id);
+                        return brand && (
+                            <div key={id} className="filter-chip">
+                                {brand.name}
+                                <button onClick={() => removeFilter('brandIds[]', id)}>×</button>
+                            </div>
+                        );
+                    })}
+                    {(filters.minPrice || filters.maxPrice) && (
+                        <div className="filter-chip">
+                            {filters.minPrice ? `> Rs.${filters.minPrice}` : ''} {filters.maxPrice ? `< Rs.${filters.maxPrice}` : ''}
+                            <button onClick={() => { removeFilter('minPrice'); removeFilter('maxPrice'); }}>×</button>
+                        </div>
+                    )}
+                    {filters.onSale && (
+                        <div className="filter-chip">
+                            On Sale
+                            <button onClick={() => removeFilter('onSale')}>×</button>
+                        </div>
+                    )}
+                    <button className="btn-sm" style={{ color: 'var(--primary)', fontWeight: 700 }} onClick={clearFilters}>Clear All</button>
                 </div>
             )}
 
@@ -138,13 +255,17 @@ export default function Products() {
                 <div className="empty-state">
                     <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
                     <h3>No products found</h3>
-                    <p>Try a different search or category</p>
+                    <p>Try refining your filters or search</p>
+                    <button className="btn btn-outline btn-sm" style={{ marginTop: 12 }} onClick={clearFilters}>Clear filters</button>
                 </div>
             ) : (
                 <>
                     <div className="product-grid">
                         {products.map((p: any) => (
                             <Link key={p.id} to={`/${shopSlug}/products/${p.id}`} className="product-card">
+                                {p.is_on_sale && p.discount_percentage > 0 && (
+                                    <div className="discount-badge">-{Math.round(p.discount_percentage)}%</div>
+                                )}
                                 <div className="image-wrap">
                                     {p.image_url ? (
                                         <img src={getFullImageUrl(p.image_url)} alt={p.name} loading="lazy" />
@@ -154,9 +275,18 @@ export default function Products() {
                                 </div>
                                 <div className="info">
                                     <div className="name">{p.name}</div>
-                                    <div className="price">{formatPrice(p.price)}</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div className="price">{formatPrice(p.price)}</div>
+                                        {p.rating_avg > 0 && renderStars(p.rating_avg)}
+                                    </div>
                                     <div className={`stock ${p.available_stock <= 0 ? 'out' : ''}`}>
-                                        {p.available_stock > 0 ? `${p.available_stock} avail` : 'Out of stock'}
+                                        {p.available_stock > 0 ? (
+                                            <span style={{ fontSize: 10 }}>In Stock: {p.available_stock}</span>
+                                        ) : p.is_pre_order ? (
+                                            <span style={{ color: 'var(--warning)', fontSize: 10 }}>Pre-Order</span>
+                                        ) : (
+                                            'Out of Stock'
+                                        )}
                                     </div>
                                 </div>
                                 <button
@@ -164,7 +294,7 @@ export default function Products() {
                                     disabled={p.available_stock <= 0}
                                     onClick={(e) => handleAddToCart(e, p)}
                                 >
-                                    {p.available_stock <= 0 ? 'Sold Out' : '+ Add to Cart'}
+                                    {p.available_stock <= 0 ? (p.is_pre_order ? 'Pre-Order' : 'Sold Out') : '+ Add to Cart'}
                                 </button>
                             </Link>
                         ))}
@@ -173,7 +303,7 @@ export default function Products() {
                     {hasMore && (
                         <div style={{ textAlign: 'center', padding: '20px 0' }}>
                             <button
-                                className="btn btn-outline btn-sm"
+                                className="btn btn-outline btn-full btn-sm"
                                 onClick={() => loadProducts(false)}
                                 disabled={loadingMore}
                             >
@@ -185,6 +315,17 @@ export default function Products() {
                     )}
                 </>
             )}
+
+            {/* Filter Panel */}
+            <FilterPanel
+                isOpen={isFilterOpen}
+                onClose={() => setIsFilterOpen(false)}
+                categories={categories}
+                brands={brands}
+                filters={filters}
+                onApply={applyFilters}
+                onClear={clearFilters}
+            />
         </div>
     );
 }

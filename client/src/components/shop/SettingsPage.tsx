@@ -200,6 +200,7 @@ const SettingsContent: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-8">
+
                 {activeTab === 'coa' && (
                     <ChartOfAccounts />
                 )}
@@ -309,8 +310,8 @@ const SettingsContent: React.FC = () => {
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded shadow-sm ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' :
-                                                                    u.role === 'accountant' ? 'bg-amber-100 text-amber-700' :
-                                                                        'bg-slate-100 text-slate-700'
+                                                                u.role === 'accountant' ? 'bg-amber-100 text-amber-700' :
+                                                                    'bg-slate-100 text-slate-700'
                                                                 }`}>
                                                                 {u.role.replace('_', ' ')}
                                                             </span>

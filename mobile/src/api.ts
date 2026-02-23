@@ -56,11 +56,21 @@ export const publicApi = {
     discover: () => request(`${API_BASE}/discover`),
     getShopInfo: (slug: string) => request(`${API_BASE}/${slug}/info`),
     getCategories: (slug: string) => request(`${API_BASE}/${slug}/categories`),
-    getProducts: (slug: string, params: Record<string, string> = {}) => {
-        const qs = new URLSearchParams(params).toString();
+    getProducts: (slug: string, params: Record<string, any> = {}) => {
+        const query = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+            if (Array.isArray(value)) {
+                value.forEach(v => query.append(`${key}[]`, v));
+            } else if (value !== undefined && value !== null && value !== '') {
+                query.append(key, value.toString());
+            }
+        });
+        const qs = query.toString();
         return request(`${API_BASE}/${slug}/products${qs ? `?${qs}` : ''}`);
     },
     getProduct: (slug: string, id: string) => request(`${API_BASE}/${slug}/products/${id}`),
+    getBrands: (slug: string) => request(`${API_BASE}/${slug}/brands`),
+    getBranding: (slug: string) => request(`${API_BASE}/${slug}/branding`),
 };
 
 // ─── Auth ─────────────────────────────────────────────

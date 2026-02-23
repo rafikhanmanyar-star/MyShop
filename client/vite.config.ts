@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    optimizeDeps: {
+      exclude: ['react-window'],
+    },
     base: process.env.VITE_ELECTRON_BUILD === '1' ? './' : '/',
     server: {
       port: 5173,

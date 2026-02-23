@@ -209,6 +209,16 @@ router.get('/products', async (req: any, res) => {
   }
 });
 
+router.get('/popular-products', async (req: any, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 10;
+    const products = await getShopService().getPopularProducts(req.tenantId, limit);
+    res.json(products);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/products', async (req: any, res) => {
   try {
     const productId = await getShopService().createProduct(req.tenantId, req.body);
@@ -494,6 +504,25 @@ router.delete('/users/:id', checkRole(['admin']), async (req: any, res) => {
   try {
     await getShopService().deleteUser(req.tenantId, req.params.id);
     res.json({ success: true, message: 'User deactivated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Branding ---
+router.get('/branding', async (req: any, res) => {
+  try {
+    const branding = await getShopService().getTenantBranding(req.tenantId);
+    res.json(branding);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/branding', async (req: any, res) => {
+  try {
+    const branding = await getShopService().updateTenantBranding(req.tenantId, req.body);
+    res.json(branding);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

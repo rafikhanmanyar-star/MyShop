@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { publicApi } from '../api';
+import { publicApi, getFullImageUrl } from '../api';
 
 interface ShopEntry {
     slug: string;
@@ -99,7 +99,7 @@ export default function LandingPage() {
                                 }}
                             >
                                 {shop.logo_url ? (
-                                    <img src={shop.logo_url} alt="" style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover' }} />
+                                    <img src={getFullImageUrl(shop.logo_url)} alt="" style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover' }} />
                                 ) : (
                                     <div style={{
                                         width: 44, height: 44, borderRadius: 12,

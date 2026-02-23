@@ -6,8 +6,10 @@ import {
     Smartphone, RefreshCw, Package, Truck, Check, X, Clock,
     ChevronRight, WifiOff, Wifi, QrCode, Settings as SettingsIcon,
     Filter, Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
-    Printer, Download, Copy, CheckCircle,
+    Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
 } from 'lucide-react';
+import { shopApi } from '../../services/shopApi';
+import { getFullImageUrl } from '../../config/apiUrl';
 
 // ─── Status Config ────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
@@ -422,10 +424,12 @@ function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
     const { settings, branding, loadSettings, loadBranding, updateSettings, updateBranding } = useMobileOrders();
     const [qrData, setQrData] = useState<{ slug: string; url: string } | null>(null);
     const [saving, setSaving] = useState(false);
+    const [uploading, setUploading] = useState(false);
     const [localSettings, setLocalSettings] = useState<any>(null);
     const [localBranding, setLocalBranding] = useState<any>(null);
     const [copied, setCopied] = useState(false);
     const qrRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         loadSettings();
@@ -457,10 +461,27 @@ function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
         setSaving(true);
         try {
             await updateBranding(localBranding);
+            alert('Branding updated successfully!');
         } catch (err: any) {
             alert(err.error || 'Failed to save');
         }
         setSaving(false);
+    };
+
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !localBranding) return;
+
+        try {
+            setUploading(true);
+            const res = await shopApi.uploadImage(file);
+            setLocalBranding({ ...localBranding, logo_url: res.imageUrl });
+        } catch (error) {
+            console.error('Logo upload failed', error);
+            alert('Failed to upload logo.');
+        } finally {
+            setUploading(false);
+        }
     };
 
     const handleCopyUrl = () => {
@@ -628,58 +649,201 @@ function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
                 </div>
 
                 {/* Branding Card */}
-                <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Smartphone className="w-5 h-5 text-indigo-600" />
-                        <h2 className="text-lg font-bold text-gray-900">Shop Branding</h2>
+                <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <Palette className="w-5 h-5 text-indigo-600" />
+                            <h2 className="text-lg font-bold text-gray-900">App Branding</h2>
+                        </div>
+                        <button
+                            onClick={handleSaveBranding}
+                            disabled={saving}
+                            className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                        >
+                            {saving ? 'Saving...' : 'Save Changes'}
+                        </button>
                     </div>
 
-                    {localBranding && (
-                        <div className="space-y-4">
+                    {localBranding ? (
+                        <div className="space-y-6 overflow-y-auto pr-2 max-h-[70vh]">
+                            {/* Slug Input */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Shop URL Slug</label>
-                                <input
-                                    type="text"
-                                    value={localBranding.slug || ''}
-                                    onChange={e => setLocalBranding({ ...localBranding, slug: e.target.value })}
-                                    placeholder="my-shop"
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Logo URL</label>
-                                <input
-                                    type="url"
-                                    value={localBranding.logo_url || ''}
-                                    onChange={e => setLocalBranding({ ...localBranding, logo_url: e.target.value })}
-                                    placeholder="https://..."
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Brand Color</label>
-                                <div className="flex items-center gap-3">
-                                    <input
-                                        type="color"
-                                        value={localBranding.brand_color || '#4F46E5'}
-                                        onChange={e => setLocalBranding({ ...localBranding, brand_color: e.target.value })}
-                                        className="w-10 h-10 border-0 rounded-lg cursor-pointer"
-                                    />
+                                <div className="flex gap-2">
                                     <input
                                         type="text"
-                                        value={localBranding.brand_color || '#4F46E5'}
-                                        onChange={e => setLocalBranding({ ...localBranding, brand_color: e.target.value })}
-                                        className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm font-mono"
+                                        value={localBranding.slug || ''}
+                                        onChange={e => setLocalBranding({ ...localBranding, slug: e.target.value })}
+                                        placeholder="my-shop"
+                                        className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-indigo-600"
                                     />
                                 </div>
+                                <p className="text-[10px] text-gray-400 mt-1">This determines your shop address: {qrData?.url}</p>
                             </div>
-                            <button
-                                onClick={handleSaveBranding}
-                                disabled={saving}
-                                className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                            >
-                                {saving ? 'Saving...' : 'Save Branding'}
-                            </button>
+
+                            {/* Shop Address & Coordinates */}
+                            <div className="space-y-4 pt-2 border-t border-gray-50">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Shop Address</label>
+                                    <textarea
+                                        value={localBranding.address || ''}
+                                        onChange={e => setLocalBranding({ ...localBranding, address: e.target.value })}
+                                        placeholder="Enter full shop address"
+                                        rows={2}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Latitude</label>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={localBranding.lat || ''}
+                                            onChange={e => setLocalBranding({ ...localBranding, lat: e.target.value ? parseFloat(e.target.value) : null })}
+                                            placeholder="e.g. 24.8607"
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Longitude</label>
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={localBranding.lng || ''}
+                                            onChange={e => setLocalBranding({ ...localBranding, lng: e.target.value ? parseFloat(e.target.value) : null })}
+                                            placeholder="e.g. 67.0011"
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                                        />
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-gray-400">These coordinates will help the mobile app find your nearest branch automatically.</p>
+                            </div>
+
+                            {/* Logo Upload */}
+                            <div className="p-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-16 h-16 rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden flex items-center justify-center flex-shrink-0">
+                                        {localBranding.logo_url ? (
+                                            <img src={getFullImageUrl(localBranding.logo_url)} alt="Logo" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <Store className="w-8 h-8 text-gray-300" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 space-y-2">
+                                        <p className="text-xs font-bold text-gray-700">App Logo</p>
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleLogoUpload}
+                                            className="hidden"
+                                            accept="image/*"
+                                        />
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploading}
+                                            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                        >
+                                            {uploading ? 'Uploading...' : 'Upload New'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Colors */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Primary Color</label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="color"
+                                            value={localBranding.primary_color || localBranding.brand_color || '#4F46E5'}
+                                            onChange={e => setLocalBranding({ ...localBranding, primary_color: e.target.value, brand_color: e.target.value })}
+                                            className="w-8 h-8 rounded border-0 p-0 cursor-pointer"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={localBranding.primary_color || localBranding.brand_color || '#4F46E5'}
+                                            onChange={e => setLocalBranding({ ...localBranding, primary_color: e.target.value, brand_color: e.target.value })}
+                                            className="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg text-xs font-mono"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Accent Color</label>
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="color"
+                                            value={localBranding.accent_color || '#f59e0b'}
+                                            onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
+                                            className="w-8 h-8 rounded border-0 p-0 cursor-pointer"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={localBranding.accent_color || '#f59e0b'}
+                                            onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
+                                            className="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg text-xs font-mono"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Theme Mode */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">App Theme</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {['light', 'dark', 'auto'].map(mode => (
+                                        <button
+                                            key={mode}
+                                            onClick={() => setLocalBranding({ ...localBranding, theme_mode: mode })}
+                                            className={`px-3 py-2 rounded-xl text-xs font-bold capitalize border transition-all ${localBranding.theme_mode === mode
+                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                                                : 'bg-white border-gray-100 text-gray-500 hover:border-gray-200'
+                                                }`}
+                                        >
+                                            {mode}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Live Preview (Mini) */}
+                            <div className="pt-4 border-t border-gray-50">
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Mobile Preview</label>
+                                <div className="w-full aspect-[9/16] max-w-[200px] mx-auto border-4 border-gray-800 rounded-[2rem] overflow-hidden bg-white shadow-lg flex flex-col"
+                                    style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#1e293b' : 'white' }}>
+                                    <div className="h-8 flex items-center px-4 justify-between border-b border-gray-50"
+                                        style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#0f172a' : 'white', borderColor: localBranding.theme_mode === 'dark' ? '#1e293b' : '#f1f5f9' }}>
+                                        <div className="w-4 h-4 rounded bg-gray-100 flex items-center justify-center">
+                                            {localBranding.logo_url ? (
+                                                <img src={getFullImageUrl(localBranding.logo_url)} className="w-full h-full object-cover rounded" />
+                                            ) : (
+                                                <div className="w-full h-full bg-indigo-500 rounded" style={{ backgroundColor: localBranding.primary_color || localBranding.brand_color }} />
+                                            )}
+                                        </div>
+                                        <div className="w-4 h-4 rounded-full bg-gray-200" style={{ backgroundColor: localBranding.secondary_color || '#10b981' }} />
+                                    </div>
+                                    <div className="flex-1 p-3 space-y-3">
+                                        <div className="h-10 rounded-lg" style={{ background: `linear-gradient(135deg, ${localBranding.primary_color || localBranding.brand_color || '#4338ca'}, ${localBranding.secondary_color || '#10b981'})` }} />
+                                        <div className="space-y-1.5">
+                                            <div className="h-2 w-12 rounded bg-gray-100" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
+                                            <div className="flex gap-1.5">
+                                                <div className="h-4 w-8 rounded-full bg-indigo-500" style={{ backgroundColor: localBranding.primary_color || localBranding.brand_color }} />
+                                                <div className="h-4 w-8 rounded-full bg-gray-100" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
+                                            </div>
+                                        </div>
+                                        <div className="p-2 rounded-lg border border-gray-50 space-y-1.5" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#0f172a' : 'white', borderColor: localBranding.theme_mode === 'dark' ? '#1e293b' : '#f1f5f9' }}>
+                                            <div className="h-2 w-16 rounded bg-gray-100" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
+                                            <div className="flex justify-end"><div className="w-3 h-3 rounded-full bg-amber-500" style={{ backgroundColor: localBranding.accent_color || '#f59e0b' }} /></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-12">
+                            <RefreshCw className="w-8 h-8 text-indigo-100 animate-spin mb-4" />
+                            <p className="text-sm text-gray-400">Loading branding...</p>
                         </div>
                     )}
                 </div>

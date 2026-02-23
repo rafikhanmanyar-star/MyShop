@@ -50,6 +50,20 @@ export interface ShopVendor {
   updated_at?: string;
 }
 
+export interface TenantBranding {
+  id: string;
+  tenant_id: string;
+  logo_url: string | null;
+  logo_dark_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+  accent_color: string;
+  font_family: string;
+  theme_mode: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export const shopApi = {
   getBranches: () => apiClient.get<ShopBranch[]>('/shop/branches'),
   createBranch: (data: any) => apiClient.post('/shop/branches', data),
@@ -69,6 +83,7 @@ export const shopApi = {
   deleteShopCategory: (id: string) => apiClient.delete(`/shop/categories/${id}`),
 
   getProducts: () => apiClient.get<ShopProduct[]>('/shop/products'),
+  getPopularProducts: (limit = 10) => apiClient.get<ShopProduct[]>(`/shop/popular-products?limit=${limit}`),
   createProduct: (data: any) => apiClient.post('/shop/products', data),
   updateProduct: (id: string, data: any) => apiClient.put(`/shop/products/${id}`, data),
   uploadImage: (file: File) => {
@@ -105,6 +120,9 @@ export const shopApi = {
     apiClient.post<ShopVendor>('/shop/vendors', data),
   updateVendor: (id: string, data: Partial<ShopVendor>) => apiClient.put(`/shop/vendors/${id}`, data),
   deleteVendor: (id: string) => apiClient.delete(`/shop/vendors/${id}`),
+
+  getBranding: () => apiClient.get<TenantBranding>('/shop/branding'),
+  updateBranding: (data: Partial<TenantBranding>) => apiClient.post<TenantBranding>('/shop/branding', data),
 };
 
 export interface ShopUser {

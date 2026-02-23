@@ -11,11 +11,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/lodash-es": "^4.17.12",
+    "@types/react-window": "^1.8.8",
+    "fuse.js": "^7.1.0",
+    "lodash-es": "^4.17.23",
     "lucide-react": "^0.460.0",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
+    "react-window": "^1.8.10",
     "recharts": "^2.15.0"
   },
   "devDependencies": {

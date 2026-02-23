@@ -16,7 +16,9 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
         setIsCustomerModalOpen,
         setIsPaymentModalOpen,
         balanceDue,
-        completeSale
+        completeSale,
+        isDenseMode,
+        setIsDenseMode
     } = usePOS();
 
     const shortcuts = [
@@ -26,6 +28,7 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
         { key: 'F6', label: 'Customer', action: () => setIsCustomerModalOpen(true), icon: ICONS.user, color: 'text-blue-500' },
         { key: 'F9', label: 'History', action: () => setIsSalesHistoryModalOpen(true), icon: ICONS.clock, color: 'text-slate-500' },
         { key: 'F7', label: isFullScreen ? 'Exit Full' : 'Fullscreen', action: onToggleFullScreen, icon: isFullScreen ? ICONS.minimize : ICONS.maximize, color: 'text-slate-500' },
+        { key: 'Alt+D', label: isDenseMode ? 'Normal' : 'Dense', action: () => setIsDenseMode(!isDenseMode), icon: ICONS.grid, color: 'text-slate-500' },
     ];
 
     return (

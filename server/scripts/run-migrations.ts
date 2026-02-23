@@ -2,6 +2,9 @@ import { getDatabaseService } from '../services/databaseService.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,3 +115,8 @@ export async function runMigrations() {
 
   console.log('✅ All migrations complete');
 }
+
+runMigrations().catch(err => {
+  console.error('Fatal migration error:', err);
+  process.exit(1);
+});

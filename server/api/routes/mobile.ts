@@ -101,6 +101,17 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
     }
 });
 
+// Branding
+router.get('/:shopSlug/branding', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const { getShopService } = await import('../../services/shopService.js');
+        const branding = await getShopService().getTenantBranding(req.tenantId);
+        res.json(branding);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Categories
 router.get('/:shopSlug/categories', publicTenantMiddleware(db), async (req: any, res) => {
     try {
@@ -111,14 +122,47 @@ router.get('/:shopSlug/categories', publicTenantMiddleware(db), async (req: any,
     }
 });
 
+// Brands
+router.get('/:shopSlug/brands', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const brands = await getMobileOrderService().getBrandsForMobile(req.tenantId);
+        res.json(brands);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Products (paginated)
 router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, res) => {
     try {
+        const {
+            cursor, limit, search, category,
+            categoryIds, subcategoryIds, brandIds,
+            minPrice, maxPrice, availability,
+            onSale, minRating, sortBy
+        } = req.query;
+
+        // Support both single 'category' and multiple 'categoryIds'
+        let finalCategoryIds: string[] | undefined = undefined;
+        if (categoryIds) {
+            finalCategoryIds = Array.isArray(categoryIds) ? categoryIds : [categoryIds as string];
+        } else if (category) {
+            finalCategoryIds = [category as string];
+        }
+
         const result = await getMobileOrderService().getProductsForMobile(req.tenantId, {
-            cursor: req.query.cursor as string,
-            limit: parseInt(req.query.limit as string) || 20,
-            categoryId: req.query.category as string,
-            search: req.query.search as string,
+            cursor: cursor as string,
+            limit: parseInt(limit as string) || 20,
+            search: search as string,
+            categoryIds: finalCategoryIds,
+            subcategoryIds: subcategoryIds ? (Array.isArray(subcategoryIds) ? subcategoryIds : [subcategoryIds as string]) : undefined,
+            brandIds: brandIds ? (Array.isArray(brandIds) ? brandIds : [brandIds as string]) : undefined,
+            minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
+            maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
+            availability: availability as string,
+            onSale: onSale === 'true',
+            minRating: minRating ? parseFloat(minRating as string) : undefined,
+            sortBy: sortBy as string,
         });
         res.json(result);
     } catch (error: any) {

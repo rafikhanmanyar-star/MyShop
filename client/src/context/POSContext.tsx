@@ -73,6 +73,9 @@ interface POSContextType {
     selectedTerminalId: string | null;
     setSelectedBranchId: (id: string | null) => void;
     setSelectedTerminalId: (id: string | null) => void;
+
+    isDenseMode: boolean;
+    setIsDenseMode: (isDense: boolean) => void;
 }
 
 const POSContext = createContext<POSContextType | undefined>(undefined);
@@ -95,6 +98,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [terminals, setTerminals] = useState<any[]>([]);
     const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
     const [selectedTerminalId, setSelectedTerminalId] = useState<string | null>(null);
+    const [isDenseMode, setIsDenseMode] = useState(false);
 
     // Barcode scanner and printer instances
     const barcodeScannerRef = useRef<BarcodeScanner | null>(null);
@@ -466,7 +470,9 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedBranchId,
         selectedTerminalId,
         setSelectedBranchId,
-        setSelectedTerminalId
+        setSelectedTerminalId,
+        isDenseMode,
+        setIsDenseMode
     };
 
     return <POSContext.Provider value={value}>{children}</POSContext.Provider>;

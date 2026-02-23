@@ -16,6 +16,8 @@ export interface POSProduct {
     isWeightBased?: boolean;
     unit: string;
     stockLevel: number;
+    reorderPoint?: number;
+    popularityScore?: number;
 }
 
 export interface POSProductVariant {

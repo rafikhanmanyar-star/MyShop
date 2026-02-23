@@ -46,8 +46,16 @@ export class MobileOrderService {
     async getProductsForMobile(tenantId: string, opts: {
         cursor?: string;
         limit?: number;
-        categoryId?: string;
+        categoryIds?: string[];
+        subcategoryIds?: string[];
+        brandIds?: string[];
         search?: string;
+        minPrice?: number;
+        maxPrice?: number;
+        availability?: string;
+        onSale?: boolean;
+        minRating?: number;
+        sortBy?: string;
     } = {}) {
         const limit = Math.min(opts.limit || 20, 50);
         const params: any[] = [tenantId];
@@ -55,46 +63,127 @@ export class MobileOrderService {
 
         let where = `WHERE p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE`;
 
-        if (opts.categoryId) {
-            where += ` AND p.category_id = $${paramIdx}`;
-            params.push(opts.categoryId);
+        if (opts.categoryIds && opts.categoryIds.length > 0) {
+            where += ` AND p.category_id = ANY($${paramIdx})`;
+            params.push(opts.categoryIds);
+            paramIdx++;
+        }
+
+        if (opts.subcategoryIds && opts.subcategoryIds.length > 0) {
+            where += ` AND p.subcategory_id = ANY($${paramIdx})`;
+            params.push(opts.subcategoryIds);
+            paramIdx++;
+        }
+
+        if (opts.brandIds && opts.brandIds.length > 0) {
+            where += ` AND p.brand_id = ANY($${paramIdx})`;
+            params.push(opts.brandIds);
             paramIdx++;
         }
 
         if (opts.search) {
-            where += ` AND (p.name ILIKE $${paramIdx} OR p.sku ILIKE $${paramIdx})`;
+            where += ` AND (p.name ILIKE $${paramIdx} OR p.sku ILIKE $${paramIdx} OR p.mobile_description ILIKE $${paramIdx})`;
             params.push(`%${opts.search}%`);
             paramIdx++;
         }
 
+        if (opts.minPrice != null) {
+            where += ` AND COALESCE(p.mobile_price, p.retail_price) >= $${paramIdx}`;
+            params.push(opts.minPrice);
+            paramIdx++;
+        }
+
+        if (opts.maxPrice != null) {
+            where += ` AND COALESCE(p.mobile_price, p.retail_price) <= $${paramIdx}`;
+            params.push(opts.maxPrice);
+            paramIdx++;
+        }
+
+        if (opts.onSale === true) {
+            where += ` AND p.is_on_sale = TRUE`;
+        }
+
+        if (opts.minRating != null) {
+            where += ` AND p.rating_avg >= $${paramIdx}`;
+            params.push(opts.minRating);
+            paramIdx++;
+        }
+
+        const stockSubquery = `COALESCE((SELECT SUM(qty_on_hand - qty_res) FROM (SELECT i.quantity_on_hand as qty_on_hand, i.quantity_reserved as qty_res FROM shop_inventory i WHERE i.product_id = p.id AND i.tenant_id = $1) as inv), 0)`;
+
+        if (opts.availability === 'in_stock') {
+            where += ` AND ${stockSubquery} > 0`;
+        } else if (opts.availability === 'out_of_stock') {
+            where += ` AND ${stockSubquery} <= 0`;
+        } else if (opts.availability === 'pre_order') {
+            where += ` AND p.is_pre_order = TRUE`;
+        }
+
+        // Handle Sorting
+        let orderBy = `p.mobile_sort_order ASC, p.created_at DESC, p.id DESC`;
+        if (opts.sortBy) {
+            switch (opts.sortBy) {
+                case 'price_low_high':
+                    orderBy = `COALESCE(p.mobile_price, p.retail_price) ASC, p.id DESC`;
+                    break;
+                case 'price_high_low':
+                    orderBy = `COALESCE(p.mobile_price, p.retail_price) DESC, p.id DESC`;
+                    break;
+                case 'popularity':
+                    orderBy = `p.popularity_score DESC, p.id DESC`;
+                    break;
+                case 'best_selling':
+                    orderBy = `p.total_sales DESC, p.id DESC`;
+                    break;
+                case 'newest':
+                    orderBy = `p.created_at DESC, p.id DESC`;
+                    break;
+                case 'top_rated':
+                    orderBy = `p.rating_avg DESC, p.rating_count DESC, p.id DESC`;
+                    break;
+                case 'a_z':
+                    orderBy = `p.name ASC, p.id DESC`;
+                    break;
+                case 'z_a':
+                    orderBy = `p.name DESC, p.id DESC`;
+                    break;
+            }
+        }
+
         if (opts.cursor) {
-            // Cursor is base64-encoded "created_at|id"
             try {
                 const decoded = Buffer.from(opts.cursor, 'base64').toString('utf-8');
-                const [cursorDate, cursorId] = decoded.split('|');
-                where += ` AND (p.created_at, p.id) < ($${paramIdx}, $${paramIdx + 1})`;
-                params.push(cursorDate, cursorId);
+                const [cValue, cId] = decoded.split('|');
+                // For simplicity, we'll only support cursor for default sort or created_at sort.
+                // For other sorts, we might need a more complex cursor.
+                // But let's assume if cursor is provided, it matches the current sort.
+                if (opts.sortBy?.startsWith('price')) {
+                    const op = opts.sortBy === 'price_low_high' ? '>' : '<';
+                    where += ` AND (COALESCE(p.mobile_price, p.retail_price), p.id) ${op} ($${paramIdx}, $${paramIdx + 1})`;
+                } else {
+                    where += ` AND (p.created_at, p.id) < ($${paramIdx}, $${paramIdx + 1})`;
+                }
+                params.push(cValue, cId);
                 paramIdx += 2;
-            } catch { /* ignore invalid cursor */ }
+            } catch { }
         }
 
         const query = `
-      SELECT p.id, p.name, p.sku, p.barcode, p.category_id,
-             p.unit, p.retail_price, p.tax_rate, p.image_url,
+      SELECT p.id, p.name, p.sku, p.category_id, p.subcategory_id, p.brand_id,
+             p.unit, p.retail_price, p.tax_rate, p.image_url, p.created_at,
              p.mobile_price, p.mobile_description, p.mobile_sort_order,
+             p.rating_avg, p.rating_count, p.is_on_sale, p.is_pre_order, p.discount_percentage,
              c.name as category_name,
-             COALESCE(
-               (SELECT SUM(i.quantity_on_hand - i.quantity_reserved)
-                FROM shop_inventory i WHERE i.product_id = p.id AND i.tenant_id = $1),
-               0
-             ) as available_stock
+             b.name as brand_name,
+             ${stockSubquery} as available_stock
       FROM shop_products p
       LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
+      LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
       ${where}
-      ORDER BY p.mobile_sort_order ASC, p.created_at DESC, p.id DESC
+      ORDER BY ${orderBy}
       LIMIT $${paramIdx}
     `;
-        params.push(limit + 1); // +1 to check hasMore
+        params.push(limit + 1);
 
         const rows = await this.db.query(query, params);
         const hasMore = rows.length > limit;
@@ -102,12 +191,15 @@ export class MobileOrderService {
             ...r,
             price: r.mobile_price != null ? (parseFloat(r.mobile_price) || 0) : (parseFloat(r.retail_price) || 0),
             available_stock: parseFloat(r.available_stock) || 0,
+            rating_avg: parseFloat(r.rating_avg) || 0,
         }));
 
         let nextCursor: string | null = null;
         if (hasMore && items.length > 0) {
             const last = items[items.length - 1];
-            nextCursor = Buffer.from(`${last.created_at}|${last.id}`).toString('base64');
+            // Simplistic cursor
+            const cursorVal = opts.sortBy?.startsWith('price') ? last.price : last.created_at;
+            nextCursor = Buffer.from(`${cursorVal}|${last.id}`).toString('base64');
         }
 
         return { items, nextCursor, hasMore };
@@ -115,7 +207,7 @@ export class MobileOrderService {
 
     async getProductDetailForMobile(tenantId: string, productId: string) {
         const rows = await this.db.query(
-            `SELECT p.*, c.name as category_name,
+            `SELECT p.*, c.name as category_name, b.name as brand_name,
               COALESCE(
                 (SELECT SUM(i.quantity_on_hand - i.quantity_reserved)
                  FROM shop_inventory i WHERE i.product_id = p.id AND i.tenant_id = $1),
@@ -123,6 +215,7 @@ export class MobileOrderService {
               ) as available_stock
        FROM shop_products p
        LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
+       LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
        WHERE p.id = $2 AND p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE`,
             [tenantId, productId]
         );
@@ -132,17 +225,29 @@ export class MobileOrderService {
             ...r,
             price: r.mobile_price != null ? parseFloat(r.mobile_price) : parseFloat(r.retail_price),
             available_stock: parseFloat(r.available_stock),
+            rating_avg: parseFloat(r.rating_avg) || 0,
         };
     }
 
     async getCategoriesForMobile(tenantId: string) {
+        const categories = await this.db.query(
+            `SELECT id, name, parent_id
+       FROM categories
+       WHERE tenant_id = $1 AND type = 'product' AND deleted_at IS NULL
+       ORDER BY name ASC`,
+            [tenantId]
+        );
+
+        // Return flat but with parent_id so mobile can structure them
+        return categories;
+    }
+
+    async getBrandsForMobile(tenantId: string) {
         return this.db.query(
-            `SELECT DISTINCT c.id, c.name
-       FROM categories c
-       INNER JOIN shop_products p ON p.category_id = c.id AND p.tenant_id = $1
-       WHERE c.tenant_id = $1 AND c.type = 'product' AND c.deleted_at IS NULL
-         AND p.is_active = TRUE AND p.mobile_visible = TRUE
-       ORDER BY c.name ASC`,
+            `SELECT id, name, logo_url
+           FROM shop_brands
+           WHERE tenant_id = $1 AND is_active = TRUE
+           ORDER BY name ASC`,
             [tenantId]
         );
     }

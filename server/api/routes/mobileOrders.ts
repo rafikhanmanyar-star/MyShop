@@ -92,12 +92,23 @@ router.put('/settings', checkRole(['admin']), async (req: any, res) => {
 router.get('/branding', checkRole(['admin']), async (req: any, res) => {
     try {
         const db = getDatabaseService();
-        const rows = await db.query(
-            'SELECT slug, logo_url, brand_color, company_name FROM tenants WHERE id = $1',
+        const { getShopService } = await import('../../services/shopService.js');
+
+        // Get basic info from tenants
+        const tenantRows = await db.query(
+            'SELECT slug, company_name FROM tenants WHERE id = $1',
             [req.tenantId]
         );
-        if (rows.length === 0) return res.status(404).json({ error: 'Tenant not found' });
-        res.json(rows[0]);
+        if (tenantRows.length === 0) return res.status(404).json({ error: 'Tenant not found' });
+
+        // Get detailed branding from tenant_branding
+        const branding = await getShopService().getTenantBranding(req.tenantId);
+
+        res.json({
+            ...branding,
+            slug: tenantRows[0].slug,
+            company_name: tenantRows[0].company_name
+        });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -105,8 +116,45 @@ router.get('/branding', checkRole(['admin']), async (req: any, res) => {
 
 router.put('/branding', checkRole(['admin']), async (req: any, res) => {
     try {
-        await getMobileCustomerService().updateTenantBranding(req.tenantId, req.body);
-        res.json({ success: true, message: 'Branding updated' });
+        const db = getDatabaseService();
+        const { getShopService } = await import('../../services/shopService.js');
+
+        // 1. Update slug if provided in tenants table
+        if (req.body.slug !== undefined) {
+            await getMobileCustomerService().updateTenantBranding(req.tenantId, {
+                slug: req.body.slug
+            });
+        }
+
+        // 2. Update company_name if provided
+        if (req.body.company_name !== undefined) {
+            await db.execute(
+                'UPDATE tenants SET company_name = $1 WHERE id = $2',
+                [req.body.company_name, req.tenantId]
+            );
+        }
+
+        // 3. Update detailed branding in tenant_branding table
+        // We also sync primary_color to brand_color in tenants table for backward compatibility
+        const brandingData = {
+            ...req.body,
+            logo_url: req.body.logo_url,
+            primary_color: req.body.primary_color || req.body.brand_color // Allow both
+        };
+
+        const updatedBranding = await getShopService().updateTenantBranding(req.tenantId, brandingData);
+
+        // Also sync logo and brand_color to tenants table for compatibility with existing mobile logic
+        await db.execute(
+            'UPDATE tenants SET logo_url = $1, brand_color = $2 WHERE id = $3',
+            [updatedBranding.logo_url, updatedBranding.primary_color, req.tenantId]
+        );
+
+        res.json({
+            ...updatedBranding,
+            slug: req.body.slug,
+            company_name: req.body.company_name
+        });
     } catch (error: any) {
         res.status(400).json({ error: error.message });
     }

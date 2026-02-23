@@ -59,7 +59,16 @@ export interface MobileOrderingSettings {
 export interface ShopBranding {
     slug: string | null;
     logo_url: string | null;
-    brand_color: string;
+    logo_dark_url?: string | null;
+    brand_color?: string;
+    primary_color?: string;
+    secondary_color?: string;
+    accent_color?: string;
+    font_family?: string;
+    theme_mode?: string;
+    address?: string | null;
+    lat?: number | null;
+    lng?: number | null;
     company_name: string;
 }
 

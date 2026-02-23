@@ -3,6 +3,7 @@ import { Outlet, useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi } from '../api';
 import BottomNav from '../components/BottomNav';
+import Header from '../components/Header';
 
 export default function ShopLoader() {
     const { shopSlug } = useParams<{ shopSlug: string }>();
@@ -20,20 +21,35 @@ export default function ShopLoader() {
         setLoading(true);
         setError('');
 
-        publicApi.getShopInfo(shopSlug)
-            .then((data) => {
+        Promise.all([
+            publicApi.getShopInfo(shopSlug),
+            publicApi.getBranding(shopSlug)
+        ])
+            .then(([shopData, brandingData]) => {
                 dispatch({
                     type: 'SET_SHOP',
                     slug: shopSlug,
-                    shop: data.shop,
-                    settings: data.settings,
+                    shop: shopData.shop,
+                    settings: shopData.settings,
+                    branding: brandingData,
                 });
 
                 // Apply shop brand color
-                if (data.shop.brand_color) {
-                    document.documentElement.style.setProperty('--primary', data.shop.brand_color);
+                if (brandingData?.primary_color) {
+                    document.documentElement.style.setProperty('--primary', brandingData.primary_color);
+                } else if (shopData.shop.brand_color) {
+                    document.documentElement.style.setProperty('--primary', shopData.shop.brand_color);
                 }
-                document.title = `${data.shop.company_name || data.shop.name} — Order Online`;
+
+                if (brandingData?.secondary_color) {
+                    document.documentElement.style.setProperty('--secondary', brandingData.secondary_color);
+                }
+
+                if (brandingData?.accent_color) {
+                    document.documentElement.style.setProperty('--accent', brandingData.accent_color);
+                }
+
+                document.title = `${shopData.shop.company_name || shopData.shop.name} — Order Online`;
             })
             .catch((err) => {
                 setError(err.message || 'Shop not found');
@@ -79,6 +95,7 @@ export default function ShopLoader() {
 
     return (
         <>
+            <Header />
             <Outlet />
             <BottomNav />
         </>
