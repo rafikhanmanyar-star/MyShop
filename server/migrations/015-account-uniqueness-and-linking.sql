@@ -5,21 +5,58 @@
 -- 1. Add description column to accounts (frontend already sends it)
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS description TEXT;
 
--- 2. Unique constraint: account name per tenant (case-insensitive)
+-- 2. Deduplicate accounts before adding uniqueness constraints.
+--    Keeps the oldest account per (tenant_id, LOWER(name)) and
+--    re-points ledger_entries to the surviving record.
+DO $$
+DECLARE
+  dup RECORD;
+BEGIN
+  FOR dup IN
+    SELECT tenant_id, LOWER(name) AS lname,
+           MIN(created_at) AS keep_ts
+    FROM accounts
+    GROUP BY tenant_id, LOWER(name)
+    HAVING COUNT(*) > 1
+  LOOP
+    -- Re-point ledger_entries from duplicates to the surviving account
+    UPDATE ledger_entries
+    SET account_id = (
+      SELECT id FROM accounts
+      WHERE tenant_id = dup.tenant_id AND LOWER(name) = dup.lname
+      ORDER BY created_at ASC LIMIT 1
+    )
+    WHERE account_id IN (
+      SELECT id FROM accounts
+      WHERE tenant_id = dup.tenant_id AND LOWER(name) = dup.lname
+      ORDER BY created_at ASC OFFSET 1
+    );
+
+    -- Delete the duplicate rows (keep the earliest)
+    DELETE FROM accounts
+    WHERE id IN (
+      SELECT id FROM accounts
+      WHERE tenant_id = dup.tenant_id AND LOWER(name) = dup.lname
+      ORDER BY created_at ASC OFFSET 1
+    );
+  END LOOP;
+END $$;
+
+-- 3. Unique constraint: account name per tenant (case-insensitive)
 --    Prevents duplicate account names within the same tenant.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_tenant_name_unique
   ON accounts (tenant_id, LOWER(name));
 
--- 3. Unique constraint: account code per tenant (where code is not null)
+-- 4. Unique constraint: account code per tenant (where code is not null)
 --    Prevents duplicate account codes within the same tenant.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_tenant_code_unique
   ON accounts (tenant_id, code) WHERE code IS NOT NULL AND code <> '';
 
--- 4. Link bank accounts to their chart-of-accounts entry
+-- 5. Link bank accounts to their chart-of-accounts entry
 ALTER TABLE shop_bank_accounts
   ADD COLUMN IF NOT EXISTS chart_account_id TEXT REFERENCES accounts(id);
 
--- 5. For existing bank accounts that have no linked chart account,
+-- 6. For existing bank accounts that have no linked chart account,
 --    create matching entries in the accounts table and link them.
 --    This DO block runs once during migration.
 DO $$

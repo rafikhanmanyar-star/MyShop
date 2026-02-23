@@ -61,6 +61,31 @@ npm run pack
 
 ---
 
+## 🚀 Release (Build, Version Bump & Push)
+
+### 1. Patch Release (Default)
+Increments the patch version (e.g. 1.0.13 → 1.0.14), builds the cloud-connected Windows installer, and pushes everything to GitHub:
+```bash
+npm run release
+```
+
+### 2. Minor Release
+Increments the minor version (e.g. 1.0.13 → 1.1.0):
+```bash
+npm run release:minor
+```
+
+### 3. Major Release
+Increments the major version (e.g. 1.0.13 → 2.0.0):
+```bash
+npm run release:major
+```
+
+*   **What it does**: Runs `build-and-push.ps1` which auto-bumps the version in all `package.json` files (root, client, server), builds the cloud installer, commits, tags, and pushes to GitHub.
+*   **Output**: Installer in `release/` folder + a new git tag (e.g. `v1.0.14`).
+
+---
+
 ## 📜 Full Scripts Reference Table
 
 | Script | Purpose |
@@ -73,6 +98,9 @@ npm run pack
 | `npm run dist:win:cloud` | Creates a Windows Installer configured for cloud use. |
 | `npm run build:server` | Compiles the TypeScript server into the `server/dist` folder. |
 | `npm run build:client` | Compiles the React client into the `client/dist` folder. |
+| `npm run release` | **Build & Push**: Patch bump, build installer, commit, tag & push to GitHub. |
+| `npm run release:minor` | Same as above but with a minor version bump. |
+| `npm run release:major` | Same as above but with a major version bump. |
 
 ---
 
