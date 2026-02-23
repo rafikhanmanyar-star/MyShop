@@ -173,11 +173,11 @@ finally {
 Write-Host ""
 
 # -----------------------------------------------------------
-# Step 5: Create GitHub Release and UPLOAD installer (.exe)
-#        (Required for Settings -> App -> Check for updates)
+# Step 5: Create GitHub Release and UPLOAD installer + latest.yml
+#        (electron-updater requires latest.yml to detect and download updates)
 # -----------------------------------------------------------
 if (-not $SkipRelease) {
-    Write-Host "[5/5] Creating GitHub Release and uploading installer..." -ForegroundColor Yellow
+    Write-Host "[5/5] Creating GitHub Release and uploading installer + latest.yml..." -ForegroundColor Yellow
 
     # Require GitHub CLI so the in-app updater can find the release
     $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
@@ -190,11 +190,13 @@ if (-not $SkipRelease) {
     }
 
     $tagName = "v$newVersion"
-    $installerName = "MyShop Setup $newVersion.exe"
+    # Match electron-builder artifactName: MyShop-Setup-1.0.6.exe
+    $installerName = "MyShop-Setup-$newVersion.exe"
     $installerPath = "$ProjectRoot\release\$installerName"
+    $latestYmlPath = "$ProjectRoot\release\latest.yml"
 
     if (-not (Test-Path $installerPath)) {
-        $fallback = Get-ChildItem -Path "$ProjectRoot\release" -Filter "MyShop Setup *.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $fallback = Get-ChildItem -Path "$ProjectRoot\release" -Filter "MyShop*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "unpacked" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if ($fallback) {
             $installerPath = $fallback.FullName
             Write-Host "  Using installer: $($fallback.Name)" -ForegroundColor Cyan
@@ -207,15 +209,23 @@ if (-not $SkipRelease) {
         exit 1
     }
 
+    if (-not (Test-Path $latestYmlPath)) {
+        Write-Host "  latest.yml not found: $latestYmlPath" -ForegroundColor Red
+        Write-Host "  electron-updater needs this file in the release. Re-run the build." -ForegroundColor DarkGray
+        exit 1
+    }
+
     Push-Location $ProjectRoot
     try {
-        gh release create $tagName $installerPath --title $tagName --notes "MyShop desktop app v$newVersion"
+        # Upload BOTH .exe and latest.yml so Settings -> App -> Check for updates works
+        gh release create $tagName $installerPath $latestYmlPath --title $tagName --notes "MyShop desktop app v$newVersion"
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  gh release create failed. Run: gh auth login" -ForegroundColor Red
             exit 1
         }
         Write-Host "  Release created: $tagName" -ForegroundColor Green
-        Write-Host "  Installer uploaded to: https://github.com/rafikhanmanyar-star/MyShop/releases" -ForegroundColor Green
+        Write-Host "  Uploaded: installer + latest.yml" -ForegroundColor Green
+        Write-Host "  https://github.com/rafikhanmanyar-star/MyShop/releases" -ForegroundColor Green
         Write-Host "  Users can now use Settings -> App -> Check for updates." -ForegroundColor Green
     }
     catch {
