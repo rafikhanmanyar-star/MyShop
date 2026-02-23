@@ -32,28 +32,31 @@ export default function Header() {
     return (
         <header className="main-header">
             <div className="header-content">
-                <Link to={`/${shopSlug}`} className="shop-logo-link">
-                    {(state.branding?.logo_url || state.shop?.logo_url) ? (
-                        <img
-                            src={getFullImageUrl(state.branding?.logo_url || state.shop?.logo_url || undefined)}
-                            alt="Logo"
-                            className="header-logo"
-                            onError={(e) => {
-                                // If image fails to load, hide it and show text
-                                (e.target as HTMLImageElement).style.display = 'none';
-                                const parent = (e.target as HTMLImageElement).parentElement;
-                                if (parent) {
-                                    const text = document.createElement('span');
-                                    text.className = 'header-shop-name';
-                                    text.innerText = state.shop?.company_name || state.shop?.name || 'MyShop';
-                                    parent.appendChild(text);
-                                }
-                            }}
-                        />
-                    ) : (
-                        <span className="header-shop-name">{state.shop?.company_name || state.shop?.name || 'MyShop'}</span>
-                    )}
-                </Link>
+                <div className="header-brand">
+                    <Link to={`/${shopSlug}`} className="shop-logo-link">
+                        {(state.branding?.logo_url || state.shop?.logo_url) ? (
+                            <img
+                                src={getFullImageUrl(state.branding?.logo_url || state.shop?.logo_url || undefined)}
+                                alt="Logo"
+                                className="header-logo"
+                                onError={(e) => {
+                                    // If image fails to load, hide it and show text
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                    const parent = (e.target as HTMLImageElement).parentElement;
+                                    if (parent) {
+                                        const text = document.createElement('span');
+                                        text.className = 'header-shop-name';
+                                        text.innerText = state.shop?.company_name || state.shop?.name || 'MyShop';
+                                        parent.appendChild(text);
+                                    }
+                                }}
+                            />
+                        ) : (
+                            <span className="header-shop-name">{state.shop?.company_name || state.shop?.name || 'MyShop'}</span>
+                        )}
+                    </Link>
+                    <span className="header-version">v{__APP_VERSION__}</span>
+                </div>
 
                 <div className="user-section">
                     <button className="user-icon-btn" onClick={() => setShowMenu(!showMenu)}>

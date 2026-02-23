@@ -177,7 +177,7 @@ Write-Host ""
 #        (electron-updater requires latest.yml to detect and download updates)
 # -----------------------------------------------------------
 if (-not $SkipRelease) {
-    Write-Host "[5/5] Creating GitHub Release and uploading installer + latest.yml..." -ForegroundColor Yellow
+    Write-Host "[5/5] Creating GitHub Release and uploading installer + latest.yml + blockmap..." -ForegroundColor Yellow
 
     # Require GitHub CLI so the in-app updater can find the release
     $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
@@ -215,16 +215,26 @@ if (-not $SkipRelease) {
         exit 1
     }
 
+    # Blockmap enables differential (delta) updates so users download only changed blocks
+    $blockmapPath = $installerPath + ".blockmap"
+    $releaseAssets = @($installerPath, $latestYmlPath)
+    if (Test-Path $blockmapPath) {
+        $releaseAssets += $blockmapPath
+        Write-Host "  Blockmap found: $(Split-Path -Leaf $blockmapPath) (delta updates enabled)" -ForegroundColor Cyan
+    } else {
+        Write-Host "  Blockmap not found: $blockmapPath (updates will be full download)" -ForegroundColor DarkGray
+    }
+
     Push-Location $ProjectRoot
     try {
-        # Upload BOTH .exe and latest.yml so Settings -> App -> Check for updates works
-        gh release create $tagName $installerPath $latestYmlPath --title $tagName --notes "MyShop desktop app v$newVersion"
+        # Upload .exe, latest.yml, and .blockmap so in-app updates work (blockmap = delta updates)
+        gh release create $tagName $releaseAssets --title $tagName --notes "MyShop desktop app v$newVersion"
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  gh release create failed. Run: gh auth login" -ForegroundColor Red
             exit 1
         }
         Write-Host "  Release created: $tagName" -ForegroundColor Green
-        Write-Host "  Uploaded: installer + latest.yml" -ForegroundColor Green
+        Write-Host "  Uploaded: installer + latest.yml" + $(if (Test-Path $blockmapPath) { " + blockmap (delta updates)" } else { "" }) -ForegroundColor Green
         Write-Host "  https://github.com/rafikhanmanyar-star/MyShop/releases" -ForegroundColor Green
         Write-Host "  Users can now use Settings -> App -> Check for updates." -ForegroundColor Green
     }

@@ -984,10 +984,25 @@ img {
   letter-spacing: -0.5px;
 }
 
+.header-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+}
+
 .header-logo {
   height: 32px;
   width: auto;
   border-radius: 6px;
+}
+
+.header-version {
+  font-size: 10px;
+  color: var(--text-muted, #9ca3af);
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
 .user-section {

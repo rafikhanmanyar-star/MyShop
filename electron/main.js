@@ -6,6 +6,8 @@ const fs = require('fs');
 let serverProcess = null;
 let mainWindow = null;
 let autoUpdater = null;
+let updateCheckIntervalId = null;
+let lastNotifiedUpdateVersion = null;
 if (app.isPackaged) {
   try {
     autoUpdater = require('electron-updater').autoUpdater;
@@ -191,6 +193,21 @@ function setupUpdaterIPC() {
     autoUpdater.autoDownload = false;
     autoUpdater.on('update-available', (info) => {
       sendUpdateStatus({ status: 'available', version: info.version });
+      if (info.version && info.version !== lastNotifiedUpdateVersion) {
+        lastNotifiedUpdateVersion = info.version;
+        const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+        dialog.showMessageBox(win, {
+          type: 'info',
+          title: 'Update available',
+          message: `MyShop ${info.version} is available.`,
+          detail: 'Would you like to download and install it now?',
+          buttons: ['Download and install', 'Later'],
+          defaultId: 0,
+          cancelId: 1,
+        }).then(({ response }) => {
+          if (response === 0) autoUpdater.downloadUpdate();
+        });
+      }
     });
     autoUpdater.on('update-not-available', () => {
       sendUpdateStatus({ status: 'not-available' });
@@ -231,6 +248,14 @@ app.whenReady().then(async () => {
     }
     createWindow();
     setupUpdaterIPC();
+    if (autoUpdater && app.isPackaged) {
+      const oneMinuteMs = 60 * 1000;
+      updateCheckIntervalId = setInterval(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          autoUpdater.checkForUpdates().catch(() => {});
+        }
+      }, oneMinuteMs);
+    }
   } catch (err) {
     console.error('Failed to start:', err);
     const message = err && err.message ? err.message : String(err);
@@ -240,6 +265,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  if (updateCheckIntervalId) {
+    clearInterval(updateCheckIntervalId);
+    updateCheckIntervalId = null;
+  }
   if (serverProcess) {
     serverProcess.kill();
     serverProcess = null;
