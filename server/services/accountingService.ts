@@ -189,9 +189,11 @@ export class AccountingService {
   /**
    * Get sales breakdown by source (POS vs Mobile)
    * for analytics dashboard.
+   * Mobile: includes all completed orders (Confirmed, Packed, OutForDelivery, Delivered)
+   * so count and revenue stay in sync; uses order-level totals with fallback from line items.
    */
   async getSalesBySource(tenantId: string) {
-    // POS sales
+    // POS sales (completed only)
     const posSales = await this.db.query(`
       SELECT
         COUNT(*) as total_orders,
@@ -202,7 +204,12 @@ export class AccountingService {
       WHERE tenant_id = $1 AND status = 'Completed'
     `, [tenantId]);
 
-    // Mobile sales (delivered) — use grand_total, fallback to (subtotal - discount + tax + delivery) if grand_total is 0
+    // Mobile: all completed statuses (not Pending/Cancelled) so dashboard count matches revenue set
+    const mobileStatusList = ['Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
+    const mobilePlaceholders = mobileStatusList.map((_, i) => `$${i + 2}`).join(', ');
+    const mobileParams = [tenantId, ...mobileStatusList];
+
+    // Order-level aggregates: grand_total first, then (subtotal - discount + tax + delivery)
     const mobileSales = await this.db.query(`
       SELECT
         COUNT(*) as total_orders,
@@ -218,13 +225,38 @@ export class AccountingService {
         ) as avg_order_value,
         'Mobile' as source
       FROM mobile_orders
-      WHERE tenant_id = $1 AND status = 'Delivered'
-    `, [tenantId]);
+      WHERE tenant_id = $1 AND status IN (${mobilePlaceholders})
+    `, mobileParams);
 
     const toNum = (v: unknown): number => (v === null || v === undefined) ? 0 : Number(v);
     const row = (r: any) => r ?? {};
     const posRow = row(posSales[0]);
     const mobileRow = row(mobileSales[0]);
+
+    let mobileRevenue = toNum(mobileRow.total_revenue ?? mobileRow.totalRevenue);
+    const mobileOrders = Math.max(0, parseInt(String(mobileRow.total_orders ?? mobileRow.totalOrders), 10) || 0);
+    let mobileAvg = toNum(mobileRow.avg_order_value ?? mobileRow.avgOrderValue);
+
+    // If order-level revenue is still 0 but we have orders, derive from mobile_order_items
+    if (mobileOrders > 0 && mobileRevenue === 0) {
+      const fromItems = await this.db.query(`
+        SELECT
+          COALESCE(SUM(t.order_total), 0) as total_revenue,
+          COALESCE(AVG(t.order_total), 0) as avg_order_value
+        FROM (
+          SELECT mi.order_id, SUM(mi.subtotal) as order_total
+          FROM mobile_order_items mi
+          INNER JOIN mobile_orders o ON o.id = mi.order_id AND o.tenant_id = $1 AND o.status IN (${mobilePlaceholders})
+          WHERE mi.tenant_id = $1
+          GROUP BY mi.order_id
+        ) t
+      `, mobileParams);
+      const ir = fromItems[0];
+      if (ir) {
+        mobileRevenue = toNum(ir.total_revenue ?? (ir as any).totalRevenue);
+        mobileAvg = mobileOrders > 0 ? mobileRevenue / mobileOrders : 0;
+      }
+    }
 
     return {
       pos: {
@@ -233,9 +265,9 @@ export class AccountingService {
         avgOrderValue: toNum(posRow.avg_order_value ?? posRow.avgOrderValue),
       },
       mobile: {
-        totalOrders: Math.max(0, parseInt(String(mobileRow.total_orders ?? mobileRow.totalOrders), 10) || 0),
-        totalRevenue: toNum(mobileRow.total_revenue ?? mobileRow.totalRevenue),
-        avgOrderValue: toNum(mobileRow.avg_order_value ?? mobileRow.avgOrderValue),
+        totalOrders: mobileOrders,
+        totalRevenue: mobileRevenue,
+        avgOrderValue: mobileAvg,
       },
     };
   }
@@ -260,17 +292,18 @@ export class AccountingService {
       ORDER BY day ASC
     `, [tenantId, cutoffStr]);
 
+    const mobileStatusList = ['Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
+    const mobileTrendPlaceholders = mobileStatusList.map((_, i) => `$${i + 3}`).join(', ');
     const mobileTrend = await this.db.query(`
       SELECT
         DATE(created_at) as day,
         COUNT(*) as order_count,
         COALESCE(SUM(grand_total), 0) as revenue
       FROM mobile_orders
-      WHERE tenant_id = $1 AND status = 'Delivered'
-        AND created_at >= $2
+      WHERE tenant_id = $1 AND status IN (${mobileTrendPlaceholders}) AND created_at >= $2
       GROUP BY DATE(created_at)
       ORDER BY day ASC
-    `, [tenantId, cutoffStr]);
+    `, [tenantId, cutoffStr, ...mobileStatusList]);
 
     return { pos: posTrend, mobile: mobileTrend };
   }
@@ -311,7 +344,7 @@ export class AccountingService {
       SELECT id, order_number as reference, grand_total as amount,
         payment_method, 'Mobile' as source, created_at, status
       FROM mobile_orders
-      WHERE tenant_id = $1 AND status = 'Delivered'
+      WHERE tenant_id = $1 AND status IN ('Confirmed', 'Packed', 'OutForDelivery', 'Delivered')
       
       ORDER BY created_at DESC
       LIMIT $2

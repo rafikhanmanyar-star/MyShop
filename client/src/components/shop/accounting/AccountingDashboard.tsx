@@ -17,9 +17,10 @@ const AccountingDashboard: React.FC = () => {
         { label: 'Receivables', value: receivablesTotal, icon: ICONS.arrowDownCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
     ];
 
-    const posRevenue = salesBySource?.pos?.totalRevenue || 0;
-    const mobileRevenue = salesBySource?.mobile?.totalRevenue || 0;
+    const posRevenue = salesBySource?.pos?.totalRevenue ?? 0;
+    const mobileRevenue = salesBySource?.mobile?.totalRevenue ?? 0;
     const totalSalesRevenue = posRevenue + mobileRevenue;
+    const hasAnyOrders = (salesBySource?.pos?.totalOrders || 0) + (salesBySource?.mobile?.totalOrders || 0) > 0;
     const posPercent = totalSalesRevenue > 0 ? (posRevenue / totalSalesRevenue) * 100 : 0;
     const mobilePercent = totalSalesRevenue > 0 ? (mobileRevenue / totalSalesRevenue) * 100 : 0;
 
@@ -64,7 +65,7 @@ const AccountingDashboard: React.FC = () => {
                         </div>
                     </div>
 
-                    {totalSalesRevenue > 0 ? (
+                    {hasAnyOrders ? (
                         <div className="space-y-6">
                             {/* POS */}
                             <div className="space-y-2">
@@ -116,7 +117,7 @@ const AccountingDashboard: React.FC = () => {
                         <div className="h-64 bg-slate-50 rounded-2xl border border-dashed border-slate-200 flex items-center justify-center text-slate-300">
                             <div className="text-center">
                                 {React.cloneElement(ICONS.barChart as React.ReactElement<any>, { width: 48, height: 48, className: 'mx-auto opacity-20' })}
-                                <p className="text-xs font-bold uppercase tracking-widest mt-2">No sales data yet. Complete a sale to see data here.</p>
+                                <p className="text-xs font-bold uppercase tracking-widest mt-2">No sales data yet. Complete a POS or mobile sale to see data here.</p>
                             </div>
                         </div>
                     )}

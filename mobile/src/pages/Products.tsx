@@ -21,6 +21,8 @@ export default function Products() {
 
     // Debounce timer
     const searchTimeout = useRef<any>(null);
+    // Sentinel ref for infinite scroll
+    const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
     // Filter state from URL
     const filters = {
@@ -83,6 +85,23 @@ export default function Products() {
         setCursor(null);
         loadProducts(true);
     }, [shopSlug, JSON.stringify(filters)]);
+
+    // Infinite scroll: load next page when sentinel enters viewport
+    useEffect(() => {
+        if (!hasMore || loadingMore || loading) return;
+        const el = loadMoreSentinelRef.current;
+        if (!el) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting && hasMore && !loadingMore && !loading) {
+                    loadProducts(false);
+                }
+            },
+            { rootMargin: '200px', threshold: 0.1 }
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [hasMore, loadingMore, loading, loadProducts]);
 
     const handleSearchChange = (val: string) => {
         setSearchTerm(val);
@@ -300,17 +319,10 @@ export default function Products() {
                         ))}
                     </div>
 
+                    {/* Sentinel for infinite scroll; loading indicator when fetching more */}
                     {hasMore && (
-                        <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                            <button
-                                className="btn btn-outline btn-full btn-sm"
-                                onClick={() => loadProducts(false)}
-                                disabled={loadingMore}
-                            >
-                                {loadingMore ? (
-                                    <><span className="spinner" style={{ width: 16, height: 16 }} /> Loading...</>
-                                ) : 'Load More'}
-                            </button>
+                        <div ref={loadMoreSentinelRef} style={{ minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+                            {loadingMore && <span className="spinner" style={{ width: 24, height: 24 }} />}
                         </div>
                     )}
                 </>

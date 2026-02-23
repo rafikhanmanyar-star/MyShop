@@ -197,8 +197,10 @@ export class MobileOrderService {
         let nextCursor: string | null = null;
         if (hasMore && items.length > 0) {
             const last = items[items.length - 1];
-            // Simplistic cursor
-            const cursorVal = opts.sortBy?.startsWith('price') ? last.price : last.created_at;
+            // Cursor value must be PostgreSQL-friendly: use ISO timestamp for dates
+            const cursorVal = opts.sortBy?.startsWith('price')
+                ? last.price
+                : (last.created_at instanceof Date ? last.created_at.toISOString() : new Date(last.created_at).toISOString());
             nextCursor = Buffer.from(`${cursorVal}|${last.id}`).toString('base64');
         }
 
@@ -478,7 +480,8 @@ export class MobileOrderService {
         let nextCursor: string | null = null;
         if (hasMore && items.length > 0) {
             const last = items[items.length - 1];
-            nextCursor = Buffer.from(`${last.created_at}|${last.id}`).toString('base64');
+            const createdAt = last.created_at instanceof Date ? last.created_at.toISOString() : new Date(last.created_at).toISOString();
+            nextCursor = Buffer.from(`${createdAt}|${last.id}`).toString('base64');
         }
 
         return { items, nextCursor, hasMore };

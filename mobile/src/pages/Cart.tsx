@@ -30,6 +30,10 @@ export default function Cart() {
         }
     };
 
+    const handleRemoveFromCart = (productId: string) => {
+        dispatch({ type: 'REMOVE_FROM_CART', productId });
+    };
+
     if (state.cart.length === 0) {
         return (
             <div className="page fade-in">
@@ -68,15 +72,30 @@ export default function Cart() {
                         <div className="item-details">
                             <div className="item-name">{item.name}</div>
                             <div className="item-price">{formatPrice(item.price * item.quantity)}</div>
+                            <button
+                                type="button"
+                                className="cart-item-remove"
+                                onClick={() => handleRemoveFromCart(item.productId)}
+                                aria-label={`Remove ${item.name} from cart`}
+                            >
+                                Remove
+                            </button>
                         </div>
                         <div className="qty-controls">
-                            <button onClick={() => dispatch({ type: 'UPDATE_QTY', productId: item.productId, quantity: item.quantity - 1 })}>
+                            <button
+                                onClick={() => item.quantity === 1
+                                    ? handleRemoveFromCart(item.productId)
+                                    : dispatch({ type: 'UPDATE_QTY', productId: item.productId, quantity: item.quantity - 1 })
+                                }
+                                aria-label={item.quantity === 1 ? 'Remove from cart' : 'Decrease quantity'}
+                            >
                                 {item.quantity === 1 ? '🗑' : '−'}
                             </button>
                             <span>{item.quantity}</span>
                             <button
                                 onClick={() => dispatch({ type: 'UPDATE_QTY', productId: item.productId, quantity: item.quantity + 1 })}
                                 disabled={item.quantity >= item.available_stock}
+                                aria-label="Increase quantity"
                             >+</button>
                         </div>
                     </div>

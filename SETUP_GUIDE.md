@@ -235,6 +235,36 @@ Check the detailed guide in `TROUBLESHOOTING.md` for:
 
 ---
 
+## Delta updates (faster in-app upgrades)
+
+The desktop app can update by downloading only **changed blocks** (differential/delta) instead of the full installer, so upgrades are faster and use less bandwidth.
+
+### Why did 1.0.8 → 1.0.9 download the full installer?
+
+Delta updates need **two** blockmaps:
+
+1. **New version blockmap** (e.g. `MyShop-Setup-1.0.9.exe.blockmap`) on the **new** release (v1.0.9).
+2. **Old version blockmap** (e.g. `MyShop-Setup-1.0.8.exe.blockmap`) either:
+   - from the app’s **updater cache** (saved when you previously updated to 1.0.8 via the app), or  
+   - from the **old release** on GitHub (v1.0.8 must have the `.blockmap` file).
+
+If the **v1.0.8** GitHub release was created **without** the blockmap (e.g. before the script was updated to upload it), the updater cannot get the old blockmap and falls back to a **full download**. The same happens if you did a **fresh install** of 1.0.8 (no prior update cache).
+
+### What to do so future updates are delta
+
+1. **Use `npm run release` for every release**  
+   The release script now uploads the installer, `latest.yml`, and the **blockmap**. Each GitHub release must include the `.blockmap` file next to the `.exe`.
+
+2. **Confirm v1.0.9 (and later) have the blockmap on GitHub**  
+   On [Releases](https://github.com/rafikhanmanyar-star/MyShop/releases), open the release (e.g. v1.0.9) and check that **MyShop-Setup-1.0.9.exe.blockmap** is listed. If it’s missing, upload it from your `release/` folder so delta updates work for the **next** version (e.g. 1.0.9 → 1.0.10).
+
+3. **(Optional) Add blockmap to the v1.0.8 release**  
+   If you still have `release/MyShop-Setup-1.0.8.exe.blockmap`, upload it to the **v1.0.8** GitHub release. Then any user still on 1.0.8 can get a delta update to 1.0.9 instead of a full download.
+
+After this, **1.0.9 → 1.0.10** (and later) should use delta updates and download much less data.
+
+---
+
 ## Summary
 
 ✅ **Your app is ready to run!**
