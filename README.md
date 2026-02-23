@@ -213,7 +213,7 @@ Options:
 - `npm run release:major` — bump major version (1.0.0 → 2.0.0)
 - `.\build-and-push.ps1 -SkipRelease` — do not create a GitHub release (e.g. if `gh` is not installed)
 
-**Required for in-app updates:** In `package.json`, set `repository.url` to your real GitHub repo (e.g. `https://github.com/your-org/MyShop.git`). The desktop app uses this to find new releases when users click **Settings → App → Check for updates**.
+**Required for in-app updates:** The desktop app uses the repo [https://github.com/rafikhanmanyar-star/MyShop](https://github.com/rafikhanmanyar-star/MyShop) to find new releases when users click **Settings → App → Check for updates** (see `repository.url` in `package.json`).
 
 ### Optional: Standalone mode (local server + DB)
 
