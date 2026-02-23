@@ -14,6 +14,7 @@ import LandingPage from './pages/LandingPage';
 import BudgetDashboard from './pages/BudgetDashboard';
 import BudgetCreation from './pages/BudgetCreation';
 import BudgetDetail from './pages/BudgetDetail';
+import AccountSettings from './pages/AccountSettings';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
 
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="order-confirmed/:orderId" element={<OrderConfirm />} />
           <Route path="orders" element={<Orders />} />
           <Route path="orders/:id" element={<OrderDetail />} />
+          <Route path="account" element={<AccountSettings />} />
 
           {/* Budget Feature */}
           <Route path="budget" element={<BudgetDashboard />} />

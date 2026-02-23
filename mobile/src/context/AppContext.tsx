@@ -60,6 +60,7 @@ type Action =
     | { type: 'CLEAR_CART' }
     | { type: 'LOGIN'; customerId: string; phone: string; name: string | null; token: string }
     | { type: 'LOGOUT' }
+    | { type: 'UPDATE_CUSTOMER_PROFILE'; name: string | null }
     | { type: 'SHOW_TOAST'; message: string }
     | { type: 'HIDE_TOAST' };
 
@@ -153,6 +154,18 @@ function reducer(state: AppState, action: Action): AppState {
             localStorage.removeItem(AUTH_KEY);
             localStorage.removeItem(CUSTOMER_KEY);
             return { ...state, isLoggedIn: false, customerId: null, customerPhone: null, customerName: null };
+
+        case 'UPDATE_CUSTOMER_PROFILE': {
+            const customer = localStorage.getItem(CUSTOMER_KEY);
+            if (customer) {
+                try {
+                    const c = JSON.parse(customer);
+                    const updated = { ...c, name: action.name };
+                    localStorage.setItem(CUSTOMER_KEY, JSON.stringify(updated));
+                } catch { /* ignore */ }
+            }
+            return { ...state, customerName: action.name };
+        }
 
         case 'SHOW_TOAST':
             return { ...state, toast: action.message };
