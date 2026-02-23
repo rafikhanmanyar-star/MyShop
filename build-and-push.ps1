@@ -5,7 +5,8 @@
 #   1. Auto-increments the patch version (e.g. 1.0.0 -> 1.0.1)
 #   2. Builds the installable Windows desktop app (client-only; API & mobile run on Render)
 #   3. Commits all changes and pushes to GitHub
-#   4. Creates a GitHub Release with the installer attached (requires: gh CLI, gh auth login)
+#   4. Creates a GitHub Release and UPLOADS the .exe (so Settings -> App -> Check for updates works)
+#      Requires: GitHub CLI installed + gh auth login
 #
 # Usage:
 #   .\build-and-push.ps1                  # patch bump (default)
@@ -172,27 +173,59 @@ finally {
 Write-Host ""
 
 # -----------------------------------------------------------
-# Step 5: Create GitHub Release and upload installer
+# Step 5: Create GitHub Release and UPLOAD installer (.exe)
+#        (Required for Settings -> App -> Check for updates)
 # -----------------------------------------------------------
 if (-not $SkipRelease) {
-    Write-Host "[5/5] Creating GitHub Release v$newVersion..." -ForegroundColor Yellow
+    Write-Host "[5/5] Creating GitHub Release and uploading installer..." -ForegroundColor Yellow
+
+    # Require GitHub CLI so the in-app updater can find the release
+    $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+    if (-not $ghCmd) {
+        Write-Host "  GitHub CLI (gh) is not installed. Install it so the .exe is uploaded to Releases." -ForegroundColor Red
+        Write-Host "  Install: winget install GitHub.cli" -ForegroundColor Cyan
+        Write-Host "  Then run: gh auth login" -ForegroundColor Cyan
+        Write-Host "  Then run this script again: npm run release" -ForegroundColor Cyan
+        exit 1
+    }
+
     $tagName = "v$newVersion"
     $installerName = "MyShop Setup $newVersion.exe"
     $installerPath = "$ProjectRoot\release\$installerName"
 
     if (-not (Test-Path $installerPath)) {
-        Write-Host "  Installer not found: $installerPath" -ForegroundColor Red
-        Write-Host "  Skipping release. Use -SkipRelease to suppress this step." -ForegroundColor DarkGray
-    } else {
-        try {
-            gh release create $tagName $installerPath --title $tagName --notes "MyShop desktop app v$newVersion"
-            if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
-            Write-Host "  Release created: $tagName" -ForegroundColor Green
-            Write-Host "  Installer uploaded. Users can update via Settings -> Check for updates." -ForegroundColor Green
-        } catch {
-            Write-Host "  Release failed (install gh and run 'gh auth login' if needed): $_" -ForegroundColor Yellow
-            Write-Host "  Installer is in ./release/ - upload manually to GitHub Releases if desired." -ForegroundColor DarkGray
+        $fallback = Get-ChildItem -Path "$ProjectRoot\release" -Filter "MyShop Setup *.exe" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($fallback) {
+            $installerPath = $fallback.FullName
+            Write-Host "  Using installer: $($fallback.Name)" -ForegroundColor Cyan
         }
+    }
+
+    if (-not (Test-Path $installerPath)) {
+        Write-Host "  Installer not found: $installerPath" -ForegroundColor Red
+        Write-Host "  Build may have failed or output is elsewhere. Check ./release/" -ForegroundColor DarkGray
+        exit 1
+    }
+
+    Push-Location $ProjectRoot
+    try {
+        gh release create $tagName $installerPath --title $tagName --notes "MyShop desktop app v$newVersion"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  gh release create failed. Run: gh auth login" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "  Release created: $tagName" -ForegroundColor Green
+        Write-Host "  Installer uploaded to: https://github.com/rafikhanmanyar-star/MyShop/releases" -ForegroundColor Green
+        Write-Host "  Users can now use Settings -> App -> Check for updates." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  Release failed: $_" -ForegroundColor Red
+        Write-Host "  Run: gh auth login" -ForegroundColor Cyan
+        Pop-Location
+        exit 1
+    }
+    finally {
+        Pop-Location
     }
 } else {
     Write-Host "[5/5] Skipping GitHub Release (-SkipRelease)." -ForegroundColor DarkGray
