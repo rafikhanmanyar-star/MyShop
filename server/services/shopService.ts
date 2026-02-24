@@ -4,11 +4,11 @@ import { COA } from '../constants/accountCodes.js';
 
 export interface ShopSale {
   id?: string;
-  branchId: string;
-  terminalId: string;
-  userId: string;
-  customerId?: string;
-  loyaltyMemberId?: string;
+  branchId?: string | null;
+  terminalId?: string | null;
+  userId?: string | null;
+  customerId?: string | null;
+  loyaltyMemberId?: string | null;
   saleNumber: string;
   subtotal: number;
   taxTotal: number;
@@ -380,6 +380,10 @@ export class ShopService {
 
   // --- Sales Methods ---
   async createSale(tenantId: string, saleData: ShopSale) {
+    if (!saleData?.items?.length) {
+      throw new Error('Sale must have at least one item');
+    }
+    const paymentDetails = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [];
     return this.db.transaction(async (client) => {
       const saleRes = await client.query(`
         INSERT INTO shop_sales (
@@ -390,11 +394,21 @@ export class ShopService {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING id
       `, [
-        tenantId, saleData.branchId, saleData.terminalId, saleData.userId,
-        saleData.customerId, saleData.loyaltyMemberId, saleData.saleNumber,
-        saleData.subtotal, saleData.taxTotal, saleData.discountTotal,
-        saleData.grandTotal, saleData.totalPaid, saleData.changeDue,
-        saleData.paymentMethod, JSON.stringify(saleData.paymentDetails)
+        tenantId,
+        saleData.branchId ?? null,
+        saleData.terminalId ?? null,
+        saleData.userId ?? null,
+        saleData.customerId ?? null,
+        saleData.loyaltyMemberId ?? null,
+        saleData.saleNumber,
+        saleData.subtotal,
+        saleData.taxTotal,
+        saleData.discountTotal,
+        saleData.grandTotal,
+        saleData.totalPaid,
+        saleData.changeDue,
+        saleData.paymentMethod ?? 'Cash',
+        JSON.stringify(paymentDetails)
       ]);
 
       const saleId = saleRes[0].id;

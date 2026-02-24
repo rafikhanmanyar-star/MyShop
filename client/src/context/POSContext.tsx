@@ -374,10 +374,19 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const completeSale = useCallback(async () => {
         try {
+            if (cart.length === 0) {
+                alert('Please add at least one item to the cart.');
+                return;
+            }
+            if (payments.length === 0 || totals.totalPaid < totals.grandTotal) {
+                alert('Please add payment covering the sale total.');
+                return;
+            }
+
             const saleNumber = `SALE-${Date.now()}`;
             const saleData = {
-                branchId: selectedBranchId,
-                terminalId: selectedTerminalId,
+                branchId: selectedBranchId ?? undefined,
+                terminalId: selectedTerminalId ?? undefined,
                 userId: currentUserId ?? undefined,
                 customerId: customer?.id,
                 loyaltyMemberId: null, // TODO: Link loyalty member
@@ -404,8 +413,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             await shopApi.createSale(saleData);
 
-            // Save sale data for receipt printing
-            setLastCompletedSale(saleData);
+            // Save sale data for receipt printing (include id from response if needed)
+            setLastCompletedSale({ ...saleData, saleNumber });
 
             clearCart();
             // Keep modal open so user can print receipt
@@ -413,10 +422,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return saleData;
         } catch (error: any) {
             console.error('Failed to complete sale:', error);
-            alert('Error completing sale: ' + (error.message || 'Unknown error'));
+            const message = (error && (typeof error === 'object' && ('error' in error) ? error.error : error.message))
+                || (error instanceof Error ? error.message : null)
+                || 'Unknown error';
+            alert('Error completing sale: ' + message);
             throw error;
         }
-    }, [cart, customer, payments, totals, clearCart, currentUserId]);
+    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId]);
 
     const applyGlobalDiscount = useCallback((percentage: number) => {
         setCart(prev => prev.map(item => {

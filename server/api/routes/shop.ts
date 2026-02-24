@@ -337,7 +337,12 @@ router.post('/sales', checkRole(['admin', 'pos_cashier']), async (req: any, res)
     const saleId = await getShopService().createSale(req.tenantId, body);
     res.status(201).json({ id: saleId, message: 'Sale completed successfully' });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const message = (error && typeof error === 'object' && 'message' in error)
+      ? error.message
+      : String(error ?? 'Internal server error');
+    const safeMessage = message || 'Internal server error';
+    console.error('POST /shop/sales failed:', safeMessage, error);
+    res.status(500).json({ error: safeMessage });
   }
 });
 
