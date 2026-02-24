@@ -21,6 +21,7 @@ export interface ShopInfo {
     slug: string;
     address?: string | null;
     phone?: string | null;
+    branchId?: string | null;
 }
 
 export interface TenantBranding {
@@ -45,6 +46,7 @@ export interface ShopSettings {
 interface AppState {
     shopSlug: string | null;
     shop: ShopInfo | null;
+    branchId: string | null;
     settings: ShopSettings | null;
     branding: TenantBranding | null;
     cart: CartItem[];
@@ -99,6 +101,7 @@ const initialAuth = loadAuth();
 const initialState: AppState = {
     shopSlug: null,
     shop: null,
+    branchId: null,
     settings: null,
     branding: null,
     cart: loadCart(),
@@ -112,7 +115,14 @@ const initialState: AppState = {
 function reducer(state: AppState, action: Action): AppState {
     switch (action.type) {
         case 'SET_SHOP':
-            return { ...state, shopSlug: action.slug, shop: action.shop, settings: action.settings, branding: action.branding };
+            return {
+                ...state,
+                shopSlug: action.slug,
+                shop: action.shop,
+                branchId: action.shop?.branchId ?? null,
+                settings: action.settings,
+                branding: action.branding,
+            };
 
         case 'ADD_TO_CART': {
             const existing = state.cart.find(i => i.productId === action.item.productId);

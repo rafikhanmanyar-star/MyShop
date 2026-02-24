@@ -201,6 +201,15 @@ const SettingsContent: React.FC = () => {
         }
     };
 
+    const handleActivateVendor = async (id: string) => {
+        try {
+            await shopApi.updateVendor(id, { is_active: true });
+            loadVendors();
+        } catch (e: any) {
+            alert(e?.message || 'Failed to activate vendor');
+        }
+    };
+
     const handleDeactivateUser = async (id: string) => {
         if (!confirm('Deactivate this user? They will no longer be able to login.')) return;
         try {
@@ -380,16 +389,27 @@ const SettingsContent: React.FC = () => {
                                                             </span>
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
-                                                            {v.is_active && (
-                                                                <div className="flex justify-end gap-2">
-                                                                    <button onClick={() => openEditVendor(v)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors">
-                                                                        {ICONS.edit}
-                                                                    </button>
-                                                                    <button onClick={() => handleDeactivateVendor(v.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
-                                                                        {ICONS.trash}
-                                                                    </button>
-                                                                </div>
-                                                            )}
+                                                            <div className="flex justify-end gap-2">
+                                                                {v.is_active ? (
+                                                                    <>
+                                                                        <button onClick={() => openEditVendor(v)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors" title="Edit">
+                                                                            {ICONS.edit}
+                                                                        </button>
+                                                                        <button onClick={() => handleDeactivateVendor(v.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors" title="Deactivate">
+                                                                            {ICONS.trash}
+                                                                        </button>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <button onClick={() => handleActivateVendor(v.id)} className="p-2 text-slate-300 hover:text-emerald-600 transition-colors" title="Activate">
+                                                                            {ICONS.checkCircle}
+                                                                        </button>
+                                                                        <button onClick={() => openEditVendor(v)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors" title="Edit">
+                                                                            {ICONS.edit}
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))

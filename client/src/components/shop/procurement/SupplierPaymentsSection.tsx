@@ -1,11 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { procurementApi, shopApi } from '../../../services/shopApi';
 import Button from '../../ui/Button';
 import Select from '../../ui/Select';
+import type { PaymentPrefill } from '../ProcurementPage';
 
 const CURRENCY = 'PKR';
 
-export default function SupplierPaymentsSection() {
+interface SupplierPaymentsSectionProps {
+  initialPrefill?: PaymentPrefill | null;
+  onClearPrefill?: () => void;
+}
+
+export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill }: SupplierPaymentsSectionProps) {
   const [vendors, setVendors] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [billsWithBalance, setBillsWithBalance] = useState<any[]>([]);
@@ -22,6 +28,7 @@ export default function SupplierPaymentsSection() {
     allocations: [] as { purchaseBillId: string; amount: number }[],
   });
   const [allocateInputs, setAllocateInputs] = useState<Record<string, string>>({});
+  const appliedPrefillRef = useRef(false);
 
   useEffect(() => {
     Promise.all([shopApi.getVendors(), shopApi.getBankAccounts()]).then(([v, b]) => {
@@ -31,6 +38,19 @@ export default function SupplierPaymentsSection() {
     procurementApi.getSupplierPayments().then((r) => setPayments(Array.isArray(r) ? r : []));
   }, []);
 
+  // Apply prefill when opened from "Pay remaining" on a purchase bill
+  useEffect(() => {
+    if (!initialPrefill || !onClearPrefill) return;
+    setForm((f) => ({
+      ...f,
+      supplierId: initialPrefill.supplierId,
+      amount: initialPrefill.amount,
+      allocations: [...initialPrefill.allocations],
+    }));
+    appliedPrefillRef.current = true;
+    onClearPrefill();
+  }, [initialPrefill, onClearPrefill]);
+
   useEffect(() => {
     if (!form.supplierId) {
       setBillsWithBalance([]);
@@ -39,13 +59,20 @@ export default function SupplierPaymentsSection() {
       return;
     }
     procurementApi.getBillsWithBalance(form.supplierId).then((r) => {
-      setBillsWithBalance(Array.isArray(r) ? r : []);
-      setForm((f) => ({ ...f, allocations: [] }));
-      setAllocateInputs({});
+      const list = Array.isArray(r) ? r : [];
+      setBillsWithBalance(list);
+      if (!appliedPrefillRef.current) {
+        setForm((f) => ({ ...f, allocations: [] }));
+        setAllocateInputs({});
+      }
+      appliedPrefillRef.current = false;
     });
   }, [form.supplierId]);
 
-  const handleAllocate = (billId: string, amount: number) => {
+  const handleAllocate = (billId: string, amountOrBlank?: number) => {
+    const bill = billsWithBalance.find((b) => b.id === billId);
+    const balanceDue = bill ? Number(bill.balance_due) || 0 : 0;
+    const amount = amountOrBlank != null && amountOrBlank > 0 ? amountOrBlank : balanceDue;
     if (amount <= 0) return;
     setForm((f) => {
       const existing = f.allocations.find((a) => a.purchaseBillId === billId);
@@ -130,34 +157,63 @@ export default function SupplierPaymentsSection() {
           {billsWithBalance.length > 0 && (
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
               <p className="text-xs font-bold text-amber-800 uppercase mb-2">Bills with balance — allocate payment to bills</p>
-              {billsWithBalance.map((b) => (
-                <div key={b.id} className="flex flex-wrap items-center gap-2 py-2 border-b border-amber-100 last:border-0">
-                  <span className="text-sm font-medium">{b.bill_number}</span>
-                  <span className="text-slate-500 text-xs">Balance: {CURRENCY} {Number(b.balance_due).toLocaleString()}</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Amount"
-                    value={allocateInputs[b.id] ?? ''}
-                    onChange={(e) => setAllocateInputs((prev) => ({ ...prev, [b.id]: e.target.value }))}
-                    className="w-24 border border-slate-200 rounded px-2 py-1 text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleAllocate(b.id, parseFloat(allocateInputs[b.id] || '0') || 0)}
-                    className="text-xs font-bold text-indigo-600 hover:underline"
-                  >
-                    Allocate
-                  </button>
-                  {form.allocations.find((a) => a.purchaseBillId === b.id) && (
-                    <span className="text-xs text-emerald-600">
-                      Allocated: {CURRENCY} {form.allocations.find((a) => a.purchaseBillId === b.id)?.amount.toLocaleString()}
-                      <button type="button" onClick={() => removeAllocation(b.id)} className="ml-1 text-rose-500">✕</button>
-                    </span>
-                  )}
-                </div>
-              ))}
+              {billsWithBalance.map((b) => {
+                const billId = b.id;
+                const inputVal = allocateInputs[billId] ?? '';
+                const alloc = form.allocations.find((a) => a.purchaseBillId === billId);
+                return (
+                  <div key={billId} className="flex flex-wrap items-center gap-2 py-2 border-b border-amber-100 last:border-0">
+                    <span className="text-sm font-medium">{b.bill_number}</span>
+                    <span className="text-slate-500 text-xs">Balance: {CURRENCY} {Number(b.balance_due).toLocaleString()}</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={Number(b.balance_due) || undefined}
+                      placeholder="Amount"
+                      value={inputVal}
+                      onChange={(e) => setAllocateInputs((prev) => ({ ...prev, [billId]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAllocate(billId, parseFloat(inputVal) || 0);
+                        }
+                      }}
+                      className="w-24 border border-slate-200 rounded px-2 py-1.5 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const num = parseFloat(inputVal);
+                        handleAllocate(billId, Number.isNaN(num) || num <= 0 ? undefined : num);
+                      }}
+                      className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg cursor-pointer transition-colors select-none"
+                    >
+                      Allocate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleAllocate(billId);
+                      }}
+                      className="px-2 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                      title="Allocate full balance"
+                    >
+                      Full balance
+                    </button>
+                    {alloc && (
+                      <span className="text-xs text-emerald-600 flex items-center gap-1">
+                        Allocated: {CURRENCY} {alloc.amount.toLocaleString()}
+                        <button type="button" onClick={() => removeAllocation(billId)} className="ml-1 text-rose-500 hover:text-rose-700 cursor-pointer" aria-label="Remove allocation">✕</button>
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
               {form.allocations.length > 0 && (
                 <p className="text-xs font-bold text-slate-600 mt-2">
                   Total allocated: {CURRENCY} {totalAllocated.toLocaleString()}

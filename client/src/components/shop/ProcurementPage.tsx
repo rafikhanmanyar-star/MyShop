@@ -1,8 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { FileText, CreditCard, BarChart3 } from 'lucide-react';
+import { InventoryProvider } from '../../context/InventoryContext';
 import PurchaseBillsSection from './procurement/PurchaseBillsSection';
 import SupplierPaymentsSection from './procurement/SupplierPaymentsSection';
 import ProcurementReports from './procurement/ProcurementReports';
+
+export type PaymentPrefill = {
+  supplierId: string;
+  supplierName?: string;
+  amount: number;
+  allocations: { purchaseBillId: string; amount: number }[];
+};
 
 type TabId = 'bills' | 'payments' | 'reports';
 
@@ -14,6 +22,22 @@ const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
 
 const ProcurementPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('bills');
+  const [paymentPrefill, setPaymentPrefill] = useState<PaymentPrefill | null>(null);
+
+  const handlePayRemaining = useCallback((bill: { id: string; supplier_id?: string; supplier_name?: string; balance_due: number }) => {
+    const supplierId = bill.supplier_id ?? (bill as any).supplierId;
+    const balanceDue = Number(bill.balance_due) || 0;
+    if (!supplierId || balanceDue <= 0) return;
+    setPaymentPrefill({
+      supplierId,
+      supplierName: bill.supplier_name ?? (bill as any).supplierName,
+      amount: balanceDue,
+      allocations: [{ purchaseBillId: bill.id, amount: balanceDue }],
+    });
+    setActiveTab('payments');
+  }, []);
+
+  const clearPaymentPrefill = useCallback(() => setPaymentPrefill(null), []);
 
   return (
     <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
@@ -43,8 +67,14 @@ const ProcurementPage: React.FC = () => {
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-8">
-        {activeTab === 'bills' && <PurchaseBillsSection />}
-        {activeTab === 'payments' && <SupplierPaymentsSection />}
+        {activeTab === 'bills' && (
+          <InventoryProvider>
+            <PurchaseBillsSection onPayRemaining={handlePayRemaining} />
+          </InventoryProvider>
+        )}
+        {activeTab === 'payments' && (
+          <SupplierPaymentsSection initialPrefill={paymentPrefill} onClearPrefill={clearPaymentPrefill} />
+        )}
         {activeTab === 'reports' && <ProcurementReports />}
       </div>
     </div>

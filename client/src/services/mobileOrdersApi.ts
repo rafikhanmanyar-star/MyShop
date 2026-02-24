@@ -70,6 +70,9 @@ export interface ShopBranding {
     lat?: number | null;
     lng?: number | null;
     company_name: string;
+    branchId?: string | null;
+    branch_name?: string | null;
+    branch_location?: string | null;
 }
 
 export const mobileOrdersApi = {
@@ -93,15 +96,15 @@ export const mobileOrdersApi = {
     updateSettings: (data: Partial<MobileOrderingSettings>) =>
         apiClient.put<MobileOrderingSettings>('/shop/mobile-orders/settings', data),
 
-    // Branding
-    getBranding: () =>
-        apiClient.get<ShopBranding>('/shop/mobile-orders/branding'),
+    // Branding (optional branchId for per-branch slug / branding)
+    getBranding: (branchId?: string | null) =>
+        apiClient.get<ShopBranding>(`/shop/mobile-orders/branding${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''}`),
     updateBranding: (data: Partial<ShopBranding>) =>
         apiClient.put('/shop/mobile-orders/branding', data),
 
-    // QR Code
-    getQRCode: () =>
-        apiClient.get<{ slug: string; url: string; qrData: string }>('/shop/mobile-orders/qr-code'),
+    // QR Code (optional branchId for per-branch QR at branch door)
+    getQRCode: (branchId?: string | null) =>
+        apiClient.get<{ slug: string; url: string; qrData: string; branchId?: string | null }>(`/shop/mobile-orders/qr-code${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''}`),
 
     // Product mobile visibility
     updateProductMobile: (id: string, data: {

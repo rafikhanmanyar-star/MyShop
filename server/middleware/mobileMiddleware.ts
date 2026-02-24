@@ -2,10 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { IDatabaseService } from '../services/databaseService.js';
 import { runWithTenantContext } from '../services/tenantContext.js';
+import { getMobileCustomerService } from '../services/mobileCustomerService.js';
 
 /**
- * Resolves tenant from :shopSlug URL param. No authentication required.
- * Used for public product browsing endpoints.
+ * Resolves tenant (and branch when slug is branch URL) from :shopSlug URL param.
+ * Tries branch slug first, then tenant slug. Sets req.tenantId, req.branchId, req.shop.
  */
 export function publicTenantMiddleware(db: IDatabaseService) {
     return async (req: any, res: Response, next: NextFunction) => {
@@ -15,18 +16,23 @@ export function publicTenantMiddleware(db: IDatabaseService) {
                 return res.status(400).json({ error: 'Shop identifier is required' });
             }
 
-            const rows = await db.query(
-                'SELECT id, name, company_name, logo_url, brand_color, slug, address, phone FROM tenants WHERE slug = $1',
-                [slug]
-            );
-
-            if (rows.length === 0) {
+            const shop = await getMobileCustomerService().resolveShopBySlug(slug);
+            if (!shop) {
                 return res.status(404).json({ error: 'Shop not found' });
             }
 
-            const tenant = rows[0];
+            const tenantRow = await db.query(
+                'SELECT id, name, company_name, logo_url, brand_color, slug, address, phone FROM tenants WHERE id = $1',
+                [shop.id]
+            );
+            if (tenantRow.length === 0) {
+                return res.status(404).json({ error: 'Shop not found' });
+            }
+
+            const tenant = tenantRow[0];
             req.tenantId = tenant.id;
-            req.shop = tenant;
+            req.branchId = shop.branchId || null;
+            req.shop = { ...tenant, branchId: shop.branchId };
 
             return await runWithTenantContext(
                 { tenantId: tenant.id },

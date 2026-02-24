@@ -4,8 +4,20 @@ import { useInventory } from '../../../context/InventoryContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
 
+const BAR_COLORS = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-500'];
+
 const InventoryDashboard: React.FC = () => {
-    const { items, lowStockItems, totalInventoryValue } = useInventory();
+    const { items, lowStockItems, totalInventoryValue, warehouses } = useInventory();
+
+    // Real branch/warehouse inventory: units per warehouse and % of total stock
+    const warehouseUtilization = React.useMemo(() => {
+        const totalUnits = items.reduce((sum, i) => sum + i.onHand, 0);
+        return warehouses.map((wh, i) => {
+            const unitsAtWh = items.reduce((sum, item) => sum + (item.warehouseStock?.[wh.id] ?? 0), 0);
+            const pct = totalUnits > 0 ? Math.round((unitsAtWh / totalUnits) * 100) : 0;
+            return { id: wh.id, name: wh.name, units: unitsAtWh, pct, color: BAR_COLORS[i % BAR_COLORS.length] };
+        });
+    }, [warehouses, items]);
 
     const stats = [
         { label: 'Total SKUs', value: items.length, icon: ICONS.package, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -78,21 +90,22 @@ const InventoryDashboard: React.FC = () => {
                 <Card className="border-none shadow-sm p-6 space-y-6">
                     <h3 className="font-bold text-slate-800">Warehouse Utilization</h3>
                     <div className="space-y-6">
-                        {['Main Warehouse', 'Downtown Store', 'Online Fulfillment'].map((wh, i) => (
-                            <div key={i} className="space-y-2">
+                        {warehouseUtilization.length > 0 ? warehouseUtilization.map((wh) => (
+                            <div key={wh.id} className="space-y-2">
                                 <div className="flex justify-between text-xs font-bold">
-                                    <span className="text-slate-600">{wh}</span>
-                                    <span className="text-slate-400">{[85, 42, 68][i]}% capacity</span>
+                                    <span className="text-slate-600">{wh.name}</span>
+                                    <span className="text-slate-400">{wh.pct}% of stock</span>
                                 </div>
                                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                                     <div
-                                        className={`h-full rounded-full transition-all duration-1000 ${i === 0 ? 'bg-indigo-600' : i === 1 ? 'bg-emerald-500' : 'bg-amber-500'
-                                            }`}
-                                        style={{ width: `${(i === 0 ? 85 : i === 1 ? 42 : 70)}%` }}
-                                    ></div>
+                                        className={`h-full rounded-full transition-all duration-1000 ${wh.color}`}
+                                        style={{ width: `${Math.min(100, wh.pct)}%` }}
+                                    />
                                 </div>
                             </div>
-                        ))}
+                        )) : (
+                            <p className="text-sm text-slate-400 italic">No warehouses. Add branches to see inventory by location.</p>
+                        )}
                     </div>
 
                     <div className="pt-6 border-t border-slate-100">

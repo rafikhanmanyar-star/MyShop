@@ -61,6 +61,7 @@ export default function Checkout() {
                 deliveryNotes: notes || undefined,
                 paymentMethod: 'COD',
                 idempotencyKey,
+                ...(state.branchId ? { branchId: state.branchId } : {}),
             });
 
             dispatch({ type: 'CLEAR_CART' });

@@ -89,25 +89,43 @@ router.put('/settings', checkRole(['admin']), async (req: any, res) => {
 });
 
 // ─── Shop Branding / Slug (Admin) ───────────────────────────────────
+// Optional query: ?branchId=... to load branding for a specific branch (slug + branch info).
 router.get('/branding', checkRole(['admin']), async (req: any, res) => {
     try {
         const db = getDatabaseService();
         const { getShopService } = await import('../../services/shopService.js');
+        const branchId = req.query.branchId as string | undefined;
 
-        // Get basic info from tenants
         const tenantRows = await db.query(
             'SELECT slug, company_name FROM tenants WHERE id = $1',
             [req.tenantId]
         );
         if (tenantRows.length === 0) return res.status(404).json({ error: 'Tenant not found' });
 
-        // Get detailed branding from tenant_branding
         const branding = await getShopService().getTenantBranding(req.tenantId);
+        let slug = tenantRows[0].slug;
+        let branch_name: string | null = null;
+        let branch_location: string | null = null;
+
+        if (branchId) {
+            const branchRows = await db.query(
+                'SELECT slug, name, location FROM shop_branches WHERE id = $1 AND tenant_id = $2',
+                [branchId, req.tenantId]
+            );
+            if (branchRows.length > 0) {
+                slug = branchRows[0].slug || slug;
+                branch_name = branchRows[0].name;
+                branch_location = branchRows[0].location;
+            }
+        }
 
         res.json({
             ...branding,
-            slug: tenantRows[0].slug,
-            company_name: tenantRows[0].company_name
+            slug,
+            company_name: tenantRows[0].company_name,
+            branchId: branchId || null,
+            branch_name: branch_name || null,
+            branch_location: branch_location || null,
         });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -118,12 +136,17 @@ router.put('/branding', checkRole(['admin']), async (req: any, res) => {
     try {
         const db = getDatabaseService();
         const { getShopService } = await import('../../services/shopService.js');
+        const branchId = req.body.branchId as string | undefined;
 
-        // 1. Update slug if provided in tenants table
+        // 1. Slug: if branchId provided, update branch slug; else update tenant slug (legacy)
         if (req.body.slug !== undefined) {
-            await getMobileCustomerService().updateTenantBranding(req.tenantId, {
-                slug: req.body.slug
-            });
+            if (branchId) {
+                await getShopService().updateBranch(req.tenantId, branchId, { slug: req.body.slug });
+            } else {
+                await getMobileCustomerService().updateTenantBranding(req.tenantId, {
+                    slug: req.body.slug
+                });
+            }
         }
 
         // 2. Update company_name if provided
@@ -135,25 +158,28 @@ router.put('/branding', checkRole(['admin']), async (req: any, res) => {
         }
 
         // 3. Update detailed branding in tenant_branding table
-        // We also sync primary_color to brand_color in tenants table for backward compatibility
         const brandingData = {
             ...req.body,
             logo_url: req.body.logo_url,
-            primary_color: req.body.primary_color || req.body.brand_color // Allow both
+            primary_color: req.body.primary_color || req.body.brand_color
         };
 
         const updatedBranding = await getShopService().updateTenantBranding(req.tenantId, brandingData);
 
-        // Also sync logo and brand_color to tenants table for compatibility with existing mobile logic
         await db.execute(
             'UPDATE tenants SET logo_url = $1, brand_color = $2 WHERE id = $3',
             [updatedBranding.logo_url, updatedBranding.primary_color, req.tenantId]
         );
 
+        const outSlug = req.body.slug !== undefined ? req.body.slug : (branchId
+            ? (await db.query('SELECT slug FROM shop_branches WHERE id = $1 AND tenant_id = $2', [branchId, req.tenantId]))[0]?.slug
+            : (await db.query('SELECT slug FROM tenants WHERE id = $1', [req.tenantId]))[0]?.slug);
+
         res.json({
             ...updatedBranding,
-            slug: req.body.slug,
-            company_name: req.body.company_name
+            slug: outSlug,
+            company_name: req.body.company_name,
+            branchId: branchId || null,
         });
     } catch (error: any) {
         res.status(400).json({ error: error.message });
@@ -161,21 +187,35 @@ router.put('/branding', checkRole(['admin']), async (req: any, res) => {
 });
 
 // ─── QR Code data ───────────────────────────────────────────────────
-// Returns the shop URL to encode in a QR code. The POS client renders
-// the actual scannable QR using qrcode.react, and can print it as a
-// sticker for customers to scan with their phone camera.
+// Optional query: ?branchId=... to get QR for that branch's slug (for sticker at branch door).
 router.get('/qr-code', checkRole(['admin']), async (req: any, res) => {
     try {
-        const slug = await getMobileCustomerService().getOrCreateSlug(req.tenantId);
-        // In production, set MOBILE_APP_URL to your deployed PWA domain
-        // e.g. https://order.myshop.com
+        const db = getDatabaseService();
+        const branchId = req.query.branchId as string | undefined;
+        let slug: string;
+
+        if (branchId) {
+            const branchRows = await db.query(
+                'SELECT slug FROM shop_branches WHERE id = $1 AND tenant_id = $2',
+                [branchId, req.tenantId]
+            );
+            if (branchRows.length === 0) return res.status(404).json({ error: 'Branch not found' });
+            slug = branchRows[0].slug;
+            if (!slug) {
+                return res.status(400).json({ error: 'This branch has no URL slug. Set a slug in App Branding for this branch first.' });
+            }
+        } else {
+            slug = await getMobileCustomerService().getOrCreateSlug(req.tenantId);
+        }
+
         const baseUrl = process.env.MOBILE_APP_URL || 'http://localhost:5175';
         const shopUrl = `${baseUrl}/${slug}`;
 
         res.json({
             slug,
             url: shopUrl,
-            qrData: shopUrl, // The data to encode in the QR code
+            qrData: shopUrl,
+            branchId: branchId || null,
         });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

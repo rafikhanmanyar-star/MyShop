@@ -32,15 +32,37 @@ export class MobileCustomerService {
     private db = getDatabaseService();
 
     // ─── Tenant / Shop Discovery ────────────────────────────────────────
-
-    async resolveShopBySlug(slug: string) {
+    // Resolve by branch slug first (QR at branch door), then by tenant slug (legacy).
+    async resolveShopBySlug(slug: string): Promise<{ id: string; name: string; company_name: string; logo_url?: string; brand_color?: string; slug: string; branchId?: string } | null> {
+        const { getShopService } = await import('./shopService.js');
+        const branch = await getShopService().getBranchBySlug(slug);
+        if (branch) {
+            const tenantRows = await this.db.query(
+                `SELECT id, name, company_name, logo_url, brand_color FROM tenants WHERE id = $1`,
+                [branch.tenant_id]
+            );
+            if (tenantRows.length === 0) return null;
+            return {
+                ...tenantRows[0],
+                slug: branch.slug || slug,
+                branchId: branch.id,
+            };
+        }
         const rows = await this.db.query(
             `SELECT id, name, company_name, email, logo_url, brand_color, slug
        FROM tenants WHERE slug = $1`,
             [slug]
         );
         if (rows.length === 0) return null;
-        return rows[0];
+        const tenant = rows[0];
+        const firstBranch = await this.db.query(
+            'SELECT id FROM shop_branches WHERE tenant_id = $1 ORDER BY name ASC LIMIT 1',
+            [tenant.id]
+        );
+        return {
+            ...tenant,
+            branchId: firstBranch.length > 0 ? firstBranch[0].id : undefined,
+        };
     }
 
     async getOrCreateSlug(tenantId: string): Promise<string> {

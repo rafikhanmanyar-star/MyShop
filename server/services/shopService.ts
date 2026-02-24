@@ -58,13 +58,14 @@ export class ShopService {
       const res = await client.query(`
         INSERT INTO shop_branches (
           tenant_id, name, code, type, region,
-          manager_name, contact_no, timezone, open_time, close_time, location
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          manager_name, contact_no, timezone, open_time, close_time, location, slug
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING id
       `, [
         tenantId, data.name, branchCode, data.type || 'Express', data.region || '',
         managerName, contactNo, data.timezone || 'GMT+5',
-        data.openTime || '09:00', data.closeTime || '21:00', data.location || ''
+        data.openTime || '09:00', data.closeTime || '21:00', data.location || '',
+        data.slug || null
       ]);
 
       const branchId = res[0].id;
@@ -87,6 +88,25 @@ export class ShopService {
     return this.db.transaction(async (client) => {
       const managerName = data.managerName || data.manager;
       const contactNo = data.contactNo || data.contact;
+      const slugVal = data.slug !== undefined ? (data.slug === '' ? null : data.slug) : undefined;
+
+      if (slugVal !== undefined) {
+        const slugToUse = slugVal === null ? null : String(slugVal).toLowerCase().trim().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 50) || null;
+        if (slugToUse && !/^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/.test(slugToUse)) {
+          throw new Error('Invalid slug format. Use lowercase letters, numbers, and hyphens (3-50 chars).');
+        }
+        const existing = await client.query(
+          'SELECT id FROM shop_branches WHERE slug = $1 AND id != $2',
+          [slugToUse, branchId]
+        );
+        if (existing.length > 0) {
+          throw new Error('This shop URL is already taken. Please choose another.');
+        }
+        await client.query(
+          'UPDATE shop_branches SET slug = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3',
+          [slugToUse, branchId, tenantId]
+        );
+      }
 
       await client.query(`
         UPDATE shop_branches
@@ -103,6 +123,15 @@ export class ShopService {
       ]);
       return branchId;
     });
+  }
+
+  /** Resolve branch by globally unique slug (for mobile QR URL). */
+  async getBranchBySlug(slug: string): Promise<{ id: string; tenant_id: string; name: string; code: string; location: string; slug: string | null } | null> {
+    const rows = await this.db.query(
+      'SELECT id, tenant_id, name, code, location, slug FROM shop_branches WHERE slug = $1',
+      [slug]
+    );
+    return rows.length > 0 ? rows[0] : null;
   }
 
   // --- Warehouse Methods ---

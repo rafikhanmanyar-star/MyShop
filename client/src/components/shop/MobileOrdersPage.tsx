@@ -12,6 +12,13 @@ import {
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
 
+interface ShopBranchOption {
+    id: string;
+    name: string;
+    code: string;
+    location?: string;
+}
+
 // ─── Status Config ────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
     Pending: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', icon: Clock },
@@ -625,6 +632,8 @@ function OrderDetailPanel({
 // ─── Settings Panel ───────────────────────────────────────
 function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
     const { settings, branding, loadSettings, loadBranding, updateSettings, updateBranding } = useMobileOrders();
+    const [branches, setBranches] = useState<ShopBranchOption[]>([]);
+    const [selectedBranchId, setSelectedBranchId] = useState<string>('');
     const [qrData, setQrData] = useState<{ slug: string; url: string } | null>(null);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -637,7 +646,9 @@ function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
     useEffect(() => {
         loadSettings();
         loadBranding();
-        mobileOrdersApi.getQRCode().then(setQrData).catch(() => { });
+        shopApi.getBranches().then((list: any[]) => {
+            setBranches(list.map((b: any) => ({ id: b.id, name: b.name, code: b.code, location: b.location })));
+        }).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -645,8 +656,17 @@ function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
     }, [settings]);
 
     useEffect(() => {
-        if (branding) setLocalBranding({ ...branding });
-    }, [branding]);
+        if (branding && !selectedBranchId) setLocalBranding({ ...branding });
+    }, [branding, selectedBranchId]);
+
+    // When branch selection changes, load branding and QR for that branch (or tenant default)
+    useEffect(() => {
+        const branchId = selectedBranchId || undefined;
+        mobileOrdersApi.getBranding(branchId).then((b) => {
+            setLocalBranding({ ...b });
+        }).catch(() => {});
+        mobileOrdersApi.getQRCode(branchId).then(setQrData).catch(() => setQrData(null));
+    }, [selectedBranchId]);
 
     const handleSaveSettings = async () => {
         if (!localSettings) return;
@@ -663,10 +683,16 @@ function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
         if (!localBranding) return;
         setSaving(true);
         try {
-            await updateBranding(localBranding);
+            const payload = { ...localBranding };
+            if (selectedBranchId) payload.branchId = selectedBranchId;
+            await mobileOrdersApi.updateBranding(payload);
+            await loadBranding();
+            if (selectedBranchId) {
+                mobileOrdersApi.getQRCode(selectedBranchId).then(setQrData).catch(() => {});
+            }
             alert('Branding updated successfully!');
         } catch (err: any) {
-            alert(err.error || 'Failed to save');
+            alert((err as any)?.error || 'Failed to save');
         }
         setSaving(false);
     };
@@ -869,6 +895,29 @@ function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
 
                     {localBranding ? (
                         <div className="space-y-6 overflow-y-auto pr-2 max-h-[70vh]">
+                            {/* Branch selector: link URL slug to branch for QR at door */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Branch (for QR & orders)</label>
+                                <select
+                                    value={selectedBranchId}
+                                    onChange={e => setSelectedBranchId(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                                >
+                                    <option value="">Default (first branch)</option>
+                                    {branches.map(b => (
+                                        <option key={b.id} value={b.id}>{b.name} {b.code ? `(${b.code})` : ''}</option>
+                                    ))}
+                                </select>
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                    Select the branch whose door QR and URL you are configuring. Orders from that URL will go to this branch&apos;s POS.
+                                </p>
+                                {(localBranding.branch_name || localBranding.branch_location) && (
+                                    <p className="text-xs text-indigo-600 mt-1">
+                                        {[localBranding.branch_name, localBranding.branch_location].filter(Boolean).join(' · ')}
+                                    </p>
+                                )}
+                            </div>
+
                             {/* Slug Input */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Shop URL Slug</label>

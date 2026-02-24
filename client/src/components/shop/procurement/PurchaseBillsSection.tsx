@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { procurementApi, shopApi } from '../../../services/shopApi';
+import { useAppContext } from '../../../context/AppContext';
+import { useInventory } from '../../../context/InventoryContext';
 import Button from '../../ui/Button';
 import Select from '../../ui/Select';
 import { CURRENCY } from '../../../constants';
+import { Wallet } from 'lucide-react';
 
 function normalizeList<T>(raw: unknown): T[] {
   if (Array.isArray(raw)) return raw;
@@ -10,10 +13,15 @@ function normalizeList<T>(raw: unknown): T[] {
   return [];
 }
 
-export default function PurchaseBillsSection() {
+interface PurchaseBillsSectionProps {
+  onPayRemaining?: (bill: { id: string; supplier_id?: string; supplier_name?: string; balance_due: number }) => void;
+}
+
+export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSectionProps) {
+  const { state: appState, dispatch: appDispatch } = useAppContext();
+  const inventory = useInventory();
   const [bills, setBills] = useState<any[]>([]);
-  const [vendors, setVendors] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
+  const [vendorsFromApi, setVendorsFromApi] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -34,47 +42,76 @@ export default function PurchaseBillsSection() {
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const productSearchRef = useRef<HTMLDivElement>(null);
 
+  // Same list as Settings → Vendor Management (from AppContext + API refresh)
+  const vendors = vendorsFromApi.length > 0 ? vendorsFromApi : (appState.vendors || []);
+
+  // Same list as Inventory → Stock Master (from InventoryContext)
+  const inventoryItems = inventory?.items ?? [];
+  const productsForDropdown = inventoryItems.map((item) => ({
+    id: item.id,
+    name: item.name,
+    sku: item.sku,
+    cost_price: item.costPrice,
+    costPrice: item.costPrice,
+    average_cost: undefined,
+  }));
+
   const loadBillsAndFormData = useCallback(() => {
     setLoadingData(true);
     Promise.all([
       procurementApi.getPurchaseBills(),
       shopApi.getVendors(),
-      shopApi.getProducts(),
       shopApi.getWarehouses(),
       shopApi.getBankAccounts(),
     ])
-      .then(([b, v, p, w, ba]) => {
+      .then(([b, v, w, ba]) => {
         setBills(normalizeList(b));
-        setVendors(normalizeList(v));
-        setProducts(normalizeList(p));
+        const vList = normalizeList(v);
+        setVendorsFromApi(vList);
+        if (vList.length > 0) {
+          appDispatch({
+            type: 'SET_VENDORS',
+            payload: vList.map((x: any) => ({
+              id: x.id,
+              name: x.name,
+              companyName: x.company_name ?? x.companyName,
+              contactNo: x.contact_no ?? x.contactNo,
+              email: x.email,
+              address: x.address,
+              description: x.description,
+            })),
+          });
+        }
         setWarehouses(normalizeList(w));
         setBankAccounts(normalizeList(ba));
       })
       .catch(() => {
         setBills([]);
-        setVendors([]);
-        setProducts([]);
+        setVendorsFromApi([]);
         setWarehouses([]);
         setBankAccounts([]);
       })
       .finally(() => setLoadingData(false));
-  }, []);
+  }, [appDispatch]);
 
   useEffect(() => {
     loadBillsAndFormData();
   }, [loadBillsAndFormData]);
 
-  // When opening the form, refetch vendors and products so we have latest suppliers and inventory SKUs
+  // When opening the form, refetch vendors and refresh inventory items (Stock Master list)
   useEffect(() => {
-    if (showForm) loadBillsAndFormData();
-  }, [showForm, loadBillsAndFormData]);
+    if (showForm) {
+      loadBillsAndFormData();
+      inventory?.refreshItems?.();
+    }
+  }, [showForm, loadBillsAndFormData, inventory]);
 
   const subtotal = form.items.reduce((s, i) => s + i.subtotal, 0);
   const taxTotal = form.items.reduce((s, i) => s + (i.taxAmount || 0), 0);
   const totalAmount = subtotal + taxTotal;
 
   const addItem = (p: any) => {
-    const unitCost = Number(p.cost_price ?? p.average_cost) || 0;
+    const unitCost = Number(p.cost_price ?? p.costPrice ?? p.average_cost) || 0;
     const existing = form.items.find((i) => i.productId === p.id);
     if (existing) {
       setForm((f) => ({
@@ -125,7 +162,7 @@ export default function PurchaseBillsSection() {
     setForm((f) => ({ ...f, items: f.items.filter((i) => i.productId !== productId) }));
   };
 
-  const filteredProducts = products.filter(
+  const filteredProducts = productsForDropdown.filter(
     (p) =>
       !productSearch ||
       p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
@@ -145,13 +182,16 @@ export default function PurchaseBillsSection() {
         billNumber: form.billNumber,
         billDate: form.billDate,
         dueDate: form.dueDate || undefined,
-        items: form.items.map((i) => ({
-          productId: i.productId,
-          quantity: i.quantity,
-          unitCost: i.unitCost,
-          taxAmount: i.taxAmount || 0,
-          subtotal: i.subtotal,
-        })),
+        items: form.items.map((i) => {
+          const qty = Math.max(1, Math.floor(i.quantity));
+          return {
+            productId: i.productId,
+            quantity: qty,
+            unitCost: i.unitCost,
+            taxAmount: i.taxAmount || 0,
+            subtotal: qty * i.unitCost,
+          };
+        }),
         subtotal,
         taxTotal,
         totalAmount,
@@ -209,13 +249,13 @@ export default function PurchaseBillsSection() {
                   <option value="">Select supplier...</option>
                   {vendors.map((v) => (
                     <option key={v.id} value={v.id}>
-                      {v.name}{v.company_name ? ` (${v.company_name})` : ''}
+                      {v.name}{(v.company_name ?? v.companyName) ? ` (${v.company_name ?? v.companyName})` : ''}
                     </option>
                   ))}
                 </Select>
-                <p className="text-xs text-slate-500 mt-1">Suppliers from Settings. Purchase is linked to this vendor for ledger and payments.</p>
+                <p className="text-xs text-slate-500 mt-1">Same list as Settings → Vendor Management. Create vendors there to see them here.</p>
                 {!loadingData && vendors.length === 0 && (
-                  <p className="text-amber-600 text-xs mt-1">No suppliers yet. Add vendors in Settings.</p>
+                  <p className="text-amber-600 text-xs mt-1">No vendors yet. Add them in Settings → Vendor Management.</p>
                 )}
               </div>
               <div>
@@ -262,9 +302,9 @@ export default function PurchaseBillsSection() {
                 placeholder="Search by product name or SKU..."
                 className="w-full border border-slate-200 rounded-lg px-3 py-2"
               />
-              <p className="text-xs text-slate-500 mt-1">Products from Inventory. Adding updates stock and weighted average cost.</p>
-              {!loadingData && products.length === 0 && (
-                <p className="text-amber-600 text-xs mt-1">No products yet. Add products in Inventory.</p>
+              <p className="text-xs text-slate-500 mt-1">Same list as Inventory → Stock Master. Adding updates stock and weighted average cost.</p>
+              {!loadingData && productsForDropdown.length === 0 && (
+                <p className="text-amber-600 text-xs mt-1">No products yet. Add products in Inventory → Stock Master.</p>
               )}
               {productDropdownOpen && (
                 <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
@@ -287,7 +327,7 @@ export default function PurchaseBillsSection() {
                             <span className="font-medium text-slate-800">{p.name}</span>
                             <span className="ml-2 text-xs font-mono text-slate-500">SKU: {p.sku || '—'}</span>
                           </span>
-                          <span className="text-sm font-medium text-indigo-600">{CURRENCY} {Number(p.cost_price ?? p.average_cost ?? 0).toLocaleString()}</span>
+                          <span className="text-sm font-medium text-indigo-600">{CURRENCY} {Number(p.cost_price ?? p.costPrice ?? p.average_cost ?? 0).toLocaleString()}</span>
                         </button>
                       </li>
                     ))
@@ -310,18 +350,19 @@ export default function PurchaseBillsSection() {
                   </thead>
                   <tbody>
                     {form.items.map((i) => {
-                      const p = products.find((x) => x.id === i.productId);
+                      const p = productsForDropdown.find((x) => x.id === i.productId) ?? inventoryItems.find((x) => x.id === i.productId);
                       return (
                         <tr key={i.productId} className="border-b border-slate-100">
                           <td className="py-2">{p?.name || i.productId}</td>
                           <td className="py-2 text-right">
                             <input
                               type="number"
-                              min="0.01"
+                              min="1"
                               step="1"
-                              value={i.quantity}
-                              onChange={(e) => updateItem(i.productId, 'quantity', parseFloat(e.target.value) || 0)}
-                              className="w-16 text-right border border-slate-200 rounded px-1 py-0.5"
+                              value={Math.max(1, Math.floor(i.quantity))}
+                              onChange={(e) => updateItem(i.productId, 'quantity', Math.max(1, Math.floor(parseFloat(e.target.value) || 0)))}
+                              onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              className="w-16 text-right border border-slate-200 rounded px-1 py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </td>
                           <td className="py-2 text-right">
@@ -331,7 +372,8 @@ export default function PurchaseBillsSection() {
                               step="0.01"
                               value={i.unitCost}
                               onChange={(e) => updateItem(i.productId, 'unitCost', parseFloat(e.target.value) || 0)}
-                              className="w-24 text-right border border-slate-200 rounded px-1 py-0.5"
+                              onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              className="w-24 text-right border border-slate-200 rounded px-1 py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </td>
                           <td className="py-2 text-right font-medium">{CURRENCY} {i.subtotal.toLocaleString()}</td>
@@ -420,27 +462,51 @@ export default function PurchaseBillsSection() {
               <th className="p-3 text-right">Paid</th>
               <th className="p-3 text-right">Balance</th>
               <th className="p-3">Status</th>
+              {(onPayRemaining && bills.some((b) => Number(b.balance_due) > 0)) && (
+                <th className="p-3 w-24 text-center">Action</th>
+              )}
             </tr>
           </thead>
           <tbody>
-            {bills.map((b) => (
-              <tr key={b.id} className="border-b border-slate-100">
-                <td className="p-3 font-medium">{b.bill_number}</td>
-                <td className="p-3">{b.supplier_name}</td>
-                <td className="p-3">{b.bill_date?.slice(0, 10)}</td>
-                <td className="p-3 text-right">{CURRENCY} {Number(b.total_amount).toLocaleString()}</td>
-                <td className="p-3 text-right">{CURRENCY} {Number(b.paid_amount).toLocaleString()}</td>
-                <td className="p-3 text-right font-medium">{CURRENCY} {Number(b.balance_due).toLocaleString()}</td>
-                <td className="p-3">
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                    b.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
-                    b.status === 'Partial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    {b.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {bills.map((b) => {
+              const balanceDue = Number(b.balance_due) || 0;
+              const hasBalance = balanceDue > 0;
+              return (
+                <tr key={b.id} className="border-b border-slate-100">
+                  <td className="p-3 font-medium">{b.bill_number}</td>
+                  <td className="p-3">{b.supplier_name}</td>
+                  <td className="p-3">{b.bill_date?.slice(0, 10)}</td>
+                  <td className="p-3 text-right">{CURRENCY} {Number(b.total_amount).toLocaleString()}</td>
+                  <td className="p-3 text-right">{CURRENCY} {Number(b.paid_amount).toLocaleString()}</td>
+                  <td className="p-3 text-right font-medium">{CURRENCY} {balanceDue.toLocaleString()}</td>
+                  <td className="p-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                      b.status === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
+                      b.status === 'Partial' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {b.status}
+                    </span>
+                  </td>
+                  {onPayRemaining && (
+                    <td className="p-3 text-center">
+                      {hasBalance ? (
+                        <button
+                          type="button"
+                          onClick={() => onPayRemaining({ id: b.id, supplier_id: b.supplier_id, supplier_name: b.supplier_name, balance_due: balanceDue })}
+                          className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                          title="Pay remaining amount"
+                        >
+                          <Wallet className="w-4 h-4" />
+                          Pay remaining
+                        </button>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {bills.length === 0 && <p className="text-slate-400 p-6 text-center">No purchase bills yet</p>}

@@ -88,6 +88,7 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
                 slug: req.shop.slug,
                 address: req.shop.address ?? null,
                 phone: req.shop.phone ?? null,
+                branchId: req.branchId ?? null,
             },
             settings: {
                 minimum_order_amount: settings.minimum_order_amount,
