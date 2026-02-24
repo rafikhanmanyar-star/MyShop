@@ -1,17 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { usePOS } from '../../../context/POSContext';
+import { useShifts } from '../../../context/ShiftsContext';
 import { ICONS } from '../../../constants';
 import { useAuth } from '../../../context/AuthContext';
 
 const POSHeader: React.FC = () => {
-    const {
-        branches,
-        terminals,
-        selectedBranchId,
-        selectedTerminalId,
-        setSelectedBranchId,
-        setSelectedTerminalId
-    } = usePOS();
+    const { branches, terminals } = usePOS();
+    const { currentShift } = useShifts();
     const { user } = useAuth();
     const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -19,6 +14,12 @@ const POSHeader: React.FC = () => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
+
+    // Static location and station from current shift (not selectable)
+    const shiftTerminal = currentShift ? terminals.find((t: any) => t.id === currentShift.terminal_id) : null;
+    const shiftBranchId = shiftTerminal?.branch_id ?? shiftTerminal?.branchId ?? null;
+    const locationName = shiftBranchId ? (branches.find((b: any) => b.id === shiftBranchId)?.name ?? '—') : null;
+    const stationName = shiftTerminal?.name ?? null;
 
     return (
         <div className="bg-white border-b border-slate-200 px-6 lg:px-8 py-3 flex items-center justify-between z-30 sticky top-0 shadow-sm">
@@ -39,36 +40,22 @@ const POSHeader: React.FC = () => {
 
                 <div className="h-8 w-px bg-slate-200 hidden xl:block"></div>
 
-                {/* Configuration Dropdowns */}
+                {/* Static Location & Station (tied to cashier's shift — not editable) */}
                 <div className="hidden xl:flex items-center gap-6">
                     <div className="flex flex-col">
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 pl-0.5">Location</span>
-                        <div className="relative group/select">
-                            <select
-                                className="appearance-none bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-8 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500 transition-all cursor-pointer min-w-[140px]"
-                                value={selectedBranchId || ''}
-                                onChange={(e) => setSelectedBranchId(e.target.value)}
-                            >
-                                {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                            </select>
-                            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover/select:text-blue-500 transition-colors">
-                                {React.cloneElement(ICONS.chevronDown as React.ReactElement, { size: 12 })}
-                            </div>
+                        <div className="min-w-[140px] px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
+                            <span className="text-xs font-semibold text-slate-700">
+                                {currentShift ? (locationName ?? '—') : '— Start shift in Dashboard —'}
+                            </span>
                         </div>
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1 pl-0.5">Station</span>
-                        <div className="relative group/select">
-                            <select
-                                className="appearance-none bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-8 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500 transition-all cursor-pointer min-w-[120px]"
-                                value={selectedTerminalId || ''}
-                                onChange={(e) => setSelectedTerminalId(e.target.value)}
-                            >
-                                {terminals.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
-                            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover/select:text-blue-500 transition-colors">
-                                {React.cloneElement(ICONS.chevronDown as React.ReactElement, { size: 12 })}
-                            </div>
+                        <div className="min-w-[120px] px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
+                            <span className="text-xs font-semibold text-slate-700">
+                                {currentShift ? (stationName ?? '—') : '— Start shift in Dashboard —'}
+                            </span>
                         </div>
                     </div>
                 </div>

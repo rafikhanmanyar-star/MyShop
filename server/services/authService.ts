@@ -82,6 +82,15 @@ export class AuthService {
       throw new Error('Invalid username or password');
     }
 
+    // Single session per user: reject if already logged in on another device
+    const existingSession = await this.db.query(
+      'SELECT id FROM user_sessions WHERE user_id = $1 AND tenant_id = $2 AND expires_at > NOW()',
+      [matchedUser.id, matchedUser.tenant_id]
+    );
+    if (existingSession.length > 0) {
+      throw new Error('Already logged in on another device. Please log out there first.');
+    }
+
     const token = this.generateToken(matchedUser.id, matchedUser.tenant_id, matchedUser.username, matchedUser.role);
     await this.createSession(matchedUser.id, matchedUser.tenant_id, token);
 

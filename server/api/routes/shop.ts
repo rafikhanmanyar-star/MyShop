@@ -36,8 +36,8 @@ router.get('/public-test', (_req, res) => {
   res.json({ message: 'Shop routes are working' });
 });
 
-// --- Branches (Admin Only) ---
-router.get('/branches', checkRole(['admin']), async (req: any, res) => {
+// --- Branches (admin: full; pos_cashier: read-only for shift start location) ---
+router.get('/branches', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
   try {
     const branches = await getShopService().getBranches(req.tenantId);
     res.json(branches);

@@ -105,8 +105,8 @@ const POSSalesContent: React.FC = () => {
             }
         };
 
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
+        window.addEventListener('keydown', handleKeyDown, true);
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
     }, [
         isActive,
         clearCart,
@@ -128,11 +128,9 @@ const POSSalesContent: React.FC = () => {
 
     return (
         <div
-            className="flex flex-col h-full bg-[#f7f9fc] -m-8 overflow-hidden pos-font select-none animate-fade-in relative"
+            className={`flex flex-col bg-[#f7f9fc] overflow-hidden pos-font select-none animate-fade-in relative ${isFullScreen ? 'fixed inset-0 z-[9999] h-screen w-screen' : 'h-full -m-8'}`}
             ref={mainRef}
-            style={{
-                maxHeight: 'calc(100vh - 4rem)'
-            }}
+            style={isFullScreen ? { height: '100vh', width: '100vw' } : { maxHeight: 'calc(100vh - 4rem)' }}
         >
             {/* Background Decorative Elements - Subtle */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">

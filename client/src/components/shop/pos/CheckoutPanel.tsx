@@ -88,6 +88,21 @@ const CheckoutPanel: React.FC = () => {
 
             {/* Bill Summary Section */}
             <div className="flex-1 p-6 space-y-4 overflow-y-auto pos-scrollbar bg-slate-50/20">
+                {/* Line items in customer summary (shows held/recalled items) */}
+                {cart.length > 0 && (
+                    <div className="mb-4 pb-4 border-b border-slate-100">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Items</div>
+                        <div className="space-y-1.5 max-h-32 overflow-y-auto pos-scrollbar">
+                            {cart.map((item) => (
+                                <div key={item.id} className="flex justify-between items-center text-xs gap-2">
+                                    <span className="text-slate-700 font-semibold truncate flex-1 min-w-0">{item.name}</span>
+                                    <span className="text-slate-500 shrink-0">×{item.quantity}</span>
+                                    <span className="font-mono font-semibold text-slate-900 shrink-0">{CURRENCY}{(item.unitPrice * item.quantity - item.discountAmount + item.taxAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 <div className="space-y-3">
                     <div className="flex justify-between items-center text-slate-500">
                         <span className="text-xs font-medium">Subtotal</span>

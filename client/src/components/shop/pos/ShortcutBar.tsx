@@ -11,6 +11,7 @@ interface ShortcutBarProps {
 const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScreen }) => {
     const {
         clearCart,
+        holdSale,
         setIsHeldSalesModalOpen,
         setIsSalesHistoryModalOpen,
         setIsCustomerModalOpen,
@@ -23,7 +24,7 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
 
     const shortcuts = [
         { key: 'F1', label: 'Clear', action: clearCart, icon: ICONS.trash, color: 'text-rose-500' },
-        { key: 'F2', label: 'Hold', action: () => { }, icon: ICONS.pause, color: 'text-amber-500' },
+        { key: 'F2', label: 'Hold', action: () => holdSale(`Hold-${new Date().toLocaleTimeString()}`), icon: ICONS.pause, color: 'text-amber-500' },
         { key: 'F3', label: 'Recall', action: () => setIsHeldSalesModalOpen(true), icon: ICONS.refresh, color: 'text-indigo-500' },
         { key: 'F6', label: 'Customer', action: () => setIsCustomerModalOpen(true), icon: ICONS.user, color: 'text-blue-500' },
         { key: 'F9', label: 'History', action: () => setIsSalesHistoryModalOpen(true), icon: ICONS.clock, color: 'text-slate-500' },
@@ -37,7 +38,8 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
                 {shortcuts.map((s) => (
                     <button
                         key={s.key}
-                        onClick={s.action}
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); s.action(); }}
                         className="flex flex-col items-center justify-center w-24 h-16 rounded-xl hover:bg-white/10 transition-all group"
                     >
                         <div className={`${s.color} mb-1.5 transition-transform group-hover:scale-110`}>

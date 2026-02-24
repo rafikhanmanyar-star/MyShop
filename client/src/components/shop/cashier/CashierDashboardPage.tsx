@@ -20,19 +20,31 @@ import TerminalCloseModal from './TerminalCloseModal';
 export default function CashierDashboardPage() {
   const { currentShift, currentTerminalId, setCurrentTerminalId, refreshCurrentShift, startShift, isLoading, error } = useShifts();
   const [stats, setStats] = useState<ShiftStats | null>(null);
+  const [branches, setBranches] = useState<any[]>([]);
   const [terminals, setTerminals] = useState<any[]>([]);
-  const [startForm, setStartForm] = useState({ terminalId: '', openingCash: '' });
+  const [startForm, setStartForm] = useState({ branchId: '', terminalId: '', openingCash: '' });
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [closeModalOpen, setCloseModalOpen] = useState(false);
 
+  const loadBranches = useCallback(() => {
+    shopApi.getBranches().then(setBranches).catch(() => setBranches([]));
+  }, []);
   const loadTerminals = useCallback(() => {
     shopApi.getTerminals().then(setTerminals).catch(() => setTerminals([]));
   }, []);
 
   useEffect(() => {
+    loadBranches();
+  }, [loadBranches]);
+  useEffect(() => {
     loadTerminals();
   }, [loadTerminals]);
+
+  // Terminals belong to a branch: filter by selected location (branch)
+  const terminalsForBranch = startForm.branchId
+    ? terminals.filter((t: any) => String(t.branch_id ?? t.branchId ?? '') === String(startForm.branchId))
+    : [];
 
   const loadStats = useCallback(() => {
     if (!currentShift?.id) {
@@ -55,15 +67,15 @@ export default function CashierDashboardPage() {
     e.preventDefault();
     const terminalId = startForm.terminalId.trim();
     const openingCash = parseFloat(startForm.openingCash);
-    if (!terminalId || isNaN(openingCash) || openingCash < 0) {
-      setStartError('Select a terminal and enter opening cash amount.');
+    if (!startForm.branchId || !terminalId || isNaN(openingCash) || openingCash < 0) {
+      setStartError('Select location, terminal, and enter opening cash amount.');
       return;
     }
     setStartError(null);
     setStarting(true);
     try {
       await startShift(terminalId, openingCash);
-      setStartForm({ terminalId: '', openingCash: '' });
+      setStartForm({ branchId: '', terminalId: '', openingCash: '' });
     } catch (err: any) {
       setStartError(err?.message || err?.error || 'Failed to start shift');
     } finally {
@@ -118,20 +130,43 @@ export default function CashierDashboardPage() {
           </div>
           <form onSubmit={handleStartShift} className="space-y-5">
             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
+              <select
+                value={startForm.branchId}
+                onChange={(e) => setStartForm((f) => ({ ...f, branchId: e.target.value, terminalId: '' }))}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500"
+                required
+              >
+                <option value="">— Select location (branch) —</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              {branches.length === 0 && (
+                <p className="mt-1 text-xs text-slate-500">No locations. Ask admin to add branches in Multi-Store.</p>
+              )}
+            </div>
+            <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Terminal</label>
               <select
                 value={startForm.terminalId}
                 onChange={(e) => setStartForm((f) => ({ ...f, terminalId: e.target.value }))}
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500"
                 required
+                disabled={!startForm.branchId}
               >
                 <option value="">— Select terminal —</option>
-                {terminals.map((t) => (
+                {terminalsForBranch.map((t: any) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} ({t.code})
+                    {t.name} ({t.code ?? t.id})
                   </option>
                 ))}
               </select>
+              {startForm.branchId && terminalsForBranch.length === 0 && (
+                <p className="mt-1 text-xs text-slate-500">No terminals at this location. Ask admin to add a terminal in Multi-Store.</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Opening cash (amount in drawer)</label>

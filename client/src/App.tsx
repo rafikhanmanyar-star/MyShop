@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
@@ -37,7 +37,7 @@ const navItems = [
   { path: '/shifts', label: 'Shifts', icon: ClipboardList, roles: ['admin', 'accountant'] },
   { path: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin', 'accountant'] },
   { path: '/accounting', label: 'Accounting', icon: BookOpen, roles: ['admin', 'accountant'] },
-  { path: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin', 'accountant', 'pos_cashier'] },
+  { path: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin', 'accountant'] },
   { path: '/forecast', label: 'Forecasting', icon: Brain, roles: ['admin', 'accountant'] },
   { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'accountant', 'pos_cashier'] },
 ];
@@ -151,15 +151,24 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
 function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [posFullScreen, setPosFullScreen] = useState(false);
   const { user } = useAuth();
   const role = user?.role || 'pos_cashier';
+
+  useEffect(() => {
+    const handlePosFullScreen = (e: CustomEvent<{ enabled: boolean }>) => {
+      setPosFullScreen(!!e.detail?.enabled);
+    };
+    window.addEventListener('pos:fullscreen', handlePosFullScreen as EventListener);
+    return () => window.removeEventListener('pos:fullscreen', handlePosFullScreen as EventListener);
+  }, []);
 
   return (
     <AppProvider>
       <ShiftsProvider>
       <div className="min-h-screen bg-[#f8fafc]">
-        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
-        <main className={`transition-all duration-500 ease-in-out ${sidebarCollapsed ? 'ml-20' : 'ml-72'} p-8 min-h-screen`}>
+        {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
+        <main className={`transition-all duration-500 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'} p-8 min-h-screen`}>
           <Suspense fallback={
             <div className="flex items-center justify-center min-h-[60vh]">
               <div className="relative w-12 h-12">
@@ -183,7 +192,7 @@ function AppLayout() {
               <Route path="/shifts" element={['admin', 'accountant'].includes(role) ? <ShiftsAdminPage /> : <Navigate to="/" replace />} />
               <Route path="/analytics" element={['admin', 'accountant'].includes(role) ? <BIDashboardsPage /> : <Navigate to="/" replace />} />
               <Route path="/accounting" element={['admin', 'accountant'].includes(role) ? <AccountingPage /> : <Navigate to="/" replace />} />
-              <Route path="/expenses" element={['admin', 'accountant', 'pos_cashier'].includes(role) ? <ExpensePage /> : <Navigate to="/" replace />} />
+              <Route path="/expenses" element={['admin', 'accountant'].includes(role) ? <ExpensePage /> : <Navigate to="/" replace />} />
               <Route path="/forecast" element={['admin', 'accountant'].includes(role) ? <ForecastPage /> : <Navigate to="/" replace />} />
               <Route path="/settings" element={<SettingsPage />} />
 

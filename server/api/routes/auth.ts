@@ -31,7 +31,8 @@ router.post('/login', async (req, res) => {
     res.json(result);
   } catch (error: any) {
     console.error('[Auth] Login error:', error.message);
-    res.status(401).json({ error: error.message });
+    const isAlreadyLoggedIn = error.message && error.message.includes('Already logged in');
+    res.status(isAlreadyLoggedIn ? 409 : 401).json({ error: error.message });
   }
 });
 

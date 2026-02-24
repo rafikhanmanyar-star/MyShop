@@ -166,14 +166,6 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
                 setBranches(branchesList);
                 setTerminals(terminalsList);
-
-                // Auto-select first branch/terminal if none selected
-                if (branchesList.length > 0 && !selectedBranchId) {
-                    setSelectedBranchId(branchesList[0].id);
-                }
-                if (terminalsList.length > 0 && !selectedTerminalId) {
-                    setSelectedTerminalId(terminalsList[0].id);
-                }
             } catch (error) {
                 console.error('Failed to fetch POS configuration:', error);
             }
@@ -182,7 +174,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (authUser) {
             fetchConfig();
         }
-    }, [authUser, selectedBranchId, selectedTerminalId]);
+    }, [authUser]);
+
+    // When user has an active shift, lock branch/terminal to shift (location & station are static)
+    useEffect(() => {
+        if (!currentShift) return;
+        const terminal = terminals.find((t: any) => t.id === currentShift.terminal_id);
+        const branchId = terminal?.branch_id ?? terminal?.branchId ?? null;
+        if (currentShift.terminal_id) setSelectedTerminalId(currentShift.terminal_id);
+        if (branchId) setSelectedBranchId(branchId);
+    }, [currentShift?.id, currentShift?.terminal_id, terminals]);
 
     // Print receipt function
     const printReceipt = useCallback(async (saleData?: any) => {
@@ -347,6 +348,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const heldSale = heldSales.find(s => s.id === heldSaleId);
         if (heldSale) {
             setCart(heldSale.cart);
+            setPayments([]); // Clear any previous payments so summary reflects recalled sale only
 
             if (heldSale.customerId) {
                 try {
