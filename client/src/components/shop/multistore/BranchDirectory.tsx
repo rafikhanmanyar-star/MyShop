@@ -10,11 +10,12 @@ import Select from '../../ui/Select';
 import Button from '../../ui/Button';
 
 const BranchDirectory: React.FC = () => {
-    const { stores, updateStore } = useMultiStore();
+    const { stores, updateStore, deleteBranch, getBranchDeleteStatus } = useMultiStore();
     const [search, setSearch] = useState('');
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingStore, setEditingStore] = useState<StoreBranch | null>(null);
     const [editData, setEditData] = useState<Partial<StoreBranch>>({});
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
     const handleEditClick = (store: StoreBranch) => {
         setEditingStore(store);
@@ -30,6 +31,38 @@ const BranchDirectory: React.FC = () => {
             setEditingStore(null);
         } catch (e) {
             alert('Failed to update branch');
+        }
+    };
+
+    const handleDeleteBranch = async () => {
+        if (!editingStore) return;
+        try {
+            setDeleteLoading(true);
+            const status = await getBranchDeleteStatus(editingStore.id);
+            if (status.hasTransactions) {
+                alert('This branch has sales or orders. Branches with transactions cannot be deleted.');
+                return;
+            }
+            if (status.terminalCount > 0) {
+                alert(`Please delete the ${status.terminalCount} terminal(s) linked to this branch first (Multi-Store → Terminals).`);
+                return;
+            }
+            if (status.hasInventory) {
+                alert('This branch has inventory in its warehouse. Please move or clear all stock at this location before deleting the branch.');
+                return;
+            }
+            if (!status.canDelete) {
+                alert(status.message || 'This branch cannot be deleted.');
+                return;
+            }
+            if (!window.confirm(`Delete branch "${editingStore.name}"? This cannot be undone.`)) return;
+            await deleteBranch(editingStore.id);
+            setIsEditModalOpen(false);
+            setEditingStore(null);
+        } catch (e: any) {
+            alert(e?.message || e?.error || 'Failed to delete branch');
+        } finally {
+            setDeleteLoading(false);
         }
     };
 
@@ -255,9 +288,21 @@ const BranchDirectory: React.FC = () => {
                         </Select>
                     </div>
 
-                    <div className="flex justify-end gap-3 mt-6">
-                        <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
-                        <Button onClick={handleUpdateStore} disabled={!editData.name}>Save Changes</Button>
+                    <div className="flex justify-between items-center mt-6 pt-4 border-t border-slate-100">
+                        <div>
+                            <button
+                                type="button"
+                                onClick={handleDeleteBranch}
+                                disabled={deleteLoading}
+                                className="text-xs font-medium text-rose-600 hover:text-rose-700 disabled:opacity-50"
+                            >
+                                {deleteLoading ? 'Checking…' : 'Delete branch'}
+                            </button>
+                        </div>
+                        <div className="flex gap-3">
+                            <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
+                            <Button onClick={handleUpdateStore} disabled={!editData.name}>Save Changes</Button>
+                        </div>
                     </div>
                 </div>
             </Modal>

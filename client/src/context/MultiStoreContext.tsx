@@ -25,6 +25,8 @@ interface MultiStoreContextType {
     activeTerminalsCount: number;
     addStore: (store: Omit<StoreBranch, 'id' | 'status'>) => Promise<void>;
     updateStore: (id: string, store: Partial<StoreBranch>) => Promise<void>;
+    deleteBranch: (id: string) => Promise<void>;
+    getBranchDeleteStatus: (id: string) => Promise<{ canDelete: boolean; hasTransactions: boolean; terminalCount: number; hasInventory: boolean; message?: string }>;
     addTerminal: (terminal: Omit<POSTerminal, 'id' | 'status' | 'healthScore' | 'lastSync' | 'code'> & { code?: string }) => Promise<void>;
     savePolicies: (policies: GlobalPolicies) => Promise<void>;
     policies: GlobalPolicies;
@@ -195,6 +197,21 @@ export const MultiStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
     };
 
+    const getBranchDeleteStatus = async (id: string) => {
+        return shopApi.getBranchDeleteStatus(id);
+    };
+
+    const deleteBranch = async (id: string) => {
+        try {
+            await shopApi.deleteBranch(id);
+            setStores(prev => prev.filter(s => s.id !== id));
+            setTerminals(prev => prev.filter(t => t.storeId !== id));
+        } catch (e) {
+            console.error('Failed to delete branch:', e);
+            throw e;
+        }
+    };
+
     const savePolicies = async (policyData: GlobalPolicies) => {
         try {
             const updated = await shopApi.updatePolicies(policyData) as any;
@@ -300,6 +317,8 @@ export const MultiStoreProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         unlockTerminal,
         addStore,
         updateStore,
+        deleteBranch,
+        getBranchDeleteStatus,
         addTerminal,
         updateTerminal,
         deleteTerminal,

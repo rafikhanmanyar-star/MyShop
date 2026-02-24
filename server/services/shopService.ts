@@ -144,6 +144,64 @@ export class ShopService {
     return rows.length > 0 ? rows[0] : null;
   }
 
+  /** Check if a branch can be deleted: no transactions, no linked terminals, no inventory in its warehouse. */
+  async getBranchDeleteStatus(tenantId: string, branchId: string): Promise<{
+    canDelete: boolean;
+    hasTransactions: boolean;
+    terminalCount: number;
+    hasInventory: boolean;
+    message?: string;
+  }> {
+    const [salesCount] = await this.db.query(
+      'SELECT COUNT(*)::int AS c FROM shop_sales WHERE tenant_id = $1 AND branch_id = $2',
+      [tenantId, branchId]
+    );
+    const [mobileCount] = await this.db.query(
+      'SELECT COUNT(*)::int AS c FROM mobile_orders WHERE tenant_id = $1 AND branch_id = $2',
+      [tenantId, branchId]
+    );
+    const hasTransactions = (salesCount?.c ?? 0) > 0 || (mobileCount?.c ?? 0) > 0;
+
+    const terminals = await this.db.query(
+      'SELECT id FROM shop_terminals WHERE tenant_id = $1 AND branch_id = $2',
+      [tenantId, branchId]
+    );
+    const terminalCount = terminals.length;
+
+    // Branch's warehouse uses id = branchId when created with the branch
+    const [inv] = await this.db.query(
+      `SELECT 1 FROM shop_inventory i
+       JOIN shop_warehouses w ON i.warehouse_id = w.id AND w.tenant_id = $1
+       WHERE i.tenant_id = $1 AND i.warehouse_id = $2 AND (i.quantity_on_hand > 0 OR i.quantity_reserved > 0)
+       LIMIT 1`,
+      [tenantId, branchId]
+    );
+    const hasInventory = !!inv;
+
+    const canDelete = !hasTransactions && terminalCount === 0 && !hasInventory;
+    let message: string | undefined;
+    if (hasTransactions) message = 'This branch has sales or orders. Branches with transactions cannot be deleted.';
+    else if (terminalCount > 0) message = `Delete the ${terminalCount} terminal(s) linked to this branch first.`;
+    else if (hasInventory) message = 'Move or clear all inventory in this branch\'s warehouse before deleting the branch.';
+
+    return { canDelete, hasTransactions, terminalCount, hasInventory, message };
+  }
+
+  /** Delete a branch. Fails if there are transactions, linked terminals, or inventory. */
+  async deleteBranch(tenantId: string, branchId: string): Promise<void> {
+    const status = await this.getBranchDeleteStatus(tenantId, branchId);
+    if (!status.canDelete) {
+      throw new Error(status.message || 'Branch cannot be deleted.');
+    }
+    await this.db.transaction(async (client) => {
+      // Warehouse may have id = branchId; delete inventory rows for this warehouse first (warehouse is deleted with branch or we delete warehouse)
+      await client.query('DELETE FROM shop_inventory WHERE tenant_id = $1 AND warehouse_id = $2', [tenantId, branchId]);
+      await client.query('DELETE FROM shop_inventory_movements WHERE tenant_id = $1 AND warehouse_id = $2', [tenantId, branchId]);
+      await client.query('DELETE FROM shop_warehouses WHERE id = $1 AND tenant_id = $2', [branchId, tenantId]);
+      await client.query('DELETE FROM shop_branches WHERE id = $1 AND tenant_id = $2', [branchId, tenantId]);
+    });
+  }
+
   // --- Warehouse Methods ---
   async getWarehouses(tenantId: string) {
     const warehouses = await this.db.query('SELECT * FROM shop_warehouses WHERE tenant_id = $1 ORDER BY name ASC', [tenantId]);

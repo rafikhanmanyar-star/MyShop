@@ -71,6 +71,8 @@ export const shopApi = {
   getBranches: () => apiClient.get<ShopBranch[]>('/shop/branches'),
   createBranch: (data: any) => apiClient.post('/shop/branches', data),
   updateBranch: (id: string, data: any) => apiClient.put(`/shop/branches/${id}`, data),
+  getBranchDeleteStatus: (id: string) => apiClient.get<{ canDelete: boolean; hasTransactions: boolean; terminalCount: number; hasInventory: boolean; message?: string }>(`/shop/branches/${id}/delete-status`),
+  deleteBranch: (id: string) => apiClient.delete(`/shop/branches/${id}`),
 
   getWarehouses: () => apiClient.get<any[]>('/shop/warehouses'),
   createWarehouse: (data: any) => apiClient.post('/shop/warehouses', data),

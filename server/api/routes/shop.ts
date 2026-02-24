@@ -64,6 +64,24 @@ router.put('/branches/:id', checkRole(['admin']), async (req: any, res) => {
   }
 });
 
+router.get('/branches/:id/delete-status', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const status = await getShopService().getBranchDeleteStatus(req.tenantId, req.params.id);
+    res.json(status);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/branches/:id', checkRole(['admin']), async (req: any, res) => {
+  try {
+    await getShopService().deleteBranch(req.tenantId, req.params.id);
+    res.json({ success: true, message: 'Branch deleted successfully' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // --- Warehouses ---
 router.get('/warehouses', async (req: any, res) => {
   try {
@@ -402,8 +420,8 @@ router.post('/policies', async (req: any, res) => {
   }
 });
 
-// --- Bank Accounts (Admin/Accountant) ---
-router.get('/bank-accounts', checkRole(['admin', 'accountant']), async (req: any, res) => {
+// --- Bank Accounts (Admin/Accountant: full; pos_cashier: read-only for POS & Collect Payment) ---
+router.get('/bank-accounts', checkRole(['admin', 'accountant', 'pos_cashier']), async (req: any, res) => {
   try {
     const activeOnly = req.query.activeOnly !== 'false';
     const list = await getShopService().getBankAccounts(req.tenantId, activeOnly);
