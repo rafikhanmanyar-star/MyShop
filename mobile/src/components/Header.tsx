@@ -60,8 +60,8 @@ export default function Header() {
                         </Link>
                         <div className="header-shop-details">
                             <span className="header-shop-name">{state.shop?.company_name || state.shop?.name || 'MyShop'}</span>
-                            {state.shop?.address && (
-                                <span className="header-shop-address">{state.shop.address}</span>
+                            {(state.shop?.address || state.branding?.address) && (
+                                <span className="header-shop-address">{state.shop?.address || state.branding?.address}</span>
                             )}
                             {state.shop?.phone && (
                                 <span className="header-shop-phone">{state.shop.phone}</span>

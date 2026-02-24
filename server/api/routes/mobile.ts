@@ -79,6 +79,16 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
             return res.status(404).json({ error: 'Mobile ordering is not available for this shop.' });
         }
 
+        // Prefer shop address/phone from tenant_branding (App Branding form) when set
+        let address = req.shop.address ?? null;
+        let phone = req.shop.phone ?? null;
+        try {
+            const { getShopService } = await import('../../services/shopService.js');
+            const branding = await getShopService().getTenantBranding(req.tenantId);
+            if (branding?.address) address = branding.address;
+            // phone stays from tenants unless we add it to tenant_branding later
+        } catch (_) { /* ignore */ }
+
         res.json({
             shop: {
                 name: req.shop.name,
@@ -86,8 +96,8 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
                 logo_url: req.shop.logo_url,
                 brand_color: req.shop.brand_color,
                 slug: req.shop.slug,
-                address: req.shop.address ?? null,
-                phone: req.shop.phone ?? null,
+                address: address ?? null,
+                phone: phone ?? null,
                 branchId: req.branchId ?? null,
             },
             settings: {

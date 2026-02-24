@@ -32,6 +32,7 @@ export interface TenantBranding {
     accent_color: string;
     font_family: string;
     theme_mode: string;
+    address?: string | null;
 }
 
 export interface ShopSettings {

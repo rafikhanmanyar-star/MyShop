@@ -887,6 +887,16 @@ export class MobileOrderService {
 
     // ─── Accounting helper: get or create account ──────────────────────
 
+    private async getAcc(
+        client: any,
+        tenantId: string,
+        code: string,
+        name: string,
+        type: 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense'
+    ): Promise<string> {
+        return getAccountingService().getOrCreateAccountByCode(tenantId, code, name, type, client);
+    }
+
     private async getOrCreateAccount(client: any, tenantId: string, name: string, type: string, code: string): Promise<string> {
         let accRes = await client.query('SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2 LIMIT 1', [tenantId, code]);
         if (accRes.length === 0) {

@@ -96,11 +96,20 @@ export class ShopService {
           throw new Error('Invalid slug format. Use lowercase letters, numbers, and hyphens (3-50 chars).');
         }
         const existing = await client.query(
-          'SELECT id FROM shop_branches WHERE slug = $1 AND id != $2',
+          'SELECT id, tenant_id FROM shop_branches WHERE slug = $1 AND id != $2',
           [slugToUse, branchId]
         );
         if (existing.length > 0) {
-          throw new Error('This shop URL is already taken. Please choose another.');
+          const other = existing[0];
+          if (other.tenant_id === tenantId) {
+            // Same tenant: transfer slug from the other branch to this one (so this branch gets the URL)
+            await client.query(
+              'UPDATE shop_branches SET slug = NULL, updated_at = NOW() WHERE id = $1 AND tenant_id = $2',
+              [other.id, tenantId]
+            );
+          } else {
+            throw new Error('This shop URL is already taken by another store. Please choose another.');
+          }
         }
         await client.query(
           'UPDATE shop_branches SET slug = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3',
