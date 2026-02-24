@@ -7,6 +7,7 @@ export interface ShopSale {
   branchId?: string | null;
   terminalId?: string | null;
   userId?: string | null;
+  shiftId?: string | null;
   customerId?: string | null;
   loyaltyMemberId?: string | null;
   saleNumber: string;
@@ -390,8 +391,8 @@ export class ShopService {
           tenant_id, branch_id, terminal_id, user_id, customer_id,
           loyalty_member_id, sale_number, subtotal, tax_total,
           discount_total, grand_total, total_paid, change_due,
-          payment_method, payment_details
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          payment_method, payment_details, shift_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING id
       `, [
         tenantId,
@@ -408,7 +409,8 @@ export class ShopService {
         saleData.totalPaid,
         saleData.changeDue,
         saleData.paymentMethod ?? 'Cash',
-        JSON.stringify(paymentDetails)
+        JSON.stringify(paymentDetails),
+        saleData.shiftId ?? null
       ]);
 
       const saleId = saleRes[0].id;

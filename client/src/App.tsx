@@ -2,13 +2,14 @@ import React, { useState, lazy, Suspense } from 'react';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
+import { ShiftsProvider } from './context/ShiftsContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet
+  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList
 } from 'lucide-react';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
@@ -21,20 +22,24 @@ const AccountingPage = lazy(() => import('./components/shop/AccountingPage'));
 const ExpensePage = lazy(() => import('./components/shop/expenses/ExpensePage'));
 const MobileOrdersPage = lazy(() => import('./components/shop/MobileOrdersPage'));
 const ForecastPage = lazy(() => import('./components/shop/ForecastPage'));
+const CashierDashboardPage = lazy(() => import('./components/shop/cashier/CashierDashboardPage'));
+const ShiftsAdminPage = lazy(() => import('./components/shop/cashier/ShiftsAdminPage'));
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant'] },
+  { path: '/cashier-dashboard', label: 'Cashier Dashboard', icon: ClipboardList, roles: ['pos_cashier'] },
   { path: '/pos', label: 'Point of Sale', icon: ShoppingCart, roles: ['admin', 'pos_cashier'] },
   { path: '/mobile-orders', label: 'Mobile Orders', icon: Smartphone, roles: ['admin', 'pos_cashier'] },
   { path: '/inventory', label: 'Inventory', icon: Package, roles: ['admin'] },
   { path: '/procurement', label: 'Procurement', icon: Truck, roles: ['admin', 'accountant'] },
   { path: '/loyalty', label: 'Loyalty', icon: Users, roles: ['admin'] },
   { path: '/multi-store', label: 'Multi-Store', icon: Building2, roles: ['admin'] },
+  { path: '/shifts', label: 'Shifts', icon: ClipboardList, roles: ['admin', 'accountant'] },
   { path: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin', 'accountant'] },
   { path: '/accounting', label: 'Accounting', icon: BookOpen, roles: ['admin', 'accountant'] },
   { path: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin', 'accountant', 'pos_cashier'] },
   { path: '/forecast', label: 'Forecasting', icon: Brain, roles: ['admin', 'accountant'] },
-  { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
+  { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'accountant', 'pos_cashier'] },
 ];
 
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
@@ -151,6 +156,7 @@ function AppLayout() {
 
   return (
     <AppProvider>
+      <ShiftsProvider>
       <div className="min-h-screen bg-[#f8fafc]">
         <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
         <main className={`transition-all duration-500 ease-in-out ${sidebarCollapsed ? 'ml-20' : 'ml-72'} p-8 min-h-screen`}>
@@ -163,9 +169,10 @@ function AppLayout() {
             </div>
           }>
             <Routes>
-              {/* Redirect pos_cashier to /pos if they try to access / */}
-              <Route path="/" element={role === 'pos_cashier' ? <Navigate to="/pos" replace /> : <DashboardPage />} />
+              {/* Redirect pos_cashier to Cashier Dashboard if they try to access / */}
+              <Route path="/" element={role === 'pos_cashier' ? <Navigate to="/cashier-dashboard" replace /> : <DashboardPage />} />
 
+              <Route path="/cashier-dashboard" element={role === 'pos_cashier' ? <CashierDashboardPage /> : <Navigate to="/" replace />} />
               <Route path="/pos" element={<POSSalesPage />} />
               <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <MobileOrdersPage /> : <Navigate to="/" replace />} />
 
@@ -173,17 +180,19 @@ function AppLayout() {
               <Route path="/procurement" element={['admin', 'accountant'].includes(role) ? <ProcurementPage /> : <Navigate to="/" replace />} />
               <Route path="/loyalty" element={role === 'admin' ? <LoyaltyPage /> : <Navigate to="/" replace />} />
               <Route path="/multi-store" element={role === 'admin' ? <MultiStorePage /> : <Navigate to="/" replace />} />
+              <Route path="/shifts" element={['admin', 'accountant'].includes(role) ? <ShiftsAdminPage /> : <Navigate to="/" replace />} />
               <Route path="/analytics" element={['admin', 'accountant'].includes(role) ? <BIDashboardsPage /> : <Navigate to="/" replace />} />
               <Route path="/accounting" element={['admin', 'accountant'].includes(role) ? <AccountingPage /> : <Navigate to="/" replace />} />
               <Route path="/expenses" element={['admin', 'accountant', 'pos_cashier'].includes(role) ? <ExpensePage /> : <Navigate to="/" replace />} />
               <Route path="/forecast" element={['admin', 'accountant'].includes(role) ? <ForecastPage /> : <Navigate to="/" replace />} />
-              <Route path="/settings" element={role === 'admin' ? <SettingsPage /> : <Navigate to="/" replace />} />
+              <Route path="/settings" element={<SettingsPage />} />
 
-              <Route path="*" element={<Navigate to={role === 'pos_cashier' ? '/pos' : '/'} replace />} />
+              <Route path="*" element={<Navigate to={role === 'pos_cashier' ? '/cashier-dashboard' : '/'} replace />} />
             </Routes>
           </Suspense>
         </main>
       </div>
+      </ShiftsProvider>
     </AppProvider>
   );
 }

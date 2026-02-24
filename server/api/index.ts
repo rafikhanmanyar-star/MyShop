@@ -13,6 +13,7 @@ import mobileOrdersRoutes from './routes/mobileOrders.js';
 import accountingRoutes from './routes/accounting.js';
 import expensesRoutes from './routes/expenses.js';
 import procurementRoutes from './routes/procurement.js';
+import shiftsRoutes from './routes/shifts.js';
 import { runMigrations } from '../scripts/run-migrations.js';
 import { fileURLToPath } from 'url';
 
@@ -90,6 +91,7 @@ app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRout
 app.use('/api/shop/accounting', tenantMiddleware(dbService), accountingRoutes);
 app.use('/api/shop/expenses', tenantMiddleware(dbService), expensesRoutes);
 app.use('/api/shop/procurement', tenantMiddleware(dbService), procurementRoutes);
+app.use('/api/shop/shifts', tenantMiddleware(dbService), shiftsRoutes);
 app.use('/api/shop', tenantMiddleware(dbService), shopRoutes);
 
 // Serve static client (Electron mode)

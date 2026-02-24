@@ -27,6 +27,8 @@ export class AccountingService {
   /**
    * Get or create an account by code. Use for posting (POS, procurement, expense, etc.).
    * Prefer enterprise code (e.g. COA.RETAIL_SALES); creates with name/type if missing (e.g. legacy tenants).
+   * If an account with the same name already exists (e.g. legacy code), returns it to avoid
+   * violating idx_accounts_tenant_name_unique.
    */
   async getOrCreateAccountByCode(
     tenantId: string,
@@ -49,6 +51,12 @@ export class AccountingService {
       );
       if (rows.length > 0) return (rows[0] as any).id;
     }
+    // Avoid duplicate key on (tenant_id, LOWER(name)): reuse existing account with same name (e.g. legacy name/code).
+    const byName = await db.query(
+      'SELECT id FROM accounts WHERE tenant_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1',
+      [tenantId, name]
+    );
+    if (byName.length > 0) return (byName[0] as any).id;
     const normalBalance = type === 'Asset' || type === 'Expense' ? 'debit' : 'credit';
     const res = await db.query(
       `INSERT INTO accounts (tenant_id, name, code, type, normal_balance, is_active)
@@ -670,6 +678,68 @@ export class AccountingService {
 
       return { journalId };
     });
+  }
+
+  /**
+   * Post cash variance on shift close (shortage or overage).
+   * Shortage: Dr Cash Shortage Expense (81006), Cr Cash on Hand (11101).
+   * Overage: Dr Cash on Hand (11101), Cr Cash Overage Income (71004).
+   * Uses leaf accounts; creates them if missing. All tenant-scoped, use from within transaction.
+   */
+  async postCashVariance(
+    tenantId: string,
+    data: { shiftId: string; type: 'shortage' | 'overage'; amount: number; reason?: string },
+    client?: any
+  ): Promise<string> {
+    const db = client || this.db;
+    const amount = Math.abs(Number(data.amount));
+    if (amount <= 0) return '';
+
+    const cashAccId = await this.getOrCreateAccountByCode(
+      tenantId, COA.CASH_ON_HAND, 'Cash on Hand', 'Asset', db
+    );
+    const ref = `Shift-${data.shiftId.slice(0, 8)}-${data.type}`;
+    const desc = `${data.type === 'shortage' ? 'Cash shortage' : 'Cash overage'} at shift close${data.reason ? `: ${data.reason}` : ''}`;
+
+    if (data.type === 'shortage') {
+      const expenseAccId = await this.getOrCreateAccountByCode(
+        tenantId, COA.CASH_SHORTAGE_EXPENSE, 'Cash Shortage Expense', 'Expense', db
+      );
+      const journalRes = await db.query(`
+        INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+        VALUES ($1, NOW(), $2, $3, 'ShiftClose', $4, 'Posted')
+        RETURNING id
+      `, [tenantId, ref, desc, data.shiftId]);
+      const journalId = journalRes[0].id;
+      await db.query(
+        'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
+        [tenantId, journalId, expenseAccId, amount]
+      );
+      await db.query(
+        'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
+        [tenantId, journalId, cashAccId, amount]
+      );
+      return journalId;
+    } else {
+      const incomeAccId = await this.getOrCreateAccountByCode(
+        tenantId, COA.CASH_OVERAGE_INCOME, 'Cash Overage Income', 'Income', db
+      );
+      const journalRes = await db.query(`
+        INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+        VALUES ($1, NOW(), $2, $3, 'ShiftClose', $4, 'Posted')
+        RETURNING id
+      `, [tenantId, ref, desc, data.shiftId]);
+      const journalId = journalRes[0].id;
+      await db.query(
+        'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
+        [tenantId, journalId, cashAccId, amount]
+      );
+      await db.query(
+        'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
+        [tenantId, journalId, incomeAccId, amount]
+      );
+      return journalId;
+    }
   }
 
   /**

@@ -85,6 +85,7 @@ export const COA = {
   OTHER_INCOME: '71001',
   GAIN_ON_ASSET_SALE: '71002',
   DISCOUNT_RECEIVED: '71003',
+  CASH_OVERAGE_INCOME: '71004',
 
   // —— OTHER EXPENSES (80000) ——
   BANK_CHARGES: '81001',
@@ -92,6 +93,7 @@ export const COA = {
   PENALTIES_FINES: '81003',
   LOSS_ON_ASSET_DISPOSAL: '81004',
   OTHER_EXPENSES: '81005', // catch-all for miscellaneous
+  CASH_SHORTAGE_EXPENSE: '81006',
 } as const;
 
 /** Legacy account codes → new 5-digit code (for migration / fallback lookup) */

@@ -16,6 +16,7 @@ import { BarcodeScanner, createBarcodeScanner } from '../services/barcode/barcod
 import { ThermalPrinter, createThermalPrinter, ReceiptData } from '../services/printer/thermalPrinter';
 import { useAppContext } from './AppContext';
 import { useAuth } from './AuthContext';
+import { useShifts } from './ShiftsContext';
 
 
 
@@ -105,6 +106,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const thermalPrinterRef = useRef<ThermalPrinter | null>(null);
 
     const { user: authUser } = useAuth();
+    const { currentShift } = useShifts();
     const currentUserId = authUser?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('user_id') : null) ?? null;
 
     // Totals Calculation
@@ -388,6 +390,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 branchId: selectedBranchId ?? undefined,
                 terminalId: selectedTerminalId ?? undefined,
                 userId: currentUserId ?? undefined,
+                shiftId: currentShift?.id ?? undefined,
                 customerId: customer?.id,
                 loyaltyMemberId: null, // TODO: Link loyalty member
                 saleNumber,
@@ -428,7 +431,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             alert('Error completing sale: ' + message);
             throw error;
         }
-    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId]);
+    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId, currentShift?.id]);
 
     const applyGlobalDiscount = useCallback((percentage: number) => {
         setCart(prev => prev.map(item => {

@@ -54,7 +54,6 @@ function MobileOrdersPageContent() {
     const [selectedOrder, setSelectedOrder] = useState<MobileOrder | null>(null);
     const [detailOrder, setDetailOrder] = useState<MobileOrder | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
-    const [showSettings, setShowSettings] = useState(false);
     const [actionLoading, setActionLoading] = useState('');
     const [bankAccounts, setBankAccounts] = useState<any[]>([]);
     const [paymentModal, setPaymentModal] = useState<{ orderId: string; orderNumber: string; grandTotal: number } | null>(null);
@@ -146,10 +145,6 @@ function MobileOrdersPageContent() {
 
     const pendingCount = orders.filter(o => o.status === 'Pending').length;
 
-    if (showSettings) {
-        return <MobileSettingsPanel onBack={() => setShowSettings(false)} />;
-    }
-
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -184,13 +179,6 @@ function MobileOrdersPageContent() {
                         title="Refresh"
                     >
                         <RefreshCw className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
-                    <button
-                        onClick={() => setShowSettings(true)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors text-sm font-medium text-gray-700"
-                    >
-                        <SettingsIcon className="w-4 h-4" />
-                        Settings
                     </button>
                 </div>
             </div>
@@ -629,8 +617,8 @@ function OrderDetailPanel({
     );
 }
 
-// ─── Settings Panel ───────────────────────────────────────
-function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
+// ─── Settings Panel (exported for use in Settings page) ───
+export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
     const { settings, branding, loadSettings, loadBranding, updateSettings, updateBranding } = useMobileOrders();
     const [branches, setBranches] = useState<ShopBranchOption[]>([]);
     const [selectedBranchId, setSelectedBranchId] = useState<string>('');
@@ -801,11 +789,13 @@ function MobileSettingsPanel({ onBack }: { onBack: () => void }) {
         <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center gap-3">
-                <button onClick={onBack} className="p-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                    <ChevronRight className="w-5 h-5 text-gray-600 rotate-180" />
-                </button>
+                {onBack && (
+                    <button onClick={onBack} className="p-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
+                        <ChevronRight className="w-5 h-5 text-gray-600 rotate-180" />
+                    </button>
+                )}
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Mobile Ordering Settings</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">Mobile branding</h1>
                     <p className="text-sm text-gray-500">Configure your mobile ordering experience</p>
                 </div>
             </div>

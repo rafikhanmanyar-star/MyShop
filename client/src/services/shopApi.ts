@@ -220,3 +220,36 @@ export const procurementApi = {
     inventoryValuation: () => apiClient.get<any>('/shop/procurement/reports/inventory-valuation'),
   },
 };
+
+// --- Shifts (Cashier & Admin) API ---
+export const shiftsApi = {
+  getCurrent: (terminalId?: string) =>
+    apiClient.get<any | null>(`/shop/shifts/current${terminalId ? `?terminalId=${encodeURIComponent(terminalId)}` : ''}`),
+  start: (terminalId: string, openingCash: number) =>
+    apiClient.post<any>('/shop/shifts/start', { terminalId, openingCash }),
+  getStats: (shiftId: string) => apiClient.get<any>(`/shop/shifts/${shiftId}/stats`),
+  close: (shiftId: string, payload: { closingCashActual: number; varianceReason?: string; handoverToUserId?: string; handoverAmount?: number }) =>
+    apiClient.post<any>(`/shop/shifts/${shiftId}/close`, payload),
+  getHandovers: (shiftId: string) => apiClient.get<any[]>(`/shop/shifts/${shiftId}/handovers`),
+  list: (params?: { status?: string; cashierId?: string; terminalId?: string; from?: string; to?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    if (params?.cashierId) q.set('cashierId', params.cashierId);
+    if (params?.terminalId) q.set('terminalId', params.terminalId);
+    if (params?.from) q.set('from', params.from);
+    if (params?.to) q.set('to', params.to);
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    const query = q.toString();
+    return apiClient.get<any[]>(`/shop/shifts${query ? `?${query}` : ''}`);
+  },
+  getById: (shiftId: string) => apiClient.get<any>(`/shop/shifts/${shiftId}`),
+  getAdminSummary: (from?: string, to?: string) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    const query = q.toString();
+    return apiClient.get<any>(`/shop/shifts/admin/summary${query ? `?${query}` : ''}`);
+  },
+  reopen: (shiftId: string) => apiClient.post<any>(`/shop/shifts/${shiftId}/reopen`, {}),
+  getHandoverRecipients: () => apiClient.get<{ id: string; name: string; role: string }[]>('/shop/shifts/handover-recipients'),
+};

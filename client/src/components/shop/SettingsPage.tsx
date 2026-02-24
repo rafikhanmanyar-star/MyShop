@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 // MyShop Settings Page - Reorganized Chart of Accounts
+import { Smartphone } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import { useAppContext } from '../../context/AppContext';
 import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
@@ -9,6 +11,8 @@ import { shopApi, accountingApi, ShopBankAccount, ShopVendor } from '../../servi
 import Card from '../ui/Card';
 import { AccountingProvider } from '../../context/AccountingContext';
 import ChartOfAccounts from './accounting/ChartOfAccounts';
+import { MobileOrdersProvider } from '../../context/MobileOrdersContext';
+import { MobileSettingsPanel } from './MobileOrdersPage';
 
 function toState(v: ShopVendor) {
     return {
@@ -35,8 +39,10 @@ declare global {
 }
 
 const SettingsContent: React.FC = () => {
+    const { user } = useAuth();
     const { dispatch } = useAppContext();
-    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'app' | 'data'>('coa');
+    const isCashier = user?.role === 'pos_cashier';
+    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'mobileBranding' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
 
     const [vendors, setVendors] = useState<ShopVendor[]>([]);
     const [vendorsLoading, setVendorsLoading] = useState(true);
@@ -112,6 +118,10 @@ const SettingsContent: React.FC = () => {
             setUsersLoading(false);
         }
     }, []);
+
+    useEffect(() => {
+        if (isCashier) setActiveTab('app');
+    }, [isCashier]);
 
     useEffect(() => {
         if (activeTab === 'vendors') loadVendors();
@@ -234,20 +244,24 @@ const SettingsContent: React.FC = () => {
         }
     };
 
-    const tabs = [
+    const allTabs = [
         { id: 'coa' as const, label: 'Chart of Accounts', icon: ICONS.list },
         { id: 'vendors' as const, label: 'Vendor Management', icon: ICONS.briefcase },
         { id: 'users' as const, label: 'User Management', icon: ICONS.users },
+        { id: 'mobileBranding' as const, label: 'Mobile branding', icon: <Smartphone /> },
         { id: 'data' as const, label: 'Data', icon: ICONS.trash },
         { id: 'app' as const, label: 'App', icon: ICONS.download },
     ];
+    const tabs = isCashier ? allTabs.filter(t => t.id === 'app') : allTabs;
 
     return (
         <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
             <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10">
                 <div className="mb-6">
                     <h1 className="text-2xl font-black text-slate-800 tracking-tight">Settings</h1>
-                    <p className="text-slate-500 text-sm font-medium">Chart of accounts, vendor management, and team roles.</p>
+                    <p className="text-slate-500 text-sm font-medium">
+                        {isCashier ? 'Check for app updates and install new versions.' : 'Chart of accounts, vendor management, and team roles.'}
+                    </p>
                 </div>
                 <div className="flex gap-8">
                     {tabs.map(tab => (
@@ -271,11 +285,11 @@ const SettingsContent: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto p-8">
 
-                {activeTab === 'coa' && (
+                {!isCashier && activeTab === 'coa' && (
                     <ChartOfAccounts />
                 )}
 
-                {activeTab === 'data' && (
+                {!isCashier && activeTab === 'data' && (
                     <div className="space-y-6 max-w-xl">
                         <Card className="border-none shadow-sm p-6">
                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Clear all transactions</h3>
@@ -345,7 +359,7 @@ const SettingsContent: React.FC = () => {
                     </div>
                 )}
 
-                {activeTab === 'vendors' && (
+                {!isCashier && activeTab === 'vendors' && (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <p className="text-slate-600 text-sm">Vendors are used in Procurement when recording stock-in and purchases.</p>
@@ -422,7 +436,7 @@ const SettingsContent: React.FC = () => {
                     </div>
                 )}
 
-                {activeTab === 'users' && (
+                {!isCashier && activeTab === 'users' && (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
                             <p className="text-slate-600 text-sm">Manage team members and their access roles (Admin, Accountant, POS Cashier).</p>
@@ -494,6 +508,12 @@ const SettingsContent: React.FC = () => {
                             )}
                         </Card>
                     </div>
+                )}
+
+                {!isCashier && activeTab === 'mobileBranding' && (
+                    <MobileOrdersProvider>
+                        <MobileSettingsPanel />
+                    </MobileOrdersProvider>
                 )}
             </div>
 
