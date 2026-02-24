@@ -1,8 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { procurementApi, shopApi } from '../../../services/shopApi';
 import Button from '../../ui/Button';
 import Select from '../../ui/Select';
 import { CURRENCY } from '../../../constants';
+
+function normalizeList<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === 'object' && 'data' in raw && Array.isArray((raw as { data: T[] }).data)) return (raw as { data: T[] }).data;
+  return [];
+}
 
 export default function PurchaseBillsSection() {
   const [bills, setBills] = useState<any[]>([]);
@@ -12,6 +18,7 @@ export default function PurchaseBillsSection() {
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
   const [form, setForm] = useState({
     supplierId: '',
     billNumber: `PB-${Date.now()}`,
@@ -24,29 +31,50 @@ export default function PurchaseBillsSection() {
     notes: '',
   });
   const [productSearch, setProductSearch] = useState('');
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const productSearchRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const loadBillsAndFormData = useCallback(() => {
+    setLoadingData(true);
     Promise.all([
       procurementApi.getPurchaseBills(),
       shopApi.getVendors(),
       shopApi.getProducts(),
       shopApi.getWarehouses(),
       shopApi.getBankAccounts(),
-    ]).then(([b, v, p, w, ba]) => {
-      setBills(Array.isArray(b) ? b : []);
-      setVendors(Array.isArray(v) ? v : []);
-      setProducts(Array.isArray(p) ? p : []);
-      setWarehouses(Array.isArray(w) ? w : []);
-      setBankAccounts(Array.isArray(ba) ? ba : []);
-    });
+    ])
+      .then(([b, v, p, w, ba]) => {
+        setBills(normalizeList(b));
+        setVendors(normalizeList(v));
+        setProducts(normalizeList(p));
+        setWarehouses(normalizeList(w));
+        setBankAccounts(normalizeList(ba));
+      })
+      .catch(() => {
+        setBills([]);
+        setVendors([]);
+        setProducts([]);
+        setWarehouses([]);
+        setBankAccounts([]);
+      })
+      .finally(() => setLoadingData(false));
   }, []);
+
+  useEffect(() => {
+    loadBillsAndFormData();
+  }, [loadBillsAndFormData]);
+
+  // When opening the form, refetch vendors and products so we have latest suppliers and inventory SKUs
+  useEffect(() => {
+    if (showForm) loadBillsAndFormData();
+  }, [showForm, loadBillsAndFormData]);
 
   const subtotal = form.items.reduce((s, i) => s + i.subtotal, 0);
   const taxTotal = form.items.reduce((s, i) => s + (i.taxAmount || 0), 0);
   const totalAmount = subtotal + taxTotal;
 
   const addItem = (p: any) => {
+    const unitCost = Number(p.cost_price ?? p.average_cost) || 0;
     const existing = form.items.find((i) => i.productId === p.id);
     if (existing) {
       setForm((f) => ({
@@ -69,9 +97,9 @@ export default function PurchaseBillsSection() {
           {
             productId: p.id,
             quantity: 1,
-            unitCost: Number(p.cost_price) || 0,
+            unitCost,
             taxAmount: 0,
-            subtotal: Number(p.cost_price) || 0,
+            subtotal: unitCost,
           },
         ],
       }));
@@ -171,17 +199,24 @@ export default function PurchaseBillsSection() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Supplier *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Supplier / Vendor *</label>
                 <Select
                   value={form.supplierId}
                   onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))}
                   required
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
                 >
-                  <option value="">Select...</option>
+                  <option value="">Select supplier...</option>
                   {vendors.map((v) => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
+                    <option key={v.id} value={v.id}>
+                      {v.name}{v.company_name ? ` (${v.company_name})` : ''}
+                    </option>
                   ))}
                 </Select>
+                <p className="text-xs text-slate-500 mt-1">Suppliers from Settings. Purchase is linked to this vendor for ledger and payments.</p>
+                {!loadingData && vendors.length === 0 && (
+                  <p className="text-amber-600 text-xs mt-1">No suppliers yet. Add vendors in Settings.</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Bill number</label>
@@ -214,28 +249,49 @@ export default function PurchaseBillsSection() {
             </div>
 
             <div ref={productSearchRef} className="relative">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Add product</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Add product (inventory SKU)</label>
               <input
                 type="text"
                 value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                placeholder="Search by name or SKU..."
+                onChange={(e) => {
+                  setProductSearch(e.target.value);
+                  setProductDropdownOpen(true);
+                }}
+                onFocus={() => setProductDropdownOpen(true)}
+                onBlur={() => setTimeout(() => setProductDropdownOpen(false), 200)}
+                placeholder="Search by product name or SKU..."
                 className="w-full border border-slate-200 rounded-lg px-3 py-2"
               />
-              {productSearch && (
-                <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {filteredProducts.slice(0, 10).map((p) => (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        onClick={() => addItem(p)}
-                        className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex justify-between"
-                      >
-                        <span>{p.name} ({p.sku})</span>
-                        <span>{CURRENCY} {Number(p.cost_price || 0).toLocaleString()}</span>
-                      </button>
+              <p className="text-xs text-slate-500 mt-1">Products from Inventory. Adding updates stock and weighted average cost.</p>
+              {!loadingData && products.length === 0 && (
+                <p className="text-amber-600 text-xs mt-1">No products yet. Add products in Inventory.</p>
+              )}
+              {productDropdownOpen && (
+                <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                  {filteredProducts.length === 0 ? (
+                    <li className="px-3 py-4 text-slate-500 text-sm text-center">
+                      {productSearch ? `No products matching "${productSearch}"` : 'Type to search by name or SKU'}
                     </li>
-                  ))}
+                  ) : (
+                    filteredProducts.slice(0, 15).map((p) => (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            addItem(p);
+                            setProductDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 flex justify-between items-center border-b border-slate-50 last:border-0"
+                        >
+                          <span>
+                            <span className="font-medium text-slate-800">{p.name}</span>
+                            <span className="ml-2 text-xs font-mono text-slate-500">SKU: {p.sku || '—'}</span>
+                          </span>
+                          <span className="text-sm font-medium text-indigo-600">{CURRENCY} {Number(p.cost_price ?? p.average_cost ?? 0).toLocaleString()}</span>
+                        </button>
+                      </li>
+                    ))
+                  )}
                 </ul>
               )}
             </div>

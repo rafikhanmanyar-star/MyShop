@@ -83,16 +83,14 @@ app.get('/api/shop-test', (_req, res) => {
   res.json({ message: 'Public shop test works' });
 });
 
-// Protected routes (auth required)
+// Protected routes (auth required) — mount more specific paths first so they are not swallowed by /api/shop
 const dbService = getDatabaseService();
-app.use('/api/shop', tenantMiddleware(dbService), shopRoutes);
 app.use('/api/shop/forecast', tenantMiddleware(dbService), forecastRoutes);
-
-// POS-side mobile order management (requires shop auth)
 app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRoutes);
 app.use('/api/shop/accounting', tenantMiddleware(dbService), accountingRoutes);
 app.use('/api/shop/expenses', tenantMiddleware(dbService), expensesRoutes);
 app.use('/api/shop/procurement', tenantMiddleware(dbService), procurementRoutes);
+app.use('/api/shop', tenantMiddleware(dbService), shopRoutes);
 
 // Serve static client (Electron mode)
 if (clientDistPath) {
