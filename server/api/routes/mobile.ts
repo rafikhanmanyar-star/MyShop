@@ -86,6 +86,8 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
                 logo_url: req.shop.logo_url,
                 brand_color: req.shop.brand_color,
                 slug: req.shop.slug,
+                address: req.shop.address ?? null,
+                phone: req.shop.phone ?? null,
             },
             settings: {
                 minimum_order_amount: settings.minimum_order_amount,
@@ -246,12 +248,12 @@ router.put('/profile', mobileAuthMiddleware(db), async (req: any, res) => {
     }
 });
 
-// Place order
+// Place order — shop and branch are the same entity: server uses tenant's default (first) branch when branchId omitted
 router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     try {
         const result = await getMobileOrderService().placeOrder(req.tenantId, {
             customerId: req.customerId,
-            branchId: req.body.branchId,
+            branchId: req.body.branchId, // optional; when omitted, tenant's first branch is used (shop = branch)
             items: req.body.items,
             deliveryAddress: req.body.deliveryAddress,
             deliveryLat: req.body.deliveryLat,

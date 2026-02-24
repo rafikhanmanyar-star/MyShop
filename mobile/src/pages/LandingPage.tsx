@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { publicApi, getFullImageUrl } from '../api';
+import { getShopSlugFromUrl, isAtRootWithoutShopInPath } from '../utils/urlShop';
 
 interface ShopEntry {
     slug: string;
@@ -11,15 +12,25 @@ interface ShopEntry {
 
 export default function LandingPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [shops, setShops] = useState<ShopEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [manualSlug, setManualSlug] = useState('');
 
     useEffect(() => {
+        // If we're at root (/) and the URL identifies a shop (query ?shop= or subdomain), bind to that shop only — no picker
+        if (isAtRootWithoutShopInPath()) {
+            const slugFromUrl = getShopSlugFromUrl();
+            if (slugFromUrl) {
+                navigate(`/${slugFromUrl}`, { replace: true });
+                return;
+            }
+        }
+
         publicApi.discover()
             .then((data: any) => {
-                // If there's only one shop, auto-redirect to it immediately
+                // If there's only one shop, auto-redirect to it immediately (no picker)
                 if (data.redirect) {
                     navigate(`/${data.redirect}`, { replace: true });
                     return;
@@ -30,7 +41,7 @@ export default function LandingPage() {
                 setError(err.message || 'Could not connect to server');
             })
             .finally(() => setLoading(false));
-    }, [navigate]);
+    }, [navigate, location.pathname]);
 
     const handleManualGo = () => {
         const slug = manualSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');

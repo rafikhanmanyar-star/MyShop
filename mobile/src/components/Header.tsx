@@ -33,28 +33,41 @@ export default function Header() {
         <header className="main-header">
             <div className="header-content">
                 <div className="header-brand">
-                    <Link to={`/${shopSlug}`} className="shop-logo-link">
-                        {(state.branding?.logo_url || state.shop?.logo_url) ? (
-                            <img
-                                src={getFullImageUrl(state.branding?.logo_url || state.shop?.logo_url || undefined)}
-                                alt="Logo"
-                                className="header-logo"
-                                onError={(e) => {
-                                    // If image fails to load, hide it and show text
-                                    (e.target as HTMLImageElement).style.display = 'none';
-                                    const parent = (e.target as HTMLImageElement).parentElement;
-                                    if (parent) {
-                                        const text = document.createElement('span');
-                                        text.className = 'header-shop-name';
-                                        text.innerText = state.shop?.company_name || state.shop?.name || 'MyShop';
-                                        parent.appendChild(text);
-                                    }
-                                }}
-                            />
-                        ) : (
+                    <div className="header-brand-main">
+                        <Link to={`/${shopSlug}`} className="shop-logo-link">
+                            {(state.branding?.logo_url || state.shop?.logo_url) ? (
+                                <img
+                                    src={getFullImageUrl(state.branding?.logo_url || state.shop?.logo_url || undefined)}
+                                    alt=""
+                                    className="header-logo"
+                                    onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                        const parent = (e.target as HTMLImageElement).parentElement;
+                                        if (parent) {
+                                            const initial = (state.shop?.company_name || state.shop?.name || 'M').charAt(0).toUpperCase();
+                                            const span = document.createElement('span');
+                                            span.className = 'header-logo-initial';
+                                            span.innerText = initial;
+                                            parent.appendChild(span);
+                                        }
+                                    }}
+                                />
+                            ) : (
+                                <span className="header-logo-initial">
+                                    {(state.shop?.company_name || state.shop?.name || 'M').charAt(0).toUpperCase()}
+                                </span>
+                            )}
+                        </Link>
+                        <div className="header-shop-details">
                             <span className="header-shop-name">{state.shop?.company_name || state.shop?.name || 'MyShop'}</span>
-                        )}
-                    </Link>
+                            {state.shop?.address && (
+                                <span className="header-shop-address">{state.shop.address}</span>
+                            )}
+                            {state.shop?.phone && (
+                                <span className="header-shop-phone">{state.shop.phone}</span>
+                            )}
+                        </div>
+                    </div>
                     <span className="header-version">v{__APP_VERSION__}</span>
                 </div>
 

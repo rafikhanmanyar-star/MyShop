@@ -8,7 +8,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain
+  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet
 } from 'lucide-react';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
@@ -18,6 +18,7 @@ const LoyaltyPage = lazy(() => import('./components/shop/LoyaltyPage'));
 const MultiStorePage = lazy(() => import('./components/shop/MultiStorePage'));
 const BIDashboardsPage = lazy(() => import('./components/shop/BIDashboardsPage'));
 const AccountingPage = lazy(() => import('./components/shop/AccountingPage'));
+const ExpensePage = lazy(() => import('./components/shop/expenses/ExpensePage'));
 const MobileOrdersPage = lazy(() => import('./components/shop/MobileOrdersPage'));
 const ForecastPage = lazy(() => import('./components/shop/ForecastPage'));
 
@@ -31,6 +32,7 @@ const navItems = [
   { path: '/multi-store', label: 'Multi-Store', icon: Building2, roles: ['admin'] },
   { path: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin', 'accountant'] },
   { path: '/accounting', label: 'Accounting', icon: BookOpen, roles: ['admin', 'accountant'] },
+  { path: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin', 'accountant', 'pos_cashier'] },
   { path: '/forecast', label: 'Forecasting', icon: Brain, roles: ['admin', 'accountant'] },
   { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
 ];
@@ -63,9 +65,13 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           </div>
         )}
         {collapsed && (
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/20">
-            <Store className="w-5 h-5 text-white" />
-          </div>
+          <button
+            onClick={onToggle}
+            className="flex items-center justify-center w-full py-3 rounded-xl hover:bg-slate-800/80 text-slate-400 hover:text-white transition-all duration-200 group"
+            title="Open sidebar"
+          >
+            <ChevronRight className="w-6 h-6 group-hover:translate-x-0.5 transition-transform" />
+          </button>
         )}
         {!collapsed && (
           <button onClick={onToggle} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-all duration-200">
@@ -169,6 +175,7 @@ function AppLayout() {
               <Route path="/multi-store" element={role === 'admin' ? <MultiStorePage /> : <Navigate to="/" replace />} />
               <Route path="/analytics" element={['admin', 'accountant'].includes(role) ? <BIDashboardsPage /> : <Navigate to="/" replace />} />
               <Route path="/accounting" element={['admin', 'accountant'].includes(role) ? <AccountingPage /> : <Navigate to="/" replace />} />
+              <Route path="/expenses" element={['admin', 'accountant', 'pos_cashier'].includes(role) ? <ExpensePage /> : <Navigate to="/" replace />} />
               <Route path="/forecast" element={['admin', 'accountant'].includes(role) ? <ForecastPage /> : <Navigate to="/" replace />} />
               <Route path="/settings" element={role === 'admin' ? <SettingsPage /> : <Navigate to="/" replace />} />
 

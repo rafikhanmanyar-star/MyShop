@@ -41,7 +41,8 @@ export default function App() {
           <Route path="budget/:id" element={<BudgetDetail />} />
         </Route>
 
-        {/* Landing page — auto-discovers shops or allows manual entry */}
+        {/* Landing page only at root — app is bound to shop when URL is /:shopSlug */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="*" element={<LandingPage />} />
       </Routes>
 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
 
 // ─── Types ─────────────────────────────────────────────────
+// Shop and branch are the same entity in the mobile app: one shop (tenant) = one default branch for orders.
 export interface CartItem {
     productId: string;
     name: string;
@@ -18,6 +19,8 @@ export interface ShopInfo {
     logo_url: string | null;
     brand_color: string;
     slug: string;
+    address?: string | null;
+    phone?: string | null;
 }
 
 export interface TenantBranding {

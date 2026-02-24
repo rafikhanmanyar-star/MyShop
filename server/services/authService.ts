@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getDatabaseService } from './databaseService.js';
+import { getCoaSeedService } from './coaSeedService.js';
 
 const JWT_EXPIRY = '30d';
 
@@ -40,6 +41,13 @@ export class AuthService {
 
     const token = this.generateToken(userId, tenantId, data.username, 'admin');
     await this.createSession(userId, tenantId, token);
+
+    // Seed enterprise Chart of Accounts for new tenant
+    try {
+      await getCoaSeedService().seedDefaultChartOfAccounts(tenantId);
+    } catch (err) {
+      console.warn('CoA seed failed for new tenant (non-fatal):', err);
+    }
 
     return { token, tenantId, userId, username: data.username, role: 'admin', name: data.name };
   }

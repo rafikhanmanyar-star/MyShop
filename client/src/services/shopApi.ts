@@ -30,8 +30,11 @@ export interface ShopBankAccount {
   id: string;
   name: string;
   code?: string;
+  /** Chart of accounts code (e.g. AST-100, AST-101) when linked */
+  chart_code?: string;
   account_type: string;
   currency: string;
+  balance?: number;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
@@ -148,6 +151,7 @@ export const accountingApi = {
   getAccounts: () => apiClient.get<any[]>('/shop/accounting/accounts'),
   createAccount: (data: any) => apiClient.post('/shop/accounting/accounts', data),
   updateAccount: (id: string, data: any) => apiClient.put(`/shop/accounting/accounts/${id}`, data),
+  deleteAccount: (id: string) => apiClient.delete(`/shop/accounting/accounts/${id}`),
   getJournalEntries: (limit = 200) => apiClient.get<any[]>(`/shop/accounting/journal-entries?limit=${limit}`),
   postJournalEntry: (data: any) => apiClient.post('/shop/accounting/journal-entries', data),
   getFinancialSummary: () => apiClient.get<any>('/shop/accounting/summary'),
@@ -157,4 +161,62 @@ export const accountingApi = {
   getCategoryPerformance: () => apiClient.get<any[]>('/shop/accounting/category-performance'),
   getTransactions: (limit = 50) => apiClient.get<any[]>(`/shop/accounting/transactions?limit=${limit}`),
   clearAllTransactions: () => apiClient.post<{ success: boolean; message: string }>('/shop/accounting/clear-transactions'),
+};
+
+// --- Expenses API ---
+export const expensesApi = {
+  getCategories: () => apiClient.get<any[]>('/shop/expenses/categories'),
+  createCategory: (data: { name: string; accountId: string }) => apiClient.post<any>('/shop/expenses/categories', data),
+  list: (params?: { fromDate?: string; toDate?: string; categoryId?: string; vendorId?: string; paymentMethod?: string; search?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.fromDate) q.set('fromDate', params.fromDate);
+    if (params?.toDate) q.set('toDate', params.toDate);
+    if (params?.categoryId) q.set('categoryId', params.categoryId);
+    if (params?.vendorId) q.set('vendorId', params.vendorId);
+    if (params?.paymentMethod) q.set('paymentMethod', params.paymentMethod);
+    if (params?.search) q.set('search', params.search);
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.offset != null) q.set('offset', String(params.offset));
+    const query = q.toString();
+    return apiClient.get<{ rows: any[]; total: number }>(`/shop/expenses${query ? `?${query}` : ''}`);
+  },
+  getById: (id: string) => apiClient.get<any>(`/shop/expenses/${id}`),
+  create: (data: any) => apiClient.post<{ id: string; journalEntryId: string }>('/shop/expenses', data),
+  delete: (id: string) => apiClient.delete(`/shop/expenses/${id}`),
+  uploadAttachment: (file: File) => {
+    const formData = new FormData();
+    formData.append('attachment', file);
+    return apiClient.post<{ attachmentUrl: string }>('/shop/expenses/upload-attachment', formData);
+  },
+  recurring: {
+    list: () => apiClient.get<any[]>('/shop/expenses/recurring/list'),
+    create: (data: any) => apiClient.post<{ id: string }>('/shop/expenses/recurring', data),
+    processDue: (upToDate?: string) => apiClient.post<{ created: number }>('/shop/expenses/recurring/process-due', { upToDate }),
+  },
+  reports: {
+    monthlySummary: (year: number, month: number) => apiClient.get<any>(`/shop/expenses/reports/monthly-summary?year=${year}&month=${month}`),
+    categoryWise: (fromDate: string, toDate: string) => apiClient.get<any[]>(`/shop/expenses/reports/category-wise?fromDate=${fromDate}&toDate=${toDate}`),
+    expenseVsRevenue: (fromDate: string, toDate: string) => apiClient.get<any>(`/shop/expenses/reports/expense-vs-revenue?fromDate=${fromDate}&toDate=${toDate}`),
+    vendor: (fromDate?: string, toDate?: string) =>
+      apiClient.get<any[]>(`/shop/expenses/reports/vendor${fromDate != null ? `?fromDate=${fromDate}${toDate ? `&toDate=${toDate}` : ''}` : ''}`),
+  },
+};
+
+// --- Procurement & Supplier Payments API ---
+export const procurementApi = {
+  getPurchaseBills: (supplierId?: string) =>
+    apiClient.get<any[]>(`/shop/procurement/purchase-bills${supplierId ? `?supplierId=${supplierId}` : ''}`),
+  getPurchaseBillById: (id: string) => apiClient.get<any>(`/shop/procurement/purchase-bills/${id}`),
+  createPurchaseBill: (data: any) => apiClient.post<{ id: string }>('/shop/procurement/purchase-bills', data),
+  getSupplierPayments: (supplierId?: string) =>
+    apiClient.get<any[]>(`/shop/procurement/supplier-payments${supplierId ? `?supplierId=${supplierId}` : ''}`),
+  recordSupplierPayment: (data: any) => apiClient.post<{ id: string }>('/shop/procurement/supplier-payments', data),
+  getSupplierLedger: (supplierId?: string) =>
+    apiClient.get<any>(`/shop/procurement/supplier-ledger${supplierId ? `?supplierId=${supplierId}` : ''}`),
+  getBillsWithBalance: (supplierId: string) =>
+    apiClient.get<any[]>(`/shop/procurement/bills-with-balance/${supplierId}`),
+  reports: {
+    apAging: () => apiClient.get<any>('/shop/procurement/reports/ap-aging'),
+    inventoryValuation: () => apiClient.get<any>('/shop/procurement/reports/inventory-valuation'),
+  },
 };

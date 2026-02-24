@@ -398,7 +398,7 @@ function MobileOrdersPageContent() {
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-bold text-gray-800 truncate">{acc.name}</p>
-                                                    <p className="text-[10px] text-gray-400 uppercase">{acc.account_type} {acc.code ? `• ${acc.code}` : ''}</p>
+                                                    <p className="text-[10px] text-gray-400 uppercase">{acc.account_type} {acc.chart_code ? `• ${acc.chart_code}` : acc.code ? `• ${acc.code}` : ''}</p>
                                                 </div>
                                                 <span className="text-xs font-mono font-bold text-gray-600">
                                                     PKR {(parseFloat(acc.balance) || 0).toLocaleString()}

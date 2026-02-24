@@ -1,4 +1,6 @@
 import { getDatabaseService } from './databaseService.js';
+import { getAccountingService } from './accountingService.js';
+import { COA } from '../constants/accountCodes.js';
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -274,6 +276,16 @@ export class MobileOrderService {
             }
         }
 
+        // Shop = branch: use tenant's default (first) branch when not specified, so the app's "shop" is one entity
+        let effectiveBranchId: string | null = input.branchId || null;
+        if (!effectiveBranchId) {
+            const defaultBranch = await this.db.query(
+                'SELECT id FROM shop_branches WHERE tenant_id = $1 ORDER BY name ASC LIMIT 1',
+                [tenantId]
+            );
+            if (defaultBranch.length > 0) effectiveBranchId = defaultBranch[0].id;
+        }
+
         return this.db.transaction(async (client: any) => {
             // 1. Get all products and lock inventory rows for order products (for consistent stock check)
             const productIds = [...new Set(input.items.map((i: any) => i.productId))];
@@ -287,17 +299,23 @@ export class MobileOrderService {
                 )
                 : [];
 
-            // 2. Resolve warehouse: one that has enough stock for ALL items (so we can reserve from it)
+            // 2. Resolve warehouse: use effective branch (shop = branch) so one that has enough stock for ALL items
             let warehouseId: string | null = null;
-            if (input.branchId) {
+            if (effectiveBranchId) {
                 const whRes = await client.query(
                     'SELECT id FROM shop_warehouses WHERE id = $1 AND tenant_id = $2',
-                    [input.branchId, tenantId]
+                    [effectiveBranchId, tenantId]
                 );
                 if (whRes.length > 0) warehouseId = whRes[0].id;
+                // Shop = branch: do not fall back to other warehouses; this shop is one entity
+                if (!warehouseId) {
+                    throw new Error(
+                        'This shop cannot fulfill your order from its current location. Try different items or quantities.'
+                    );
+                }
             }
             if (!warehouseId) {
-                // Find first warehouse that can fulfill every line item that has tracked inventory
+                // No branch specified and no default: find first warehouse that can fulfill every line item
                 const warehouses = await client.query(
                     'SELECT id FROM shop_warehouses WHERE tenant_id = $1 ORDER BY id',
                     [tenantId]
@@ -436,7 +454,7 @@ export class MobileOrderService {
           idempotency_key, created_at, updated_at
         ) VALUES ($1,$2,$3,$4,$5,'Pending',$6,$7,0,$8,$9,$10,'Unpaid',$11,$12,$13,$14,$15,NOW(),NOW())`,
                 [
-                    orderId, tenantId, input.customerId, input.branchId || null,
+                    orderId, tenantId, input.customerId, effectiveBranchId,
                     orderNumber, subtotal, taxTotal, deliveryFee, grandTotal,
                     input.paymentMethod || 'COD',
                     input.deliveryAddress || null, input.deliveryLat || null,
@@ -901,21 +919,21 @@ export class MobileOrderService {
         if (journalRes.length === 0) return;
         const journalId = journalRes[0].id;
 
-        // 1. Credit Revenue
-        const revenueAcc = await this.getOrCreateAccount(client, tenantId, 'Sales Revenue', 'Income', 'INC-400');
+        // 1. Credit Revenue (41001 Retail Sales)
+        const revenueAcc = await this.getAcc(client, tenantId, COA.RETAIL_SALES, 'Retail Sales', 'Income');
         await client.query(
             'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
             [tenantId, journalId, revenueAcc, data.grandTotal]
         );
 
-        // 2. Debit Accounts Receivable (payment collected later)
-        const receivableAcc = await this.getOrCreateAccount(client, tenantId, 'Accounts Receivable', 'Asset', 'AST-120');
+        // 2. Debit Accounts Receivable (11201 Trade Receivables)
+        const receivableAcc = await this.getAcc(client, tenantId, COA.TRADE_RECEIVABLES, 'Trade Receivables', 'Asset');
         await client.query(
             'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
             [tenantId, journalId, receivableAcc, data.grandTotal]
         );
 
-        // 3. COGS vs Inventory
+        // 3. COGS vs Inventory (51001, 11301)
         let totalCogs = 0;
         for (const item of data.items) {
             const prodRes = await client.query('SELECT cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1', [item.product_id, tenantId]);
@@ -925,8 +943,8 @@ export class MobileOrderService {
         }
 
         if (totalCogs > 0) {
-            const cogsAcc = await this.getOrCreateAccount(client, tenantId, 'Cost of Goods Sold', 'Expense', 'EXP-500');
-            const invAssetAcc = await this.getOrCreateAccount(client, tenantId, 'Inventory Asset', 'Asset', 'AST-110');
+            const cogsAcc = await this.getAcc(client, tenantId, COA.COST_OF_GOODS_SOLD, 'Cost of Goods Sold', 'Expense');
+            const invAssetAcc = await this.getAcc(client, tenantId, COA.MERCHANDISE_INVENTORY, 'Merchandise Inventory', 'Asset');
 
             await client.query(
                 'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
@@ -969,16 +987,16 @@ export class MobileOrderService {
         if (bankLinkRes.length > 0 && bankLinkRes[0].chart_account_id) {
             bankChartAccId = bankLinkRes[0].chart_account_id;
         } else {
-            const accCode = data.bankType === 'Cash' ? 'AST-100' : 'AST-101';
-            bankChartAccId = await this.getOrCreateAccount(client, tenantId, data.bankName, 'Asset', accCode);
+            const accCode = data.bankType === 'Cash' ? COA.CASH_ON_HAND : COA.MAIN_BANK;
+            bankChartAccId = await this.getAcc(client, tenantId, accCode, data.bankName, 'Asset');
         }
         await client.query(
             'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
             [tenantId, journalId, bankChartAccId, data.grandTotal]
         );
 
-        // 2. Credit Accounts Receivable
-        const receivableAcc = await this.getOrCreateAccount(client, tenantId, 'Accounts Receivable', 'Asset', 'AST-120');
+        // 2. Credit Accounts Receivable (11201)
+        const receivableAcc = await this.getAcc(client, tenantId, COA.TRADE_RECEIVABLES, 'Trade Receivables', 'Asset');
         await client.query(
             'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
             [tenantId, journalId, receivableAcc, data.grandTotal]

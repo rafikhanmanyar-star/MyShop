@@ -1,5 +1,6 @@
 import express from 'express';
 import { getAccountingService } from '../../services/accountingService.js';
+import { getCoaSeedService } from '../../services/coaSeedService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
 
 const router = express.Router();
@@ -56,6 +57,22 @@ router.put('/accounts/:id', checkRole(['admin', 'accountant']), async (req: any,
             return res.status(status).json({ error: error.message });
         }
         console.error('❌ Error updating account:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- Delete Account (Chart of Accounts) ---
+router.delete('/accounts/:id', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const { id } = req.params;
+        await getAccountingService().deleteAccount(req.tenantId, id);
+        res.json({ success: true });
+    } catch (error: any) {
+        const status = error.statusCode || 500;
+        if (status !== 500) {
+            return res.status(status).json({ error: error.message });
+        }
+        console.error('❌ Error deleting account:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -147,6 +164,17 @@ router.get('/transactions', checkRole(['admin', 'accountant']), async (req: any,
         res.json(data);
     } catch (error: any) {
         console.error('❌ Error fetching transactions:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- Seed default enterprise Chart of Accounts (idempotent; for new or existing tenants) ---
+router.post('/seed-coa', checkRole(['admin']), async (req: any, res) => {
+    try {
+        const { inserted, skipped } = await getCoaSeedService().seedDefaultChartOfAccounts(req.tenantId);
+        res.json({ success: true, inserted, skipped, message: `Chart of Accounts: ${inserted} accounts added, ${skipped} already present.` });
+    } catch (error: any) {
+        console.error('❌ Error seeding CoA:', error);
         res.status(500).json({ error: error.message });
     }
 });

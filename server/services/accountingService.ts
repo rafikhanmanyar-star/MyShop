@@ -1,7 +1,62 @@
 import { getDatabaseService } from './databaseService.js';
+import { COA, LEGACY_TO_COA } from '../constants/accountCodes.js';
 
 export class AccountingService {
   private db = getDatabaseService();
+
+  /**
+   * Get account id by enterprise code (e.g. 41001) or legacy code (e.g. INC-400).
+   * Tries preferred code first, then legacy mapping, so existing tenants keep working.
+   */
+  async getAccountIdByCode(tenantId: string, preferredCode: string, options?: { legacyCode?: string }): Promise<string | null> {
+    const codesToTry = [preferredCode];
+    if (options?.legacyCode) codesToTry.push(options.legacyCode);
+    else if (LEGACY_TO_COA[preferredCode]) codesToTry.push(preferredCode); // already legacy
+    const legacy = LEGACY_TO_COA[preferredCode];
+    if (legacy && legacy !== preferredCode) codesToTry.push(legacy);
+    for (const code of codesToTry) {
+      const rows = await this.db.query(
+        'SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2 AND is_active = TRUE LIMIT 1',
+        [tenantId, code]
+      );
+      if (rows.length > 0) return (rows[0] as any).id;
+    }
+    return null;
+  }
+
+  /**
+   * Get or create an account by code. Use for posting (POS, procurement, expense, etc.).
+   * Prefer enterprise code (e.g. COA.RETAIL_SALES); creates with name/type if missing (e.g. legacy tenants).
+   */
+  async getOrCreateAccountByCode(
+    tenantId: string,
+    code: string,
+    name: string,
+    type: 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense',
+    client?: any
+  ): Promise<string> {
+    const db = client || this.db;
+    let rows = await db.query(
+      'SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2 LIMIT 1',
+      [tenantId, code]
+    );
+    if (rows.length > 0) return (rows[0] as any).id;
+    const legacy = LEGACY_TO_COA[code];
+    if (legacy && legacy !== code) {
+      rows = await db.query(
+        'SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2 LIMIT 1',
+        [tenantId, legacy]
+      );
+      if (rows.length > 0) return (rows[0] as any).id;
+    }
+    const normalBalance = type === 'Asset' || type === 'Expense' ? 'debit' : 'credit';
+    const res = await db.query(
+      `INSERT INTO accounts (tenant_id, name, code, type, normal_balance, is_active)
+       VALUES ($1, $2, $3, $4, $5, TRUE) RETURNING id`,
+      [tenantId, name, code, type, normalBalance]
+    );
+    return (res[0] as any).id;
+  }
 
   /**
    * Get all chart-of-accounts entries (from `accounts` table)
@@ -11,6 +66,7 @@ export class AccountingService {
     return this.db.query(`
       SELECT
         a.id, a.name, a.code, a.type, a.description, a.is_active,
+        a.parent_account_id, a.normal_balance, a.level,
         COALESCE(SUM(le.debit), 0) as total_debit,
         COALESCE(SUM(le.credit), 0) as total_credit,
         CASE
@@ -22,7 +78,7 @@ export class AccountingService {
       FROM accounts a
       LEFT JOIN ledger_entries le ON le.account_id = a.id AND le.tenant_id = $1
       WHERE a.tenant_id = $1
-      GROUP BY a.id, a.name, a.code, a.type, a.description, a.is_active
+      GROUP BY a.id, a.name, a.code, a.type, a.description, a.is_active, a.parent_account_id, a.normal_balance, a.level
       ORDER BY a.code ASC
     `, [tenantId]);
   }
@@ -137,22 +193,22 @@ export class AccountingService {
       }
     }
 
-    // Get COGS specifically
+    // Get COGS specifically (enterprise 51001 or legacy EXP-500)
     const cogsResult = await this.db.query(`
       SELECT COALESCE(SUM(le.debit) - SUM(le.credit), 0) as cogs
       FROM ledger_entries le
       JOIN accounts a ON le.account_id = a.id AND a.tenant_id = $1
-      WHERE le.tenant_id = $1 AND a.code = 'EXP-500'
-    `, [tenantId]);
+      WHERE le.tenant_id = $1 AND (a.code = $2 OR a.code = $3)
+    `, [tenantId, COA.COST_OF_GOODS_SOLD, 'EXP-500']);
     totalCOGS = parseFloat(cogsResult[0]?.cogs) || 0;
 
-    // Get Accounts Receivable balance
+    // Get Accounts Receivable balance (enterprise 11201 or legacy AST-120)
     const arResult = await this.db.query(`
       SELECT COALESCE(SUM(le.debit) - SUM(le.credit), 0) as ar_balance
       FROM ledger_entries le
       JOIN accounts a ON le.account_id = a.id AND a.tenant_id = $1
-      WHERE le.tenant_id = $1 AND a.code = 'AST-120'
-    `, [tenantId]);
+      WHERE le.tenant_id = $1 AND (a.code = $2 OR a.code = $3)
+    `, [tenantId, COA.TRADE_RECEIVABLES, 'AST-120']);
     receivablesTotal = parseFloat(arResult[0]?.ar_balance) || 0;
 
     const grossProfit = totalRevenue - totalCOGS;
@@ -175,15 +231,57 @@ export class AccountingService {
 
   /**
    * Get bank account balances from shop_bank_accounts.
-   * These are the "physical" cash/bank balances.
+   * When a bank account is linked to a chart account (chart_account_id), the balance shown
+   * is the ledger-derived balance for that chart account so it stays in sync with cleared transactions.
+   * Otherwise falls back to the denormalized shop_bank_accounts.balance.
    */
   async getBankBalances(tenantId: string) {
-    return this.db.query(`
-      SELECT id, name, code, account_type, currency, balance, is_active, created_at, updated_at
-      FROM shop_bank_accounts
-      WHERE tenant_id = $1 AND is_active = TRUE
-      ORDER BY name ASC
+    const rows = await this.db.query(`
+      SELECT
+        sba.id, sba.name, sba.code, sba.account_type, sba.currency,
+        sba.balance, sba.is_active, sba.created_at, sba.updated_at,
+        sba.chart_account_id
+      FROM shop_bank_accounts sba
+      WHERE sba.tenant_id = $1 AND sba.is_active = TRUE AND sba.chart_account_id IS NOT NULL
+      ORDER BY sba.name ASC
     `, [tenantId]);
+
+    if (rows.length === 0) return [];
+
+    const chartIds = rows.map((r: any) => r.chart_account_id).filter(Boolean);
+    let ledgerBalances: Record<string, number> = {};
+    if (chartIds.length > 0) {
+      const placeholders = chartIds.map((_: any, i: number) => `$${i + 2}`).join(', ');
+      const balanceRows = await this.db.query(`
+        SELECT
+          a.id,
+          CASE WHEN a.type IN ('Asset', 'Expense')
+            THEN COALESCE(SUM(le.debit), 0) - COALESCE(SUM(le.credit), 0)
+            ELSE COALESCE(SUM(le.credit), 0) - COALESCE(SUM(le.debit), 0)
+          END as balance
+        FROM accounts a
+        LEFT JOIN ledger_entries le ON le.account_id = a.id AND le.tenant_id = $1
+        WHERE a.tenant_id = $1 AND a.id IN (${placeholders})
+        GROUP BY a.id
+      `, [tenantId, ...chartIds]);
+      for (const r of balanceRows) {
+        ledgerBalances[r.id] = parseFloat(r.balance) || 0;
+      }
+    }
+
+    return rows.map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      code: r.code,
+      account_type: r.account_type,
+      currency: r.currency,
+      is_active: r.is_active,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      balance: r.chart_account_id != null && r.chart_account_id in ledgerBalances
+        ? ledgerBalances[r.chart_account_id]
+        : (parseFloat(r.balance) || 0),
+    }));
   }
 
   /**
@@ -460,7 +558,34 @@ export class AccountingService {
   }
 
   /**
-   * Post journal entry + ledger for a manual entry (from UI)
+   * Delete a chart-of-accounts entry. Only allowed when the account has no ledger entries.
+   */
+  async deleteAccount(tenantId: string, accountId: string) {
+    const existing = await this.db.query(
+      `SELECT id FROM accounts WHERE id = $1 AND tenant_id = $2`,
+      [accountId, tenantId]
+    );
+    if (!existing.length) {
+      const err: any = new Error('Account not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    const hasLedger = await this.db.query(
+      `SELECT 1 FROM ledger_entries WHERE account_id = $1 AND tenant_id = $2 LIMIT 1`,
+      [accountId, tenantId]
+    );
+    if (hasLedger.length) {
+      const err: any = new Error('Cannot delete account that has transactions. Deactivate it instead or remove its transactions first.');
+      err.statusCode = 409;
+      throw err;
+    }
+    await this.db.query(`DELETE FROM accounts WHERE id = $1 AND tenant_id = $2`, [accountId, tenantId]);
+    return { success: true };
+  }
+
+  /**
+   * Post journal entry + ledger for a manual entry (from UI).
+   * Validates: journal must balance (sum debit = sum credit); posting only to leaf accounts (level 4 or legacy without level).
    */
   async postManualJournalEntry(tenantId: string, data: {
     date: string;
@@ -473,7 +598,34 @@ export class AccountingService {
       description?: string;
     }>;
   }) {
+    const totalDebit = data.lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
+    const totalCredit = data.lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      const err: any = new Error('Journal must balance: total debits must equal total credits.');
+      err.statusCode = 400;
+      throw err;
+    }
+
     return this.db.transaction(async (client: any) => {
+      const accountIds = [...new Set(data.lines.map((l) => l.accountId))];
+      const placeholders = accountIds.map((_, i) => `$${i + 2}`).join(', ');
+      const levelRows = await client.query(
+        `SELECT id, level FROM accounts WHERE tenant_id = $1 AND id IN (${placeholders})`,
+        [tenantId, ...accountIds]
+      );
+      const levelByAccount: Record<string, number | null> = {};
+      for (const r of levelRows) {
+        levelByAccount[r.id] = r.level != null ? Number(r.level) : null;
+      }
+      for (const aid of accountIds) {
+        const level = levelByAccount[aid];
+        if (level != null && level < 4) {
+          const err: any = new Error('Posting is only allowed to leaf (postable) accounts. This account is a parent/header account.');
+          err.statusCode = 400;
+          throw err;
+        }
+      }
+
       const journalRes = await client.query(`
         INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, status)
         VALUES ($1, $2, $3, $4, 'Manual', 'Posted')
@@ -524,10 +676,16 @@ export class AccountingService {
    * Clear all sales transaction data for the tenant. Keeps settings, accounts, users, vendors,
    * bank accounts, products, and all inventory data (stock levels and movement history).
    * Removes: sales, journal/ledger entries, transactions table, mobile orders, customer balances,
-   * and report aggregates.
+   * report aggregates; and zeros Cash & Bank balances so the dashboard shows 0 after clear.
    */
   async clearAllTransactions(tenantId: string): Promise<void> {
     await this.db.transaction(async (client) => {
+      // Expense records reference journal_entries; delete first so journal cascade is clean (table may not exist before migration 017)
+      try {
+        await client.execute('DELETE FROM expenses WHERE tenant_id = $1', [tenantId]);
+      } catch (_) {
+        // expenses table may not exist if migration 017 not applied
+      }
       // Parent tables only; child rows removed by CASCADE. Inventories (shop_inventory, shop_inventory_movements) are not touched.
       await client.execute('DELETE FROM shop_sales WHERE tenant_id = $1', [tenantId]);
       await client.execute('DELETE FROM journal_entries WHERE tenant_id = $1', [tenantId]);
@@ -535,6 +693,8 @@ export class AccountingService {
       await client.execute('DELETE FROM mobile_orders WHERE tenant_id = $1', [tenantId]);
       await client.execute('DELETE FROM customer_balance WHERE tenant_id = $1', [tenantId]);
       await client.execute('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+      // Zero denormalized Cash & Bank balances so "Cash & Bank Balances" shows 0 after clear
+      await client.execute('UPDATE shop_bank_accounts SET balance = 0, updated_at = NOW() WHERE tenant_id = $1', [tenantId]);
     });
   }
 }

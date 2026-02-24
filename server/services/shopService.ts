@@ -1,4 +1,6 @@
 import { getDatabaseService } from './databaseService.js';
+import { getAccountingService } from './accountingService.js';
+import { COA } from '../constants/accountCodes.js';
 
 export interface ShopSale {
   id?: string;
@@ -373,10 +375,25 @@ export class ShopService {
             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4
           `, [item.quantity, tenantId, item.productId, warehouseId]);
 
+          let unitCost: number | null = null;
+          let totalCost: number | null = null;
+          const prodRow = await client.query(
+            'SELECT average_cost, cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1',
+            [item.productId, tenantId]
+          );
+          if (prodRow.length > 0) {
+            const ac = prodRow[0].average_cost != null && Number(prodRow[0].average_cost) > 0
+              ? Number(prodRow[0].average_cost)
+              : Number(prodRow[0].cost_price) || 0;
+            if (ac > 0) {
+              unitCost = ac;
+              totalCost = ac * item.quantity;
+            }
+          }
           await client.query(`
-            INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id)
-            VALUES ($1, $2, $3, 'Sale', $4, $5, $6)
-          `, [tenantId, item.productId, warehouseId, -item.quantity, saleId, saleData.userId]);
+            INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, unit_cost, total_cost)
+            VALUES ($1, $2, $3, 'Sale', $4, $5, $6, $7, $8)
+          `, [tenantId, item.productId, warehouseId, -item.quantity, saleId, saleData.userId, unitCost, totalCost]);
         }
       }
 
@@ -442,22 +459,14 @@ export class ShopService {
     if (journalIdResult.length === 0) return; // Silent return for missing tables if not migrated yet
     const journalId = journalIdResult[0].id;
 
-    // Helper to get or create account
-    const getAccount = async (name: string, type: string, code: string) => {
-      let accRes = await client.query('SELECT id FROM accounts WHERE tenant_id = $1 AND code = $2 LIMIT 1', [tenantId, code]);
-      if (accRes.length === 0) {
-        accRes = await client.query(
-          'INSERT INTO accounts (tenant_id, name, code, type, balance) VALUES ($1, $2, $3, $4, 0) RETURNING id',
-          [tenantId, name, code, type]
-        );
-      }
-      return accRes[0].id;
-    };
+    const accounting = getAccountingService();
+    const getAcc = (code: string, name: string, type: 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense') =>
+      accounting.getOrCreateAccountByCode(tenantId, code, name, type, client);
 
     const isCredit = saleData.paymentMethod === 'Credit';
 
-    // Revenue Ledger (Credit)
-    const revenueAcc = await getAccount('Sales Revenue', 'Income', 'INC-400');
+    // Revenue Ledger (Credit) – 41001 Retail Sales
+    const revenueAcc = await getAcc(COA.RETAIL_SALES, 'Retail Sales', 'Income');
     await client.query(
       'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, 0, $4)',
       [tenantId, journalId, revenueAcc, saleData.grandTotal]
@@ -466,7 +475,7 @@ export class ShopService {
     // Asset/Cash Ledger (Debit)
     if (isCredit) {
       if (!saleData.customerId) throw new Error('Customer required for credit sale');
-      const arAcc = await getAccount('Accounts Receivable', 'Asset', 'AST-120');
+      const arAcc = await getAcc(COA.TRADE_RECEIVABLES, 'Trade Receivables', 'Asset');
       await client.query(
         'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
         [tenantId, journalId, arAcc, saleData.grandTotal]
@@ -494,12 +503,11 @@ export class ShopService {
           if (bank?.chart_account_id) {
             debitAccId = bank.chart_account_id;
           } else {
-            const accName = bank?.name || 'Bank';
-            const accCode = bank?.account_type === 'Cash' ? 'AST-100' : 'AST-101';
-            debitAccId = await getAccount(accName, 'Asset', accCode);
+            const accCode = bank?.account_type === 'Cash' ? COA.CASH_ON_HAND : COA.MAIN_BANK;
+            const accName = bank?.account_type === 'Cash' ? 'Cash on Hand' : 'Main Bank Account';
+            debitAccId = await getAcc(accCode, accName, 'Asset');
           }
         } else {
-          // Use the chart account linked to the first Cash-type bank account to avoid creating a duplicate Cash account
           const cashBank = await client.query(
             `SELECT chart_account_id FROM shop_bank_accounts WHERE tenant_id = $1 AND account_type = 'Cash' AND is_active = TRUE ORDER BY name LIMIT 1`,
             [tenantId]
@@ -507,7 +515,7 @@ export class ShopService {
           if (cashBank.length > 0 && cashBank[0].chart_account_id) {
             debitAccId = cashBank[0].chart_account_id;
           } else {
-            debitAccId = await getAccount('Cash', 'Asset', 'AST-100');
+            debitAccId = await getAcc(COA.CASH_ON_HAND, 'Cash on Hand', 'Asset');
           }
         }
 
@@ -518,19 +526,24 @@ export class ShopService {
       }
     }
 
-    // COGS vs Inventory (Only if items exist with cost prices)
-    // To properly calculate COGS, we sum up max(cost_price, 0) * qty
+    // COGS vs Inventory: use weighted average cost when set, else cost_price
     let totalCogs = 0;
     for (const item of saleData.items) {
-      const prodRes = await client.query('SELECT cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1', [item.productId, tenantId]);
-      if (prodRes.length > 0 && prodRes[0].cost_price) {
-        totalCogs += (Number(prodRes[0].cost_price) * item.quantity);
+      const prodRes = await client.query(
+        'SELECT average_cost, cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1',
+        [item.productId, tenantId]
+      );
+      if (prodRes.length > 0) {
+        const avgCost = prodRes[0].average_cost != null && Number(prodRes[0].average_cost) > 0
+          ? Number(prodRes[0].average_cost)
+          : Number(prodRes[0].cost_price) || 0;
+        if (avgCost > 0) totalCogs += avgCost * item.quantity;
       }
     }
 
     if (totalCogs > 0) {
-      const cogsAcc = await getAccount('Cost of Goods Sold', 'Expense', 'EXP-500');
-      const invAssetAcc = await getAccount('Inventory Asset', 'Asset', 'AST-110');
+      const cogsAcc = await getAcc(COA.COST_OF_GOODS_SOLD, 'Cost of Goods Sold', 'Expense');
+      const invAssetAcc = await getAcc(COA.MERCHANDISE_INVENTORY, 'Merchandise Inventory', 'Asset');
 
       // Debit COGS
       await client.query(
@@ -735,15 +748,22 @@ export class ShopService {
   }
 
   // --- Bank Accounts (Chart of Accounts for POS) ---
+  // Only returns bank accounts linked to the chart of accounts (user-created in Settings).
+  // Unlinked/test accounts are excluded so POS and Collect Payment show only AST-100, AST-101, etc.
   async getBankAccounts(tenantId: string, activeOnly = true) {
-    const clause = activeOnly ? 'AND is_active = TRUE' : '';
+    const clause = activeOnly ? 'AND sba.is_active = TRUE' : '';
     let accounts = await this.db.query(
-      `SELECT id, name, code, account_type, currency, balance, is_active, created_at, updated_at
-       FROM shop_bank_accounts WHERE tenant_id = $1 ${clause} ORDER BY name`,
+      `SELECT sba.id, sba.name, sba.code, sba.account_type, sba.currency, sba.balance,
+              sba.is_active, sba.created_at, sba.updated_at,
+              a.code AS chart_code
+       FROM shop_bank_accounts sba
+       INNER JOIN accounts a ON a.id = sba.chart_account_id AND a.tenant_id = sba.tenant_id
+       WHERE sba.tenant_id = $1 AND sba.chart_account_id IS NOT NULL ${clause}
+       ORDER BY sba.name`,
       [tenantId]
     );
 
-    // Ensure at least one Cash account exists for POS
+    // Ensure at least one Cash account exists for POS (creates one linked to chart)
     if (accounts.length === 0 && activeOnly) {
       await this.createBankAccount(tenantId, {
         name: 'Main Cash Account',
@@ -752,8 +772,13 @@ export class ShopService {
         currency: 'PKR'
       });
       accounts = await this.db.query(
-        `SELECT id, name, code, account_type, currency, balance, is_active, created_at, updated_at
-         FROM shop_bank_accounts WHERE tenant_id = $1 ${clause} ORDER BY name`,
+        `SELECT sba.id, sba.name, sba.code, sba.account_type, sba.currency, sba.balance,
+                sba.is_active, sba.created_at, sba.updated_at,
+                a.code AS chart_code
+         FROM shop_bank_accounts sba
+         INNER JOIN accounts a ON a.id = sba.chart_account_id AND a.tenant_id = sba.tenant_id
+         WHERE sba.tenant_id = $1 AND sba.chart_account_id IS NOT NULL ${clause}
+         ORDER BY sba.name`,
         [tenantId]
       );
     }
@@ -776,28 +801,31 @@ export class ShopService {
 
       const accountType = data.account_type || 'Bank';
 
-      // Auto-create a linked chart-of-accounts entry (Asset)
-      const baseCode = accountType === 'Cash' ? 'AST-100' : 'AST-101';
-      const existingCodes = await client.query(
-        `SELECT code FROM accounts WHERE tenant_id = $1 AND code LIKE $2`,
-        [tenantId, baseCode + '%']
+      // Link to enterprise CoA: 11101–11105 for Cash/Bank; prefer first unused by type
+      const cashCodes = [COA.CASH_ON_HAND, COA.PETTY_CASH, COA.MOBILE_WALLET];
+      const bankCodes = [COA.MAIN_BANK, COA.SECONDARY_BANK];
+      const codesForType = accountType === 'Cash' ? cashCodes : bankCodes;
+      const linkedIds = await client.query(
+        `SELECT chart_account_id FROM shop_bank_accounts WHERE tenant_id = $1 AND chart_account_id IS NOT NULL`,
+        [tenantId]
       );
-      const chartCode = existingCodes.length === 0 ? baseCode : `${baseCode}-${existingCodes.length + 1}`;
-
+      const linkedSet = new Set((linkedIds || []).map((r: any) => r.chart_account_id));
+      const placeholders = codesForType.map((_: string, i: number) => `$${i + 2}`).join(', ');
+      const accsByCode = await client.query(
+        `SELECT id, code FROM accounts WHERE tenant_id = $1 AND code IN (${placeholders})`,
+        [tenantId, ...codesForType]
+      );
       let chartAccId: string | null = null;
-      const existingAcc = await client.query(
-        'SELECT id FROM accounts WHERE tenant_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1',
-        [tenantId, data.name]
-      );
-      if (existingAcc.length > 0) {
-        chartAccId = existingAcc[0].id;
-      } else {
-        const accRes = await client.query(
-          `INSERT INTO accounts (tenant_id, name, code, type, balance, is_active, description)
-           VALUES ($1, $2, $3, 'Asset', 0, TRUE, $4) RETURNING id`,
-          [tenantId, data.name, chartCode, `Linked bank account: ${data.name}`]
-        );
-        chartAccId = accRes[0].id;
+      for (const a of accsByCode) {
+        if (!linkedSet.has(a.id)) {
+          chartAccId = a.id;
+          break;
+        }
+      }
+      if (!chartAccId) {
+        const code = codesForType[0];
+        const name = accountType === 'Cash' ? 'Cash on Hand' : 'Main Bank Account';
+        chartAccId = await getAccountingService().getOrCreateAccountByCode(tenantId, code, name, 'Asset', client);
       }
 
       const res = await client.query(

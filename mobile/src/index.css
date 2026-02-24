@@ -1007,12 +1007,69 @@ img {
   align-items: flex-start;
   justify-content: center;
   gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.header-brand-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.shop-logo-link {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .header-logo {
   height: 32px;
   width: auto;
+  max-height: 32px;
   border-radius: 6px;
+}
+
+.header-logo-initial {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: white;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.header-shop-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.header-shop-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-shop-address,
+.header-shop-phone {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-version {

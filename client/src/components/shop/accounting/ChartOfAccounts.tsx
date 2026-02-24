@@ -11,13 +11,14 @@ import Button from '../../ui/Button';
 type AccountRow = { id: string; code: string; name: string; type: string; description?: string; isControlAccount?: boolean; balance: number };
 
 const ChartOfAccounts: React.FC = () => {
-    const { accounts, createAccount, updateAccount } = useAccounting();
+    const { accounts, createAccount, updateAccount, deleteAccount } = useAccounting();
     const [filter, setFilter] = useState<string>('All');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingAccount, setEditingAccount] = useState<AccountRow | null>(null);
     const [formError, setFormError] = useState<string>('');
     const [creating, setCreating] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const [newAccount, setNewAccount] = useState({
         code: '',
         name: '',
@@ -102,6 +103,22 @@ const ChartOfAccounts: React.FC = () => {
             setFormError(msg);
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!editingAccount) return;
+        if (!window.confirm(`Delete account "${editingAccount.name}"? This cannot be undone.`)) return;
+        setFormError('');
+        setDeleting(true);
+        try {
+            await deleteAccount(editingAccount.id);
+            closeModal();
+        } catch (e: any) {
+            const msg = e?.error || e?.message || 'Failed to delete account';
+            setFormError(msg);
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -254,17 +271,30 @@ const ChartOfAccounts: React.FC = () => {
                         </div>
                     )}
 
-                    <div className="flex justify-end gap-3 mt-4">
-                        <Button variant="secondary" onClick={closeModal}>Cancel</Button>
-                        {editingAccount ? (
-                            <Button onClick={handleUpdate} disabled={!newAccount.code.trim() || !newAccount.name.trim() || saving}>
-                                {saving ? 'Saving...' : 'Save Changes'}
-                            </Button>
-                        ) : (
-                            <Button onClick={handleCreate} disabled={!newAccount.code.trim() || !newAccount.name.trim() || creating}>
-                                {creating ? 'Creating...' : 'Create Account'}
-                            </Button>
-                        )}
+                    <div className="flex justify-between gap-3 mt-4">
+                        <div>
+                            {editingAccount && (
+                                <Button
+                                    variant="danger"
+                                    onClick={handleDelete}
+                                    disabled={deleting || saving}
+                                >
+                                    {deleting ? 'Deleting...' : 'Delete Account'}
+                                </Button>
+                            )}
+                        </div>
+                        <div className="flex gap-3">
+                            <Button variant="secondary" onClick={closeModal}>Cancel</Button>
+                            {editingAccount ? (
+                                <Button onClick={handleUpdate} disabled={!newAccount.code.trim() || !newAccount.name.trim() || saving}>
+                                    {saving ? 'Saving...' : 'Save Changes'}
+                                </Button>
+                            ) : (
+                                <Button onClick={handleCreate} disabled={!newAccount.code.trim() || !newAccount.name.trim() || creating}>
+                                    {creating ? 'Creating...' : 'Create Account'}
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </Modal>

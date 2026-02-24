@@ -16,7 +16,7 @@ export function publicTenantMiddleware(db: IDatabaseService) {
             }
 
             const rows = await db.query(
-                'SELECT id, name, company_name, logo_url, brand_color, slug FROM tenants WHERE slug = $1',
+                'SELECT id, name, company_name, logo_url, brand_color, slug, address, phone FROM tenants WHERE slug = $1',
                 [slug]
             );
 

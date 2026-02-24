@@ -11,6 +11,8 @@ import forecastRoutes from './routes/forecast.js';
 import mobileRoutes from './routes/mobile.js';
 import mobileOrdersRoutes from './routes/mobileOrders.js';
 import accountingRoutes from './routes/accounting.js';
+import expensesRoutes from './routes/expenses.js';
+import procurementRoutes from './routes/procurement.js';
 import { runMigrations } from '../scripts/run-migrations.js';
 import { fileURLToPath } from 'url';
 
@@ -89,6 +91,8 @@ app.use('/api/shop/forecast', tenantMiddleware(dbService), forecastRoutes);
 // POS-side mobile order management (requires shop auth)
 app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRoutes);
 app.use('/api/shop/accounting', tenantMiddleware(dbService), accountingRoutes);
+app.use('/api/shop/expenses', tenantMiddleware(dbService), expensesRoutes);
+app.use('/api/shop/procurement', tenantMiddleware(dbService), procurementRoutes);
 
 // Serve static client (Electron mode)
 if (clientDistPath) {

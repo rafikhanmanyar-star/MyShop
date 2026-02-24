@@ -144,7 +144,7 @@ const PaymentModal: React.FC = () => {
                                         {bankAccounts
                                             .filter(b => selectedMethod === POSPaymentMethod.CASH ? (b.account_type === 'Cash' || b.name.toLowerCase().includes('cash')) : (b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash')))
                                             .map(b => (
-                                                <option key={b.id} value={b.id}>{b.name}{b.code ? ` — ${b.code}` : ''}</option>
+                                                <option key={b.id} value={b.id}>{b.name}{b.chart_code ? ` — ${b.chart_code}` : b.code ? ` — ${b.code}` : ''}</option>
                                             ))}
                                     </select>
                                     <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">

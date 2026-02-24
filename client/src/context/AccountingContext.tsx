@@ -23,6 +23,7 @@ interface AccountingContextValue {
   refreshAll: () => Promise<void>;
   createAccount: (data: any) => Promise<any>;
   updateAccount: (id: string, data: any) => Promise<any>;
+  deleteAccount: (id: string) => Promise<any>;
   postJournalEntry: (data: any) => Promise<any>;
   [key: string]: any;
 }
@@ -37,6 +38,7 @@ const defaultValue: AccountingContextValue = {
   refreshAll: async () => { },
   createAccount: async () => ({}),
   updateAccount: async () => ({}),
+  deleteAccount: async () => ({}),
   postJournalEntry: async () => ({}),
 };
 
@@ -142,6 +144,16 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const deleteAccount = async (id: string) => {
+    try {
+      await accountingApi.deleteAccount(id);
+      await refreshAll();
+    } catch (error) {
+      console.error('Failed to delete account:', error);
+      throw error;
+    }
+  };
+
   const postJournalEntry = async (data: any) => {
     try {
       const result = await accountingApi.postJournalEntry(data);
@@ -180,6 +192,7 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
     refreshAll,
     createAccount,
     updateAccount,
+    deleteAccount,
     postJournalEntry,
   };
 
