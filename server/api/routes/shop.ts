@@ -571,7 +571,7 @@ router.post('/pos-settings', async (req: any, res) => {
     const settings = await getShopService().updatePosSettings(req.tenantId, req.body);
     res.json(settings);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, message: error.message });
   }
 });
 
@@ -581,7 +581,7 @@ router.get('/receipt-settings', checkRole(['admin', 'pos_cashier']), async (req:
     const settings = await getShopService().getReceiptSettings(req.tenantId);
     res.json(settings);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, message: error.message });
   }
 });
 
@@ -590,7 +590,7 @@ router.post('/receipt-settings', checkRole(['admin']), async (req: any, res) => 
     const settings = await getShopService().updateReceiptSettings(req.tenantId, req.body);
     res.json(settings);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, message: error.message });
   }
 });
 

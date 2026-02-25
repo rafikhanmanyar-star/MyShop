@@ -39,10 +39,12 @@ const SettingsContent: React.FC = () => {
     });
     const [posSettingsLoading, setPosSettingsLoading] = useState(false);
     const [receiptSettings, setReceiptSettings] = useState<any>({
+        show_logo: false,
         show_barcode: true,
         barcode_type: 'CODE128',
         barcode_position: 'footer',
         receipt_width: '80mm',
+        show_tax_breakdown: false,
         show_cashier_name: true,
         show_shift_number: true,
         footer_message: '',
@@ -172,7 +174,9 @@ const SettingsContent: React.FC = () => {
             setPosSettings(result);
             alert('POS settings saved successfully');
         } catch (e: any) {
-            alert(e?.message || 'Failed to save POS settings');
+            const msg = e?.message || e?.error || 'Failed to save POS settings';
+            alert(msg);
+            loadPosSettings();
         }
     };
 
@@ -182,7 +186,9 @@ const SettingsContent: React.FC = () => {
             setReceiptSettings(result);
             alert('Receipt template settings saved');
         } catch (e: any) {
-            alert(e?.message || 'Failed to save receipt settings');
+            const msg = e?.message || e?.error || 'Failed to save receipt settings';
+            alert(msg);
+            loadReceiptSettings();
         }
     };
 
@@ -635,8 +641,23 @@ const SettingsContent: React.FC = () => {
                                             <Input label="Phone" placeholder="e.g. 021-1234567" value={receiptSettings.shop_phone || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_phone: e.target.value })} />
                                             <Input label="Tax ID / Registration" placeholder="Optional" value={receiptSettings.tax_id || ''} onChange={e => setReceiptSettings({ ...receiptSettings, tax_id: e.target.value })} />
                                             <Input label="Logo URL (optional)" placeholder="https://..." value={receiptSettings.logo_url || ''} onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })} />
+                                            <label className="flex items-center gap-3 cursor-pointer mt-1">
+                                                <input type="checkbox" checked={!!receiptSettings.show_logo} onChange={e => setReceiptSettings({ ...receiptSettings, show_logo: e.target.checked })} className="rounded border-slate-300" />
+                                                <span className="font-bold text-slate-700">Show logo on receipt</span>
+                                            </label>
                                         </div>
                                     </div>
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Receipt width</label>
+                                        <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.receipt_width || '80mm'} onChange={e => setReceiptSettings({ ...receiptSettings, receipt_width: e.target.value })}>
+                                            <option value="80mm">80mm (standard)</option>
+                                            <option value="58mm">58mm (narrow)</option>
+                                        </select>
+                                    </div>
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={!!receiptSettings.show_tax_breakdown} onChange={e => setReceiptSettings({ ...receiptSettings, show_tax_breakdown: e.target.checked })} className="rounded border-slate-300" />
+                                        <span className="font-bold text-slate-700">Show tax breakdown</span>
+                                    </label>
                                     <label className="flex items-center gap-3 cursor-pointer">
                                         <input type="checkbox" checked={!!receiptSettings.show_barcode} onChange={e => setReceiptSettings({ ...receiptSettings, show_barcode: e.target.checked })} className="rounded border-slate-300" />
                                         <span className="font-bold text-slate-700">Show barcode on receipt</span>

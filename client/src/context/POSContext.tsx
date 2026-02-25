@@ -286,7 +286,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     reference: p.reference
                 })),
                 change: dataToUse.changeDue > 0 ? dataToUse.changeDue : undefined,
-                footer: state.printSettings?.posReceiptFooter || receiptSettings?.footer_message || 'Thank you for shopping with us!',
+                footer: receiptSettings?.footer_message || state.printSettings?.posReceiptFooter || 'Thank you for shopping with us!',
                 reprint_count: dataToUse.reprintCount ?? dataToUse.reprint_count ?? 0,
                 barcode_value: dataToUse.barcodeValue ?? dataToUse.barcode_value ?? null,
                 printerName: posSettings?.default_printer_name
