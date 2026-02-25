@@ -342,6 +342,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                   <thead>
                     <tr className="text-left text-slate-500 border-b">
                       <th className="pb-2">Product</th>
+                      <th className="pb-2 text-right w-24">Existing stock</th>
                       <th className="pb-2 text-right w-24">Qty</th>
                       <th className="pb-2 text-right w-28">Unit cost</th>
                       <th className="pb-2 text-right w-28">Subtotal</th>
@@ -351,9 +352,14 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                   <tbody>
                     {form.items.map((i) => {
                       const p = productsForDropdown.find((x) => x.id === i.productId) ?? inventoryItems.find((x) => x.id === i.productId);
+                      const invItem = inventoryItems.find((x) => x.id === i.productId);
+                      const existingStock = invItem != null ? invItem.onHand : null;
                       return (
                         <tr key={i.productId} className="border-b border-slate-100">
                           <td className="py-2">{p?.name || i.productId}</td>
+                          <td className="py-2 text-right font-medium text-slate-600">
+                            {existingStock != null ? Number(existingStock).toLocaleString() : '—'}
+                          </td>
                           <td className="py-2 text-right">
                             <input
                               type="number"

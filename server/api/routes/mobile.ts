@@ -89,6 +89,12 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
             // phone stays from tenants unless we add it to tenant_branding later
         } catch (_) { /* ignore */ }
 
+        let branchName: string | null = null;
+        if (req.branchId) {
+            const branchRows = await db.query('SELECT name FROM shop_branches WHERE id = $1 AND tenant_id = $2', [req.branchId, req.tenantId]);
+            branchName = branchRows[0]?.name ?? null;
+        }
+
         res.json({
             shop: {
                 name: req.shop.name,
@@ -99,6 +105,7 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
                 address: address ?? null,
                 phone: phone ?? null,
                 branchId: req.branchId ?? null,
+                branchName: branchName ?? null,
             },
             settings: {
                 minimum_order_amount: settings.minimum_order_amount,
@@ -239,6 +246,25 @@ router.post('/auth/login', async (req: any, res) => {
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  AUTHENTICATED CUSTOMER ROUTES                                  ║
 // ╚══════════════════════════════════════════════════════════════════╝
+
+// List branches for the current tenant (for switch branch in mobile app)
+router.get('/branches', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getShopService } = await import('../../services/shopService.js');
+        const tenantRows = await db.query('SELECT slug FROM tenants WHERE id = $1', [req.tenantId]);
+        const tenantSlug = tenantRows[0]?.slug ?? null;
+        const branches = await getShopService().getBranches(req.tenantId);
+        const list = branches.map((b: any, index: number) => ({
+            id: b.id,
+            name: b.name,
+            code: b.code || undefined,
+            slug: b.slug || (index === 0 && tenantSlug ? tenantSlug : null),
+        }));
+        res.json({ branches: list });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // Profile
 router.get('/profile', mobileAuthMiddleware(db), async (req: any, res) => {

@@ -1,6 +1,6 @@
-
 import React from 'react';
 import { usePOS } from '../../../context/POSContext';
+import { useShifts } from '../../../context/ShiftsContext';
 import { ICONS } from '../../../constants';
 
 interface ShortcutBarProps {
@@ -19,8 +19,13 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
         balanceDue,
         completeSale,
         isDenseMode,
-        setIsDenseMode
+        setIsDenseMode,
+        terminals
     } = usePOS();
+    const { currentShift } = useShifts();
+    const terminalName = currentShift && terminals?.length
+        ? (terminals.find((t: any) => t.id === currentShift.terminal_id)?.name || terminals.find((t: any) => t.id === currentShift.terminal_id)?.code || 'Terminal')
+        : 'No shift';
 
     const shortcuts = [
         { key: 'F1', label: 'Clear', action: clearCart, icon: ICONS.trash, color: 'text-rose-500' },
@@ -55,8 +60,10 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
                 {/* Status Pill */}
                 <div className="flex items-center gap-3 px-4 py-2 bg-slate-800/50 rounded-full border border-slate-700/50">
                     <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span className="text-[10px] font-bold text-emerald-400 capitalize tracking-wide">Main Terminal #01</span>
+                        <div className={`w-2 h-2 rounded-full ${currentShift ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></div>
+                        <span className={`text-[10px] font-bold capitalize tracking-wide ${currentShift ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            {terminalName}
+                        </span>
                     </div>
                 </div>
 

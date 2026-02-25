@@ -22,6 +22,7 @@ export interface ShopInfo {
     address?: string | null;
     phone?: string | null;
     branchId?: string | null;
+    branchName?: string | null;
 }
 
 export interface TenantBranding {

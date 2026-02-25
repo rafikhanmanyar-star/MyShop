@@ -66,7 +66,7 @@ interface POSContextType {
     setIsSalesHistoryModalOpen: (isOpen: boolean) => void;
 
     completeSale: (directPayment?: any) => Promise<any>;
-    printReceipt: (saleData?: any) => Promise<void>;
+    printReceipt: (saleData?: any) => Promise<boolean>;
     lastCompletedSale: any | null;
     setLastCompletedSale: (sale: any | null) => void;
 
@@ -207,7 +207,9 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, [authUser]);
 
-    // When user has an active shift, lock branch/terminal to shift (location & station are static)
+    // When user has an active shift, lock branch/terminal to shift (location & station are static).
+    // Do NOT dispatch 'branch-changed' here: that event clears the cart and is for explicit user branch switch only.
+    // Syncing from shift would clear the cart right after cashier adds items (e.g. when terminals finish loading).
     useEffect(() => {
         if (!currentShift) return;
         const terminal = terminals.find((t: any) => t.id === currentShift.terminal_id);
@@ -217,7 +219,6 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setSelectedBranchId(branchId);
             apiClient.setBranchId(branchId);
             setAppContext({ branch_id: branchId, selected_by_qr: false });
-            window.dispatchEvent(new CustomEvent('branch-changed', { detail: { branchId } }));
         }
     }, [currentShift?.id, currentShift?.terminal_id, terminals]);
 
@@ -247,13 +248,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return () => window.removeEventListener('branch-changed', handleBranchChanged as EventListener);
     }, []);
 
-    // Print receipt function
-    const printReceipt = useCallback(async (saleData?: any) => {
+    // Print receipt function; returns true if printed successfully, false otherwise (for toast feedback)
+    const printReceipt = useCallback(async (saleData?: any): Promise<boolean> => {
         try {
             const dataToUse = saleData || lastCompletedSale;
             if (!dataToUse) {
-                alert('No sale data available to print');
-                return;
+                if (!saleData) alert('No sale data available to print');
+                return false;
             }
 
             const receiptData: ReceiptData = {
@@ -291,24 +292,24 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 printerName: posSettings?.default_printer_name
             };
 
-            if (thermalPrinterRef.current) {
-                // Determine printer name and copies
-                const copies = posSettings?.receipt_copies || 1;
-                // Currently printReceipt does not take copies or printer name in the interface,
-                // but we can execute it multiple times for copies.
-                for (let i = 0; i < copies; i++) {
-                    await thermalPrinterRef.current.printReceipt({
-                        ...receiptData,
-                        printerName: posSettings?.default_printer_name
-                    } as any);
-                }
-                console.log('Receipt printed successfully');
-            } else {
-                throw new Error('Printer not initialized');
+            if (!thermalPrinterRef.current) {
+                console.warn('Receipt printer not initialized');
+                return false;
             }
+            const copies = posSettings?.receipt_copies || 1;
+            let ok = true;
+            for (let i = 0; i < copies; i++) {
+                const result = await thermalPrinterRef.current.printReceipt({
+                    ...receiptData,
+                    printerName: posSettings?.default_printer_name
+                } as any);
+                if (!result) ok = false;
+            }
+            if (ok) console.log('Receipt printed successfully');
+            return ok;
         } catch (error: any) {
             console.error('Failed to print receipt:', error);
-            // Don't alert here to avoid blocking, just log it. The UI can handle it if needed.
+            return false;
         }
     }, [lastCompletedSale, customer, state.printSettings, posSettings, receiptSettings, authUser, currentShift]);
 
@@ -519,22 +520,28 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // Refresh inventory so POS product grid shows updated stock
             refreshInventory().catch(() => {});
 
-            // Auto-print logic
+            // Auto-print: await and show toast so user knows if receipt printed
             const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
+            let printSucceeded = false;
             if (shouldAutoPrint) {
-                // Async print
-                printReceipt(completedSale).catch(e => console.error("Auto print failed", e));
-                // Show toast
-                const toast = document.createElement('div');
-                toast.innerText = 'Sale Completed & Printed';
-                toast.className = 'fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded shadow-lg z-50 animate-slide-up';
-                document.body.appendChild(toast);
-                setTimeout(() => {
-                    toast.remove();
-                    // Auto-start next sale if auto-print is true
-                    setLastCompletedSale(null);
-                }, 3000);
+                printSucceeded = await printReceipt(completedSale).catch(() => false);
             }
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-4 right-4 px-4 py-3 rounded-xl shadow-xl z-[10000] text-sm font-medium animate-slide-up';
+            if (printSucceeded) {
+                toast.classList.add('bg-emerald-600', 'text-white');
+                toast.innerText = 'Sale completed. Receipt printed.';
+            } else {
+                toast.classList.add('bg-slate-800', 'text-white');
+                toast.innerText = shouldAutoPrint
+                    ? 'Sale completed. Receipt could not be printed—use Reprint if needed.'
+                    : 'Sale completed.';
+            }
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.remove();
+                setLastCompletedSale(null);
+            }, 3500);
 
             return completedSale;
         } catch (error: any) {

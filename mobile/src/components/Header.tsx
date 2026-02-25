@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { getFullImageUrl } from '../api';
+import { getFullImageUrl, customerApi } from '../api';
+
+type BranchItem = { id: string; name: string; code?: string; slug: string | null };
 
 export default function Header() {
     const { shopSlug } = useParams();
+    const navigate = useNavigate();
     const { state, dispatch } = useApp();
     const [showMenu, setShowMenu] = useState(false);
+    const [showBranchPicker, setShowBranchPicker] = useState(false);
+    const [branches, setBranches] = useState<BranchItem[]>([]);
+    const [branchesLoading, setBranchesLoading] = useState(false);
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -14,7 +20,6 @@ export default function Header() {
 
         const handleClick = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
-            // If the click is not on the button or its children, and not on the menu or its children
             if (!target.closest('.user-section')) {
                 setShowMenu(false);
             }
@@ -23,6 +28,27 @@ export default function Header() {
         document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
     }, [showMenu]);
+
+    const openBranchPicker = () => {
+        setShowBranchPicker(true);
+        setBranchesLoading(true);
+        setShowMenu(false);
+        customerApi.getBranches()
+            .then((data) => setBranches(data.branches || []))
+            .catch(() => setBranches([]))
+            .finally(() => setBranchesLoading(false));
+    };
+
+    const selectBranch = (branch: BranchItem) => {
+        if (!branch.slug) return;
+        if (branch.slug === shopSlug) {
+            setShowBranchPicker(false);
+            return;
+        }
+        dispatch({ type: 'CLEAR_CART' });
+        setShowBranchPicker(false);
+        navigate(`/${branch.slug}`, { replace: true });
+    };
 
     if (!shopSlug) return null;
 
@@ -93,6 +119,19 @@ export default function Header() {
                                             <div className="user-name">{state.customerName || 'Customer'}</div>
                                             <div className="user-phone">{state.customerPhone}</div>
                                         </div>
+                                        {(state.shop?.branchName || state.shop?.branchId) && (
+                                            <>
+                                                <div className="menu-divider" />
+                                                <div className="menu-branch-info">
+                                                    <span className="menu-branch-label">Current branch</span>
+                                                    <span className="menu-branch-name">{state.shop?.branchName || 'Branch'}</span>
+                                                </div>
+                                                <button type="button" className="menu-item" onClick={openBranchPicker}>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3v12" /><path d="M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /><path d="M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /><path d="M15 6a9 9 0 0 0-9 9" /><path d="M18 9v12" /></svg>
+                                                    Switch branch
+                                                </button>
+                                            </>
+                                        )}
                                         <div className="menu-divider" />
                                         <Link to={`/${shopSlug}/orders`} className="menu-item" onClick={() => setShowMenu(false)}>
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" /><path d="M15 3v4a2 2 0 0 0 2 2h4" /></svg>
@@ -127,6 +166,42 @@ export default function Header() {
                                 )}
                             </div>
                             <div className="menu-overlay active" onClick={() => setShowMenu(false)} />
+                        </>
+                    )}
+
+                    {showBranchPicker && (
+                        <>
+                            <div className="menu-overlay active" onClick={() => setShowBranchPicker(false)} />
+                            <div className="branch-picker scale-in">
+                                <div className="branch-picker-title">Switch branch</div>
+                                <p className="branch-picker-subtitle">Choose a branch to see its inventory and place orders there.</p>
+                                {branchesLoading ? (
+                                    <div className="branch-picker-loading">
+                                        <div className="spinner" style={{ width: 28, height: 28 }} />
+                                        <span>Loading branches…</span>
+                                    </div>
+                                ) : (
+                                    <div className="branch-picker-list">
+                                        {branches.filter(b => b.slug).map((branch) => (
+                                            <button
+                                                key={branch.id}
+                                                type="button"
+                                                className={`branch-picker-item ${branch.slug === shopSlug ? 'current' : ''}`}
+                                                onClick={() => selectBranch(branch)}
+                                            >
+                                                <span className="branch-picker-item-name">{branch.name}</span>
+                                                {branch.slug === shopSlug && <span className="branch-picker-item-badge">Current</span>}
+                                            </button>
+                                        ))}
+                                        {!branchesLoading && branches.filter(b => b.slug).length === 0 && (
+                                            <p className="branch-picker-empty">No other branches available.</p>
+                                        )}
+                                    </div>
+                                )}
+                                <button type="button" className="branch-picker-close" onClick={() => setShowBranchPicker(false)}>
+                                    Close
+                                </button>
+                            </div>
                         </>
                     )}
                 </div>

@@ -1221,6 +1221,146 @@ img {
   pointer-events: auto;
 }
 
+.menu-branch-info {
+  padding: 10px 16px 6px;
+  background: var(--bg-light);
+}
+
+.menu-branch-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.menu-branch-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+/* Branch picker (switch shop/branch) */
+.branch-picker {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+  z-index: 2002;
+  transform-origin: top right;
+  padding: 16px;
+}
+
+.branch-picker-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.branch-picker-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  line-height: 1.35;
+}
+
+.branch-picker-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.branch-picker-list {
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0 -4px 12px;
+}
+
+.branch-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 12px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--bg-light);
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.branch-picker-item:last-child {
+  margin-bottom: 0;
+}
+
+.branch-picker-item:active,
+.branch-picker-item:hover {
+  background: var(--bg);
+}
+
+.branch-picker-item.current {
+  border-color: var(--primary);
+  background: #EEF2FF;
+}
+
+.branch-picker-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-picker-item-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--primary);
+  margin-left: 8px;
+}
+
+.branch-picker-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 16px 0;
+  text-align: center;
+}
+
+.branch-picker-close {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-light);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.branch-picker-close:active {
+  background: var(--bg);
+}
+
 /* Page margin adjustment for fixed header */
 .page {
   padding-top: 16px;
