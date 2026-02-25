@@ -98,13 +98,16 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
     loadBillsAndFormData();
   }, [loadBillsAndFormData]);
 
+  const refreshItemsRef = useRef(inventory?.refreshItems);
+  refreshItemsRef.current = inventory?.refreshItems;
+
   // When opening the form, refetch vendors and refresh inventory items (Stock Master list)
   useEffect(() => {
     if (showForm) {
       loadBillsAndFormData();
-      inventory?.refreshItems?.();
+      refreshItemsRef.current?.();
     }
-  }, [showForm, loadBillsAndFormData, inventory]);
+  }, [showForm, loadBillsAndFormData]);
 
   const subtotal = form.items.reduce((s, i) => s + i.subtotal, 0);
   const taxTotal = form.items.reduce((s, i) => s + (i.taxAmount || 0), 0);
@@ -298,7 +301,10 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                   setProductDropdownOpen(true);
                 }}
                 onFocus={() => setProductDropdownOpen(true)}
-                onBlur={() => setTimeout(() => setProductDropdownOpen(false), 200)}
+                onBlur={(e) => {
+                  if (productSearchRef.current?.contains(e.relatedTarget as Node)) return;
+                  setProductDropdownOpen(false);
+                }}
                 placeholder="Search by product name or SKU..."
                 className="w-full border border-slate-200 rounded-lg px-3 py-2"
               />
@@ -317,6 +323,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                       <li key={p.id}>
                         <button
                           type="button"
+                          onMouseDown={(e) => e.preventDefault()}
                           onClick={() => {
                             addItem(p);
                             setProductDropdownOpen(false);

@@ -353,10 +353,12 @@ router.post('/sales', checkRole(['admin', 'pos_cashier']), async (req: any, res)
   try {
     const body = { ...req.body, userId: req.userId ?? req.body?.userId };
     const result = await getShopService().createSale(req.tenantId, body);
+    if (req.timedout) return;
     const saleId = typeof result === 'object' && result?.id != null ? result.id : result;
     const barcode_value = typeof result === 'object' && result?.barcode_value != null ? result.barcode_value : undefined;
     res.status(201).json({ id: saleId, barcode_value, message: 'Sale completed successfully' });
   } catch (error: any) {
+    if (req.timedout) return;
     const message = (error && typeof error === 'object' && 'message' in error)
       ? error.message
       : String(error ?? 'Internal server error');

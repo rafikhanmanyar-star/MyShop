@@ -170,30 +170,45 @@ function createWindow() {
 
 function printReceiptSilent(html, printerName) {
   return new Promise((resolve) => {
+    const tmpFile = path.join(app.getPath('temp'), `receipt-${Date.now()}.html`);
+    try {
+      fs.writeFileSync(tmpFile, html, 'utf-8');
+    } catch (err) {
+      console.error('Failed to write temp receipt file:', err);
+      return resolve(false);
+    }
+
     const win = new BrowserWindow({
       width: 400,
       height: 800,
       show: false,
       webPreferences: { nodeIntegration: false, contextIsolation: true },
     });
-    // Use setContent to avoid data URL length limits (receipt HTML with base64 barcode can exceed 2MB).
-    // This ensures the full receipt is rendered before printing.
-    win.webContents.setContent(html, { baseURLForDataURL: 'file:///' }).then(() => {
-      // Allow layout/paint to complete so the full receipt prints (avoids blank or one-line output).
+
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      try { fs.unlinkSync(tmpFile); } catch (_) {}
+      resolve(result);
+    };
+
+    win.on('closed', () => finish(false));
+
+    win.loadFile(tmpFile).then(() => {
       setTimeout(() => {
         const opts = { silent: true, printBackground: true };
         if (printerName) opts.deviceName = printerName;
         win.webContents.print(opts, (success, err) => {
           win.close();
-          resolve(success && !err);
+          finish(success && !err);
         });
       }, 400);
     }).catch((err) => {
-      console.error('Receipt setContent failed:', err);
+      console.error('Receipt load failed:', err);
       win.close();
-      resolve(false);
+      finish(false);
     });
-    win.on('closed', () => resolve(false));
   });
 }
 

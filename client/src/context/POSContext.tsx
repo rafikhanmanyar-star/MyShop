@@ -546,9 +546,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return completedSale;
         } catch (error: any) {
             console.error('Failed to complete sale:', error);
-            const message = (error && (typeof error === 'object' && ('error' in error) ? error.error : error.message))
+            let message = (error && (typeof error === 'object' && ('error' in error) ? error.error : error.message))
                 || (error instanceof Error ? error.message : null)
                 || 'Unknown error';
+            if (typeof message === 'string' && (message.includes('<!DOCTYPE') || message.includes('<html'))) {
+                message = 'Server returned an unexpected response. Please check your connection and try again.';
+            }
             alert('Error completing sale: ' + message);
             throw error;
         }

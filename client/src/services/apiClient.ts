@@ -98,8 +98,14 @@ class ApiClient {
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         if (!response.ok) {
-          const text = await response.text();
-          throw new Error(`HTTP ${response.status}: ${text || response.statusText}`);
+          const statusMessages: Record<number, string> = {
+            502: 'Server is temporarily unavailable (Bad Gateway). Please try again.',
+            503: 'Server is currently overloaded. Please try again in a moment.',
+            504: 'Request timed out. The server took too long to respond.',
+          };
+          const friendlyMsg = statusMessages[response.status]
+            || `Server returned an unexpected response (HTTP ${response.status}).`;
+          throw { error: friendlyMsg, message: friendlyMsg, status: response.status };
         }
         return {} as T;
       }

@@ -124,18 +124,25 @@ export function createThermalPrinter(config?: { receiptSettings?: ReceiptSetting
       doc.write(html);
       doc.close();
 
-      const win = iframe.contentWindow;
-      if (win) {
-        win.onload = () => {
-          win.print();
+      return new Promise<boolean>((resolve) => {
+        setTimeout(() => {
+          try {
+            const win = iframe.contentWindow;
+            if (win) {
+              win.focus();
+              win.print();
+            }
+          } catch (e) {
+            console.error('Iframe print failed:', e);
+          }
           setTimeout(() => {
             try {
               if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
             } catch (_) {}
-          }, 150);
-        };
-      }
-      return true;
+            resolve(true);
+          }, 1000);
+        }, 300);
+      });
     } catch (err) {
       console.error('Failed to print receipt:', err);
       return false;

@@ -357,7 +357,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         items.reduce((sum, item) => sum + (item.onHand * item.costPrice), 0),
         [items]);
 
-    const value = {
+    const value = useMemo(() => ({
         items,
         warehouses,
         movements,
@@ -372,7 +372,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         refreshItems,
         lowStockItems,
         totalInventoryValue
-    };
+    }), [items, warehouses, movements, adjustments, transfers, addItem, updateItem, updateStock, requestTransfer, approveAdjustment, refreshWarehouses, refreshItems, lowStockItems, totalInventoryValue]);
 
     return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 };

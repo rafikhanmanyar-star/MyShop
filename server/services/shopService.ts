@@ -444,7 +444,7 @@ export class ShopService {
     }
     const paymentDetails = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [];
     const barcodeValue = `SALE|${tenantId}|${saleData.saleNumber}`;
-    return this.db.transaction(async (client) => {
+    const result = await this.db.transaction(async (client) => {
       const saleRes = await client.query(`
         INSERT INTO shop_sales (
           tenant_id, branch_id, terminal_id, user_id, customer_id,
@@ -566,11 +566,13 @@ export class ShopService {
         }
       }
 
-      // Update popularity scores after sale
-      await this.recalculatePopularityScores(tenantId).catch(err => console.error('PopScore Error:', err));
-
       return { id: saleId, barcode_value: barcodeValue };
     });
+
+    // Fire-and-forget: update popularity scores outside the transaction
+    this.recalculatePopularityScores(tenantId).catch(err => console.error('PopScore Error:', err));
+
+    return result;
   }
 
   // Double-entry accounting for Sales
