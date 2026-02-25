@@ -89,7 +89,7 @@ export const authApi = {
 
 // ─── Customer (authenticated) ────────────────────────
 export const customerApi = {
-    getBranches: () => request<{ branches: { id: string; name: string; code?: string; slug: string | null }[] }>(`${API_BASE}/branches`),
+    getBranches: () => request(`${API_BASE}/branches`),
     getProfile: () => request(`${API_BASE}/profile`),
     updateProfile: (data: any) =>
         request(`${API_BASE}/profile`, { method: 'PUT', body: JSON.stringify(data) }),
