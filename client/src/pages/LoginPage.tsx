@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Store, Eye, EyeOff } from 'lucide-react';
+import { getQrParamsFromUrl } from '../utils/urlParams';
+import { setAppContext, getAppContext } from '../services/appContext';
 
 export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => void }) {
   const { login } = useAuth();
@@ -10,12 +12,25 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // On load: parse QR params from URL and persist org + branch BEFORE login
+  useEffect(() => {
+    const qr = getQrParamsFromUrl();
+    if (qr) {
+      setAppContext({
+        organization_id: qr.org_id,
+        branch_id: qr.branch_id,
+        selected_by_qr: true,
+      });
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await login(username, password);
+      const ctx = getAppContext();
+      await login(username, password, ctx.organization_id || undefined);
     } catch (err: any) {
       setError(err.error || err.message || 'Login failed');
     } finally {

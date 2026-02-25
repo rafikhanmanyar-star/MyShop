@@ -105,6 +105,9 @@ export interface POSSessionState {
 
 export interface POSSale {
     id?: string;
+    source?: string; // e.g. 'POS' | 'Mobile'
+    reprintCount?: number;
+    reprint_count?: number;
     saleNumber: string;
     branchId: string;
     terminalId: string;

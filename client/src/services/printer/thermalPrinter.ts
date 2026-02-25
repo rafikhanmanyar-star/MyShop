@@ -1,12 +1,17 @@
+import { generateReceiptHTML } from '../receipt/receiptBuilder';
+import type { ReceiptSettings, ReceiptSaleData } from '../receipt/receiptBuilder';
+
 export interface ReceiptData {
   storeName?: string;
   storeAddress?: string;
   storePhone?: string;
   taxId?: string;
+  logoUrl?: string | null;
   receiptNumber?: string;
   date?: string;
   time?: string;
   cashier?: string;
+  shiftNumber?: string;
   customer?: string;
   items: Array<{
     name: string;
@@ -14,17 +19,18 @@ export interface ReceiptData {
     unitPrice: number;
     total: number;
     discount?: number;
+    taxAmount?: number;
   }>;
   subtotal: number;
   discount: number;
   tax: number;
   total: number;
-  payments: Array<{
-    method: string;
-    amount: number;
-  }>;
+  payments: Array<{ method: string; amount: number; reference?: string }>;
   change?: number;
   footer?: string;
+  reprint_count?: number;
+  barcode_value?: string | null;
+  transactionId?: string;
   [key: string]: any;
 }
 
@@ -35,180 +41,118 @@ export interface ThermalPrinter {
   [key: string]: any;
 }
 
-export function createThermalPrinter(config?: any): ThermalPrinter {
-  const printReceipt = async (data: ReceiptData) => {
-    console.log('🖨️ Printing receipt...', data);
+declare global {
+  interface Window {
+    electronAPI?: {
+      printReceiptSilent?: (html: string, printerName?: string) => Promise<boolean>;
+      getAppVersion?: () => Promise<string>;
+      checkForUpdates?: () => Promise<void>;
+      onUpdateStatus?: (cb: (payload: { status: string; message?: string; version?: string; percent?: number }) => void) => () => void;
+      startUpdateDownload?: () => Promise<void>;
+      quitAndInstall?: () => Promise<void>;
+    };
+  }
+}
 
-    // Create a hidden iframe for printing
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
+function buildReceiptSaleData(data: ReceiptData): ReceiptSaleData {
+  return {
+    storeName: data.storeName,
+    storeAddress: data.storeAddress,
+    storePhone: data.storePhone,
+    taxId: data.taxId,
+    logoUrl: data.logoUrl,
+    receiptNumber: data.receiptNumber,
+    date: data.date,
+    time: data.time,
+    cashier: data.cashier,
+    shiftNumber: data.shiftNumber,
+    customer: data.customer,
+    items: data.items.map((item: any) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+      discount: item.discount,
+      taxAmount: item.taxAmount,
+    })),
+    subtotal: data.subtotal,
+    discount: data.discount,
+    tax: data.tax,
+    total: data.total,
+    payments: data.payments.map((p: any) => ({ method: p.method, amount: p.amount, reference: p.reference })),
+    change: data.change,
+    reprint_count: data.reprint_count,
+    barcode_value: data.barcode_value,
+    transactionId: data.transactionId,
+  };
+}
 
-    const doc = iframe.contentWindow?.document;
-    if (!doc) return false;
+export function createThermalPrinter(config?: { receiptSettings?: ReceiptSettings | null; printSettings?: any }): ThermalPrinter {
+  const receiptSettings: ReceiptSettings | null = config?.receiptSettings ?? null;
 
-    const itemsHtml = data.items.map((item: any) => `
-      <tr class="item-row">
-        <td colspan="2" class="item-name">${item.name}</td>
-      </tr>
-      <tr class="item-details">
-        <td>
-          ${item.quantity} x ${item.unitPrice.toLocaleString()}
-          ${item.discount > 0 ? `<br/><small>Disc: -${item.discount.toLocaleString()}</small>` : ''}
-        </td>
-        <td style="text-align: right; vertical-align: top;">${item.total.toLocaleString()}</td>
-      </tr>
-    `).join('');
+  const printReceipt = async (data: ReceiptData): Promise<boolean> => {
+    try {
+      const saleData = buildReceiptSaleData(data);
+      const settings: ReceiptSettings = {
+        ...receiptSettings,
+        footer_message: receiptSettings?.footer_message ?? data.footer ?? null,
+      };
+      const html = generateReceiptHTML(saleData, settings);
 
-    const html = `
-      <html>
-        <head>
-          <style>
-            @page { margin: 0; size: 80mm auto; }
-            body { 
-              font-family: 'Courier New', Courier, monospace; 
-              width: 72mm; 
-              padding: 4mm; 
-              font-size: 11px;
-              line-height: 1.2;
-              color: black;
-              background: white;
-            }
-            .text-center { text-align: center; }
-            .font-bold { font-weight: bold; }
-            .border-top { border-top: 1px dashed black; margin-top: 2mm; padding-top: 2mm; }
-            .border-bottom { border-bottom: 1px dashed black; margin-bottom: 2mm; padding-bottom: 2mm; }
-            table { width: 100%; border-collapse: collapse; }
-            .mt-1 { margin-top: 1mm; }
-            .mb-1 { margin-bottom: 1mm; }
-            .item-name { padding-top: 1mm; font-weight: bold; }
-            .item-details td { padding-bottom: 1mm; }
-            .flex-between { display: flex; justify-content: space-between; }
-            .total-row { font-size: 14px; font-weight: bold; padding-top: 1mm; }
-          </style>
-        </head>
-        <body>
-          <div class="text-center font-bold" style="font-size: 16px;">${data.storeName || 'My Shop'}</div>
-          ${data.storeAddress ? `<div class="text-center">${data.storeAddress}</div>` : ''}
-          ${data.storePhone ? `<div class="text-center">Tel: ${data.storePhone}</div>` : ''}
-          ${data.taxId ? `<div class="text-center">Tax ID: ${data.taxId}</div>` : ''}
-          
-          <div class="border-top mt-1">
-            <div class="flex-between">
-              <span>Receipt #:</span>
-              <span>${data.receiptNumber || 'N/A'}</span>
-            </div>
-            <div class="flex-between">
-              <span>Date:</span>
-              <span>${data.date} ${data.time}</span>
-            </div>
-            <div class="flex-between">
-              <span>Cashier:</span>
-              <span>${data.cashier || 'Admin'}</span>
-            </div>
-            ${data.customer ? `
-            <div class="flex-between">
-              <span>Customer:</span>
-              <span>${data.customer}</span>
-            </div>` : ''}
-          </div>
+      // Prefer Electron silent print (no dialog, non-blocking)
+      const electronPrint = (window as Window).electronAPI?.printReceiptSilent;
+      if (electronPrint) {
+        const printerName = data.printerName ?? config?.printSettings?.default_printer_name ?? undefined;
+        const ok = await electronPrint(html, printerName);
+        return !!ok;
+      }
 
-          <div class="border-top mt-1 mb-1"></div>
-          <table>
-            <thead>
-              <tr class="border-bottom font-bold">
-                <th align="left">Description</th>
-                <th align="right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsHtml}
-            </tbody>
-          </table>
+      // Fallback: hidden iframe + window.print()
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
 
-          <div class="border-top">
-            <div class="flex-between">
-              <span>Subtotal:</span>
-              <span>${data.subtotal.toLocaleString()}</span>
-            </div>
-            ${data.discount > 0 ? `
-            <div class="flex-between">
-              <span>Discount:</span>
-              <span>-${data.discount.toLocaleString()}</span>
-            </div>` : ''}
-            <div class="flex-between">
-              <span>Tax:</span>
-              <span>${data.tax.toLocaleString()}</span>
-            </div>
-            <div class="flex-between total-row">
-              <span>TOTAL:</span>
-              <span>${data.total.toLocaleString()}</span>
-            </div>
-          </div>
+      const doc = iframe.contentWindow?.document;
+      if (!doc) return false;
 
-          <div class="border-top mt-1">
-            ${data.payments.map((p: any) => `
-              <div class="flex-between">
-                <span>Payment (${p.method}):</span>
-                <span>${p.amount.toLocaleString()}</span>
-              </div>
-            `).join('')}
-            ${data.change ? `
-            <div class="flex-between font-bold">
-              <span>Change:</span>
-              <span>${data.change.toLocaleString()}</span>
-            </div>` : ''}
-          </div>
+      doc.open();
+      doc.write(html);
+      doc.close();
 
-          <div class="border-top text-center" style="margin-top: 4mm;">
-            ${data.showBarcode && data.receiptNumber ? `
-              <div style="margin-bottom: 2mm;">
-                <img src="https://bwipjs-api.metafloor.com/?bcid=code128&text=${encodeURIComponent(data.receiptNumber)}&scale=1&rotate=N&includetext=true" 
-                     style="max-width: 50mm; width: 100%; height: auto; min-height: 20px;" 
-                     alt="Barcode" 
-                />
-                <div style="font-size: 7px; margin-top: 1mm;">${data.receiptNumber}</div>
-              </div>
-            ` : ''}
-            ${data.footer || 'Thank you for your business!'}
-            <div style="font-size: 8px; margin-top: 2mm;">Powered by AntiGravity POS</div>
-          </div>
-          
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() {
-                window.parent.document.body.removeChild(window.frameElement);
-              }, 100);
-            };
-          </script>
-        </body>
-      </html>
-    `;
-
-    doc.open();
-    doc.write(html);
-    doc.close();
-
-    return true;
+      const win = iframe.contentWindow;
+      if (win) {
+        win.onload = () => {
+          win.print();
+          setTimeout(() => {
+            try {
+              if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+            } catch (_) {}
+          }, 150);
+        };
+      }
+      return true;
+    } catch (err) {
+      console.error('Failed to print receipt:', err);
+      return false;
+    }
   };
 
   const testPrint = async () => {
     return printReceipt({
       storeName: 'Test Store',
-      storeAddress: '123 Test St, Karachi',
+      storeAddress: '123 Test St',
       storePhone: '021-1234567',
       receiptNumber: 'TEST-001',
       date: new Date().toLocaleDateString(),
       time: new Date().toLocaleTimeString(),
       items: [
         { name: 'Test Item 1', quantity: 1, unitPrice: 100, total: 100 },
-        { name: 'Test Item 2', quantity: 2, unitPrice: 50, total: 100 }
+        { name: 'Test Item 2', quantity: 2, unitPrice: 50, total: 100 },
       ],
       subtotal: 200,
       discount: 0,
@@ -216,7 +160,7 @@ export function createThermalPrinter(config?: any): ThermalPrinter {
       total: 200,
       payments: [{ method: 'Cash', amount: 200 }],
       footer: 'Browser Test Print',
-      showBarcode: true
+      barcode_value: 'SALE|T01|TEST-001',
     });
   };
 

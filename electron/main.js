@@ -168,8 +168,32 @@ function createWindow() {
   });
 }
 
+function printReceiptSilent(html, printerName) {
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      width: 400,
+      height: 600,
+      show: false,
+      webPreferences: { nodeIntegration: false, contextIsolation: true },
+    });
+    win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    win.webContents.on('did-finish-load', () => {
+      const opts = { silent: true, printBackground: true };
+      if (printerName) opts.deviceName = printerName;
+      win.webContents.print(opts, (success, err) => {
+        win.close();
+        resolve(success && !err);
+      });
+    });
+    win.on('closed', () => resolve(false));
+  });
+}
+
 function setupUpdaterIPC() {
   ipcMain.handle('get-app-version', () => app.getVersion());
+  ipcMain.handle('print-receipt-silent', (_event, { html, printerName }) =>
+    printReceiptSilent(html, printerName || undefined)
+  );
   ipcMain.handle('check-for-updates', async () => {
     if (!app.isPackaged || !autoUpdater) {
       sendUpdateStatus({ status: 'unavailable', message: 'Updates only work in the installed app.' });

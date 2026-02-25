@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   startUpdateDownload: () => ipcRenderer.invoke('start-update-download'),
   quitAndInstall: () => ipcRenderer.invoke('quit-and-install'),
+  printReceiptSilent: (html, printerName) =>
+    ipcRenderer.invoke('print-receipt-silent', { html, printerName: printerName || undefined }),
 });

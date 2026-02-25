@@ -12,7 +12,7 @@ export interface LoginResponse {
 export interface RegisterResponse extends LoginResponse {}
 
 export const authApi = {
-  login: (data: { username: string; password: string }) =>
+  login: (data: { username: string; password: string; org_id?: string }) =>
     apiClient.post<LoginResponse>('/auth/login', data),
 
   register: (data: { name: string; email: string; username: string; password: string; companyName?: string }) =>

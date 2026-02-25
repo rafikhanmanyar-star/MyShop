@@ -10,7 +10,9 @@ const SalesHistoryModal: React.FC = () => {
     const {
         isSalesHistoryModalOpen,
         setIsSalesHistoryModalOpen,
-        printReceipt
+        printReceipt,
+        searchQuery,
+        setSearchQuery
     } = usePOS();
 
     const [sales, setSales] = useState<POSSale[]>([]);
@@ -24,6 +26,21 @@ const SalesHistoryModal: React.FC = () => {
             fetchSales();
         }
     }, [isSalesHistoryModalOpen]);
+
+    // When opened by barcode scan (SALE|tenant|invoice), lookup sale and select
+    useEffect(() => {
+        if (!isSalesHistoryModalOpen || !searchQuery) return;
+        const match = String(searchQuery).match(/^SALE\|[^|]+\|(.+)$/);
+        if (match) {
+            const invoiceNumber = match[1].trim();
+            setSearchTerm(invoiceNumber);
+            setIsBarcodeScan(true);
+            shopApi.getSaleByInvoiceNumber(invoiceNumber)
+                .then((sale) => { if (sale) setSelectedSale(sale as POSSale); })
+                .catch(() => {})
+                .finally(() => setSearchQuery(''));
+        }
+    }, [isSalesHistoryModalOpen, searchQuery]);
 
     const fetchSales = async () => {
         setIsLoading(true);
@@ -44,25 +61,35 @@ const SalesHistoryModal: React.FC = () => {
         }
     };
 
-    // Handle search term changes with barcode detection
-    const handleSearchChange = (value: string) => {
+    // Handle search term changes with barcode detection (including SALE|tenant|invoice pattern)
+    const handleSearchChange = async (value: string) => {
         setSearchTerm(value);
 
-        // Detect if this looks like a barcode scan (typically longer and alphanumeric)
+        const saleBarcodeMatch = value.match(/^SALE\|[^|]+\|(.+)$/);
+        if (saleBarcodeMatch) {
+            const invoiceNumber = saleBarcodeMatch[1].trim();
+            setIsBarcodeScan(true);
+            try {
+                const saleByInvoice = await shopApi.getSaleByInvoiceNumber(invoiceNumber);
+                if (saleByInvoice) {
+                    setSelectedSale(saleByInvoice as POSSale);
+                    setSearchTerm(invoiceNumber);
+                }
+            } catch (_) {
+                // Not found or API error; fall back to local filter
+                const matchedSale = sales.find(s => s.saleNumber === invoiceNumber);
+                if (matchedSale) setSelectedSale(matchedSale);
+            }
+            return;
+        }
+
         const looksLikeBarcode = value.length > 8 && /^[A-Z0-9-]+$/i.test(value);
         setIsBarcodeScan(looksLikeBarcode);
 
-        // Auto-select sale if exact match found
-        if (looksLikeBarcode) {
-            const matchedSale = sales.find(sale =>
-                sale.saleNumber.toLowerCase() === value.toLowerCase()
-            );
-            if (matchedSale) {
-                setSelectedSale(matchedSale);
-                // Visual feedback for successful barcode scan
-                console.log('✅ Barcode matched:', matchedSale.saleNumber);
-            }
-        }
+        const matchedSale = sales.find(sale =>
+            sale.saleNumber?.toLowerCase() === value.toLowerCase()
+        );
+        if (matchedSale) setSelectedSale(matchedSale);
     };
 
     const filteredSales = sales.filter(sale => {
@@ -72,8 +99,20 @@ const SalesHistoryModal: React.FC = () => {
         return saleNumberMatch || customerNameMatch;
     });
 
-    const handlePrint = (sale: POSSale) => {
-        printReceipt(sale);
+    const handlePrint = async (sale: POSSale) => {
+        const reprintCount = sale.reprintCount ?? sale.reprint_count ?? 0;
+        const isPosSale = sale.source === 'POS' && sale.id;
+        if (isPosSale && sale.id) {
+            try {
+                await shopApi.incrementReprintCount(sale.id);
+                printReceipt({ ...sale, reprintCount: reprintCount + 1 });
+            } catch (e) {
+                console.error('Reprint count increment failed', e);
+                printReceipt(sale);
+            }
+        } else {
+            printReceipt(sale);
+        }
     };
 
     if (!isSalesHistoryModalOpen) return null;
@@ -111,7 +150,7 @@ const SalesHistoryModal: React.FC = () => {
                                 : 'border-transparent focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5'
                                 } shadow-none`}
                             value={searchTerm}
-                            onChange={(e) => handleSearchChange(e.target.value)}
+                            onChange={(e) => handleSearchChange(e.target.value).catch(() => {})}
                             autoFocus
                         />
                         {isBarcodeScan && (

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { apiClient } from '../services/apiClient';
 import { authApi, type LoginResponse } from '../services/authApi';
+import { getAppContext, setAppContext } from '../services/appContext';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -10,7 +11,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, orgId?: string) => Promise<void>;
   register: (data: { name: string; email: string; username: string; password: string; companyName?: string }) => Promise<void>;
   logout: () => void;
 }
@@ -60,9 +61,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('auth:expired', handleExpired);
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const result: LoginResponse = await authApi.login({ username, password });
+  const login = useCallback(async (username: string, password: string, orgId?: string) => {
+    const result: LoginResponse = await authApi.login({ username, password, org_id: orgId });
     apiClient.setAuth(result.token, result.tenantId);
+
+    // Persist branch context: if we had QR branch for this org, keep it and set API client
+    const ctx = getAppContext();
+    if (ctx.branch_id && ctx.organization_id === result.tenantId) {
+      apiClient.setBranchId(ctx.branch_id);
+    } else if (ctx.organization_id !== result.tenantId) {
+      setAppContext({ organization_id: result.tenantId, branch_id: null, selected_by_qr: false });
+      apiClient.setBranchId(null);
+    } else {
+      apiClient.setBranchId(ctx.branch_id);
+    }
+
     setState({
       isAuthenticated: true,
       isLoading: false,
@@ -99,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     authApi.logout().catch(() => {});
     apiClient.clearAuth();
+    apiClient.setBranchId(null);
     setState({ isAuthenticated: false, isLoading: false, user: null, tenant: null });
   }, []);
 

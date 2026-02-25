@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 // MyShop Settings Page - Reorganized Chart of Accounts
-import { Smartphone } from 'lucide-react';
+import { Smartphone, Printer } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppContext } from '../../context/AppContext';
 import { ICONS } from '../../constants';
@@ -26,23 +26,28 @@ function toState(v: ShopVendor) {
     };
 }
 
-declare global {
-    interface Window {
-        electronAPI?: {
-            getAppVersion: () => Promise<string>;
-            checkForUpdates: () => Promise<void>;
-            onUpdateStatus: (cb: (payload: { status: string; message?: string; version?: string; percent?: number }) => void) => () => void;
-            startUpdateDownload: () => Promise<void>;
-            quitAndInstall: () => Promise<void>;
-        };
-    }
-}
-
 const SettingsContent: React.FC = () => {
     const { user } = useAuth();
     const { dispatch } = useAppContext();
     const isCashier = user?.role === 'pos_cashier';
-    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'mobileBranding' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
+    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'mobileBranding' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
+
+    const [posSettings, setPosSettings] = useState({
+        auto_print_receipt: true,
+        default_printer_name: '',
+        receipt_copies: 1
+    });
+    const [posSettingsLoading, setPosSettingsLoading] = useState(false);
+    const [receiptSettings, setReceiptSettings] = useState<any>({
+        show_barcode: true,
+        barcode_type: 'CODE128',
+        barcode_position: 'footer',
+        receipt_width: '80mm',
+        show_cashier_name: true,
+        show_shift_number: true,
+        footer_message: ''
+    });
+    const [receiptSettingsLoading, setReceiptSettingsLoading] = useState(false);
 
     const [vendors, setVendors] = useState<ShopVendor[]>([]);
     const [vendorsLoading, setVendorsLoading] = useState(true);
@@ -69,29 +74,29 @@ const SettingsContent: React.FC = () => {
 
     useEffect(() => {
         if (!isElectron || !window.electronAPI) return;
-        window.electronAPI.getAppVersion().then(setAppVersion);
+        window.electronAPI?.getAppVersion?.().then(setAppVersion);
     }, [isElectron]);
 
     useEffect(() => {
         if (!isElectron || !window.electronAPI) return;
-        const unsub = window.electronAPI.onUpdateStatus((payload) => setUpdateStatus(payload));
-        return unsub;
+        const unsub = window.electronAPI.onUpdateStatus?.((payload) => setUpdateStatus(payload));
+        return () => { unsub?.(); };
     }, [isElectron]);
 
     const handleCheckForUpdates = useCallback(() => {
         if (!window.electronAPI) return;
         setUpdateStatus({ status: 'checking' });
-        window.electronAPI.checkForUpdates();
+        window.electronAPI?.checkForUpdates?.();
     }, []);
 
     const handleDownloadUpdate = useCallback(() => {
         if (!window.electronAPI) return;
-        window.electronAPI.startUpdateDownload();
+        window.electronAPI?.startUpdateDownload?.();
     }, []);
 
     const handleQuitAndInstall = useCallback(() => {
         if (!window.electronAPI) return;
-        window.electronAPI.quitAndInstall();
+        window.electronAPI?.quitAndInstall?.();
     }, []);
 
     const loadVendors = useCallback(async () => {
@@ -123,10 +128,58 @@ const SettingsContent: React.FC = () => {
         if (isCashier) setActiveTab('app');
     }, [isCashier]);
 
+    const loadPosSettings = useCallback(async () => {
+        try {
+            setPosSettingsLoading(true);
+            const data = await shopApi.getPosSettings();
+            if (data) setPosSettings(data);
+        } catch (e: any) {
+            console.error('Failed to load POS settings', e);
+        } finally {
+            setPosSettingsLoading(false);
+        }
+    }, []);
+
+    const loadReceiptSettings = useCallback(async () => {
+        try {
+            setReceiptSettingsLoading(true);
+            const data = await shopApi.getReceiptSettings();
+            if (data) setReceiptSettings(data);
+        } catch (e: any) {
+            console.error('Failed to load receipt settings', e);
+        } finally {
+            setReceiptSettingsLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
+        if (activeTab === 'pos') {
+            loadPosSettings();
+            loadReceiptSettings();
+        }
         if (activeTab === 'vendors') loadVendors();
         if (activeTab === 'users') loadUsers();
-    }, [activeTab, loadVendors, loadUsers]);
+    }, [activeTab, loadVendors, loadUsers, loadPosSettings, loadReceiptSettings]);
+
+    const handleSavePosSettings = async () => {
+        try {
+            const result = await shopApi.updatePosSettings(posSettings);
+            setPosSettings(result);
+            alert('POS settings saved successfully');
+        } catch (e: any) {
+            alert(e?.message || 'Failed to save POS settings');
+        }
+    };
+
+    const handleSaveReceiptSettings = async () => {
+        try {
+            const result = await shopApi.updateReceiptSettings(receiptSettings);
+            setReceiptSettings(result);
+            alert('Receipt template settings saved');
+        } catch (e: any) {
+            alert(e?.message || 'Failed to save receipt settings');
+        }
+    };
 
     const openNewVendor = () => {
         setEditingVendor(null);
@@ -249,6 +302,7 @@ const SettingsContent: React.FC = () => {
         { id: 'vendors' as const, label: 'Vendor Management', icon: ICONS.briefcase },
         { id: 'users' as const, label: 'User Management', icon: ICONS.users },
         { id: 'mobileBranding' as const, label: 'Mobile branding', icon: <Smartphone /> },
+        { id: 'pos' as const, label: 'POS Preferences', icon: <Printer /> },
         { id: 'data' as const, label: 'Data', icon: ICONS.trash },
         { id: 'app' as const, label: 'App', icon: ICONS.download },
     ];
@@ -514,6 +568,94 @@ const SettingsContent: React.FC = () => {
                     <MobileOrdersProvider>
                         <MobileSettingsPanel />
                     </MobileOrdersProvider>
+                )}
+
+                {activeTab === 'pos' && (
+                    <div className="space-y-6 max-w-xl">
+                        <Card className="border-none shadow-sm p-6">
+                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Print Settings</h3>
+                            {posSettingsLoading ? (
+                                <p className="text-slate-500 text-sm">Loading...</p>
+                            ) : (
+                                <div className="space-y-4">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <div className="relative">
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only"
+                                                checked={posSettings.auto_print_receipt}
+                                                onChange={e => setPosSettings({ ...posSettings, auto_print_receipt: e.target.checked })}
+                                            />
+                                            <div className={`block w-10 h-6 rounded-full transition-colors ${posSettings.auto_print_receipt ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${posSettings.auto_print_receipt ? 'transform translate-x-4' : ''}`}></div>
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-slate-700">Auto-Print Receipt</p>
+                                            <p className="text-xs text-slate-500">Automatically print the receipt after a sale.</p>
+                                        </div>
+                                    </label>
+                                    <Input
+                                        label="Default Printer Name (Optional)"
+                                        placeholder="e.g. EPSON TM-T82III"
+                                        value={posSettings.default_printer_name || ''}
+                                        onChange={e => setPosSettings({ ...posSettings, default_printer_name: e.target.value })}
+                                        className="mt-4"
+                                    />
+                                    <Input
+                                        label="Receipt Copies"
+                                        type="number"
+                                        min="1"
+                                        max="5"
+                                        value={String(posSettings.receipt_copies || 1)}
+                                        onChange={e => setPosSettings({ ...posSettings, receipt_copies: parseInt(e.target.value) || 1 })}
+                                    />
+                                    <div className="pt-4">
+                                        <Button onClick={handleSavePosSettings}>Save Preferences</Button>
+                                    </div>
+                                </div>
+                            )}
+                        </Card>
+                        <Card className="border-none shadow-sm p-6">
+                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Receipt Template</h3>
+                            {receiptSettingsLoading ? (
+                                <p className="text-slate-500 text-sm">Loading...</p>
+                            ) : (
+                                <div className="space-y-4">
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={!!receiptSettings.show_barcode} onChange={e => setReceiptSettings({ ...receiptSettings, show_barcode: e.target.checked })} className="rounded border-slate-300" />
+                                        <span className="font-bold text-slate-700">Show barcode on receipt</span>
+                                    </label>
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode type</label>
+                                        <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_type || 'CODE128'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_type: e.target.value })}>
+                                            <option value="CODE128">CODE128</option>
+                                            <option value="CODE39">CODE39</option>
+                                            <option value="EAN13">EAN13</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode position</label>
+                                        <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_position || 'footer'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_position: e.target.value })}>
+                                            <option value="header">Header</option>
+                                            <option value="footer">Footer</option>
+                                        </select>
+                                    </div>
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={!!receiptSettings.show_cashier_name} onChange={e => setReceiptSettings({ ...receiptSettings, show_cashier_name: e.target.checked })} className="rounded border-slate-300" />
+                                        <span className="font-bold text-slate-700">Show cashier name</span>
+                                    </label>
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <input type="checkbox" checked={!!receiptSettings.show_shift_number} onChange={e => setReceiptSettings({ ...receiptSettings, show_shift_number: e.target.checked })} className="rounded border-slate-300" />
+                                        <span className="font-bold text-slate-700">Show shift number</span>
+                                    </label>
+                                    <Input label="Footer message" placeholder="Thank you for your business!" value={receiptSettings.footer_message || ''} onChange={e => setReceiptSettings({ ...receiptSettings, footer_message: e.target.value })} />
+                                    <div className="pt-4">
+                                        <Button onClick={handleSaveReceiptSettings}>Save Receipt Template</Button>
+                                    </div>
+                                </div>
+                            )}
+                        </Card>
+                    </div>
                 )}
             </div>
 

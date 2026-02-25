@@ -52,7 +52,7 @@ export class AuthService {
     return { token, tenantId, userId, username: data.username, role: 'admin', name: data.name };
   }
 
-  async login(data: { username: string; password: string }) {
+  async login(data: { username: string; password: string; orgId?: string }) {
     const users = await this.db.query(
       `SELECT u.id, u.tenant_id, u.username, u.name, u.role, u.password, u.is_active
        FROM users u WHERE u.username = $1`,
@@ -63,15 +63,23 @@ export class AuthService {
       throw new Error('Invalid username or password');
     }
 
-    // Check password against all matching users (handles same username across tenants)
+    // If org_id (QR) provided, only consider users in that tenant
+    const candidates = data.orgId
+      ? users.filter((u: any) => u.tenant_id === data.orgId)
+      : users;
+
     let matchedUser = null;
-    for (const user of users) {
+    for (const user of candidates) {
       if (!user.is_active) continue;
       const valid = await bcrypt.compare(data.password, user.password);
       if (valid) {
         matchedUser = user;
         break;
       }
+    }
+
+    if (data.orgId && users.some((u: any) => u.tenant_id === data.orgId) && !matchedUser) {
+      throw new Error('User does not belong to this organization or invalid password');
     }
 
     if (!matchedUser) {

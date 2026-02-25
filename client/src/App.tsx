@@ -9,8 +9,10 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList
+  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList, ChevronDown
 } from 'lucide-react';
+import { BranchProvider, useBranch } from './context/BranchContext';
+import BranchSwitchModal from './components/shop/BranchSwitchModal';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
 const InventoryPage = lazy(() => import('./components/shop/InventoryPage'));
@@ -44,6 +46,7 @@ const navItems = [
 
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const { user, logout } = useAuth();
+  const { selectedBranchName, setSwitchModalOpen } = useBranch();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -112,15 +115,29 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
       <div className="p-4 mt-auto">
         <div className={`bg-slate-800/40 rounded-3xl p-4 border border-slate-700/50 transition-all duration-300 ${collapsed ? 'px-2' : ''}`}>
           {!collapsed && user && (
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center border-2 border-indigo-500/50 overflow-hidden">
-                <Users className="w-5 h-5 text-indigo-400" />
+            <>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center border-2 border-indigo-500/50 overflow-hidden">
+                  <Users className="w-5 h-5 text-indigo-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-white truncate">{user.name}</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">{user.role.replace('_', ' ')}</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-white truncate">{user.name}</p>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">{user.role.replace('_', ' ')}</p>
+              <div className="mb-3 pl-1 text-[11px] text-slate-500 border-b border-slate-700/50 pb-2">
+                <p className="font-medium text-slate-400">Current Branch</p>
+                <p className="text-white truncate mt-0.5">{selectedBranchName}</p>
               </div>
-            </div>
+              <button
+                onClick={() => setSwitchModalOpen(true)}
+                className="flex items-center gap-3 text-slate-400 hover:text-indigo-400 transition-colors w-full group mb-2"
+              >
+                <Building2 className="w-5 h-5 flex-shrink-0" />
+                <span className="font-semibold text-xs tracking-wide">Switch Branch</span>
+                <ChevronDown className="w-4 h-4 ml-auto opacity-70" />
+              </button>
+            </>
           )}
           <button
             onClick={handleLogout}
@@ -164,9 +181,11 @@ function AppLayout() {
   }, []);
 
   return (
-    <AppProvider>
-      <ShiftsProvider>
+    <BranchProvider>
+      <AppProvider>
+        <ShiftsProvider>
       <div className="min-h-screen bg-[#f8fafc]">
+        <BranchSwitchModal />
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
         <main className={`transition-all duration-500 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'} p-8 min-h-screen`}>
           <Suspense fallback={
@@ -201,8 +220,9 @@ function AppLayout() {
           </Suspense>
         </main>
       </div>
-      </ShiftsProvider>
-    </AppProvider>
+        </ShiftsProvider>
+      </AppProvider>
+    </BranchProvider>
   );
 }
 

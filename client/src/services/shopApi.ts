@@ -128,6 +128,15 @@ export const shopApi = {
 
   getBranding: () => apiClient.get<TenantBranding>('/shop/branding'),
   updateBranding: (data: Partial<TenantBranding>) => apiClient.post<TenantBranding>('/shop/branding', data),
+
+  getPosSettings: () => apiClient.get<any>('/shop/pos-settings'),
+  updatePosSettings: (data: any) => apiClient.post<any>('/shop/pos-settings', data),
+
+  getReceiptSettings: () => apiClient.get<any>('/shop/receipt-settings'),
+  updateReceiptSettings: (data: any) => apiClient.post<any>('/shop/receipt-settings', data),
+
+  incrementReprintCount: (saleId: string) => apiClient.post<any>(`/shop/sales/${saleId}/reprint`),
+  getSaleByInvoiceNumber: (saleNumber: string) => apiClient.get<any>(`/shop/sales/by-invoice/${encodeURIComponent(saleNumber)}`),
 };
 
 export interface ShopUser {

@@ -7,6 +7,7 @@ export interface TenantRequest extends Record<string, any> {
   tenantId?: string;
   userId?: string;
   userRole?: string;
+  branchId?: string | null;
   user?: {
     userId: string;
     username: string;
@@ -96,6 +97,26 @@ export function tenantMiddleware(db: IDatabaseService) {
       } catch (authError) {
         console.error('Authentication check error:', authError);
         return res.status(500).json({ error: 'Authentication failed', code: 'SESSION_CHECK_FAILED' });
+      }
+
+      // Validate x-branch-id when present: must belong to tenant (never trust client-only branch)
+      const branchIdHeader = (req.headers['x-branch-id'] as string)?.trim();
+      if (branchIdHeader) {
+        try {
+          const branchRows = await db.query(
+            'SELECT id FROM shop_branches WHERE id = $1 AND tenant_id = $2',
+            [branchIdHeader, req.tenantId]
+          );
+          if (branchRows.length === 0) {
+            return res.status(403).json({ error: 'Branch not found or access denied', code: 'INVALID_BRANCH' });
+          }
+          req.branchId = branchIdHeader;
+        } catch (err) {
+          console.error('Branch validation error:', err);
+          return res.status(403).json({ error: 'Branch validation failed', code: 'INVALID_BRANCH' });
+        }
+      } else {
+        req.branchId = null;
       }
 
       return await runWithTenantContext(

@@ -443,14 +443,15 @@ export class ShopService {
       throw new Error('Sale must have at least one item');
     }
     const paymentDetails = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [];
+    const barcodeValue = `SALE|${tenantId}|${saleData.saleNumber}`;
     return this.db.transaction(async (client) => {
       const saleRes = await client.query(`
         INSERT INTO shop_sales (
           tenant_id, branch_id, terminal_id, user_id, customer_id,
           loyalty_member_id, sale_number, subtotal, tax_total,
           discount_total, grand_total, total_paid, change_due,
-          payment_method, payment_details, shift_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          payment_method, payment_details, shift_id, barcode_value
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id
       `, [
         tenantId,
@@ -468,7 +469,8 @@ export class ShopService {
         saleData.changeDue,
         saleData.paymentMethod ?? 'Cash',
         JSON.stringify(paymentDetails),
-        saleData.shiftId ?? null
+        saleData.shiftId ?? null,
+        barcodeValue
       ]);
 
       const saleId = saleRes[0].id;
@@ -556,7 +558,7 @@ export class ShopService {
       // Update popularity scores after sale
       await this.recalculatePopularityScores(tenantId).catch(err => console.error('PopScore Error:', err));
 
-      return saleId;
+      return { id: saleId, barcode_value: barcodeValue };
     });
   }
 
@@ -684,6 +686,7 @@ export class ShopService {
         s.payment_method as "paymentMethod", s.payment_details as "paymentDetails", 
         s.status, s.points_earned as "pointsEarned", s.points_redeemed as "pointsRedeemed", 
         s.created_at as "createdAt", s.updated_at as "updatedAt",
+        s.barcode_value as "barcodeValue", s.reprint_count as "reprintCount", s.printed_at as "printedAt",
         c.name as "customerName", b.name as "branchName", 'POS' as source,
         COALESCE((
           SELECT json_agg(json_build_object(
@@ -715,6 +718,7 @@ export class ShopService {
         o.payment_method as "paymentMethod", NULL as "paymentDetails", 
         o.status, 0 as "pointsEarned", 0 as "pointsRedeemed", 
         o.created_at as "createdAt", o.updated_at as "updatedAt",
+        NULL as "barcodeValue", 0 as "reprintCount", NULL as "printedAt",
         mc.name as "customerName", b.name as "branchName", 'Mobile' as source,
         COALESCE((
           SELECT json_agg(json_build_object(
@@ -1103,6 +1107,155 @@ export class ShopService {
       ]
     );
     return res[0];
+  }
+
+  // --- POS Settings ---
+  async getPosSettings(tenantId: string) {
+    const res = await this.db.query(
+      `SELECT * FROM pos_settings WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    if (res.length === 0) {
+      const defaultRes = await this.db.query(
+        `INSERT INTO pos_settings (tenant_id) VALUES ($1) RETURNING *`,
+        [tenantId]
+      );
+      return defaultRes[0];
+    }
+    return res[0];
+  }
+
+  async updatePosSettings(tenantId: string, data: any) {
+    const res = await this.db.query(
+      `INSERT INTO pos_settings (tenant_id, auto_print_receipt, default_printer_name, receipt_copies, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (tenant_id) DO UPDATE SET
+         auto_print_receipt = EXCLUDED.auto_print_receipt,
+         default_printer_name = EXCLUDED.default_printer_name,
+         receipt_copies = EXCLUDED.receipt_copies,
+         updated_at = NOW()
+       RETURNING *`,
+      [
+        tenantId,
+        data.auto_print_receipt !== undefined ? data.auto_print_receipt : true,
+        data.default_printer_name || null,
+        data.receipt_copies !== undefined ? data.receipt_copies : 1
+      ]
+    );
+    return res[0];
+  }
+
+  // --- Receipt Settings (pos_receipt_settings) ---
+  async getReceiptSettings(tenantId: string) {
+    const res = await this.db.query(
+      'SELECT * FROM pos_receipt_settings WHERE tenant_id = $1',
+      [tenantId]
+    );
+    if (res.length === 0) {
+      const defaultRes = await this.db.query(
+        `INSERT INTO pos_receipt_settings (tenant_id) VALUES ($1) RETURNING *`,
+        [tenantId]
+      );
+      return defaultRes[0];
+    }
+    return res[0];
+  }
+
+  async updateReceiptSettings(tenantId: string, data: any) {
+    const showLogo = data.show_logo !== undefined ? data.show_logo : false;
+    const showBarcode = data.show_barcode !== undefined ? data.show_barcode : true;
+    const barcodeType = (data.barcode_type && ['CODE128', 'CODE39', 'EAN13'].includes(data.barcode_type)) ? data.barcode_type : 'CODE128';
+    const barcodePosition = (data.barcode_position && ['header', 'footer'].includes(data.barcode_position)) ? data.barcode_position : 'footer';
+    const receiptWidth = (data.receipt_width && ['58mm', '80mm'].includes(data.receipt_width)) ? data.receipt_width : '80mm';
+    const showTaxBreakdown = data.show_tax_breakdown !== undefined ? data.show_tax_breakdown : false;
+    const showCashierName = data.show_cashier_name !== undefined ? data.show_cashier_name : true;
+    const showShiftNumber = data.show_shift_number !== undefined ? data.show_shift_number : true;
+    const footerMessage = data.footer_message ?? null;
+    const res = await this.db.query(
+      `INSERT INTO pos_receipt_settings (
+        tenant_id, show_logo, show_barcode, barcode_type, barcode_position,
+        receipt_width, show_tax_breakdown, show_cashier_name, show_shift_number,
+        footer_message, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      ON CONFLICT (tenant_id) DO UPDATE SET
+        show_logo = EXCLUDED.show_logo,
+        show_barcode = EXCLUDED.show_barcode,
+        barcode_type = EXCLUDED.barcode_type,
+        barcode_position = EXCLUDED.barcode_position,
+        receipt_width = EXCLUDED.receipt_width,
+        show_tax_breakdown = EXCLUDED.show_tax_breakdown,
+        show_cashier_name = EXCLUDED.show_cashier_name,
+        show_shift_number = EXCLUDED.show_shift_number,
+        footer_message = EXCLUDED.footer_message,
+        updated_at = NOW()
+      RETURNING *`,
+      [tenantId, showLogo, showBarcode, barcodeType, barcodePosition, receiptWidth, showTaxBreakdown, showCashierName, showShiftNumber, footerMessage]
+    );
+    return res[0];
+  }
+
+  /** Increment reprint_count for a sale (tenant-scoped). Returns updated sale. */
+  async incrementReprintCount(tenantId: string, saleId: string) {
+    await this.db.query(
+      `UPDATE shop_sales SET reprint_count = COALESCE(reprint_count, 0) + 1, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+      [saleId, tenantId]
+    );
+    const rows = await this.db.query(
+      `SELECT id, sale_number as "saleNumber", reprint_count as "reprintCount" FROM shop_sales WHERE id = $1 AND tenant_id = $2`,
+      [saleId, tenantId]
+    );
+    return rows[0] || null;
+  }
+
+  /** Record printed_at for a sale (optional). */
+  async markSalePrinted(tenantId: string, saleId: string) {
+    await this.db.query(
+      `UPDATE shop_sales SET printed_at = NOW(), updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+      [saleId, tenantId]
+    );
+  }
+
+  /** Get sale by ID (for barcode lookup / detail). */
+  async getSaleById(tenantId: string, saleId: string) {
+    const rows = await this.db.query(
+      `SELECT s.id, s.tenant_id as "tenantId", s.branch_id as "branchId", s.terminal_id as "terminalId",
+        s.user_id as "userId", s.customer_id as "customerId", s.sale_number as "saleNumber",
+        s.subtotal, s.tax_total as "taxTotal", s.discount_total as "discountTotal", s.grand_total as "grandTotal",
+        s.total_paid as "totalPaid", s.change_due as "changeDue", s.payment_method as "paymentMethod",
+        s.payment_details as "paymentDetails", s.status, s.created_at as "createdAt",
+        s.barcode_value as "barcodeValue", s.reprint_count as "reprintCount", s.printed_at as "printedAt",
+        c.name as "customerName", b.name as "branchName",
+        (SELECT json_agg(json_build_object('productId', si.product_id, 'name', COALESCE(p.name, 'Unknown'), 'quantity', si.quantity, 'unitPrice', si.unit_price, 'taxAmount', si.tax_amount, 'discountAmount', si.discount_amount, 'subtotal', si.subtotal))
+         FROM shop_sale_items si LEFT JOIN shop_products p ON si.product_id = p.id AND p.tenant_id = $1 WHERE si.sale_id = s.id AND si.tenant_id = $1) as items
+       FROM shop_sales s
+       LEFT JOIN contacts c ON s.customer_id = c.id AND c.tenant_id = $1
+       LEFT JOIN shop_branches b ON s.branch_id = b.id AND b.tenant_id = $1
+       WHERE s.id = $2 AND s.tenant_id = $1`,
+      [tenantId, saleId]
+    );
+    return rows[0] || null;
+  }
+
+  /** Find POS sale by invoice/sale number (for barcode SALE|tenant|invoice lookup). */
+  async getSaleByInvoiceNumber(tenantId: string, saleNumber: string) {
+    const rows = await this.db.query(
+      `SELECT id FROM shop_sales WHERE tenant_id = $1 AND sale_number = $2 LIMIT 1`,
+      [tenantId, saleNumber]
+    );
+    if (rows.length === 0) return null;
+    return this.getSaleById(tenantId, rows[0].id);
+  }
+
+  /** Log a print attempt (optional traceability). */
+  async logPrint(tenantId: string, data: { saleId: string; printedBy?: string; printerName?: string; success: boolean; errorMessage?: string }) {
+    try {
+      await this.db.query(
+        `INSERT INTO print_logs (sale_id, printed_by, printer_name, success, error_message) VALUES ($1, $2, $3, $4, $5)`,
+        [data.saleId, data.printedBy || null, data.printerName || null, data.success, data.errorMessage || null]
+      );
+    } catch (_) {
+      // non-blocking
+    }
   }
 }
 

@@ -5,7 +5,6 @@ import ProductSearch from './pos/ProductSearch';
 import CartGrid from './pos/CartGrid';
 import CheckoutPanel from './pos/CheckoutPanel';
 import ShortcutBar from './pos/ShortcutBar';
-import PaymentModal from './pos/PaymentModal';
 import HeldSalesModal from './pos/HeldSalesModal';
 import CustomerSelectionModal from './pos/CustomerSelectionModal';
 import SalesHistoryModal from './pos/SalesHistoryModal';
@@ -15,8 +14,6 @@ import './pos/POSStyles.css';
 const POSSalesContent: React.FC = () => {
     const { state } = useAppContext();
     const {
-        isPaymentModalOpen,
-        setIsPaymentModalOpen,
         isHeldSalesModalOpen,
         setIsHeldSalesModalOpen,
         isCustomerModalOpen,
@@ -75,12 +72,10 @@ const POSSalesContent: React.FC = () => {
                 case 'F6': setIsCustomerModalOpen(!isCustomerModalOpen); break;
                 case 'F9': setIsSalesHistoryModalOpen(!isSalesHistoryModalOpen); break;
                 case 'F7': toggleFullScreen(); break;
-                case 'F8': setIsPaymentModalOpen(!isPaymentModalOpen); break;
                 case 'F12':
-                    if (balanceDue <= 0 && cart.length > 0) {
-                        completeSale();
-                    } else if (cart.length > 0) {
-                        setIsPaymentModalOpen(true);
+                    if (cart.length > 0) {
+                        const tenderInput = document.getElementById('tender-amount-input');
+                        if (tenderInput) tenderInput.focus();
                     }
                     break;
                 case 'd':
@@ -97,7 +92,6 @@ const POSSalesContent: React.FC = () => {
                     }
                     break;
                 case 'Escape':
-                    setIsPaymentModalOpen(false);
                     setIsCustomerModalOpen(false);
                     setIsHeldSalesModalOpen(false);
                     setIsSalesHistoryModalOpen(false);
@@ -117,8 +111,6 @@ const POSSalesContent: React.FC = () => {
         setIsCustomerModalOpen,
         isSalesHistoryModalOpen,
         setIsSalesHistoryModalOpen,
-        isPaymentModalOpen,
-        setIsPaymentModalOpen,
         balanceDue,
         completeSale,
         toggleFullScreen,
@@ -166,7 +158,6 @@ const POSSalesContent: React.FC = () => {
             </div>
 
             {/* Modals */}
-            <PaymentModal />
             <HeldSalesModal />
             <CustomerSelectionModal
                 isOpen={isCustomerModalOpen}

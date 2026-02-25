@@ -17,6 +17,8 @@ import { ThermalPrinter, createThermalPrinter, ReceiptData } from '../services/p
 import { useAppContext } from './AppContext';
 import { useAuth } from './AuthContext';
 import { useShifts } from './ShiftsContext';
+import { getAppContext, setAppContext, clearAppContextBranch } from '../services/appContext';
+import { apiClient } from '../services/apiClient';
 
 
 
@@ -62,7 +64,7 @@ interface POSContextType {
     isSalesHistoryModalOpen: boolean;
     setIsSalesHistoryModalOpen: (isOpen: boolean) => void;
 
-    completeSale: () => Promise<any>;
+    completeSale: (directPayment?: any) => Promise<any>;
     printReceipt: (saleData?: any) => Promise<void>;
     lastCompletedSale: any | null;
     setLastCompletedSale: (sale: any | null) => void;
@@ -77,6 +79,8 @@ interface POSContextType {
 
     isDenseMode: boolean;
     setIsDenseMode: (isDense: boolean) => void;
+
+    posSettings: any;
 }
 
 const POSContext = createContext<POSContextType | undefined>(undefined);
@@ -100,6 +104,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
     const [selectedTerminalId, setSelectedTerminalId] = useState<string | null>(null);
     const [isDenseMode, setIsDenseMode] = useState(false);
+    const [posSettings, setPosSettings] = useState<any>(null);
+    const [receiptSettings, setReceiptSettings] = useState<any>(null);
 
     // Barcode scanner and printer instances
     const barcodeScannerRef = useRef<BarcodeScanner | null>(null);
@@ -124,12 +130,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Initialize barcode scanner and thermal printer
     useEffect(() => {
-        // Re-create thermal printer with updated print settings
-        // This ensures the printer always uses the latest configuration
+        // Re-create thermal printer with receipt + print settings (configurable template, optional silent print)
         thermalPrinterRef.current = createThermalPrinter({
-            paperWidth: 80, // 80mm thermal paper
-            autoConnect: true,
-            printSettings: state.printSettings // Pass print settings for configurable receipts
+            printSettings: posSettings ?? state.printSettings,
+            receiptSettings: receiptSettings ?? undefined,
         });
 
         console.log('🖨️ Thermal printer initialized with settings:', {
@@ -137,11 +141,17 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             showBarcode: state.printSettings?.posShowBarcode
         });
 
-        // Initialize barcode scanner (only once)
+        // Initialize barcode scanner (only once). Detect SALE|tenant|invoice to open sale detail.
         if (!barcodeScannerRef.current) {
             barcodeScannerRef.current = createBarcodeScanner((barcode) => {
-                console.log('Barcode scanned:', barcode);
-                setSearchQuery(barcode);
+                const match = typeof barcode === 'string' && barcode.match(/^SALE\|[^|]+\|(.+)$/);
+                if (match) {
+                    const invoiceNumber = match[1].trim();
+                    setSearchQuery(invoiceNumber);
+                    setIsSalesHistoryModalOpen(true);
+                } else {
+                    setSearchQuery(barcode || '');
+                }
             });
             barcodeScannerRef.current.start();
         }
@@ -152,20 +162,39 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 barcodeScannerRef.current.stop();
             }
         };
-    }, [state.printSettings]); // Re-initialize when print settings change
+    }, [state.printSettings, posSettings, receiptSettings]);
 
     // Fetch Branches and Terminals
     useEffect(() => {
         const fetchConfig = async () => {
             try {
                 console.log('🔄 [POSContext] Fetching branches and terminals...');
-                const [branchesList, terminalsList] = await Promise.all([
+                const [branchesList, terminalsList, settings, receiptSettingsRes] = await Promise.all([
                     shopApi.getBranches(),
-                    shopApi.getTerminals()
+                    shopApi.getTerminals(),
+                    shopApi.getPosSettings().catch(() => null),
+                    shopApi.getReceiptSettings().catch(() => null)
                 ]);
 
                 setBranches(branchesList);
                 setTerminals(terminalsList);
+                if (settings) setPosSettings(settings);
+                if (receiptSettingsRes) setReceiptSettings(receiptSettingsRes);
+
+                // Apply persisted/QR branch if valid: do NOT override with default when QR branch exists and user has access
+                const ctx = getAppContext();
+                const branchIds = (branchesList || []).map((b: any) => b.id);
+                if (ctx.branch_id && branchIds.includes(ctx.branch_id)) {
+                    setSelectedBranchId(ctx.branch_id);
+                    apiClient.setBranchId(ctx.branch_id);
+                } else if (ctx.selected_by_qr && ctx.branch_id && !branchIds.includes(ctx.branch_id)) {
+                    clearAppContextBranch();
+                    setSelectedBranchId(branchesList?.[0]?.id ?? null);
+                    apiClient.setBranchId(branchesList?.[0]?.id ?? null);
+                } else if (!currentShift && branchesList?.length && !ctx.branch_id) {
+                    setSelectedBranchId(branchesList[0]?.id ?? null);
+                    apiClient.setBranchId(branchesList[0]?.id ?? null);
+                }
             } catch (error) {
                 console.error('Failed to fetch POS configuration:', error);
             }
@@ -182,8 +211,39 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const terminal = terminals.find((t: any) => t.id === currentShift.terminal_id);
         const branchId = terminal?.branch_id ?? terminal?.branchId ?? null;
         if (currentShift.terminal_id) setSelectedTerminalId(currentShift.terminal_id);
-        if (branchId) setSelectedBranchId(branchId);
+        if (branchId) {
+            setSelectedBranchId(branchId);
+            apiClient.setBranchId(branchId);
+            setAppContext({ branch_id: branchId, selected_by_qr: false });
+            window.dispatchEvent(new CustomEvent('branch-changed', { detail: { branchId } }));
+        }
     }, [currentShift?.id, currentShift?.terminal_id, terminals]);
+
+    // Keep API client and persisted context in sync with selected branch (e.g. after branch switch)
+    useEffect(() => {
+        if (selectedBranchId && authUser) {
+            apiClient.setBranchId(selectedBranchId);
+        }
+    }, [selectedBranchId, authUser]);
+
+    // On branch switch (from user menu): clear cart/held, update branch, re-fetch config
+    useEffect(() => {
+        const handleBranchChanged = (e: CustomEvent<{ branchId: string }>) => {
+            const branchId = e.detail?.branchId ?? getAppContext().branch_id;
+            if (!branchId) return;
+            setSelectedBranchId(branchId);
+            apiClient.setBranchId(branchId);
+            setCart([]);
+            setPayments([]);
+            setCustomer(null);
+            setHeldSales([]);
+            setLastCompletedSale(null);
+            shopApi.getBranches().then(setBranches).catch(() => {});
+            shopApi.getTerminals().then(setTerminals).catch(() => {});
+        };
+        window.addEventListener('branch-changed', handleBranchChanged as EventListener);
+        return () => window.removeEventListener('branch-changed', handleBranchChanged as EventListener);
+    }, []);
 
     // Print receipt function
     const printReceipt = useCallback(async (saleData?: any) => {
@@ -202,9 +262,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 receiptNumber: dataToUse.saleNumber,
                 date: new Date(dataToUse.createdAt || Date.now()).toLocaleDateString(),
                 time: new Date(dataToUse.createdAt || Date.now()).toLocaleTimeString(),
-                cashier: dataToUse.userId || 'Cashier',
-                customer: customer?.name,
-                items: dataToUse.items.map((item: any) => ({
+                cashier: dataToUse.userId || authUser?.name || 'Cashier',
+                shiftNumber: currentShift?.id ? String(currentShift.id) : undefined,
+                customer: customer?.name ?? dataToUse.customerName,
+                items: (dataToUse.items || []).map((item: any) => ({
                     name: item.name || 'Unknown Item',
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,
@@ -212,29 +273,41 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     total: item.subtotal
                 })),
                 subtotal: dataToUse.subtotal,
-                discount: dataToUse.discountTotal,
-                tax: dataToUse.taxTotal,
+                discount: dataToUse.discountTotal ?? 0,
+                tax: dataToUse.taxTotal ?? 0,
                 total: dataToUse.grandTotal,
-                payments: dataToUse.paymentDetails.map((p: any) => ({
+                payments: (dataToUse.paymentDetails || []).map((p: any) => ({
                     method: p.method,
-                    amount: p.amount
+                    amount: p.amount,
+                    reference: p.reference
                 })),
                 change: dataToUse.changeDue > 0 ? dataToUse.changeDue : undefined,
-                footer: state.printSettings?.posReceiptFooter || 'Thank you for shopping with us!',
-                showBarcode: state.printSettings?.posShowBarcode ?? true // Default to true if not set
+                footer: state.printSettings?.posReceiptFooter || receiptSettings?.footer_message || 'Thank you for shopping with us!',
+                reprint_count: dataToUse.reprintCount ?? dataToUse.reprint_count ?? 0,
+                barcode_value: dataToUse.barcodeValue ?? dataToUse.barcode_value ?? null,
+                printerName: posSettings?.default_printer_name
             };
 
             if (thermalPrinterRef.current) {
-                await thermalPrinterRef.current.printReceipt(receiptData);
+                // Determine printer name and copies
+                const copies = posSettings?.receipt_copies || 1;
+                // Currently printReceipt does not take copies or printer name in the interface,
+                // but we can execute it multiple times for copies.
+                for (let i = 0; i < copies; i++) {
+                    await thermalPrinterRef.current.printReceipt({
+                        ...receiptData,
+                        printerName: posSettings?.default_printer_name
+                    } as any);
+                }
                 console.log('Receipt printed successfully');
             } else {
                 throw new Error('Printer not initialized');
             }
         } catch (error: any) {
             console.error('Failed to print receipt:', error);
-            alert('Failed to print receipt: ' + (error.message || 'Unknown error'));
+            // Don't alert here to avoid blocking, just log it. The UI can handle it if needed.
         }
-    }, [lastCompletedSale, customer]);
+    }, [lastCompletedSale, customer, state.printSettings, posSettings, receiptSettings, authUser, currentShift]);
 
 
     const addToCart = useCallback((product: POSProduct, variant?: POSProductVariant, quantity: number = 1) => {
@@ -376,13 +449,18 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
     }, [heldSales]);
 
-    const completeSale = useCallback(async () => {
+    const completeSale = useCallback(async (directPayment?: any) => {
         try {
             if (cart.length === 0) {
                 alert('Please add at least one item to the cart.');
                 return;
             }
-            if (payments.length === 0 || totals.totalPaid < totals.grandTotal) {
+
+            const currentPayments = directPayment ? [directPayment] : payments;
+            const currentTotalPaid = directPayment ? directPayment.amount : totals.totalPaid;
+            const currentChangeDue = directPayment ? Math.max(0, directPayment.amount - totals.grandTotal) : totals.changeDue;
+
+            if (currentPayments.length === 0 || currentTotalPaid < totals.grandTotal) {
                 alert('Please add payment covering the sale total.');
                 return;
             }
@@ -400,10 +478,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 taxTotal: totals.taxTotal,
                 discountTotal: totals.discountTotal,
                 grandTotal: totals.grandTotal,
-                totalPaid: totals.totalPaid,
-                changeDue: totals.changeDue,
-                paymentMethod: payments.length > 1 ? 'Multiple' : payments[0]?.method || 'Cash',
-                paymentDetails: payments,
+                totalPaid: currentTotalPaid,
+                changeDue: currentChangeDue,
+                paymentMethod: currentPayments.length > 1 ? 'Multiple' : currentPayments[0]?.method || 'Cash',
+                paymentDetails: currentPayments,
                 items: cart.map(item => ({
                     productId: item.productId,
                     name: item.name, // Include name for receipt printing
@@ -416,15 +494,43 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 createdAt: new Date().toISOString()
             };
 
-            await shopApi.createSale(saleData);
+            const saleResponse = await shopApi.createSale(saleData) as any;
+            const saleId = saleResponse?.id ?? saleResponse;
+            const barcode_value = saleResponse?.barcode_value ?? `SALE|${saleNumber}`;
 
-            // Save sale data for receipt printing (include id from response if needed)
-            setLastCompletedSale({ ...saleData, saleNumber });
+            const completedSale = {
+                ...saleData,
+                saleNumber,
+                id: saleId,
+                barcode_value,
+                barcodeValue: barcode_value,
+                reprintCount: 0,
+                reprint_count: 0,
+            };
+            setLastCompletedSale(completedSale);
 
             clearCart();
-            // Keep modal open so user can print receipt
+            // Clear payment data for the next sale (auto-clears if not recalled, but helps to clear now)
+            setPayments([]);
 
-            return saleData;
+            // Auto-print logic
+            const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
+            if (shouldAutoPrint) {
+                // Async print
+                printReceipt(completedSale).catch(e => console.error("Auto print failed", e));
+                // Show toast
+                const toast = document.createElement('div');
+                toast.innerText = 'Sale Completed & Printed';
+                toast.className = 'fixed bottom-4 right-4 bg-gray-900 text-white px-4 py-2 rounded shadow-lg z-50 animate-slide-up';
+                document.body.appendChild(toast);
+                setTimeout(() => {
+                    toast.remove();
+                    // Auto-start next sale if auto-print is true
+                    setLastCompletedSale(null);
+                }, 3000);
+            }
+
+            return completedSale;
         } catch (error: any) {
             console.error('Failed to complete sale:', error);
             const message = (error && (typeof error === 'object' && ('error' in error) ? error.error : error.message))
@@ -433,7 +539,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             alert('Error completing sale: ' + message);
             throw error;
         }
-    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId, currentShift?.id]);
+    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId, currentShift?.id, posSettings, printReceipt]);
 
     const applyGlobalDiscount = useCallback((percentage: number) => {
         setCart(prev => prev.map(item => {
@@ -489,7 +595,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedBranchId,
         setSelectedTerminalId,
         isDenseMode,
-        setIsDenseMode
+        setIsDenseMode,
+        posSettings
     };
 
     return <POSContext.Provider value={value}>{children}</POSContext.Provider>;

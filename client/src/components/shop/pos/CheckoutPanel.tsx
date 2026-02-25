@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { usePOS } from '../../../context/POSContext';
 import { ICONS, CURRENCY } from '../../../constants';
+import { POSPaymentMethod } from '../../../types/pos';
+import { shopApi, ShopBankAccount } from '../../../services/shopApi';
 import Button from '../../ui/Button';
 import CustomerSelectionModal from './CustomerSelectionModal';
 
@@ -13,14 +15,96 @@ const CheckoutPanel: React.FC = () => {
         grandTotal,
         customer,
         setCustomer,
-        setIsPaymentModalOpen,
         cart,
         holdSale,
-        applyGlobalDiscount
+        applyGlobalDiscount,
+        completeSale,
+        lastCompletedSale,
+        setLastCompletedSale,
+        printReceipt,
+        posSettings,
+        balanceDue,
+        changeDue,
+        addPayment,
+        payments
     } = usePOS();
 
     const [isDiscountOpen, setIsDiscountOpen] = useState(false);
     const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+
+    // Payment state
+    const [tenderAmount, setTenderAmount] = useState('0');
+    const [selectedMethod, setSelectedMethod] = useState<POSPaymentMethod>(POSPaymentMethod.CASH);
+    const [bankAccounts, setBankAccounts] = useState<ShopBankAccount[]>([]);
+    const [selectedBankId, setSelectedBankId] = useState<string>('');
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    React.useEffect(() => {
+        setTenderAmount(grandTotal.toString());
+    }, [grandTotal]);
+
+    React.useEffect(() => {
+        const loadBanks = async () => {
+            try {
+                const list = await shopApi.getBankAccounts(true);
+                setBankAccounts(Array.isArray(list) ? list : []);
+                setSelectedBankId(prev => (list?.length && (!prev || !list.some((b: ShopBankAccount) => b.id === prev))) ? list[0].id : prev);
+            } catch {
+                setBankAccounts([]);
+            }
+        };
+        loadBanks();
+    }, []);
+
+    const handleMethodSelect = (method: POSPaymentMethod) => {
+        setSelectedMethod(method);
+        if (method === POSPaymentMethod.CASH) {
+            const cashBank = bankAccounts.find(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'));
+            if (cashBank) setSelectedBankId(cashBank.id);
+        } else {
+            const firstOnline = bankAccounts.find(b => b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash'));
+            if (firstOnline) setSelectedBankId(firstOnline.id);
+            else setSelectedBankId('');
+        }
+    };
+
+    const handleComplete = async () => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+        try {
+            // First clear any previous payments and add the new complete payment
+            // Actually context handles this through addPayment, let's just add payment if enough
+            const amount = parseFloat(tenderAmount);
+            if (amount < grandTotal) {
+                alert('Tender amount is less than total');
+                setIsProcessing(false);
+                return;
+            }
+
+            // We simulate adding the payment and immediately completing
+            const bank = bankAccounts.find(b => b.id === selectedBankId);
+            const directPaymentObj = {
+                id: crypto.randomUUID(),
+                method: selectedMethod,
+                amount,
+                bankAccountId: bank?.id,
+                bankAccountName: bank?.name
+            };
+            addPayment(selectedMethod, amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
+
+            const sale = await completeSale(directPaymentObj);
+
+            // Check auto print
+            const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
+            if (!shouldAutoPrint) {
+                // Not auto-printing, leave lastCompletedSale set so we can show buttons
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     const handleHold = () => {
         if (cart.length === 0) return;
@@ -157,40 +241,98 @@ const CheckoutPanel: React.FC = () => {
                 </div>
             </div>
 
-            {/* Transaction Controls */}
-            <div className="p-6 bg-white border-t border-slate-100 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                    <button
-                        onClick={handleHold}
-                        className="py-3 flex flex-col items-center justify-center border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-[0.98]"
-                    >
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">Save to List</span>
-                        <span className="text-[11px] font-bold text-slate-700 uppercase">Hold (F2)</span>
-                    </button>
-                    <button
-                        onClick={handleProforma}
-                        className="py-3 flex flex-col items-center justify-center border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-[0.98]"
-                    >
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider leading-none mb-1">Print Draft</span>
-                        <span className="text-[11px] font-bold text-slate-700 uppercase">Proforma</span>
-                    </button>
-                </div>
+            {/* Transaction Controls or Post-Sale */
+                lastCompletedSale ? (
+                    <div className="p-6 bg-white border-t border-slate-100 space-y-4">
+                        <div className="flex flex-col items-center justify-center p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-center mb-4">
+                            <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center mb-2">
+                                {ICONS.checkCircle}
+                            </div>
+                            <h3 className="text-lg font-bold text-emerald-700">Sale Complete</h3>
+                            <p className="text-xs text-emerald-600">Change: {CURRENCY}{(lastCompletedSale.changeDue || 0).toLocaleString()}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => printReceipt(lastCompletedSale)}
+                                className="py-4 flex items-center justify-center gap-2 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 transition-all"
+                            >
+                                {ICONS.print} Print Receipt
+                            </button>
+                            <button
+                                onClick={() => setLastCompletedSale(null)}
+                                className="py-4 flex items-center justify-center gap-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all"
+                            >
+                                {ICONS.refresh} New Sale
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-6 bg-white border-t border-slate-100 space-y-4 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.05)] z-10 relative">
+                        {cart.length > 0 ? (
+                            <div className="space-y-4 animate-slide-up">
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => handleMethodSelect(POSPaymentMethod.CASH)}
+                                        className={`flex-1 py-3 px-4 rounded-xl font-bold flex flex-col items-center gap-1 transition-all border-2 ${selectedMethod === POSPaymentMethod.CASH ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-100 text-slate-500 hover:bg-slate-50'}`}
+                                    >
+                                        {ICONS.dollarSign} CASH
+                                    </button>
+                                    <button
+                                        onClick={() => handleMethodSelect(POSPaymentMethod.ONLINE)}
+                                        className={`flex-1 py-3 px-4 rounded-xl font-bold flex flex-col items-center gap-1 transition-all border-2 ${selectedMethod === POSPaymentMethod.ONLINE ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 text-slate-500 hover:bg-slate-50'}`}
+                                    >
+                                        {ICONS.creditCard} ONLINE
+                                    </button>
+                                </div>
 
-                <button
-                    disabled={cart.length === 0}
-                    onClick={() => setIsPaymentModalOpen(true)}
-                    className={`w-full py-6 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20 ${cart.length === 0
-                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                        }`}
-                >
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Finalize Sale</span>
-                    <span className="text-xl font-black tracking-tight flex items-center gap-3">
-                        COLLECT CASH
-                        <kbd className="px-2 py-0.5 bg-white/20 border border-white/20 rounded text-[10px] font-bold text-white uppercase">F12</kbd>
-                    </span>
-                </button>
-            </div>
+                                <div className="flex bg-slate-50 border-2 border-slate-100 rounded-xl overflow-hidden focus-within:border-blue-500 transition-colors">
+                                    <span className="flex items-center justify-center px-4 font-bold text-slate-400 bg-white">
+                                        {CURRENCY}
+                                    </span>
+                                    <input
+                                        id="tender-amount-input"
+                                        type="number"
+                                        className="flex-1 py-3 px-2 bg-transparent text-xl font-black text-slate-900 outline-none"
+                                        value={tenderAmount}
+                                        onChange={e => setTenderAmount(e.target.value)}
+                                        onFocus={e => e.target.select()}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') {
+                                                if (!isProcessing && parseFloat(tenderAmount) >= grandTotal) {
+                                                    handleComplete();
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    <button onClick={() => setTenderAmount(grandTotal.toString())} className="px-4 text-xs font-bold text-blue-600 hover:bg-blue-50">
+                                        EXACT
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                    <button
+                                        onClick={handleHold}
+                                        className="py-4 flex flex-col items-center justify-center border-2 border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all"
+                                    >
+                                        <span className="text-[11px] font-bold text-slate-500 uppercase">Save / Hold</span>
+                                    </button>
+                                    <button
+                                        disabled={isProcessing || parseFloat(tenderAmount) < grandTotal}
+                                        onClick={handleComplete}
+                                        className={`py-4 flex flex-col items-center justify-center rounded-xl transition-all font-black text-lg ${parseFloat(tenderAmount) >= grandTotal ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-700' : 'bg-slate-200 text-slate-400'}`}
+                                    >
+                                        {isProcessing ? 'PROCESSING...' : 'COMPLETE SALE'}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="py-4 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Cart is empty</span>
+                            </div>
+                        )}
+                    </div>
+                )
+            }
 
 
             <CustomerSelectionModal

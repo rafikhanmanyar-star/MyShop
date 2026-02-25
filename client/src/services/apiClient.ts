@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from '../config/apiUrl';
+import { getAppContext } from './appContext';
 
 export interface ApiError {
   error: string;
@@ -10,16 +11,25 @@ class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
   private tenantId: string | null = null;
+  private branchId: string | null = null;
 
   constructor() {
     this.baseUrl = getApiBaseUrl();
     this.loadAuth();
+    this.loadBranchFromContext();
   }
 
   private loadAuth(): void {
     if (typeof window !== 'undefined') {
       this.token = localStorage.getItem('auth_token');
       this.tenantId = localStorage.getItem('tenant_id');
+    }
+  }
+
+  private loadBranchFromContext(): void {
+    if (typeof window !== 'undefined') {
+      const ctx = getAppContext();
+      if (ctx.branch_id) this.branchId = ctx.branch_id;
     }
   }
 
@@ -30,6 +40,10 @@ class ApiClient {
       localStorage.setItem('auth_token', token);
       localStorage.setItem('tenant_id', tenantId);
     }
+  }
+
+  setBranchId(branchId: string | null): void {
+    this.branchId = branchId;
   }
 
   clearAuth(): void {
@@ -43,6 +57,7 @@ class ApiClient {
 
   getToken(): string | null { return this.token; }
   getTenantId(): string | null { return this.tenantId; }
+  getBranchId(): string | null { return this.branchId; }
 
   isAuthenticated(): boolean {
     if (!this.token) return false;
@@ -68,6 +83,12 @@ class ApiClient {
 
     if (this.token) {
       (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`;
+    }
+    if (this.tenantId) {
+      (headers as Record<string, string>)['x-org-id'] = this.tenantId;
+    }
+    if (this.branchId) {
+      (headers as Record<string, string>)['x-branch-id'] = this.branchId;
     }
 
     try {

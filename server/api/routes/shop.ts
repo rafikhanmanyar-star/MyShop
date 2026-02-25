@@ -352,8 +352,10 @@ router.get('/sales', checkRole(['admin', 'pos_cashier', 'accountant']), async (r
 router.post('/sales', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
   try {
     const body = { ...req.body, userId: req.userId ?? req.body?.userId };
-    const saleId = await getShopService().createSale(req.tenantId, body);
-    res.status(201).json({ id: saleId, message: 'Sale completed successfully' });
+    const result = await getShopService().createSale(req.tenantId, body);
+    const saleId = typeof result === 'object' && result?.id != null ? result.id : result;
+    const barcode_value = typeof result === 'object' && result?.barcode_value != null ? result.barcode_value : undefined;
+    res.status(201).json({ id: saleId, barcode_value, message: 'Sale completed successfully' });
   } catch (error: any) {
     const message = (error && typeof error === 'object' && 'message' in error)
       ? error.message
@@ -547,6 +549,66 @@ router.post('/branding', async (req: any, res) => {
   try {
     const branding = await getShopService().updateTenantBranding(req.tenantId, req.body);
     res.json(branding);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- POS Settings ---
+router.get('/pos-settings', async (req: any, res) => {
+  try {
+    const settings = await getShopService().getPosSettings(req.tenantId);
+    res.json(settings);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/pos-settings', async (req: any, res) => {
+  try {
+    const settings = await getShopService().updatePosSettings(req.tenantId, req.body);
+    res.json(settings);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Receipt Settings (pos_receipt_settings) ---
+router.get('/receipt-settings', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+  try {
+    const settings = await getShopService().getReceiptSettings(req.tenantId);
+    res.json(settings);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/receipt-settings', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const settings = await getShopService().updateReceiptSettings(req.tenantId, req.body);
+    res.json(settings);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Sale reprint (increment reprint_count) ---
+router.post('/sales/:id/reprint', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+  try {
+    const sale = await getShopService().incrementReprintCount(req.tenantId, req.params.id);
+    if (!sale) return res.status(404).json({ error: 'Sale not found' });
+    res.json(sale);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Sale by invoice number (for barcode SALE|tenant|invoice lookup) ---
+router.get('/sales/by-invoice/:saleNumber', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+  try {
+    const sale = await getShopService().getSaleByInvoiceNumber(req.tenantId, req.params.saleNumber);
+    if (!sale) return res.status(404).json({ error: 'Sale not found' });
+    res.json(sale);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

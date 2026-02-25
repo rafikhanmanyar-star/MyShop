@@ -21,13 +21,13 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, org_id: orgId } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const result = await getAuthService().login({ username, password });
+    const result = await getAuthService().login({ username, password, orgId });
     res.json(result);
   } catch (error: any) {
     console.error('[Auth] Login error:', error.message);
