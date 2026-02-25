@@ -51,6 +51,7 @@ const ProductSearch: React.FC = () => {
         addToCart,
         searchQuery,
         setSearchQuery,
+        selectedBranchId,
         isDenseMode,
         isHeldSalesModalOpen,
         isPaymentModalOpen,
@@ -133,6 +134,24 @@ const ProductSearch: React.FC = () => {
         loadPopularProducts();
     }, [loadProducts, loadShopCategories, loadPopularProducts]);
 
+    // Merge inventory stock into products so POS shows correct stock (branch-specific when branch selected)
+    const productsWithStock = useMemo(() => {
+        if (!inventoryItems?.length) return products;
+        return products.map((p) => {
+            const inv = inventoryItems.find((i) => i.id === p.id);
+            const branchStock =
+                selectedBranchId && inv?.warehouseStock
+                    ? (inv.warehouseStock[selectedBranchId] ?? 0)
+                    : (inv?.onHand ?? p.stockLevel);
+            const stockLevel = inv ? branchStock : p.stockLevel;
+            return {
+                ...p,
+                stockLevel: Number(stockLevel) || 0,
+                reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
+            };
+        });
+    }, [products, inventoryItems, selectedBranchId]);
+
     // Update local query when external search query changes (e.g. from barcode scanner)
     useEffect(() => {
         setLocalQuery(searchQuery);
@@ -177,16 +196,16 @@ const ProductSearch: React.FC = () => {
     }, []);
 
     const fuse = useMemo(() => {
-        return new Fuse(products, {
+        return new Fuse(productsWithStock, {
             keys: ['name', 'sku', 'barcode', 'categoryId'],
             threshold: 0.3,
             distance: 100,
             ignoreLocation: true,
         });
-    }, [products]);
+    }, [productsWithStock]);
 
     const filteredProducts = useMemo(() => {
-        let result = products;
+        let result = productsWithStock;
 
         // Category Filter
         if (selectedCategory !== 'all') {
@@ -201,7 +220,7 @@ const ProductSearch: React.FC = () => {
         const query = localQuery.toLowerCase().trim();
         if (query) {
             // Check for exact barcode match first (Speed optimization)
-            const exactBarcode = products.find(p => p.barcode && p.barcode.toLowerCase() === query);
+            const exactBarcode = productsWithStock.find(p => p.barcode && p.barcode.toLowerCase() === query);
             if (exactBarcode) return [exactBarcode];
 
             // Fuzzy match
@@ -210,7 +229,7 @@ const ProductSearch: React.FC = () => {
         }
 
         return result;
-    }, [products, selectedCategory, localQuery, fuse, shopCategories]);
+    }, [productsWithStock, selectedCategory, localQuery, fuse, shopCategories]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -265,14 +284,14 @@ const ProductSearch: React.FC = () => {
         // Only auto-add if it looks like a barcode (all numeric or specific format)
         const isNumeric = /^\d+$/.test(query);
         if (isNumeric) {
-            const exactMatch = products.find(p => p.barcode === query);
+            const exactMatch = productsWithStock.find(p => p.barcode === query);
             if (exactMatch) {
                 addToCart(exactMatch);
                 setLocalQuery('');
                 setSearchQuery('');
             }
         }
-    }, [localQuery, products, addToCart, setSearchQuery]);
+    }, [localQuery, productsWithStock, addToCart, setSearchQuery]);
 
     // Virtualized Grid Setup
     const columnCount = isDenseMode ? 3 : 2;

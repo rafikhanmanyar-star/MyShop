@@ -45,7 +45,12 @@ const SettingsContent: React.FC = () => {
         receipt_width: '80mm',
         show_cashier_name: true,
         show_shift_number: true,
-        footer_message: ''
+        footer_message: '',
+        shop_name: '',
+        shop_address: '',
+        shop_phone: '',
+        tax_id: '',
+        logo_url: ''
     });
     const [receiptSettingsLoading, setReceiptSettingsLoading] = useState(false);
 
@@ -621,6 +626,17 @@ const SettingsContent: React.FC = () => {
                                 <p className="text-slate-500 text-sm">Loading...</p>
                             ) : (
                                 <div className="space-y-4">
+                                    <div className="pb-4 border-b border-slate-100">
+                                        <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Shop information (on receipt)</h4>
+                                        <p className="text-slate-500 text-xs mb-3">This appears at the top of every printed receipt.</p>
+                                        <div className="grid gap-3">
+                                            <Input label="Shop name" placeholder="e.g. My Store" value={receiptSettings.shop_name || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_name: e.target.value })} />
+                                            <Input label="Address" placeholder="Street, city" value={receiptSettings.shop_address || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_address: e.target.value })} />
+                                            <Input label="Phone" placeholder="e.g. 021-1234567" value={receiptSettings.shop_phone || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_phone: e.target.value })} />
+                                            <Input label="Tax ID / Registration" placeholder="Optional" value={receiptSettings.tax_id || ''} onChange={e => setReceiptSettings({ ...receiptSettings, tax_id: e.target.value })} />
+                                            <Input label="Logo URL (optional)" placeholder="https://..." value={receiptSettings.logo_url || ''} onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })} />
+                                        </div>
+                                    </div>
                                     <label className="flex items-center gap-3 cursor-pointer">
                                         <input type="checkbox" checked={!!receiptSettings.show_barcode} onChange={e => setReceiptSettings({ ...receiptSettings, show_barcode: e.target.checked })} className="rounded border-slate-300" />
                                         <span className="font-bold text-slate-700">Show barcode on receipt</span>

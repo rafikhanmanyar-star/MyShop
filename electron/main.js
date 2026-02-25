@@ -172,18 +172,26 @@ function printReceiptSilent(html, printerName) {
   return new Promise((resolve) => {
     const win = new BrowserWindow({
       width: 400,
-      height: 600,
+      height: 800,
       show: false,
       webPreferences: { nodeIntegration: false, contextIsolation: true },
     });
-    win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-    win.webContents.on('did-finish-load', () => {
-      const opts = { silent: true, printBackground: true };
-      if (printerName) opts.deviceName = printerName;
-      win.webContents.print(opts, (success, err) => {
-        win.close();
-        resolve(success && !err);
-      });
+    // Use setContent to avoid data URL length limits (receipt HTML with base64 barcode can exceed 2MB).
+    // This ensures the full receipt is rendered before printing.
+    win.webContents.setContent(html, { baseURLForDataURL: 'file:///' }).then(() => {
+      // Allow layout/paint to complete so the full receipt prints (avoids blank or one-line output).
+      setTimeout(() => {
+        const opts = { silent: true, printBackground: true };
+        if (printerName) opts.deviceName = printerName;
+        win.webContents.print(opts, (success, err) => {
+          win.close();
+          resolve(success && !err);
+        });
+      }, 400);
+    }).catch((err) => {
+      console.error('Receipt setContent failed:', err);
+      win.close();
+      resolve(false);
     });
     win.on('closed', () => resolve(false));
   });

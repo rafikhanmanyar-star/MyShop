@@ -481,9 +481,20 @@ export class ShopService {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [tenantId, saleId, item.productId, item.quantity, item.unitPrice, item.taxAmount, item.discountAmount, item.subtotal]);
 
-        const whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
-        if (whRes.length > 0) {
-          const warehouseId = whRes[0].id;
+        // Deduct from the sale's branch warehouse when branchId is set (branch id = warehouse id); otherwise first warehouse
+        let warehouseId: string | null = null;
+        if (saleData.branchId) {
+          const branchWh = await client.query(
+            'SELECT id FROM shop_warehouses WHERE id = $1 AND tenant_id = $2 LIMIT 1',
+            [saleData.branchId, tenantId]
+          );
+          if (branchWh.length > 0) warehouseId = branchWh[0].id;
+        }
+        if (!warehouseId) {
+          const whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
+          if (whRes.length > 0) warehouseId = whRes[0].id;
+        }
+        if (warehouseId) {
           await client.query(`
             UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand - $1
             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4
@@ -1171,12 +1182,17 @@ export class ShopService {
     const showCashierName = data.show_cashier_name !== undefined ? data.show_cashier_name : true;
     const showShiftNumber = data.show_shift_number !== undefined ? data.show_shift_number : true;
     const footerMessage = data.footer_message ?? null;
+    const shopName = data.shop_name ?? null;
+    const shopAddress = data.shop_address ?? null;
+    const shopPhone = data.shop_phone ?? null;
+    const taxId = data.tax_id ?? null;
+    const logoUrl = data.logo_url ?? null;
     const res = await this.db.query(
       `INSERT INTO pos_receipt_settings (
         tenant_id, show_logo, show_barcode, barcode_type, barcode_position,
         receipt_width, show_tax_breakdown, show_cashier_name, show_shift_number,
-        footer_message, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        footer_message, shop_name, shop_address, shop_phone, tax_id, logo_url, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
       ON CONFLICT (tenant_id) DO UPDATE SET
         show_logo = EXCLUDED.show_logo,
         show_barcode = EXCLUDED.show_barcode,
@@ -1187,9 +1203,14 @@ export class ShopService {
         show_cashier_name = EXCLUDED.show_cashier_name,
         show_shift_number = EXCLUDED.show_shift_number,
         footer_message = EXCLUDED.footer_message,
+        shop_name = EXCLUDED.shop_name,
+        shop_address = EXCLUDED.shop_address,
+        shop_phone = EXCLUDED.shop_phone,
+        tax_id = EXCLUDED.tax_id,
+        logo_url = EXCLUDED.logo_url,
         updated_at = NOW()
       RETURNING *`,
-      [tenantId, showLogo, showBarcode, barcodeType, barcodePosition, receiptWidth, showTaxBreakdown, showCashierName, showShiftNumber, footerMessage]
+      [tenantId, showLogo, showBarcode, barcodeType, barcodePosition, receiptWidth, showTaxBreakdown, showCashierName, showShiftNumber, footerMessage, shopName, shopAddress, shopPhone, taxId, logoUrl]
     );
     return res[0];
   }

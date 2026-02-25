@@ -17,6 +17,7 @@ import { ThermalPrinter, createThermalPrinter, ReceiptData } from '../services/p
 import { useAppContext } from './AppContext';
 import { useAuth } from './AuthContext';
 import { useShifts } from './ShiftsContext';
+import { useInventory } from './InventoryContext';
 import { getAppContext, setAppContext, clearAppContextBranch } from '../services/appContext';
 import { apiClient } from '../services/apiClient';
 
@@ -113,6 +114,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const { user: authUser } = useAuth();
     const { currentShift } = useShifts();
+    const { refreshItems: refreshInventory } = useInventory();
     const currentUserId = authUser?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('user_id') : null) ?? null;
 
     // Totals Calculation
@@ -255,10 +257,11 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
 
             const receiptData: ReceiptData = {
-                storeName: state.printSettings?.posShopName || 'My Shop',
-                storeAddress: state.printSettings?.posShopAddress || 'Shop Address',
-                storePhone: state.printSettings?.posShopPhone || 'Shop Phone',
-                taxId: state.printSettings?.taxId || 'TAX-ID-XXXXX',
+                storeName: receiptSettings?.shop_name?.trim() || state.printSettings?.posShopName || 'My Shop',
+                storeAddress: receiptSettings?.shop_address?.trim() || state.printSettings?.posShopAddress || '',
+                storePhone: receiptSettings?.shop_phone?.trim() || state.printSettings?.posShopPhone || '',
+                taxId: receiptSettings?.tax_id?.trim() || state.printSettings?.taxId || '',
+                logoUrl: receiptSettings?.logo_url?.trim() || state.printSettings?.logoUrl || undefined,
                 receiptNumber: dataToUse.saleNumber,
                 date: new Date(dataToUse.createdAt || Date.now()).toLocaleDateString(),
                 time: new Date(dataToUse.createdAt || Date.now()).toLocaleTimeString(),
@@ -512,6 +515,9 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             clearCart();
             // Clear payment data for the next sale (auto-clears if not recalled, but helps to clear now)
             setPayments([]);
+
+            // Refresh inventory so POS product grid shows updated stock
+            refreshInventory().catch(() => {});
 
             // Auto-print logic
             const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
