@@ -99,15 +99,7 @@ export function createThermalPrinter(config?: { receiptSettings?: ReceiptSetting
       };
       const html = generateReceiptHTML(saleData, settings);
 
-      // Prefer Electron silent print (no dialog, non-blocking)
-      const electronPrint = (window as Window).electronAPI?.printReceiptSilent;
-      if (electronPrint) {
-        const printerName = data.printerName ?? config?.printSettings?.default_printer_name ?? undefined;
-        const ok = await electronPrint(html, printerName);
-        return !!ok;
-      }
-
-      // Fallback: hidden iframe + window.print()
+      // We removed silent print. Always use iframe fallback to show the browser native print preview.
       const iframe = document.createElement('iframe');
       iframe.style.position = 'fixed';
       iframe.style.right = '0';
