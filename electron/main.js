@@ -200,7 +200,9 @@ function printReceiptSilent(html, printerName) {
         const opts = {
           silent: true,
           printBackground: true,
-          margins: { marginType: 'none' }
+          margins: { marginType: 'none' }, // Bypass default browser margins
+          landscape: false,
+          color: false,
         };
         // Ensure deviceName gets added properly if provided
         if (printerName && printerName.trim() !== '') {

@@ -150,7 +150,8 @@ export function generateReceiptHTML(
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 @page { margin: 0; }
-body { font-family: 'Courier New', Courier, monospace; width: 100%; margin: 0 auto; padding: ${bodyPadding}; font-size: ${fontSize}; line-height: 1.2; color: #000; background: #fff; box-sizing: border-box; }
+html, body { min-height: 100vh; overflow: visible; display: block; margin: 0; padding: 0; }
+body { font-family: 'Courier New', Courier, monospace; width: ${bodyWidth}mm; max-width: 100%; padding: ${bodyPadding}; font-size: ${fontSize}; line-height: 1.2; color: #000; background: #fff; box-sizing: border-box; }
 * { box-sizing: border-box; }
 .text-center { text-align: center; }
 .font-bold { font-weight: bold; }
