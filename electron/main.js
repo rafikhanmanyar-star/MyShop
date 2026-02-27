@@ -179,8 +179,7 @@ function printReceiptSilent(html, printerName) {
     }
 
     const win = new BrowserWindow({
-      width: 400,
-      height: 800,
+      width: 300,
       show: false,
       webPreferences: { nodeIntegration: false, contextIsolation: true },
     });
@@ -200,9 +199,7 @@ function printReceiptSilent(html, printerName) {
         const opts = {
           silent: true,
           printBackground: true,
-          margins: { marginType: 'none' },
-          color: false,
-          scaleFactor: 100
+          margins: { marginType: 'none' }
         };
         if (printerName) opts.deviceName = printerName;
         win.webContents.print(opts, (success, err) => {
