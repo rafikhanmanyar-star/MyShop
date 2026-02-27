@@ -99,7 +99,7 @@ export function generateReceiptHTML(
 
   const barcodeBlock =
     showBarcode && barcodeDataUrl
-      ? `<div style="text-align:center;margin:2mm 0;"><img src="${barcodeDataUrl}" alt="Barcode" style="max-width:${barcodeMaxWidth}mm;width:100%;height:auto;min-height:${barcodeMinHeight};" /><div style="font-size:7px;margin-top:1mm;">${escapeHtml(saleData.barcode_value || '')}</div></div>`
+      ? `<div style="text-align:center;margin:1mm 0;"><img src="${barcodeDataUrl}" alt="Barcode" style="max-width:${barcodeMaxWidth}mm;width:100%;height:auto;min-height:${barcodeMinHeight};" /><div style="font-size:7px;margin-top:0.5mm;">${escapeHtml(saleData.barcode_value || '')}</div></div>`
       : '';
 
   const headerBarcode = barcodePosition === 'header' ? barcodeBlock : '';
@@ -107,99 +107,98 @@ export function generateReceiptHTML(
 
   const logoBlock =
     s.show_logo && saleData.logoUrl
-      ? `<div style="text-align:center;margin-bottom:2mm;"><img src="${escapeHtml(saleData.logoUrl)}" alt="Logo" style="max-width:${bodyWidth - 4}mm;max-height:20mm;" /></div>`
+      ? `<div style="text-align:center;margin-bottom:1mm;"><img src="${escapeHtml(saleData.logoUrl)}" alt="Logo" style="max-width:${bodyWidth - 4}mm;max-height:15mm;" /></div>`
       : '';
 
   const shopName = escapeHtml(saleData.storeName || 'My Shop');
-  const address = saleData.storeAddress ? `<div style="text-align:center;">${escapeHtml(saleData.storeAddress)}</div>` : '';
-  const phone = saleData.storePhone ? `<div style="text-align:center;">Tel: ${escapeHtml(saleData.storePhone)}</div>` : '';
-  const taxId = saleData.taxId ? `<div style="text-align:center;">Tax ID: ${escapeHtml(saleData.taxId)}</div>` : '';
+  const address = saleData.storeAddress ? `<div style="text-align:center;font-size:0.9em;">${escapeHtml(saleData.storeAddress)}</div>` : '';
+  const phone = saleData.storePhone ? `<div style="text-align:center;font-size:0.9em;">Tel: ${escapeHtml(saleData.storePhone)}</div>` : '';
+  const taxId = saleData.taxId ? `<div style="text-align:center;font-size:0.9em;">Tax ID: ${escapeHtml(saleData.taxId)}</div>` : '';
 
   const duplicateBlock = reprintLabel
-    ? `<div style="text-align:center;font-weight:bold;font-size:10px;margin-bottom:2mm;">${reprintLabel}</div>`
+    ? `<div style="text-align:center;font-weight:bold;font-size:9px;margin-bottom:1mm;">${reprintLabel}</div>`
     : '';
 
   const cashierLine = s.show_cashier_name
-    ? `<div style="display:flex;justify-content:space-between;"><span>Cashier:</span><span>${escapeHtml(saleData.cashier || '—')}</span></div>`
+    ? `<div class="info-row"><span>Cashier:</span><span>${escapeHtml(saleData.cashier || '—')}</span></div>`
     : '';
   const shiftLine = s.show_shift_number && saleData.shiftNumber
-    ? `<div style="display:flex;justify-content:space-between;"><span>Shift:</span><span>${escapeHtml(saleData.shiftNumber)}</span></div>`
+    ? `<div class="info-row"><span>Shift:</span><span>${escapeHtml(saleData.shiftNumber)}</span></div>`
     : '';
   const customerLine = saleData.customer
-    ? `<div style="display:flex;justify-content:space-between;"><span>Customer:</span><span>${escapeHtml(saleData.customer)}</span></div>`
+    ? `<div class="info-row"><span>Customer:</span><span>${escapeHtml(saleData.customer)}</span></div>`
     : '';
 
   const itemsRows = saleData.items
     .map(
       (item) =>
-        `<tr><td style="padding:1mm 0;word-wrap:break-word;max-width:${bodyWidth * 0.5}mm;">${escapeHtml(item.name)}</td><td style="text-align:center;">${item.quantity}</td><td style="text-align:right;">${Number(item.unitPrice).toLocaleString()}</td><td style="text-align:right;">${Number(item.total).toLocaleString()}</td></tr>`
+        `<tr><td style="padding:0.5mm 0;line-height:1.1;word-wrap:break-word;max-width:${bodyWidth * 0.45}mm;">${escapeHtml(item.name)}</td><td style="text-align:center;padding:0.5mm 0;">${item.quantity}</td><td style="text-align:right;padding:0.5mm 0;">${Number(item.unitPrice).toLocaleString()}</td><td style="text-align:right;padding:0.5mm 0;">${Number(item.total).toLocaleString()}</td></tr>`
     )
     .join('');
 
   const taxBreakdownBlock = s.show_tax_breakdown
-    ? `<div style="display:flex;justify-content:space-between;"><span>Tax:</span><span>${Number(saleData.tax).toLocaleString()}</span></div>`
+    ? `<div class="info-row"><span>Tax:</span><span>${Number(saleData.tax).toLocaleString()}</span></div>`
     : '';
 
   const paymentRows = saleData.payments
     .map(
       (p) =>
-        `<div style="display:flex;justify-content:space-between;"><span>${escapeHtml(p.method)}:</span><span>${Number(p.amount).toLocaleString()}</span></div>`
+        `<div class="info-row"><span>${escapeHtml(p.method)}:</span><span>${Number(p.amount).toLocaleString()}</span></div>`
     )
     .join('');
   const changeLine = saleData.change != null && saleData.change > 0
-    ? `<div style="display:flex;justify-content:space-between;font-weight:bold;"><span>Change:</span><span>${Number(saleData.change).toLocaleString()}</span></div>`
+    ? `<div class="info-row" style="font-weight:bold;"><span>Change:</span><span>${Number(saleData.change).toLocaleString()}</span></div>`
     : '';
   const transactionLine = saleData.transactionId
-    ? `<div style="display:flex;justify-content:space-between;font-size:8px;"><span>Transaction ID:</span><span>${escapeHtml(saleData.transactionId)}</span></div>`
+    ? `<div class="info-row" style="font-size:8px;"><span>Tx ID:</span><span>${escapeHtml(saleData.transactionId)}</span></div>`
     : '';
 
   const footerMessage = (s.footer_message && s.footer_message.trim()) ? escapeHtml(s.footer_message.trim()) : 'Thank you for your business!';
   const totalItems = saleData.items.reduce((sum, i) => sum + i.quantity, 0);
 
   const pageSize = s.receipt_width === '58mm' ? '58mm auto' : '80mm auto';
-  const bodyPadding = '4mm';
-  const fontSize = widthMm === 58 ? '10px' : '11px';
+  const bodyPadding = '2mm';
+  const fontSize = widthMm === 58 ? '9px' : '10px';
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 @page { size: ${pageSize}; margin: 0; }
 html, body { min-height: 100vh; overflow: visible; display: block; margin: 0 auto; }
-body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: ${bodyWidth}mm; padding: ${bodyPadding}; font-size: ${fontSize}; line-height: 1.2; color: #000; background: #fff; box-sizing: border-box; }
+body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: ${bodyWidth}mm; padding: ${bodyPadding}; font-size: ${fontSize}; line-height: 1.1; color: #000; background: #fff; box-sizing: border-box; }
 * { box-sizing: border-box; }
 .text-center { text-align: center; }
 .font-bold { font-weight: bold; }
-.border-top { border-top: 1px dashed #000; margin-top: 2mm; padding-top: 2mm; }
-.border-bottom { border-bottom: 1px dashed #000; margin-bottom: 2mm; padding-bottom: 2mm; }
-table { width: 100%; border-collapse: collapse; }
-th { text-align: left; font-weight: bold; }
+.border-top { border-top: 1px dashed #000; margin-top: 1mm; padding-top: 1mm; }
+table { width: 100%; border-collapse: collapse; margin: 1mm 0; }
+th { text-align: left; font-weight: bold; padding: 0.5mm 0; font-size: 0.9em; border-bottom: 1px solid #000; }
 th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: center; }
 th:nth-child(4) { text-align: right; }
 td:nth-child(2), td:nth-child(3) { text-align: center; }
 td:nth-child(4) { text-align: right; }
-.total-row { font-size: 14px; font-weight: bold; padding-top: 2mm; }
+.total-row { font-size: 1.1em; font-weight: bold; margin-top: 1mm; }
+.info-row { display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 0.5mm; }
 </style></head><body>
 ${duplicateBlock}
 ${logoBlock}
-<div class="text-center font-bold" style="font-size: 16px;">${shopName}</div>
+<div class="text-center font-bold" style="font-size: 1.2em; margin-bottom: 0.5mm;">${shopName}</div>
 ${address}
 ${phone}
 ${taxId}
 ${headerBarcode}
 <div class="border-top">
-<div style="display:flex;justify-content:space-between;"><span>Invoice #:</span><span>${escapeHtml(saleData.receiptNumber || '—')}</span></div>
-<div style="display:flex;justify-content:space-between;"><span>Date:</span><span>${escapeHtml([saleData.date, saleData.time].filter(Boolean).join(' '))}</span></div>
+<div class="info-row"><span>Inv #:</span><span>${escapeHtml(saleData.receiptNumber || '—')}</span></div>
+<div class="info-row"><span>Date:</span><span>${escapeHtml([saleData.date, saleData.time].filter(Boolean).join(' '))}</span></div>
 ${cashierLine}
 ${shiftLine}
 ${customerLine}
 </div>
-<div class="border-top"></div>
 <table>
-<thead><tr class="border-bottom font-bold"><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+<thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
 <tbody>${itemsRows}</tbody>
 </table>
 <div class="border-top">
-<div style="display:flex;justify-content:space-between;"><span>Subtotal:</span><span>${Number(saleData.subtotal).toLocaleString()}</span></div>
-${saleData.discount > 0 ? `<div style="display:flex;justify-content:space-between;"><span>Discount:</span><span>-${Number(saleData.discount).toLocaleString()}</span></div>` : ''}
-${taxBreakdownBlock || `<div style="display:flex;justify-content:space-between;"><span>Tax:</span><span>${Number(saleData.tax).toLocaleString()}</span></div>`}
+<div class="info-row"><span>Subtotal:</span><span>${Number(saleData.subtotal).toLocaleString()}</span></div>
+${saleData.discount > 0 ? `<div class="info-row"><span>Discount:</span><span>-${Number(saleData.discount).toLocaleString()}</span></div>` : ''}
+${taxBreakdownBlock || `<div class="info-row"><span>Tax:</span><span>${Number(saleData.tax).toLocaleString()}</span></div>`}
 <div class="total-row" style="display:flex;justify-content:space-between;"><span>TOTAL:</span><span>${Number(saleData.total).toLocaleString()}</span></div>
 </div>
 <div class="border-top">
@@ -208,9 +207,9 @@ ${changeLine}
 ${transactionLine}
 </div>
 ${footerBarcode}
-<div class="border-top text-center" style="margin-top: 4mm;">
-<div style="font-size: 9px;">Total Items: ${totalItems}</div>
-<div style="margin-top: 2mm;">${footerMessage}</div>
+<div class="border-top text-center" style="margin-top: 1mm;">
+<div style="font-size: 0.8em; margin-bottom: 1mm;">Total Items: ${totalItems}</div>
+<div>${footerMessage}</div>
 </div>
 </body></html>`;
 }
