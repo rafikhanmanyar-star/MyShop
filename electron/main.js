@@ -195,18 +195,29 @@ function printReceiptSilent(html, printerName) {
     win.on('closed', () => finish(false));
 
     win.loadFile(tmpFile).then(() => {
+      // Need enough time for Chromium to calculate layout before printing
       setTimeout(() => {
         const opts = {
           silent: true,
           printBackground: true,
           margins: { marginType: 'none' }
         };
-        if (printerName) opts.deviceName = printerName;
-        win.webContents.print(opts, (success, err) => {
+        // Ensure deviceName gets added properly if provided
+        if (printerName && printerName.trim() !== '') {
+          opts.deviceName = printerName.trim();
+        }
+
+        try {
+          win.webContents.print(opts, (success, err) => {
+            win.close();
+            finish(success && !err);
+          });
+        } catch (printErr) {
+          console.error("Print Error:", printErr);
           win.close();
-          finish(success && !err);
-        });
-      }, 400);
+          finish(false);
+        }
+      }, 1500);
     }).catch((err) => {
       console.error('Receipt load failed:', err);
       win.close();
