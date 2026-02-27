@@ -9,6 +9,7 @@ export interface ReceiptSettings {
   show_barcode?: boolean;
   barcode_type?: 'CODE128' | 'CODE39' | 'EAN13';
   barcode_position?: 'header' | 'footer';
+  barcode_size?: 'small' | 'medium' | 'large';
   receipt_width?: '58mm' | '80mm';
   show_tax_breakdown?: boolean;
   show_cashier_name?: boolean;
@@ -86,9 +87,19 @@ export function generateReceiptHTML(
     barcodeDataUrl = generateBarcodeBase64(saleData.barcode_value, barcodeType);
   }
 
+  let barcodeMaxWidth = Math.min(bodyWidth - 4, 50);
+  let barcodeMinHeight = '18px';
+  if (s.barcode_size === 'small') {
+    barcodeMaxWidth = Math.min(bodyWidth - 4, 35);
+    barcodeMinHeight = '12px';
+  } else if (s.barcode_size === 'large') {
+    barcodeMaxWidth = Math.min(bodyWidth - 4, 75);
+    barcodeMinHeight = '24px';
+  }
+
   const barcodeBlock =
     showBarcode && barcodeDataUrl
-      ? `<div style="text-align:center;margin:2mm 0;"><img src="${barcodeDataUrl}" alt="Barcode" style="max-width:${Math.min(bodyWidth - 4, 50)}mm;height:auto;min-height:18px;" /><div style="font-size:7px;margin-top:1mm;">${escapeHtml(saleData.barcode_value || '')}</div></div>`
+      ? `<div style="text-align:center;margin:2mm 0;"><img src="${barcodeDataUrl}" alt="Barcode" style="max-width:${barcodeMaxWidth}mm;width:100%;height:auto;min-height:${barcodeMinHeight};" /><div style="font-size:7px;margin-top:1mm;">${escapeHtml(saleData.barcode_value || '')}</div></div>`
       : '';
 
   const headerBarcode = barcodePosition === 'header' ? barcodeBlock : '';

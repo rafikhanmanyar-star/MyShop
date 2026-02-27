@@ -1179,6 +1179,7 @@ export class ShopService {
     const showBarcode = data.show_barcode !== undefined ? data.show_barcode : true;
     const barcodeType = (data.barcode_type && ['CODE128', 'CODE39', 'EAN13'].includes(data.barcode_type)) ? data.barcode_type : 'CODE128';
     const barcodePosition = (data.barcode_position && ['header', 'footer'].includes(data.barcode_position)) ? data.barcode_position : 'footer';
+    const barcodeSize = (data.barcode_size && ['small', 'medium', 'large'].includes(data.barcode_size)) ? data.barcode_size : 'medium';
     const receiptWidth = (data.receipt_width && ['58mm', '80mm'].includes(data.receipt_width)) ? data.receipt_width : '80mm';
     const showTaxBreakdown = data.show_tax_breakdown !== undefined ? data.show_tax_breakdown : false;
     const showCashierName = data.show_cashier_name !== undefined ? data.show_cashier_name : true;
@@ -1191,15 +1192,16 @@ export class ShopService {
     const logoUrl = data.logo_url ?? null;
     const res = await this.db.query(
       `INSERT INTO pos_receipt_settings (
-        tenant_id, show_logo, show_barcode, barcode_type, barcode_position,
+        tenant_id, show_logo, show_barcode, barcode_type, barcode_position, barcode_size,
         receipt_width, show_tax_breakdown, show_cashier_name, show_shift_number,
         footer_message, shop_name, shop_address, shop_phone, tax_id, logo_url, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
       ON CONFLICT (tenant_id) DO UPDATE SET
         show_logo = EXCLUDED.show_logo,
         show_barcode = EXCLUDED.show_barcode,
         barcode_type = EXCLUDED.barcode_type,
         barcode_position = EXCLUDED.barcode_position,
+        barcode_size = EXCLUDED.barcode_size,
         receipt_width = EXCLUDED.receipt_width,
         show_tax_breakdown = EXCLUDED.show_tax_breakdown,
         show_cashier_name = EXCLUDED.show_cashier_name,
@@ -1212,7 +1214,7 @@ export class ShopService {
         logo_url = EXCLUDED.logo_url,
         updated_at = NOW()
       RETURNING *`,
-      [tenantId, showLogo, showBarcode, barcodeType, barcodePosition, receiptWidth, showTaxBreakdown, showCashierName, showShiftNumber, footerMessage, shopName, shopAddress, shopPhone, taxId, logoUrl]
+      [tenantId, showLogo, showBarcode, barcodeType, barcodePosition, barcodeSize, receiptWidth, showTaxBreakdown, showCashierName, showShiftNumber, footerMessage, shopName, shopAddress, shopPhone, taxId, logoUrl]
     );
     return res[0];
   }

@@ -26,6 +26,48 @@ function toState(v: ShopVendor) {
     };
 }
 
+import { generateReceiptHTML, ReceiptSaleData } from '../../services/receipt/receiptBuilder';
+
+const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettings }) => {
+    const saleData: ReceiptSaleData = {
+        storeName: receiptSettings.shop_name || 'My Store',
+        storeAddress: receiptSettings.shop_address || '123 Fake Street',
+        storePhone: receiptSettings.shop_phone || '021-1234567',
+        taxId: receiptSettings.tax_id || '',
+        logoUrl: receiptSettings.logo_url || null,
+        receiptNumber: 'SALE-TEST-001',
+        date: new Date().toLocaleDateString(),
+        time: new Date().toLocaleTimeString(),
+        cashier: 'John Cashier',
+        shiftNumber: '1',
+        customer: 'Walk-in Customer',
+        items: [
+            { name: 'Test Product 1', quantity: 1, unitPrice: 25.00, total: 25.00 },
+            { name: 'Test Product 2', quantity: 2, unitPrice: 15.00, total: 30.00 }
+        ],
+        subtotal: 55.00,
+        discount: 5.00,
+        tax: 5.00,
+        total: 55.00,
+        payments: [{ method: 'Cash', amount: 55.00 }],
+        change: 0,
+        barcode_value: 'SALE-TEST-001'
+    };
+
+    const containerWidth = receiptSettings.receipt_width === '58mm' ? '58mm' : '80mm';
+    const html = generateReceiptHTML(saleData, receiptSettings);
+
+    return (
+        <Card className="border-none shadow-sm p-6 bg-slate-100 flex flex-col items-center overflow-hidden">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 self-start">Live Preview</h3>
+            <div className="bg-white shadow-xl border border-slate-200 transition-all overflow-hidden relative" style={{ width: containerWidth }}>
+                <iframe srcDoc={html} style={{ width: '100%', height: '500px', border: 'none', backgroundColor: '#fff' }} title="Receipt Preview" />
+            </div>
+            <p className="text-xs text-slate-400 mt-4 text-center">This is an approximate software rendering.<br />Actual thermal paper may look slightly different.</p>
+        </Card>
+    );
+};
+
 const SettingsContent: React.FC = () => {
     const { user } = useAuth();
     const { dispatch } = useAppContext();
@@ -582,116 +624,131 @@ const SettingsContent: React.FC = () => {
                 )}
 
                 {activeTab === 'pos' && (
-                    <div className="space-y-6 max-w-xl">
-                        <Card className="border-none shadow-sm p-6">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Print Settings</h3>
-                            {posSettingsLoading ? (
-                                <p className="text-slate-500 text-sm">Loading...</p>
-                            ) : (
-                                <div className="space-y-4">
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <div className="relative">
-                                            <input
-                                                type="checkbox"
-                                                className="sr-only"
-                                                checked={posSettings.auto_print_receipt}
-                                                onChange={e => setPosSettings({ ...posSettings, auto_print_receipt: e.target.checked })}
-                                            />
-                                            <div className={`block w-10 h-6 rounded-full transition-colors ${posSettings.auto_print_receipt ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
-                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${posSettings.auto_print_receipt ? 'transform translate-x-4' : ''}`}></div>
+                    <div className="flex flex-col lg:flex-row gap-8 max-w-6xl w-full">
+                        <div className="space-y-6 flex-1 max-w-xl">
+                            <Card className="border-none shadow-sm p-6">
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Print Settings</h3>
+                                {posSettingsLoading ? (
+                                    <p className="text-slate-500 text-sm">Loading...</p>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <label className="flex items-center gap-3 cursor-pointer">
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    className="sr-only"
+                                                    checked={posSettings.auto_print_receipt}
+                                                    onChange={e => setPosSettings({ ...posSettings, auto_print_receipt: e.target.checked })}
+                                                />
+                                                <div className={`block w-10 h-6 rounded-full transition-colors ${posSettings.auto_print_receipt ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
+                                                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${posSettings.auto_print_receipt ? 'transform translate-x-4' : ''}`}></div>
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-700">Auto-Print Receipt</p>
+                                                <p className="text-xs text-slate-500">Automatically print the receipt after a sale.</p>
+                                            </div>
+                                        </label>
+                                        <Input
+                                            label="Default Printer Name (Optional)"
+                                            placeholder="e.g. EPSON TM-T82III"
+                                            value={posSettings.default_printer_name || ''}
+                                            onChange={e => setPosSettings({ ...posSettings, default_printer_name: e.target.value })}
+                                            className="mt-4"
+                                        />
+                                        <Input
+                                            label="Receipt Copies"
+                                            type="number"
+                                            min="1"
+                                            max="5"
+                                            value={String(posSettings.receipt_copies || 1)}
+                                            onChange={e => setPosSettings({ ...posSettings, receipt_copies: parseInt(e.target.value) || 1 })}
+                                        />
+                                        <div className="pt-4">
+                                            <Button onClick={handleSavePosSettings}>Save Preferences</Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </Card>
+                            <Card className="border-none shadow-sm p-6">
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Receipt Template</h3>
+                                {receiptSettingsLoading ? (
+                                    <p className="text-slate-500 text-sm">Loading...</p>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="pb-4 border-b border-slate-100">
+                                            <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Shop information (on receipt)</h4>
+                                            <p className="text-slate-500 text-xs mb-3">This appears at the top of every printed receipt.</p>
+                                            <div className="grid gap-3">
+                                                <Input label="Shop name" placeholder="e.g. My Store" value={receiptSettings.shop_name || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_name: e.target.value })} />
+                                                <Input label="Address" placeholder="Street, city" value={receiptSettings.shop_address || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_address: e.target.value })} />
+                                                <Input label="Phone" placeholder="e.g. 021-1234567" value={receiptSettings.shop_phone || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_phone: e.target.value })} />
+                                                <Input label="Tax ID / Registration" placeholder="Optional" value={receiptSettings.tax_id || ''} onChange={e => setReceiptSettings({ ...receiptSettings, tax_id: e.target.value })} />
+                                                <Input label="Logo URL (optional)" placeholder="https://..." value={receiptSettings.logo_url || ''} onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })} />
+                                                <label className="flex items-center gap-3 cursor-pointer mt-1">
+                                                    <input type="checkbox" checked={!!receiptSettings.show_logo} onChange={e => setReceiptSettings({ ...receiptSettings, show_logo: e.target.checked })} className="rounded border-slate-300" />
+                                                    <span className="font-bold text-slate-700">Show logo on receipt</span>
+                                                </label>
+                                            </div>
                                         </div>
                                         <div>
-                                            <p className="font-bold text-slate-700">Auto-Print Receipt</p>
-                                            <p className="text-xs text-slate-500">Automatically print the receipt after a sale.</p>
+                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Receipt width</label>
+                                            <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.receipt_width || '80mm'} onChange={e => setReceiptSettings({ ...receiptSettings, receipt_width: e.target.value })}>
+                                                <option value="80mm">80mm (standard)</option>
+                                                <option value="58mm">58mm (narrow)</option>
+                                            </select>
                                         </div>
-                                    </label>
-                                    <Input
-                                        label="Default Printer Name (Optional)"
-                                        placeholder="e.g. EPSON TM-T82III"
-                                        value={posSettings.default_printer_name || ''}
-                                        onChange={e => setPosSettings({ ...posSettings, default_printer_name: e.target.value })}
-                                        className="mt-4"
-                                    />
-                                    <Input
-                                        label="Receipt Copies"
-                                        type="number"
-                                        min="1"
-                                        max="5"
-                                        value={String(posSettings.receipt_copies || 1)}
-                                        onChange={e => setPosSettings({ ...posSettings, receipt_copies: parseInt(e.target.value) || 1 })}
-                                    />
-                                    <div className="pt-4">
-                                        <Button onClick={handleSavePosSettings}>Save Preferences</Button>
-                                    </div>
-                                </div>
-                            )}
-                        </Card>
-                        <Card className="border-none shadow-sm p-6">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Receipt Template</h3>
-                            {receiptSettingsLoading ? (
-                                <p className="text-slate-500 text-sm">Loading...</p>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="pb-4 border-b border-slate-100">
-                                        <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Shop information (on receipt)</h4>
-                                        <p className="text-slate-500 text-xs mb-3">This appears at the top of every printed receipt.</p>
-                                        <div className="grid gap-3">
-                                            <Input label="Shop name" placeholder="e.g. My Store" value={receiptSettings.shop_name || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_name: e.target.value })} />
-                                            <Input label="Address" placeholder="Street, city" value={receiptSettings.shop_address || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_address: e.target.value })} />
-                                            <Input label="Phone" placeholder="e.g. 021-1234567" value={receiptSettings.shop_phone || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_phone: e.target.value })} />
-                                            <Input label="Tax ID / Registration" placeholder="Optional" value={receiptSettings.tax_id || ''} onChange={e => setReceiptSettings({ ...receiptSettings, tax_id: e.target.value })} />
-                                            <Input label="Logo URL (optional)" placeholder="https://..." value={receiptSettings.logo_url || ''} onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })} />
-                                            <label className="flex items-center gap-3 cursor-pointer mt-1">
-                                                <input type="checkbox" checked={!!receiptSettings.show_logo} onChange={e => setReceiptSettings({ ...receiptSettings, show_logo: e.target.checked })} className="rounded border-slate-300" />
-                                                <span className="font-bold text-slate-700">Show logo on receipt</span>
-                                            </label>
+                                        <label className="flex items-center gap-3 cursor-pointer">
+                                            <input type="checkbox" checked={!!receiptSettings.show_tax_breakdown} onChange={e => setReceiptSettings({ ...receiptSettings, show_tax_breakdown: e.target.checked })} className="rounded border-slate-300" />
+                                            <span className="font-bold text-slate-700">Show tax breakdown</span>
+                                        </label>
+                                        <label className="flex items-center gap-3 cursor-pointer">
+                                            <input type="checkbox" checked={!!receiptSettings.show_barcode} onChange={e => setReceiptSettings({ ...receiptSettings, show_barcode: e.target.checked })} className="rounded border-slate-300" />
+                                            <span className="font-bold text-slate-700">Show barcode on receipt</span>
+                                        </label>
+                                        <div>
+                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode type</label>
+                                            <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_type || 'CODE128'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_type: e.target.value })}>
+                                                <option value="CODE128">CODE128</option>
+                                                <option value="CODE39">CODE39</option>
+                                                <option value="EAN13">EAN13</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode size</label>
+                                            <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_size || 'medium'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_size: e.target.value })}>
+                                                <option value="small">Small</option>
+                                                <option value="medium">Medium</option>
+                                                <option value="large">Large</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode position</label>
+                                            <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_position || 'footer'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_position: e.target.value })}>
+                                                <option value="header">Header</option>
+                                                <option value="footer">Footer</option>
+                                            </select>
+                                        </div>
+                                        <label className="flex items-center gap-3 cursor-pointer">
+                                            <input type="checkbox" checked={!!receiptSettings.show_cashier_name} onChange={e => setReceiptSettings({ ...receiptSettings, show_cashier_name: e.target.checked })} className="rounded border-slate-300" />
+                                            <span className="font-bold text-slate-700">Show cashier name</span>
+                                        </label>
+                                        <label className="flex items-center gap-3 cursor-pointer">
+                                            <input type="checkbox" checked={!!receiptSettings.show_shift_number} onChange={e => setReceiptSettings({ ...receiptSettings, show_shift_number: e.target.checked })} className="rounded border-slate-300" />
+                                            <span className="font-bold text-slate-700">Show shift number</span>
+                                        </label>
+                                        <Input label="Footer message" placeholder="Thank you for your business!" value={receiptSettings.footer_message || ''} onChange={e => setReceiptSettings({ ...receiptSettings, footer_message: e.target.value })} />
+                                        <div className="pt-4">
+                                            <Button onClick={handleSaveReceiptSettings}>Save Receipt Template</Button>
                                         </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Receipt width</label>
-                                        <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.receipt_width || '80mm'} onChange={e => setReceiptSettings({ ...receiptSettings, receipt_width: e.target.value })}>
-                                            <option value="80mm">80mm (standard)</option>
-                                            <option value="58mm">58mm (narrow)</option>
-                                        </select>
-                                    </div>
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={!!receiptSettings.show_tax_breakdown} onChange={e => setReceiptSettings({ ...receiptSettings, show_tax_breakdown: e.target.checked })} className="rounded border-slate-300" />
-                                        <span className="font-bold text-slate-700">Show tax breakdown</span>
-                                    </label>
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={!!receiptSettings.show_barcode} onChange={e => setReceiptSettings({ ...receiptSettings, show_barcode: e.target.checked })} className="rounded border-slate-300" />
-                                        <span className="font-bold text-slate-700">Show barcode on receipt</span>
-                                    </label>
-                                    <div>
-                                        <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode type</label>
-                                        <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_type || 'CODE128'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_type: e.target.value })}>
-                                            <option value="CODE128">CODE128</option>
-                                            <option value="CODE39">CODE39</option>
-                                            <option value="EAN13">EAN13</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode position</label>
-                                        <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_position || 'footer'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_position: e.target.value })}>
-                                            <option value="header">Header</option>
-                                            <option value="footer">Footer</option>
-                                        </select>
-                                    </div>
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={!!receiptSettings.show_cashier_name} onChange={e => setReceiptSettings({ ...receiptSettings, show_cashier_name: e.target.checked })} className="rounded border-slate-300" />
-                                        <span className="font-bold text-slate-700">Show cashier name</span>
-                                    </label>
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={!!receiptSettings.show_shift_number} onChange={e => setReceiptSettings({ ...receiptSettings, show_shift_number: e.target.checked })} className="rounded border-slate-300" />
-                                        <span className="font-bold text-slate-700">Show shift number</span>
-                                    </label>
-                                    <Input label="Footer message" placeholder="Thank you for your business!" value={receiptSettings.footer_message || ''} onChange={e => setReceiptSettings({ ...receiptSettings, footer_message: e.target.value })} />
-                                    <div className="pt-4">
-                                        <Button onClick={handleSaveReceiptSettings}>Save Receipt Template</Button>
-                                    </div>
-                                </div>
-                            )}
-                        </Card>
+                                )}
+                            </Card>
+                        </div>
+                        <div className="w-full lg:w-[420px] flex-shrink-0">
+                            <div className="sticky top-6">
+                                <ReceiptPreviewPanel receiptSettings={receiptSettings} />
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
