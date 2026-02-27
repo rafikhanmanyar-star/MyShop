@@ -11,7 +11,7 @@ let lastNotifiedUpdateVersion = null;
 if (app.isPackaged) {
   try {
     autoUpdater = require('electron-updater').autoUpdater;
-  } catch (_) {}
+  } catch (_) { }
 }
 
 function sendUpdateStatus(...args) {
@@ -189,7 +189,7 @@ function printReceiptSilent(html, printerName) {
     const finish = (result) => {
       if (settled) return;
       settled = true;
-      try { fs.unlinkSync(tmpFile); } catch (_) {}
+      try { fs.unlinkSync(tmpFile); } catch (_) { }
       resolve(result);
     };
 
@@ -197,7 +197,13 @@ function printReceiptSilent(html, printerName) {
 
     win.loadFile(tmpFile).then(() => {
       setTimeout(() => {
-        const opts = { silent: true, printBackground: true };
+        const opts = {
+          silent: true,
+          printBackground: true,
+          margins: { marginType: 'none' },
+          color: false,
+          scaleFactor: 100
+        };
         if (printerName) opts.deviceName = printerName;
         win.webContents.print(opts, (success, err) => {
           win.close();
@@ -299,7 +305,7 @@ app.whenReady().then(async () => {
       const oneMinuteMs = 60 * 1000;
       updateCheckIntervalId = setInterval(() => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          autoUpdater.checkForUpdates().catch(() => {});
+          autoUpdater.checkForUpdates().catch(() => { });
         }
       }, oneMinuteMs);
     }

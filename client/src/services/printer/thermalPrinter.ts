@@ -112,8 +112,10 @@ export function createThermalPrinter(config?: { receiptSettings?: ReceiptSetting
       iframe.style.position = 'fixed';
       iframe.style.right = '0';
       iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
+      iframe.style.width = '100%';
+      iframe.style.height = '100%';
+      iframe.style.opacity = '0';
+      iframe.style.pointerEvents = 'none';
       iframe.style.border = '0';
       document.body.appendChild(iframe);
 
@@ -138,7 +140,7 @@ export function createThermalPrinter(config?: { receiptSettings?: ReceiptSetting
           setTimeout(() => {
             try {
               if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-            } catch (_) {}
+            } catch (_) { }
             resolve(true);
           }, 1000);
         }, 300);
