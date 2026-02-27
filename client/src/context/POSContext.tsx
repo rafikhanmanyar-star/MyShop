@@ -241,8 +241,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setCustomer(null);
             setHeldSales([]);
             setLastCompletedSale(null);
-            shopApi.getBranches().then(setBranches).catch(() => {});
-            shopApi.getTerminals().then(setTerminals).catch(() => {});
+            shopApi.getBranches().then(setBranches).catch(() => { });
+            shopApi.getTerminals().then(setTerminals).catch(() => { });
         };
         window.addEventListener('branch-changed', handleBranchChanged as EventListener);
         return () => window.removeEventListener('branch-changed', handleBranchChanged as EventListener);
@@ -266,8 +266,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 receiptNumber: dataToUse.saleNumber,
                 date: new Date(dataToUse.createdAt || Date.now()).toLocaleDateString(),
                 time: new Date(dataToUse.createdAt || Date.now()).toLocaleTimeString(),
-                cashier: dataToUse.userId || authUser?.name || 'Cashier',
-                shiftNumber: currentShift?.id ? String(currentShift.id) : undefined,
+                cashier: dataToUse.cashierName || (dataToUse.userId === authUser?.id ? authUser?.name : null) || authUser?.name || 'Cashier',
+                shiftNumber: dataToUse.shiftId ? String(dataToUse.shiftId).split('-')[0].toUpperCase() : (currentShift?.id ? String(currentShift.id).split('-')[0].toUpperCase() : undefined),
                 customer: customer?.name ?? dataToUse.customerName,
                 items: (dataToUse.items || []).map((item: any) => ({
                     name: item.name || 'Unknown Item',
@@ -518,7 +518,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setPayments([]);
 
             // Refresh inventory so POS product grid shows updated stock
-            refreshInventory().catch(() => {});
+            refreshInventory().catch(() => { });
 
             // Auto-print: await and show toast so user knows if receipt printed
             const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;

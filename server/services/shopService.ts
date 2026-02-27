@@ -700,7 +700,8 @@ export class ShopService {
         s.status, s.points_earned as "pointsEarned", s.points_redeemed as "pointsRedeemed", 
         s.created_at as "createdAt", s.updated_at as "updatedAt",
         s.barcode_value as "barcodeValue", s.reprint_count as "reprintCount", s.printed_at as "printedAt",
-        c.name as "customerName", b.name as "branchName", 'POS' as source,
+        c.name as "customerName", b.name as "branchName", u.name as "cashierName", 
+        COALESCE(cs.id, s.shift_id) as "shiftId", 'POS' as source,
         COALESCE((
           SELECT json_agg(json_build_object(
             'productId', si.product_id,
@@ -718,6 +719,8 @@ export class ShopService {
       FROM shop_sales s
       LEFT JOIN contacts c ON s.customer_id = c.id AND c.tenant_id = $1
       LEFT JOIN shop_branches b ON s.branch_id = b.id AND b.tenant_id = $1
+      LEFT JOIN users u ON s.user_id = u.id AND u.tenant_id = $1
+      LEFT JOIN cashier_shifts cs ON s.shift_id = cs.id AND cs.tenant_id = $1
       WHERE s.tenant_id = $1
       
       UNION ALL
@@ -732,7 +735,8 @@ export class ShopService {
         o.status, 0 as "pointsEarned", 0 as "pointsRedeemed", 
         o.created_at as "createdAt", o.updated_at as "updatedAt",
         NULL as "barcodeValue", 0 as "reprintCount", NULL as "printedAt",
-        mc.name as "customerName", b.name as "branchName", 'Mobile' as source,
+        mc.name as "customerName", b.name as "branchName", NULL as "cashierName",
+        NULL as "shiftId", 'Mobile' as source,
         COALESCE((
           SELECT json_agg(json_build_object(
             'productId', oi.product_id,
@@ -1249,12 +1253,14 @@ export class ShopService {
         s.total_paid as "totalPaid", s.change_due as "changeDue", s.payment_method as "paymentMethod",
         s.payment_details as "paymentDetails", s.status, s.created_at as "createdAt",
         s.barcode_value as "barcodeValue", s.reprint_count as "reprintCount", s.printed_at as "printedAt",
-        c.name as "customerName", b.name as "branchName",
+        c.name as "customerName", b.name as "branchName", u.name as "cashierName", COALESCE(cs.id, s.shift_id) as "shiftId",
         (SELECT json_agg(json_build_object('productId', si.product_id, 'name', COALESCE(p.name, 'Unknown'), 'quantity', si.quantity, 'unitPrice', si.unit_price, 'taxAmount', si.tax_amount, 'discountAmount', si.discount_amount, 'subtotal', si.subtotal))
          FROM shop_sale_items si LEFT JOIN shop_products p ON si.product_id = p.id AND p.tenant_id = $1 WHERE si.sale_id = s.id AND si.tenant_id = $1) as items
        FROM shop_sales s
        LEFT JOIN contacts c ON s.customer_id = c.id AND c.tenant_id = $1
        LEFT JOIN shop_branches b ON s.branch_id = b.id AND b.tenant_id = $1
+       LEFT JOIN users u ON s.user_id = u.id AND u.tenant_id = $1
+       LEFT JOIN cashier_shifts cs ON s.shift_id = cs.id AND cs.tenant_id = $1
        WHERE s.id = $2 AND s.tenant_id = $1`,
       [tenantId, saleId]
     );
