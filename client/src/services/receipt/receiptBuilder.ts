@@ -145,12 +145,11 @@ export function generateReceiptHTML(
   const footerMessage = (s.footer_message && s.footer_message.trim()) ? escapeHtml(s.footer_message.trim()) : 'Thank you for your business!';
   const totalItems = saleData.items.reduce((sum, i) => sum + i.quantity, 0);
 
-  const pageSize = s.receipt_width === '58mm' ? '58mm auto' : '80mm auto';
   const bodyPadding = '4mm';
   const fontSize = widthMm === 58 ? '10px' : '11px';
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page { margin: 0; size: ${pageSize}; }
+@page { margin: 0; }
 body { font-family: 'Courier New', Courier, monospace; max-width: ${bodyWidth}mm; width: 100%; margin: 0 auto; padding: ${bodyPadding}; font-size: ${fontSize}; line-height: 1.2; color: #000; background: #fff; box-sizing: border-box; }
 * { box-sizing: border-box; }
 .text-center { text-align: center; }
