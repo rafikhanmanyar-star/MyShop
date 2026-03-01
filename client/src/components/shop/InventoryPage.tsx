@@ -5,7 +5,6 @@ import StockMaster from './inventory/StockMaster';
 import StockMovements from './inventory/StockMovements';
 import StockAdjustments from './inventory/StockAdjustments';
 import InventoryCategories from './inventory/InventoryCategories';
-import Select from '../ui/Select';
 import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
@@ -16,7 +15,6 @@ import { getFullImageUrl } from '../../config/apiUrl';
 const InventoryContent: React.FC = () => {
     const { addItem, refreshItems } = useInventory();
     const [activeTab, setActiveTab] = useState<'dashboard' | 'stock' | 'movements' | 'adjustments' | 'categories'>('dashboard');
-    const [stockCategoryFilter, setStockCategoryFilter] = useState<string>('');
     const [isNewSkuModalOpen, setIsNewSkuModalOpen] = useState(false);
     const [shopCategories, setShopCategories] = useState<ShopProductCategory[]>([]);
     const [newItemData, setNewItemData] = useState({
@@ -79,7 +77,7 @@ const InventoryContent: React.FC = () => {
                 sku: '',
                 barcode: '',
                 name: '',
-                category: stockCategoryFilter || 'General',
+                category: 'General',
                 retailPrice: 0,
                 costPrice: 0,
                 reorderPoint: 10,
@@ -111,30 +109,10 @@ const InventoryContent: React.FC = () => {
                         <h1 className="text-2xl font-black text-slate-800 tracking-tight">Inventory Management</h1>
                         <p className="text-slate-500 text-sm font-medium">Enterprise-level stock control and logistics.</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {activeTab === 'stock' && (
-                            <div className="min-w-[200px]">
-                                <Select
-                                    value={stockCategoryFilter}
-                                    onChange={(e) => setStockCategoryFilter(e.target.value)}
-                                    hideIcon={false}
-                                >
-                                    <option value="">All Categories</option>
-                                    {shopCategories.map(c => (
-                                        <option key={c.id} value={c.name}>{c.name}</option>
-                                    ))}
-                                </Select>
-                            </div>
-                        )}
+                    <div className="flex gap-3">
                         <button
-                            onClick={() => {
-                                // Auto-populate category from the filter if one is selected
-                                if (stockCategoryFilter) {
-                                    setNewItemData(prev => ({ ...prev, category: stockCategoryFilter }));
-                                }
-                                setIsNewSkuModalOpen(true);
-                            }}
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2 whitespace-nowrap"
+                            onClick={() => setIsNewSkuModalOpen(true)}
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2"
                         >
                             {ICONS.plus} New SKU
                         </button>
@@ -164,7 +142,7 @@ const InventoryContent: React.FC = () => {
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-y-auto p-8">
                 {activeTab === 'dashboard' && <InventoryDashboard />}
-                {activeTab === 'stock' && <StockMaster categoryFilter={stockCategoryFilter} />}
+                {activeTab === 'stock' && <StockMaster />}
                 {activeTab === 'movements' && <StockMovements />}
                 {activeTab === 'adjustments' && <StockAdjustments />}
                 {activeTab === 'categories' && <InventoryCategories />}
