@@ -10,7 +10,11 @@ import Select from '../../ui/Select';
 import { shopApi } from '../../../services/shopApi';
 import { getFullImageUrl } from '../../../config/apiUrl';
 
-const StockMaster: React.FC = () => {
+interface StockMasterProps {
+    categoryFilter?: string;
+}
+
+const StockMaster: React.FC<StockMasterProps> = ({ categoryFilter = '' }) => {
     const { items, warehouses, updateStock, requestTransfer } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedItem, setSelectedItem] = useState<any>(null);
@@ -137,6 +141,11 @@ const StockMaster: React.FC = () => {
     };
 
     const filteredItems = items.filter(item => {
+        // Category filter
+        if (categoryFilter && item.category !== categoryFilter) {
+            return false;
+        }
+        // Search filter
         const query = searchQuery.toLowerCase().trim();
         return item.name.toLowerCase().includes(query) ||
             item.sku.toLowerCase().includes(query) ||
