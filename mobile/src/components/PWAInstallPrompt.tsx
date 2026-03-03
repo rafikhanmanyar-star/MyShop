@@ -48,6 +48,13 @@ const PWAInstallPrompt: React.FC = () => {
 
         window.addEventListener('beforeinstallprompt', handler);
 
+        // Listen for header "Install" click on iOS — show guide immediately
+        const onShowIOSGuide = () => {
+            setShowPrompt(true);
+            setShowIOSGuide(true);
+        };
+        window.addEventListener('pwa-show-ios-guide', onShowIOSGuide);
+
         // Listen for successful install
         window.addEventListener('appinstalled', () => {
             setIsInstalled(true);
@@ -57,6 +64,7 @@ const PWAInstallPrompt: React.FC = () => {
 
         return () => {
             window.removeEventListener('beforeinstallprompt', handler);
+            window.removeEventListener('pwa-show-ios-guide', onShowIOSGuide);
         };
     }, []);
 

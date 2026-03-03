@@ -1088,6 +1088,29 @@ img {
 
 .user-section {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-install-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgba(79, 70, 229, 0.1);
+  border: 1px solid rgba(79, 70, 229, 0.25);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.header-install-btn:active {
+  transform: scale(0.96);
+  background: rgba(79, 70, 229, 0.18);
 }
 
 .user-icon-btn {
