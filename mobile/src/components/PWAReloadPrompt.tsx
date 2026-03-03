@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 
 export default function PWAReloadPrompt() {
@@ -7,17 +8,27 @@ export default function PWAReloadPrompt() {
     } = useRegisterSW({
         onRegisteredSW(swUrl, r) {
             console.log('✅ SW registered:', swUrl);
-            // Check for updates every 30 minutes
             if (r) {
-                setInterval(() => {
-                    r.update();
-                }, 30 * 60 * 1000);
+                // Check for updates immediately when app loads (e.g. after new deploy)
+                r.update();
+                // Check every 30 minutes in the background
+                setInterval(() => r.update(), 30 * 60 * 1000);
             }
         },
         onRegisterError(error) {
             console.error('❌ SW registration error:', error);
         },
     });
+
+    // Let the header menu trigger a manual update check
+    useEffect(() => {
+        const onCheck = () => {
+            // useRegisterSW doesn't expose registration; trigger via navigator.serviceWorker
+            navigator.serviceWorker?.getRegistration?.()?.then((r) => r?.update?.());
+        };
+        window.addEventListener('pwa-check-update', onCheck);
+        return () => window.removeEventListener('pwa-check-update', onCheck);
+    }, []);
 
     if (!needRefresh) return null;
 

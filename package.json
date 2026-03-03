@@ -1,6 +1,6 @@
 {
   "name": "myshop",
-  "version": "1.0.56",
+  "version": "1.0.57",
   "description": "MyShop - POS & Inventory Management",
   "main": "electron/main.js",
   "private": true,
