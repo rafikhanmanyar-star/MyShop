@@ -13,6 +13,7 @@ import { getFullImageUrl } from '../../../config/apiUrl';
 const StockMaster: React.FC = () => {
     const { items, warehouses, updateStock, requestTransfer } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
     const [selectedItem, setSelectedItem] = useState<any>(null);
 
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -138,26 +139,54 @@ const StockMaster: React.FC = () => {
 
     const filteredItems = items.filter(item => {
         const query = searchQuery.toLowerCase().trim();
-        return item.name.toLowerCase().includes(query) ||
+        const matchesSearch = !query ||
+            item.name.toLowerCase().includes(query) ||
             item.sku.toLowerCase().includes(query) ||
             (item.barcode && item.barcode.toLowerCase().includes(query));
+        const selectedCat = selectedCategoryId
+            ? categories.find((c: any) => c.id === selectedCategoryId)
+            : null;
+        const matchesCategory =
+            !selectedCategoryId ||
+            item.category === selectedCategoryId ||
+            (selectedCat && selectedCat.name === item.category);
+        return matchesSearch && matchesCategory;
     });
 
     return (
         <div className="flex gap-8 animate-fade-in relative h-full">
             {/* Left: Item List */}
             <div className={`flex-1 flex flex-col gap-6 transition-all ${selectedItem ? 'w-1/2' : 'w-full'}`}>
-                <div className="relative group max-w-md">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                        {ICONS.search}
+                <div className="flex flex-wrap items-center gap-4">
+                    <div className="relative group flex-1 min-w-[200px] max-w-md">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            {ICONS.search}
+                        </div>
+                        <input
+                            type="text"
+                            className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                            placeholder="Search SKU, Name or Barcode..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
                     </div>
-                    <input
-                        type="text"
-                        className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
-                        placeholder="Search SKU, Name or Barcode..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        <label htmlFor="stock-master-category" className="text-sm font-bold text-slate-600 whitespace-nowrap">
+                            Category:
+                        </label>
+                        <select
+                            id="stock-master-category"
+                            value={selectedCategoryId}
+                            onChange={(e) => setSelectedCategoryId(e.target.value)}
+                            className="block rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-10 text-sm font-medium text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[180px]"
+                        >
+                            <option value="">All categories</option>
+                            <option value="General">General</option>
+                            {categories.map((c: any) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 <Card className="border-none shadow-sm overflow-hidden flex-1">

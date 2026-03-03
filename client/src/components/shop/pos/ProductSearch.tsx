@@ -9,6 +9,7 @@ import { getFullImageUrl } from '../../../config/apiUrl';
 import { FixedSizeList } from 'react-window';
 import Fuse from 'fuse.js';
 import { debounce } from 'lodash-es';
+import AddOrEditSkuModal from './AddOrEditSkuModal';
 
 function mapApiProductToPOS(p: any): POSProduct {
     return {
@@ -70,6 +71,7 @@ const ProductSearch: React.FC = () => {
     const [loadError, setLoadError] = useState<string | null>(null);
     const [keyboardIndex, setKeyboardIndex] = useState(-1);
     const [showFilters, setShowFilters] = useState(false);
+    const [isAddSkuModalOpen, setIsAddSkuModalOpen] = useState(false);
 
     // Internal search state for debouncing
     const [localQuery, setLocalQuery] = useState(searchQuery);
@@ -358,6 +360,7 @@ const ProductSearch: React.FC = () => {
                     </div>
                     <input
                         ref={searchInputRef}
+                        id="pos-product-search"
                         type="text"
                         className="w-full pl-11 pr-24 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 transition-all"
                         placeholder="Search Products (Ctrl+F)"
@@ -466,13 +469,28 @@ const ProductSearch: React.FC = () => {
                             {React.cloneElement(ICONS.search as any, { size: 32 })}
                         </div>
                         <h4 className="text-sm font-bold text-slate-900">No products found</h4>
-                        <p className="text-xs text-slate-500 mt-1 max-w-[180px]">Try adjusting your search query or category filters</p>
-                        <button
-                            onClick={() => { setLocalQuery(''); setSearchQuery(''); setSelectedCategory('all'); }}
-                            className="mt-6 px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-800 transition-all shadow-lg"
-                        >
-                            Reset Catalog
-                        </button>
+                        <p className="text-xs text-slate-500 mt-1 max-w-[220px]">
+                            {localQuery.trim()
+                                ? 'Add this SKU/barcode to inventory or search for an existing one to edit.'
+                                : 'Try adjusting your search query or category filters'}
+                        </p>
+                        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                            {localQuery.trim() && (
+                                <button
+                                    onClick={() => setIsAddSkuModalOpen(true)}
+                                    className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
+                                >
+                                    {React.cloneElement(ICONS.plus as any, { size: 14 })}
+                                    Add SKU to inventory
+                                </button>
+                            )}
+                            <button
+                                onClick={() => { setLocalQuery(''); setSearchQuery(''); setSelectedCategory('all'); }}
+                                className="px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-800 transition-all shadow-lg"
+                            >
+                                Reset Catalog
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
@@ -484,6 +502,18 @@ const ProductSearch: React.FC = () => {
                 </div>
                 {/* Dense Mode Toggle is handled by ShortcutBar, but we can add minor UI here if needed */}
             </div>
+
+            <AddOrEditSkuModal
+                isOpen={isAddSkuModalOpen}
+                onClose={() => setIsAddSkuModalOpen(false)}
+                initialSkuOrBarcode={localQuery.trim()}
+                onItemReady={(item) => {
+                    const posProduct = mapInventoryItemToPOS(item);
+                    addToCart(posProduct);
+                    setLocalQuery('');
+                    setSearchQuery('');
+                }}
+            />
         </div>
     );
 };

@@ -102,6 +102,8 @@ try {
     Pop-Location
 
     # Package with electron-builder (client-only config; no embedded server)
+    # Disable code signing so winCodeSign is not used (avoids Windows symlink errors when not in Developer Mode / Admin)
+    $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
     Write-Host "  Packaging with electron-builder..." -ForegroundColor Cyan
     npx electron-builder --win -c electron-builder.cloud.json
     if ($LASTEXITCODE -ne 0) { throw "Electron build failed!" }

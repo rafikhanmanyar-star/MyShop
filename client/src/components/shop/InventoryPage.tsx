@@ -13,7 +13,7 @@ import { shopApi, ShopProductCategory } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
 
 const InventoryContent: React.FC = () => {
-    const { addItem, refreshItems } = useInventory();
+    const { items, addItem, refreshItems } = useInventory();
     const [activeTab, setActiveTab] = useState<'dashboard' | 'stock' | 'movements' | 'adjustments' | 'categories'>('dashboard');
     const [isNewSkuModalOpen, setIsNewSkuModalOpen] = useState(false);
     const [shopCategories, setShopCategories] = useState<ShopProductCategory[]>([]);
@@ -46,7 +46,27 @@ const InventoryContent: React.FC = () => {
         loadShopCategories();
     }, [refreshItems, loadShopCategories]);
 
+    // Real-time duplicate checks for barcode and product name
+    const barcodeConflictItems = React.useMemo(() => {
+        const barcodeNorm = (newItemData.barcode || '').trim().toLowerCase();
+        if (!barcodeNorm) return [];
+        return items.filter(
+            (i) => i.barcode && i.barcode.trim().toLowerCase() === barcodeNorm
+        );
+    }, [items, newItemData.barcode]);
+
+    const nameConflictItems = React.useMemo(() => {
+        const nameNorm = (newItemData.name || '').trim().toLowerCase();
+        if (!nameNorm) return [];
+        return items.filter(
+            (i) => i.name.trim().toLowerCase() === nameNorm
+        );
+    }, [items, newItemData.name]);
+
+    const hasConflict = barcodeConflictItems.length > 0 || nameConflictItems.length > 0;
+
     const handleCreateSku = async () => {
+        if (hasConflict) return;
         try {
             let imageUrl = '';
             if (selectedImage) {
@@ -162,20 +182,71 @@ const InventoryContent: React.FC = () => {
                             value={newItemData.sku}
                             onChange={(e) => setNewItemData({ ...newItemData, sku: e.target.value })}
                         />
-                        <Input
-                            label="Barcode"
-                            placeholder="Scan or enter barcode"
-                            value={newItemData.barcode}
-                            onChange={(e) => setNewItemData({ ...newItemData, barcode: e.target.value })}
-                        />
+                        <div className="space-y-1">
+                            <Input
+                                label="Barcode"
+                                placeholder="Scan or enter barcode"
+                                value={newItemData.barcode}
+                                onChange={(e) => setNewItemData({ ...newItemData, barcode: e.target.value })}
+                            />
+                            {barcodeConflictItems.length > 0 && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
+                                    <div className="flex items-center gap-1.5 font-semibold text-amber-800 mb-1">
+                                        {React.cloneElement(ICONS.alertTriangle as React.ReactElement<{ size?: number }>, { size: 14 })}
+                                        <span>Barcode already in use</span>
+                                    </div>
+                                    <ul className="space-y-1 max-h-24 overflow-y-auto">
+                                        {barcodeConflictItems.map((item) => (
+                                            <li key={item.id} className="flex items-center gap-2 text-amber-800">
+                                                <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                                    {item.imageUrl ? (
+                                                        <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        React.cloneElement(ICONS.package as React.ReactElement<{ size?: number }>, { size: 12 })
+                                                    )}
+                                                </div>
+                                                <span className="font-medium truncate">{item.name}</span>
+                                                <span className="text-amber-600 text-xs flex-shrink-0">SKU: {item.sku}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-1">
                         <Input
                             label="Product Name"
                             placeholder="e.g. Cotton T-Shirt"
                             value={newItemData.name}
                             onChange={(e) => setNewItemData({ ...newItemData, name: e.target.value })}
                         />
+                        {nameConflictItems.length > 0 && (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
+                                <div className="flex items-center gap-1.5 font-semibold text-amber-800 mb-1">
+                                    {React.cloneElement(ICONS.alertTriangle as React.ReactElement<{ size?: number }>, { size: 14 })}
+                                    <span>Product name already in use</span>
+                                </div>
+                                <ul className="space-y-1 max-h-24 overflow-y-auto">
+                                    {nameConflictItems.map((item) => (
+                                        <li key={item.id} className="flex items-center gap-2 text-amber-800">
+                                            <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                                {item.imageUrl ? (
+                                                    <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    React.cloneElement(ICONS.package as React.ReactElement<{ size?: number }>, { size: 12 })
+                                                )}
+                                            </div>
+                                            <span className="font-medium truncate">{item.name}</span>
+                                            <span className="text-amber-600 text-xs flex-shrink-0">SKU: {item.sku}</span>
+                                            {item.barcode && (
+                                                <span className="text-amber-600 text-xs flex-shrink-0">· {item.barcode}</span>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                     </div>
                     <div className="grid grid-cols-3 gap-4">
                         <div>
@@ -259,7 +330,7 @@ const InventoryContent: React.FC = () => {
 
                     <div className="flex justify-end gap-3 mt-6">
                         <Button variant="secondary" onClick={() => setIsNewSkuModalOpen(false)}>Cancel</Button>
-                        <Button onClick={handleCreateSku} disabled={!newItemData.name}>Create Product</Button>
+                        <Button onClick={handleCreateSku} disabled={!newItemData.name || hasConflict}>Create Product</Button>
                     </div>
                 </div>
             </Modal>

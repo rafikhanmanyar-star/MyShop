@@ -1,13 +1,27 @@
-
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useInventory } from '../../../context/InventoryContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
+import { shopApi } from '../../../services/shopApi';
 
 const BAR_COLORS = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-500'];
 
 const InventoryDashboard: React.FC = () => {
     const { items, lowStockItems, totalInventoryValue, warehouses } = useInventory();
+    const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+
+    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                const res = await shopApi.getShopCategories();
+                setCategories(Array.isArray(res) ? res : []);
+            } catch (err) {
+                console.error('Failed to fetch categories:', err);
+            }
+        };
+        fetchCategories();
+    }, []);
 
     // Real branch/warehouse inventory: units per warehouse and % of total stock
     const warehouseUtilization = React.useMemo(() => {
@@ -18,6 +32,21 @@ const InventoryDashboard: React.FC = () => {
             return { id: wh.id, name: wh.name, units: unitsAtWh, pct, color: BAR_COLORS[i % BAR_COLORS.length] };
         });
     }, [warehouses, items]);
+
+    const filteredLowStockItems = useMemo(() => {
+        if (!selectedCategoryId) return lowStockItems;
+        const selectedCat = categories.find(c => c.id === selectedCategoryId);
+        return lowStockItems.filter(item =>
+            item.category === selectedCategoryId ||
+            (selectedCat && selectedCat.name === item.category)
+        );
+    }, [lowStockItems, selectedCategoryId, categories]);
+
+    const getCategoryDisplayName = (itemCategory: string | undefined) => {
+        if (!itemCategory) return 'General';
+        const cat = categories.find(c => c.id === itemCategory || c.name === itemCategory);
+        return cat ? cat.name : itemCategory;
+    };
 
     const stats = [
         { label: 'Total SKUs', value: items.length, icon: ICONS.package, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -46,26 +75,47 @@ const InventoryDashboard: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Low Stock Table */}
                 <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                    <div className="p-6 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4">
                         <h3 className="font-bold text-slate-800">Critical Stock Alerts</h3>
-                        <span className="px-2 py-1 bg-rose-100 text-rose-600 text-[10px] font-black rounded uppercase">Immediate Action Needed</span>
+                        <div className="flex items-center gap-3">
+                            <label htmlFor="critical-alerts-category" className="text-xs font-bold text-slate-600 whitespace-nowrap">
+                                Category:
+                            </label>
+                            <select
+                                id="critical-alerts-category"
+                                value={selectedCategoryId}
+                                onChange={(e) => setSelectedCategoryId(e.target.value)}
+                                className="block rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[160px]"
+                            >
+                                <option value="">All categories</option>
+                                <option value="General">General</option>
+                                {categories.map((c) => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                            <span className="px-2 py-1 bg-rose-100 text-rose-600 text-[10px] font-black rounded uppercase">Immediate Action Needed</span>
+                        </div>
                     </div>
                     <div className="flex-1 overflow-x-auto">
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
                                 <tr>
                                     <th className="px-6 py-4">Item Name / SKU</th>
+                                    <th className="px-6 py-4">Category</th>
                                     <th className="px-6 py-4">On Hand</th>
                                     <th className="px-6 py-4">Reorder Point</th>
                                     <th className="px-6 py-4">Status</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
-                                {lowStockItems.length > 0 ? lowStockItems.map(item => (
+                                {filteredLowStockItems.length > 0 ? filteredLowStockItems.map(item => (
                                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-slate-800 text-sm">{item.name}</div>
                                             <div className="text-[10px] text-slate-400 font-mono italic">{item.sku}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-sm font-medium text-slate-600">{getCategoryDisplayName(item.category)}</span>
                                         </td>
                                         <td className="px-6 py-4 text-sm font-black font-mono">{item.onHand} {item.unit}</td>
                                         <td className="px-6 py-4 text-sm font-medium text-slate-500 font-mono">{item.reorderPoint}</td>
@@ -78,7 +128,9 @@ const InventoryDashboard: React.FC = () => {
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={4} className="px-6 py-12 text-center text-slate-400 italic text-sm">No critical stock levels detected.</td>
+                                        <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic text-sm">
+                                            {lowStockItems.length > 0 ? 'No critical stock in this category.' : 'No critical stock levels detected.'}
+                                        </td>
                                     </tr>
                                 )}
                             </tbody>
