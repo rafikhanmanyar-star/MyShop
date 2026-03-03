@@ -74,6 +74,7 @@ type Action =
 const CART_KEY = 'myshop_cart';
 const AUTH_KEY = 'mobile_token';
 const CUSTOMER_KEY = 'mobile_customer';
+const LAST_SHOP_SLUG_KEY = 'myshop_last_shop_slug';
 
 function loadCart(): CartItem[] {
     try {
@@ -116,7 +117,10 @@ const initialState: AppState = {
 
 function reducer(state: AppState, action: Action): AppState {
     switch (action.type) {
-        case 'SET_SHOP':
+        case 'SET_SHOP': {
+            try {
+                localStorage.setItem(LAST_SHOP_SLUG_KEY, action.slug);
+            } catch { /* ignore */ }
             return {
                 ...state,
                 shopSlug: action.slug,
@@ -125,6 +129,7 @@ function reducer(state: AppState, action: Action): AppState {
                 settings: action.settings,
                 branding: action.branding,
             };
+        }
 
         case 'ADD_TO_CART': {
             const existing = state.cart.find(i => i.productId === action.item.productId);
