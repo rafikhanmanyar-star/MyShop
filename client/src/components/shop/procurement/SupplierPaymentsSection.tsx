@@ -173,6 +173,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                       placeholder="Amount"
                       value={inputVal}
                       onChange={(e) => setAllocateInputs((prev) => ({ ...prev, [billId]: e.target.value }))}
+                      onWheel={(e) => e.preventDefault()}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
@@ -235,6 +236,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
               required
               value={form.amount || ''}
               onChange={(e) => setForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
+              onWheel={(e) => e.preventDefault()}
               className="w-full border border-slate-200 rounded-lg px-3 py-2"
             />
           </div>

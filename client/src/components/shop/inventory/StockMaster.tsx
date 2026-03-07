@@ -154,9 +154,9 @@ const StockMaster: React.FC = () => {
     });
 
     return (
-        <div className="flex gap-8 animate-fade-in relative h-full">
+        <div className="flex gap-8 animate-fade-in relative h-full min-h-0">
             {/* Left: Item List */}
-            <div className={`flex-1 flex flex-col gap-6 transition-all ${selectedItem ? 'w-1/2' : 'w-full'}`}>
+            <div className={`flex-1 flex flex-col gap-6 transition-all min-h-0 ${selectedItem ? 'w-1/2' : 'w-full'}`}>
                 <div className="flex flex-wrap items-center gap-4">
                     <div className="relative group flex-1 min-w-[200px] max-w-md">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -189,8 +189,8 @@ const StockMaster: React.FC = () => {
                     </div>
                 </div>
 
-                <Card className="border-none shadow-sm overflow-hidden flex-1">
-                    <div className="overflow-x-auto">
+                <Card className="border-none shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
+                    <div className="overflow-x-auto overflow-y-auto min-h-0 flex-1">
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
                                 <tr>
@@ -259,8 +259,8 @@ const StockMaster: React.FC = () => {
 
             {/* Right: Item Drill-down Side Panel */}
             {selectedItem && (
-                <div className="w-1/3 min-w-[400px] h-full sticky top-0 animate-slide-in-right">
-                    <Card className="h-full border-none shadow-xl flex flex-col p-8 gap-8 overflow-y-auto bg-white border-l border-indigo-100 rounded-none rounded-l-3xl">
+                <div className="w-1/3 min-w-[400px] h-full min-h-0 flex flex-col sticky top-0 animate-slide-in-right">
+                    <Card className="h-full min-h-0 border-none shadow-xl flex flex-col p-8 gap-8 overflow-y-auto bg-white border-l border-indigo-100 rounded-none rounded-l-3xl">
                         <div className="flex justify-between items-start">
                             <div>
                                 <h2 className="text-xl font-black text-slate-800">{selectedItem.name}</h2>

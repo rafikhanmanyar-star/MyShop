@@ -374,7 +374,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                               step="1"
                               value={Math.max(1, Math.floor(i.quantity))}
                               onChange={(e) => updateItem(i.productId, 'quantity', Math.max(1, Math.floor(parseFloat(e.target.value) || 0)))}
-                              onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              onWheel={(e) => e.preventDefault()}
                               className="w-16 text-right border border-slate-200 rounded px-1 py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </td>
@@ -385,7 +385,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                               step="0.01"
                               value={i.unitCost}
                               onChange={(e) => updateItem(i.productId, 'unitCost', parseFloat(e.target.value) || 0)}
-                              onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              onWheel={(e) => e.preventDefault()}
                               className="w-24 text-right border border-slate-200 rounded px-1 py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           </td>
@@ -430,6 +430,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                       min="0"
                       value={form.paidAmount || ''}
                       onChange={(e) => setForm((f) => ({ ...f, paidAmount: parseFloat(e.target.value) || 0 }))}
+                      onWheel={(e) => e.preventDefault()}
                       className="w-full border border-slate-200 rounded-lg px-3 py-2"
                     />
                   </div>

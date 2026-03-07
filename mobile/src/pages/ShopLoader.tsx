@@ -4,6 +4,23 @@ import { useApp } from '../context/AppContext';
 import { publicApi } from '../api';
 import BottomNav from '../components/BottomNav';
 import Header from '../components/Header';
+import { getShop, setShop } from '../services/offlineCache';
+import { syncCatalogForShop } from '../services/catalogSync';
+
+function applyBranding(shopData: { shop: { company_name?: string; name: string; brand_color?: string } }, brandingData: { primary_color?: string; secondary_color?: string; accent_color?: string } | null) {
+    if (brandingData?.primary_color) {
+        document.documentElement.style.setProperty('--primary', brandingData.primary_color);
+    } else if (shopData.shop.brand_color) {
+        document.documentElement.style.setProperty('--primary', shopData.shop.brand_color);
+    }
+    if (brandingData?.secondary_color) {
+        document.documentElement.style.setProperty('--secondary', brandingData.secondary_color);
+    }
+    if (brandingData?.accent_color) {
+        document.documentElement.style.setProperty('--accent', brandingData.accent_color);
+    }
+    document.title = `${shopData.shop.company_name || shopData.shop.name} — Order Online`;
+}
 
 export default function ShopLoader() {
     const { shopSlug } = useParams<{ shopSlug: string }>();
@@ -21,6 +38,8 @@ export default function ShopLoader() {
         setLoading(true);
         setError('');
 
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
         Promise.all([
             publicApi.getShopInfo(shopSlug),
             publicApi.getBranding(shopSlug)
@@ -33,26 +52,29 @@ export default function ShopLoader() {
                     settings: shopData.settings,
                     branding: brandingData,
                 });
-
-                // Apply shop brand color
-                if (brandingData?.primary_color) {
-                    document.documentElement.style.setProperty('--primary', brandingData.primary_color);
-                } else if (shopData.shop.brand_color) {
-                    document.documentElement.style.setProperty('--primary', shopData.shop.brand_color);
+                setShop(shopSlug, { shop: shopData.shop, settings: shopData.settings, branding: brandingData });
+                applyBranding(shopData, brandingData);
+                if (!isOffline) {
+                    syncCatalogForShop(shopSlug).catch(() => {});
                 }
-
-                if (brandingData?.secondary_color) {
-                    document.documentElement.style.setProperty('--secondary', brandingData.secondary_color);
-                }
-
-                if (brandingData?.accent_color) {
-                    document.documentElement.style.setProperty('--accent', brandingData.accent_color);
-                }
-
-                document.title = `${shopData.shop.company_name || shopData.shop.name} — Order Online`;
             })
-            .catch((err) => {
-                setError(err.message || 'Shop not found');
+            .catch(async () => {
+                const cached = await getShop(shopSlug);
+                if (cached) {
+                    dispatch({
+                        type: 'SET_SHOP',
+                        slug: shopSlug,
+                        shop: cached.shop,
+                        settings: cached.settings,
+                        branding: cached.branding,
+                    });
+                    applyBranding({ shop: cached.shop }, cached.branding);
+                    if (!isOffline) {
+                        syncCatalogForShop(shopSlug).catch(() => {});
+                    }
+                } else {
+                    setError(isOffline ? 'This shop isn\'t available offline. Open a shop you\'ve visited before.' : 'Shop not found');
+                }
             })
             .finally(() => setLoading(false));
     }, [shopSlug]);
@@ -60,6 +82,11 @@ export default function ShopLoader() {
     if (loading) {
         return (
             <div className="loading-page fade-in">
+                <img
+                    src="/icons/shop-logo.png"
+                    alt="Shop logo"
+                    className="loading-page-logo"
+                />
                 <div className="spinner" style={{ width: 40, height: 40 }} />
                 <p style={{ fontSize: 15 }}>Loading shop...</p>
             </div>

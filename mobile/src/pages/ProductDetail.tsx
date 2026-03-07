@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi, getFullImageUrl } from '../api';
+import { useOnline } from '../hooks/useOnline';
+import { getProductById } from '../services/offlineCache';
 
 export default function ProductDetail() {
     const { shopSlug, id } = useParams();
     const navigate = useNavigate();
     const { dispatch, showToast, state } = useApp();
+    const online = useOnline();
 
     const [product, setProduct] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -14,11 +17,20 @@ export default function ProductDetail() {
 
     useEffect(() => {
         if (!shopSlug || !id) return;
-        publicApi.getProduct(shopSlug, id)
-            .then(setProduct)
-            .catch(() => showToast('Product not found'))
-            .finally(() => setLoading(false));
-    }, [shopSlug, id]);
+        if (online) {
+            publicApi.getProduct(shopSlug, id)
+                .then(setProduct)
+                .catch(() => showToast('Product not found'))
+                .finally(() => setLoading(false));
+        } else {
+            getProductById(shopSlug, id)
+                .then((p) => {
+                    setProduct(p);
+                    if (!p) showToast('Product not found');
+                })
+                .finally(() => setLoading(false));
+        }
+    }, [shopSlug, id, online]);
 
     const formatPrice = (p: number | string | null | undefined) => {
         if (p === null || p === undefined) return 'Rs. 0';

@@ -2,20 +2,23 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { customerApi } from '../api';
+import { useOnline } from '../hooks/useOnline';
+import { placeOrderOfflineFirst } from '../services/orderSyncService';
 
 export default function Checkout() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
     const { state, dispatch, cartTotal, showToast } = useApp();
+    const online = useOnline();
 
     const [address, setAddress] = useState('');
     const [notes, setNotes] = useState('');
     const [loading, setLoading] = useState(false);
     const defaultAddressFetched = useRef(false);
 
-    // Populate delivery address with user's default address from registration
+    // Populate delivery address with user's default address from registration (only when online)
     useEffect(() => {
-        if (!state.customerId || defaultAddressFetched.current) return;
+        if (!online || !state.customerId || defaultAddressFetched.current) return;
         defaultAddressFetched.current = true;
         customerApi.getProfile()
             .then((profile: { address_line1?: string; address_line2?: string; city?: string; postal_code?: string }) => {
@@ -29,7 +32,7 @@ export default function Checkout() {
                 if (defaultAddr) setAddress(defaultAddr);
             })
             .catch(() => {});
-    }, [state.customerId]);
+    }, [online, state.customerId]);
 
     const deliveryFee = state.settings?.delivery_fee || 0;
     const freeAbove = state.settings?.free_delivery_above;
@@ -51,21 +54,28 @@ export default function Checkout() {
 
         setLoading(true);
         try {
-            const idempotencyKey = `order_${state.customerId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-            const result = await customerApi.placeOrder({
-                items: state.cart.map(i => ({
-                    productId: i.productId,
-                    quantity: i.quantity,
-                })),
+            const idempotencyKey = `order_${state.customerId ?? 'guest'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const payload = {
+                items: state.cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
                 deliveryAddress: address,
                 deliveryNotes: notes || undefined,
-                paymentMethod: 'COD',
+                paymentMethod: 'COD' as const,
                 idempotencyKey,
                 ...(state.branchId ? { branchId: state.branchId } : {}),
-            });
+            };
 
-            dispatch({ type: 'CLEAR_CART' });
-            navigate(`/${shopSlug}/order-confirmed/${result.id || result.order_number}`, { replace: true });
+            const result = await placeOrderOfflineFirst(shopSlug!, payload);
+
+            if (result.synced && result.orderId) {
+                dispatch({ type: 'CLEAR_CART' });
+                navigate(`/${shopSlug}/order-confirmed/${result.orderId}`, { replace: true });
+            } else if (result.localId) {
+                dispatch({ type: 'CLEAR_CART' });
+                showToast('Order saved. We\'ll send it when you\'re back online.');
+                navigate(`/${shopSlug}`, { replace: true });
+            } else {
+                showToast(result.error || 'Failed to place order');
+            }
         } catch (err: any) {
             showToast(err.message || 'Failed to place order');
         } finally {
@@ -194,6 +204,11 @@ export default function Checkout() {
             )}
 
             {/* Place Order */}
+            {!online && (
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12, textAlign: 'center' }}>
+                    Order will be saved and sent when you're back online.
+                </p>
+            )}
             <button
                 className="btn btn-primary btn-full"
                 onClick={handlePlaceOrder}
@@ -202,8 +217,10 @@ export default function Checkout() {
             >
                 {loading ? (
                     <><span className="spinner" style={{ width: 20, height: 20 }} /> Placing Order...</>
-                ) : (
+                ) : online ? (
                     `Place Order — ${formatPrice(Math.round(grandTotal * 100) / 100)}`
+                ) : (
+                    `Save for when online — ${formatPrice(Math.round(grandTotal * 100) / 100)}`
                 )}
             </button>
         </div>

@@ -1,5 +1,6 @@
+import { useEffect, useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { AppProvider } from './context/AppContext';
+import { AppProvider, useApp } from './context/AppContext';
 import ShopLoader from './pages/ShopLoader';
 import Home from './pages/Home';
 import Products from './pages/Products';
@@ -17,10 +18,38 @@ import BudgetDetail from './pages/BudgetDetail';
 import AccountSettings from './pages/AccountSettings';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
+import OfflineBanner from './components/OfflineBanner';
+import { processOrderQueue, subscribeToOnline } from './services/orderSyncService';
+
+function OrderSyncOnOnline() {
+  const { showToast } = useApp();
+  const processedRef = useRef(false);
+
+  useEffect(() => {
+    const runQueue = async () => {
+      const result = await processOrderQueue();
+      if (result.succeeded > 0) {
+        showToast(result.succeeded === 1 ? 'Order sent!' : `${result.succeeded} orders sent!`);
+      }
+    };
+    const unsub = subscribeToOnline(() => {
+      runQueue();
+    });
+    if (typeof navigator !== 'undefined' && navigator.onLine && !processedRef.current) {
+      processedRef.current = true;
+      runQueue();
+    }
+    return unsub;
+  }, [showToast]);
+
+  return null;
+}
 
 export default function App() {
   return (
     <AppProvider>
+      <OfflineBanner />
+      <OrderSyncOnOnline />
       <Routes>
         {/* Shop slug entry point — loads shop branding */}
         <Route path="/:shopSlug" element={<ShopLoader />}>

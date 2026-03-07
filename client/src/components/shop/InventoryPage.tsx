@@ -160,7 +160,7 @@ const InventoryContent: React.FC = () => {
             </div>
 
             {/* Scrollable Content Area */}
-            <div className="flex-1 overflow-y-auto p-8">
+            <div className="flex-1 min-h-0 overflow-y-auto p-8">
                 {activeTab === 'dashboard' && <InventoryDashboard />}
                 {activeTab === 'stock' && <StockMaster />}
                 {activeTab === 'movements' && <StockMovements />}

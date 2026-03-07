@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { publicApi, getFullImageUrl } from '../api';
 import { getShopSlugFromUrl, isAtRootWithoutShopInPath } from '../utils/urlShop';
+import { getDiscover, setDiscover } from '../services/offlineCache';
+
+const LAST_SHOP_SLUG_KEY = 'myshop_last_shop_slug';
 
 interface ShopEntry {
     slug: string;
@@ -17,9 +20,9 @@ export default function LandingPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [manualSlug, setManualSlug] = useState('');
+    const [offlineCached, setOfflineCached] = useState(false);
 
     useEffect(() => {
-        // If we're at root (/) and the URL identifies a shop (query ?shop= or subdomain), bind to that shop only — no picker
         if (isAtRootWithoutShopInPath()) {
             const slugFromUrl = getShopSlugFromUrl();
             if (slugFromUrl) {
@@ -28,17 +31,40 @@ export default function LandingPage() {
             }
         }
 
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
         publicApi.discover()
             .then((data: any) => {
-                // If there's only one shop, auto-redirect to it immediately (no picker)
+                setDiscover({ shops: data.shops || [], redirect: data.redirect });
                 if (data.redirect) {
                     navigate(`/${data.redirect}`, { replace: true });
                     return;
                 }
                 setShops(data.shops || []);
+                setError('');
             })
-            .catch((err: any) => {
-                setError(err.message || 'Could not connect to server');
+            .catch(async (err: any) => {
+                const cached = await getDiscover();
+                if (cached?.shops?.length) {
+                    setShops(cached.shops);
+                    setOfflineCached(true);
+                    setError(isOffline ? 'You\'re offline. Opening a previously opened shop.' : '');
+                } else {
+                    setError(isOffline
+                        ? 'You\'re offline. Open a shop you\'ve visited before or enter its URL below.'
+                        : (err.message || 'Could not connect to server'));
+                }
+                if (cached?.redirect && !cached.shops?.length) {
+                    navigate(`/${cached.redirect}`, { replace: true });
+                } else if (!cached?.shops?.length && isOffline) {
+                    try {
+                        const lastSlug = localStorage.getItem(LAST_SHOP_SLUG_KEY);
+                        if (lastSlug && /^[a-z0-9-]+$/.test(lastSlug.trim())) {
+                            navigate(`/${lastSlug.trim()}`, { replace: true });
+                            return;
+                        }
+                    } catch { /* ignore */ }
+                }
             })
             .finally(() => setLoading(false));
     }, [navigate, location.pathname]);
@@ -84,7 +110,7 @@ export default function LandingPage() {
             {shops.length > 0 && (
                 <div style={{ width: '100%', maxWidth: 360, marginBottom: 24 }}>
                     <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                        Available Shops
+                        {offlineCached ? 'Previously opened shops (offline)' : 'Available Shops'}
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {shops.map(shop => (

@@ -141,6 +141,7 @@ const POSHeader: React.FC = () => {
                                     min="0"
                                     value={startForm.openingCash}
                                     onChange={(e) => setStartForm((f) => ({ ...f, openingCash: e.target.value }))}
+                                    onWheel={(e) => e.preventDefault()}
                                     className="w-24 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-blue-500"
                                     placeholder="0"
                                 />

@@ -109,6 +109,7 @@ export default function TerminalCloseModal({ shiftId, stats, onClose, onSuccess 
               min="0"
               value={closingCashActual}
               onChange={(e) => setClosingCashActual(e.target.value)}
+              onWheel={(e) => e.preventDefault()}
               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               required
             />
@@ -158,6 +159,7 @@ export default function TerminalCloseModal({ shiftId, stats, onClose, onSuccess 
                 min="0"
                 value={handoverAmount}
                 onChange={(e) => setHandoverAmount(e.target.value)}
+                onWheel={(e) => e.preventDefault()}
                 placeholder={String(stats.expectedCash)}
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500"
               />

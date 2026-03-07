@@ -10,7 +10,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   compact?: boolean;
 }
 
-const Input: React.FC<InputProps> = ({ label, id, helperText, onKeyDown, name, enableSpellCheck = true, icon, horizontal = false, compact = false, ...props }) => {
+const Input: React.FC<InputProps> = ({ label, id, helperText, onKeyDown, onWheel, name, enableSpellCheck = true, icon, horizontal = false, compact = false, ...props }) => {
   // Mobile: py-3 and text-base to prevent zoom and increase touch area
   // Desktop: py-2 and text-sm for compactness
   // Added tabular-nums for consistent number width
@@ -40,6 +40,14 @@ const Input: React.FC<InputProps> = ({ label, id, helperText, onKeyDown, name, e
     }
   };
 
+  // Prevent mouse wheel from changing number input values (avoids accidental scroll adjustments)
+  const handleWheel = (e: React.WheelEvent<HTMLInputElement>) => {
+    if (props.type === 'number') {
+      e.preventDefault();
+    }
+    onWheel?.(e);
+  };
+
   // Determine if spell check should be enabled
   // Disable for number, email, password, tel, url input types
   const shouldEnableSpellCheck = enableSpellCheck && !['number', 'email', 'password', 'tel', 'url'].includes(props.type || 'text');
@@ -56,6 +64,7 @@ const Input: React.FC<InputProps> = ({ label, id, helperText, onKeyDown, name, e
         id={inputId}
         name={name || inputId}
         onKeyDown={handleKeyDown}
+        onWheel={handleWheel}
         className={`${finalClassName} ${icon ? 'pl-10' : ''}`}
         autoComplete={props.autoComplete || "off"}
         autoCorrect={shouldEnableSpellCheck ? "on" : "off"}

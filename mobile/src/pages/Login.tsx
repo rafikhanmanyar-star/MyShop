@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { authApi, getFullImageUrl } from '../api';
+import { useOnline } from '../hooks/useOnline';
 
 type Mode = 'login' | 'register';
 
@@ -10,6 +11,7 @@ export default function Login() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { state, dispatch, showToast } = useApp();
+    const online = useOnline();
 
     const [mode, setMode] = useState<Mode>('login');
     const [phone, setPhone] = useState('');
@@ -21,6 +23,10 @@ export default function Login() {
     const redirect = searchParams.get('redirect') || '';
 
     const handleSubmit = async () => {
+        if (!online) {
+            showToast('Connect to sign in or register.');
+            return;
+        }
         if (!phone || phone.length < 10) {
             showToast('Please enter a valid phone number');
             return;
@@ -92,8 +98,29 @@ export default function Login() {
                 <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>
                     {state.shop ? state.shop.company_name || state.shop.name : 'Welcome'}
                 </h1>
+
+                {!online && (
+                    <div style={{
+                        background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(217, 119, 6, 0.5)',
+                        borderRadius: 12, padding: '12px 16px', marginBottom: 20, fontSize: 14, color: '#92400E',
+                    }}>
+                        You're offline. Connect to sign in or register.
+                        {state.isLoggedIn && (
+                            <p style={{ marginTop: 8, marginBottom: 0 }}>
+                                You're signed in offline. You can continue to browse and add to cart.
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {state.isLoggedIn && online && (
+                    <p style={{ color: 'var(--accent)', marginBottom: 16, fontSize: 14, fontWeight: 600 }}>
+                        You're already signed in.
+                    </p>
+                )}
+
                 <p style={{ color: 'var(--text-secondary)', marginBottom: 32, fontSize: 14 }}>
-                    {mode === 'login' ? 'Login with your phone and password' : 'Register with your details to continue'}
+                    {!online ? 'Sign in when you have a connection.' : (mode === 'login' ? 'Login with your phone and password' : 'Register with your details to continue')}
                 </p>
 
                 <div className="input-group" style={{ textAlign: 'left' }}>
@@ -147,11 +174,20 @@ export default function Login() {
                 <button
                     className="btn btn-primary btn-full"
                     onClick={handleSubmit}
-                    disabled={loading || !phone || !password || (mode === 'register' && (!name || !addressLine1))}
+                    disabled={loading || !online || !phone || !password || (mode === 'register' && (!name || !addressLine1))}
                     style={{ marginTop: 8, padding: 16, fontSize: 16 }}
                 >
-                    {loading ? <span className="spinner" style={{ width: 20, height: 20 }} /> : (mode === 'login' ? 'Login' : 'Register')}
+                    {loading ? <span className="spinner" style={{ width: 20, height: 20 }} /> : !online ? 'Connect to sign in' : (mode === 'login' ? 'Login' : 'Register')}
                 </button>
+
+                {!online && state.isLoggedIn && shopSlug && (
+                    <Link
+                        to={`/${shopSlug}/${redirect || 'cart'}`}
+                        style={{ display: 'block', marginTop: 16, color: 'var(--primary)', fontSize: 14, fontWeight: 700 }}
+                    >
+                        Continue to cart →
+                    </Link>
+                )}
 
                 <button
                     style={{

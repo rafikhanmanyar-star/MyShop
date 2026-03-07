@@ -394,6 +394,28 @@ img {
   color: var(--text-secondary);
 }
 
+/* Animated shop logo during loading */
+.loading-page-logo {
+  width: 160px;
+  height: auto;
+  max-width: 70vw;
+  object-fit: contain;
+  animation: loading-logo-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes loading-logo-pulse {
+  0%, 100% {
+    opacity: 0.85;
+    transform: scale(1);
+    filter: drop-shadow(0 0 12px rgba(79, 70, 229, 0.35));
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+    filter: drop-shadow(0 0 20px rgba(79, 70, 229, 0.5));
+  }
+}
+
 /* ─── Empty State ─────────────────────────────────────────── */
 
 .empty-state {

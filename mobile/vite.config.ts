@@ -58,6 +58,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,gif,webp,woff,woff2}'],
+        // Serve index.html for all SPA routes when offline (not just "/")
+        navigateFallback: 'index.html',
+        navigateFallbackAllowlist: [/^\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
         runtimeCaching: [
           {
             // Cache Google Fonts

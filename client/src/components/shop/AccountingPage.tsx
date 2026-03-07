@@ -210,6 +210,7 @@ const AccountingContent: React.FC = () => {
                                                 className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0"
                                                 value={line.debit}
                                                 onChange={(e) => handleLineChange(idx, 'debit', e.target.value)}
+                                                onWheel={(e) => e.preventDefault()}
                                                 onFocus={(e) => e.target.select()}
                                             />
                                         </td>
@@ -219,6 +220,7 @@ const AccountingContent: React.FC = () => {
                                                 className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0"
                                                 value={line.credit}
                                                 onChange={(e) => handleLineChange(idx, 'credit', e.target.value)}
+                                                onWheel={(e) => e.preventDefault()}
                                                 onFocus={(e) => e.target.select()}
                                             />
                                         </td>

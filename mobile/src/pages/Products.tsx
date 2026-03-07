@@ -1,13 +1,16 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi, getFullImageUrl } from '../api';
 import FilterPanel from '../components/FilterPanel';
+import { useOnline } from '../hooks/useOnline';
+import { getProducts as getCachedProducts, getCategories as getCachedCategories, getBrands as getCachedBrands } from '../services/offlineCache';
 
 export default function Products() {
     const { shopSlug } = useParams();
     const [searchParams, setSearchParams] = useSearchParams();
     const { dispatch, showToast } = useApp();
+    const online = useOnline();
 
     const [products, setProducts] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
@@ -18,13 +21,11 @@ export default function Products() {
     const [hasMore, setHasMore] = useState(false);
     const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [offlineCatalogMissing, setOfflineCatalogMissing] = useState(false);
 
-    // Debounce timer
     const searchTimeout = useRef<any>(null);
-    // Sentinel ref for infinite scroll
     const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
 
-    // Filter state from URL
     const filters = {
         categoryIds: searchParams.getAll('categoryIds[]').length > 0 ? searchParams.getAll('categoryIds[]') : (searchParams.get('category') ? [searchParams.get('category') as string] : []),
         subcategoryIds: searchParams.getAll('subcategoryIds[]'),
@@ -44,7 +45,7 @@ export default function Products() {
         const params: Record<string, any> = {
             limit: '20',
             ...currentFilters,
-            search: searchTerm // prioritize current input
+            search: searchTerm
         };
 
         if (!reset && cursor) params.cursor = cursor;
@@ -52,6 +53,7 @@ export default function Products() {
 
         if (reset) setLoading(true);
         else setLoadingMore(true);
+        setOfflineCatalogMissing(false);
 
         try {
             const data = await publicApi.getProducts(shopSlug, params);
@@ -63,28 +65,107 @@ export default function Products() {
             setCursor(data.nextCursor);
             setHasMore(data.hasMore);
         } catch (err: any) {
-            showToast(err.message || 'Failed to load products');
+            if (!online) {
+                const cached = await getCachedProducts(shopSlug);
+                if (cached?.items?.length) {
+                    setProducts(cached.items);
+                    setCursor(null);
+                    setHasMore(false);
+                } else {
+                    setOfflineCatalogMissing(true);
+                }
+            } else {
+                showToast(err.message || 'Failed to load products');
+            }
         } finally {
             setLoading(false);
             setLoadingMore(false);
         }
-    }, [shopSlug, JSON.stringify(filters), searchTerm, cursor]);
+    }, [shopSlug, JSON.stringify(filters), searchTerm, cursor, online]);
 
     useEffect(() => {
         if (!shopSlug) return;
-        Promise.all([
-            publicApi.getCategories(shopSlug),
-            publicApi.getBrands(shopSlug)
-        ]).then(([cats, bnds]) => {
-            setCategories(cats);
-            setBrands(bnds);
-        }).catch(() => { });
-    }, [shopSlug]);
+        if (online) {
+            Promise.all([
+                publicApi.getCategories(shopSlug),
+                publicApi.getBrands(shopSlug)
+            ]).then(([cats, bnds]) => {
+                setCategories(Array.isArray(cats) ? cats : (cats as any)?.categories ?? []);
+                setBrands(Array.isArray(bnds) ? bnds : (bnds as any)?.brands ?? []);
+            }).catch(() => { });
+        } else {
+            Promise.all([
+                getCachedCategories(shopSlug),
+                getCachedBrands(shopSlug)
+            ]).then(([cCat, cBrand]) => {
+                setCategories(cCat?.items ?? []);
+                setBrands(cBrand?.items ?? []);
+            });
+        }
+    }, [shopSlug, online]);
 
     useEffect(() => {
+        if (!shopSlug) return;
         setCursor(null);
-        loadProducts(true);
-    }, [shopSlug, JSON.stringify(filters)]);
+        if (!online) {
+            setLoading(true);
+            setOfflineCatalogMissing(false);
+            getCachedProducts(shopSlug).then((cached) => {
+                if (cached?.items?.length) {
+                    setProducts(cached.items);
+                } else {
+                    setOfflineCatalogMissing(true);
+                }
+                setHasMore(false);
+                setLoading(false);
+            }).catch(() => {
+                setOfflineCatalogMissing(true);
+                setLoading(false);
+            });
+        }
+    }, [shopSlug, online]);
+
+    useEffect(() => {
+        if (online && shopSlug) {
+            setCursor(null);
+            loadProducts(true);
+        }
+    }, [online, shopSlug, JSON.stringify(filters)]);
+
+    const displayedProducts = useMemo(() => {
+        if (online) return products;
+        let list = [...products];
+        if (searchTerm.trim()) {
+            const t = searchTerm.trim().toLowerCase();
+            list = list.filter((p: any) =>
+                (p.name && p.name.toLowerCase().includes(t)) ||
+                (p.sku && p.sku.toLowerCase().includes(t))
+            );
+        }
+        if (filters.categoryIds?.length) {
+            const set = new Set(filters.categoryIds);
+            list = list.filter((p: any) => p.category_id && set.has(String(p.category_id)));
+        }
+        if (filters.brandIds?.length) {
+            const set = new Set(filters.brandIds);
+            list = list.filter((p: any) => p.brand_id && set.has(String(p.brand_id)));
+        }
+        if (filters.minPrice) {
+            const min = parseFloat(filters.minPrice);
+            if (!isNaN(min)) list = list.filter((p: any) => Number(p.price) >= min);
+        }
+        if (filters.maxPrice) {
+            const max = parseFloat(filters.maxPrice);
+            if (!isNaN(max)) list = list.filter((p: any) => Number(p.price) <= max);
+        }
+        if (filters.onSale) list = list.filter((p: any) => p.is_on_sale);
+        const sortBy = filters.sortBy || 'newest';
+        if (sortBy === 'price_low_high') list.sort((a: any, b: any) => Number(a.price) - Number(b.price));
+        else if (sortBy === 'price_high_low') list.sort((a: any, b: any) => Number(b.price) - Number(a.price));
+        else if (sortBy === 'a_z') list.sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''));
+        else if (sortBy === 'z_a') list.sort((a: any, b: any) => (b.name || '').localeCompare(a.name || ''));
+        return list;
+    }, [online, products, searchTerm, filters.categoryIds, filters.brandIds, filters.minPrice, filters.maxPrice, filters.onSale, filters.sortBy]);
 
     // Infinite scroll: load next page when sentinel enters viewport
     useEffect(() => {
@@ -270,7 +351,13 @@ export default function Products() {
                         </div>
                     ))}
                 </div>
-            ) : products.length === 0 ? (
+            ) : offlineCatalogMissing ? (
+                <div className="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                    <h3>Catalog not available offline</h3>
+                    <p>Connect to load products for this shop.</p>
+                </div>
+            ) : displayedProducts.length === 0 ? (
                 <div className="empty-state">
                     <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
                     <h3>No products found</h3>
@@ -280,7 +367,7 @@ export default function Products() {
             ) : (
                 <>
                     <div className="product-grid">
-                        {products.map((p: any) => (
+                        {displayedProducts.map((p: any) => (
                             <Link key={p.id} to={`/${shopSlug}/products/${p.id}`} className="product-card">
                                 {p.is_on_sale && p.discount_percentage > 0 && (
                                     <div className="discount-badge">-{Math.round(p.discount_percentage)}%</div>
