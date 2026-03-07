@@ -190,17 +190,20 @@ const StockMaster: React.FC = () => {
                 </div>
 
                 <Card className="border-none shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
-                    <div className="overflow-x-auto overflow-y-auto min-h-0 flex-1">
+                    <div
+                        className="overflow-auto min-h-0 flex-1"
+                        style={{ maxHeight: 'calc(100vh - 20rem)' }}
+                    >
                         <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
                                 <tr>
-                                    <th className="px-6 py-4">Item Details</th>
-                                    <th className="px-6 py-4">Barcode</th>
-                                    <th className="px-6 py-4">On Hand</th>
-                                    <th className="px-6 py-4">Available</th>
-                                    <th className="px-6 py-4">In Transit</th>
-                                    <th className="px-6 py-4">Value (Retail)</th>
-                                    <th className="px-6 py-4"></th>
+                                    <th className="px-6 py-4 bg-slate-50">Item Details</th>
+                                    <th className="px-6 py-4 bg-slate-50">Barcode</th>
+                                    <th className="px-6 py-4 bg-slate-50">On Hand</th>
+                                    <th className="px-6 py-4 bg-slate-50">Available</th>
+                                    <th className="px-6 py-4 bg-slate-50">In Transit</th>
+                                    <th className="px-6 py-4 bg-slate-50">Value (Retail)</th>
+                                    <th className="px-6 py-4 bg-slate-50"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
