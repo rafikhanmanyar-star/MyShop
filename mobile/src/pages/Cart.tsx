@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { getFullImageUrl } from '../api';
+import CachedImage from '../components/CachedImage';
 
 export default function Cart() {
     const { shopSlug } = useParams();
@@ -64,7 +64,7 @@ export default function Cart() {
                     <div key={item.productId} className="cart-item">
                         <div className="item-image">
                             {item.image_url ? (
-                                <img src={getFullImageUrl(item.image_url)} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'var(--radius)' }} />
+                                <CachedImage path={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'var(--radius)' }} />
                             ) : (
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /></svg>
                             )}

@@ -20,24 +20,31 @@ import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
 import OfflineBanner from './components/OfflineBanner';
 import { processOrderQueue, subscribeToOnline } from './services/orderSyncService';
+import { processPendingProductQueue } from './services/productSyncService';
 
-function OrderSyncOnOnline() {
+function SyncOnOnline() {
   const { showToast } = useApp();
   const processedRef = useRef(false);
 
   useEffect(() => {
-    const runQueue = async () => {
-      const result = await processOrderQueue();
-      if (result.succeeded > 0) {
-        showToast(result.succeeded === 1 ? 'Order sent!' : `${result.succeeded} orders sent!`);
+    const runSync = async () => {
+      const [orderResult, productResult] = await Promise.all([
+        processOrderQueue(),
+        processPendingProductQueue(),
+      ]);
+      if (orderResult.succeeded > 0) {
+        showToast(orderResult.succeeded === 1 ? 'Order sent!' : `${orderResult.succeeded} orders sent!`);
+      }
+      if (productResult.succeeded > 0) {
+        showToast(productResult.succeeded === 1 ? 'Product synced!' : `${productResult.succeeded} products synced!`);
       }
     };
     const unsub = subscribeToOnline(() => {
-      runQueue();
+      runSync();
     });
     if (typeof navigator !== 'undefined' && navigator.onLine && !processedRef.current) {
       processedRef.current = true;
-      runQueue();
+      runSync();
     }
     return unsub;
   }, [showToast]);
@@ -49,7 +56,7 @@ export default function App() {
   return (
     <AppProvider>
       <OfflineBanner />
-      <OrderSyncOnOnline />
+      <SyncOnOnline />
       <Routes>
         {/* Shop slug entry point — loads shop branding */}
         <Route path="/:shopSlug" element={<ShopLoader />}>

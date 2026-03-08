@@ -7,6 +7,7 @@ import Button from '../../ui/Button';
 import { ICONS } from '../../../constants';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
 import { getFullImageUrl } from '../../../config/apiUrl';
+import CachedImage from '../../ui/CachedImage';
 import Fuse from 'fuse.js';
 
 export type AddOrEditSkuModalMode = 'choice' | 'search' | 'add' | 'edit';
@@ -171,28 +172,31 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         setSaving(true);
         try {
             let imageUrl = formData.imageUrl;
-            if (selectedImage) {
+            if (selectedImage && typeof navigator !== 'undefined' && navigator.onLine) {
                 const uploadRes = await shopApi.uploadImage(selectedImage);
                 imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
             }
-            const newItem = await addItem({
-                id: '',
-                sku: formData.sku || `SKU-${Date.now()}`,
-                barcode: formData.barcode || undefined,
-                name: formData.name,
-                category: formData.category,
-                retailPrice: Number(formData.retailPrice),
-                costPrice: Number(formData.costPrice),
-                onHand: 0,
-                available: 0,
-                reserved: 0,
-                inTransit: 0,
-                damaged: 0,
-                reorderPoint: Number(formData.reorderPoint),
-                unit: formData.unit,
-                imageUrl,
-                warehouseStock: {}
-            });
+            const newItem = await addItem(
+                {
+                    id: '',
+                    sku: formData.sku || `SKU-${Date.now()}`,
+                    barcode: formData.barcode || undefined,
+                    name: formData.name,
+                    category: formData.category,
+                    retailPrice: Number(formData.retailPrice),
+                    costPrice: Number(formData.costPrice),
+                    onHand: 0,
+                    available: 0,
+                    reserved: 0,
+                    inTransit: 0,
+                    damaged: 0,
+                    reorderPoint: Number(formData.reorderPoint),
+                    unit: formData.unit,
+                    imageUrl,
+                    warehouseStock: {}
+                },
+                selectedImage || undefined
+            );
             await refreshItems();
             handleClose();
             onItemReady?.(newItem);
@@ -313,7 +317,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     >
                                         <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden">
                                             {item.imageUrl ? (
-                                                <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                <CachedImage path={item.imageUrl} alt="" className="w-full h-full object-cover" />
                                             ) : (
                                                 React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 20 })
                                             )}
@@ -373,7 +377,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                 <li key={item.id} className="flex items-center gap-2 text-amber-800">
                                                     <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0">
                                                         {item.imageUrl ? (
-                                                            <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                            <CachedImage path={item.imageUrl} alt="" className="w-full h-full object-cover" />
                                                         ) : (
                                                             React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 12, className: 'm-1' })
                                                         )}
@@ -406,7 +410,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                             <li key={item.id} className="flex items-center gap-2 text-amber-800">
                                                 <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0">
                                                     {item.imageUrl ? (
-                                                        <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                        <CachedImage path={item.imageUrl} alt="" className="w-full h-full object-cover" />
                                                     ) : (
                                                         React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 12, className: 'm-1' })
                                                     )}
@@ -467,7 +471,11 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                             <div className="flex items-center gap-4">
                                 <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden text-slate-300">
                                     {imagePreview ? (
-                                        <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                        imagePreview.startsWith('blob:') ? (
+                                            <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <CachedImage path={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                        )
                                     ) : (
                                         React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 32 })
                                     )}
@@ -510,7 +518,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                         <li key={item.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                                             <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
                                                 {item.imageUrl ? (
-                                                    <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                    <CachedImage path={item.imageUrl} alt="" className="w-full h-full object-cover" />
                                                 ) : (
                                                     React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 16 })
                                                 )}

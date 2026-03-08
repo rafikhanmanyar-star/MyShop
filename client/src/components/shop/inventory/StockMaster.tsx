@@ -157,7 +157,7 @@ const StockMaster: React.FC = () => {
         <div className="flex gap-8 animate-fade-in relative h-full min-h-0">
             {/* Left: Item List */}
             <div className={`flex-1 flex flex-col gap-6 transition-all min-h-0 ${selectedItem ? 'w-1/2' : 'w-full'}`}>
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4 flex-shrink-0">
                     <div className="relative group flex-1 min-w-[200px] max-w-md">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                             {ICONS.search}
@@ -190,10 +190,7 @@ const StockMaster: React.FC = () => {
                 </div>
 
                 <Card className="border-none shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
-                    <div
-                        className="overflow-auto min-h-0 flex-1"
-                        style={{ maxHeight: 'calc(100vh - 20rem)' }}
-                    >
+                    <div className="overflow-auto min-h-0 flex-1">
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
                                 <tr>

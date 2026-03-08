@@ -1,6 +1,12 @@
 /**
  * Offline cache: IndexedDB store for discover, shop info, full product catalog
  * (products, categories, brands) per shop. Used when offline or API fails.
+ *
+ * PERMANENT STORAGE: All data in this DB is kept permanently on the local system.
+ * We never clear or remove cached data on app exit or reload. When online, all
+ * records fetched from the API are written here; when offline, the app reads
+ * from here. Only pending-sync queues (in separate DBs) remove items after
+ * successful sync to the cloud.
  */
 
 const DB_NAME = 'myshop_offline';

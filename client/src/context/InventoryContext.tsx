@@ -9,7 +9,15 @@ import {
 } from '../types/inventory';
 import { shopApi } from '../services/shopApi';
 import { useAuth } from './AuthContext';
-import { getFullImageUrl } from '../config/apiUrl';
+import { getFullImageUrl, getBaseUrl } from '../config/apiUrl';
+import { fetchAndCacheImage } from '../services/imageCache';
+import { isOnline, processPendingProductQueue } from '../services/productSyncService';
+import {
+    addPendingProduct,
+    saveLocalImageBlob,
+    type PendingProductPayload,
+} from '../services/productSyncStore';
+import { subscribeToOnline } from '../services/productSyncService';
 
 interface InventoryContextType {
     items: InventoryItem[];
@@ -18,7 +26,7 @@ interface InventoryContextType {
     adjustments: StockAdjustment[];
     transfers: StockTransfer[];
 
-    addItem: (item: InventoryItem) => Promise<InventoryItem>;
+    addItem: (item: InventoryItem, imageFile?: File) => Promise<InventoryItem>;
     updateItem: (id: string, updates: Partial<InventoryItem>) => Promise<void>;
     updateStock: (itemId: string, warehouseId: string, delta: number, type: any, referenceId: string, notes?: string) => void;
     requestTransfer: (transfer: Omit<StockTransfer, 'id' | 'timestamp' | 'status'>) => void;
@@ -188,11 +196,26 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }));
 
             setItems(mappedItems);
+            // Prefill local image cache so product images load offline
+            products.filter((p: any) => p.image_url).slice(0, 50).forEach((p: any) => {
+                const path = p.image_url.startsWith('/') ? p.image_url : `/${p.image_url}`;
+                fetchAndCacheImage(`${getBaseUrl()}${path}`, path).catch(() => {});
+            });
             console.log('✅ [InventoryContext] Products refreshed:', mappedItems.length, 'items');
         } catch (error) {
             console.error('Failed to refresh products:', error);
         }
     }, []);
+
+    React.useEffect(() => {
+        const runSync = async () => {
+            const result = await processPendingProductQueue();
+            if (result.succeeded > 0) await refreshItems();
+        };
+        const unsub = subscribeToOnline(runSync);
+        if (typeof navigator !== 'undefined' && navigator.onLine) runSync();
+        return unsub;
+    }, [refreshItems]);
 
     const updateStock = useCallback(async (
         itemId: string,
@@ -253,16 +276,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
     }, []);
 
-    const addItem = useCallback(async (item: InventoryItem) => {
+    const addItem = useCallback(async (item: InventoryItem, imageFile?: File) => {
         try {
-            // Ensure we have an auth token before calling the API (avoids generic 401 message)
-            const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-            if (!token || token.trim() === '') {
-                alert('Please log in to create products. Your session may have expired.');
-                throw new Error('No authentication token');
-            }
-
-            const payload = {
+            const payload: PendingProductPayload = {
                 sku: item.sku,
                 barcode: item.barcode || null,
                 name: item.name,
@@ -271,18 +287,37 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 cost_price: item.costPrice,
                 unit: item.unit,
                 reorder_point: item.reorderPoint,
-                image_url: item.imageUrl
             };
 
-            const response = await shopApi.createProduct(payload) as any;
+            if (!isOnline()) {
+                let localImageId: string | undefined;
+                if (imageFile) {
+                    localImageId = await saveLocalImageBlob(imageFile);
+                }
+                await addPendingProduct({ ...payload, localImageId });
+                const placeholder = { ...item, id: `pending-${Date.now()}` };
+                setItems(prev => [...prev, placeholder]);
+                return placeholder;
+            }
+
+            const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+            if (!token || token.trim() === '') {
+                alert('Please log in to create products. Your session may have expired.');
+                throw new Error('No authentication token');
+            }
+
+            let imageUrl = item.imageUrl;
+            if (imageFile) {
+                const uploadRes = await shopApi.uploadImage(imageFile);
+                imageUrl = uploadRes.imageUrl ? getFullImageUrl(uploadRes.imageUrl) || uploadRes.imageUrl : undefined;
+            }
+
+            const response = await shopApi.createProduct({ ...payload, image_url: imageUrl }) as any;
 
             if (response && response.id) {
-                const newItem = { ...item, id: response.id };
+                const newItem = { ...item, id: response.id, imageUrl };
                 setItems(prev => [...prev, newItem]);
-
-                // Refresh items list to ensure it's in sync with database
                 await refreshItems();
-
                 return newItem;
             } else {
                 throw new Error("Invalid response from server");

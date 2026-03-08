@@ -1,6 +1,7 @@
 /**
- * Full catalog sync: fetch all products (paginated), categories, and brands
- * for a shop when online, and persist to offline cache so the app works offline.
+ * Full catalog sync: when online, fetch all products (paginated), categories,
+ * and brands for a shop and persist to local DB permanently. Data is never
+ * cleared on app exit or reload; it is used when offline.
  */
 
 import { publicApi } from '../api';
@@ -9,6 +10,8 @@ import {
     setCategories,
     setBrands,
 } from './offlineCache';
+import { fetchAndCacheImage } from './imageCache';
+import { getBaseUrl } from '../api';
 
 const PAGE_SIZE = 100;
 
@@ -58,6 +61,16 @@ export async function syncCatalogForShop(shopSlug: string): Promise<CatalogSyncR
         } while (cursor);
 
         await setProducts(shopSlug, allItems);
+
+        // Prefill image cache so product images load offline
+        const baseUrl = getBaseUrl();
+        const pathToUrl = (p: string) => (p.startsWith('http') ? p : `${baseUrl}${p.startsWith('/') ? '' : '/'}${p}`);
+        await Promise.all(
+            allItems
+                .filter((p: any) => p.image_url)
+                .slice(0, 50)
+                .map((p: any) => fetchAndCacheImage(pathToUrl(p.image_url), p.image_url))
+        );
 
         return {
             success: true,

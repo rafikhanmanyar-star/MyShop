@@ -6,6 +6,7 @@ import { POSProduct } from '../../../types/pos';
 import { InventoryItem } from '../../../types/inventory';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
 import { getFullImageUrl } from '../../../config/apiUrl';
+import CachedImage from '../../ui/CachedImage';
 import { FixedSizeList } from 'react-window';
 import Fuse from 'fuse.js';
 import { debounce } from 'lodash-es';
@@ -315,7 +316,7 @@ const ProductSearch: React.FC = () => {
                         >
                             <div className={`w-full bg-slate-50 rounded-xl flex items-center justify-center border border-slate-50 overflow-hidden relative ${isDenseMode ? 'aspect-video' : 'aspect-square'}`}>
                                 {product.imageUrl ? (
-                                    <img src={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
+                                    <CachedImage path={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
                                 ) : (
                                     <div className="text-slate-200">
                                         {React.cloneElement(ICONS.package as any, { size: isDenseMode ? 24 : 40 })}
@@ -431,7 +432,7 @@ const ProductSearch: React.FC = () => {
                             >
                                 <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center mb-1 overflow-hidden">
                                     {p.imageUrl ? (
-                                        <img src={p.imageUrl} className="w-full h-full object-cover" />
+                                        <CachedImage path={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="text-indigo-200">
                                             {React.cloneElement(ICONS.package as any, { size: 16 })}

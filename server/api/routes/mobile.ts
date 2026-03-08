@@ -1,4 +1,7 @@
 import express from 'express';
+import * as fs from 'fs';
+import path from 'path';
+import multer from 'multer';
 import { getDatabaseService } from '../../services/databaseService.js';
 import { getMobileCustomerService } from '../../services/mobileCustomerService.js';
 import { getMobileOrderService } from '../../services/mobileOrderService.js';
@@ -6,6 +9,19 @@ import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/m
 
 const router = express.Router();
 const db = getDatabaseService();
+
+const productUploadStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+        const uploadDir = path.resolve(process.cwd(), 'uploads/product');
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+    },
+    filename: (_req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'product-' + uniqueSuffix + path.extname(file.originalname));
+    },
+});
+const productUpload = multer({ storage: productUploadStorage });
 
 console.log('✅ Mobile router initialized');
 
@@ -199,6 +215,13 @@ router.get('/:shopSlug/products/:id', publicTenantMiddleware(db), async (req: an
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
+});
+
+// Upload product image (for syncing offline-created products with images to cloud)
+router.post('/:shopSlug/upload-image', publicTenantMiddleware(db), productUpload.single('image'), (req: any, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const imageUrl = `/uploads/product/${req.file.filename}`;
+    res.json({ imageUrl });
 });
 
 // ╔══════════════════════════════════════════════════════════════════╗

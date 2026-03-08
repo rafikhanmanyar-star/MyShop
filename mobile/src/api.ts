@@ -71,6 +71,21 @@ export const publicApi = {
     getProduct: (slug: string, id: string) => request(`${API_BASE}/${slug}/products/${id}`),
     getBrands: (slug: string) => request(`${API_BASE}/${slug}/brands`),
     getBranding: (slug: string) => request(`${API_BASE}/${slug}/branding`),
+    /** Create product/SKU (used when syncing offline-created products; requires backend POST /api/mobile/:shopSlug/products) */
+    createProduct: (slug: string, data: Record<string, unknown>) =>
+        request(`${API_BASE}/${slug}/products`, { method: 'POST', body: JSON.stringify(data) }),
+    /** Upload product image (for syncing offline-created product images to cloud) */
+    uploadImage: async (slug: string, file: File): Promise<{ imageUrl: string }> => {
+        const formData = new FormData();
+        formData.append('image', file);
+        const token = localStorage.getItem('mobile_token');
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(`${getApiBaseUrl()}/mobile/${slug}/upload-image`, { method: 'POST', body: formData, headers });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+        return data;
+    },
 };
 
 // ─── Auth ─────────────────────────────────────────────

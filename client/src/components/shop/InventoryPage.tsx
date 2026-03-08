@@ -69,29 +69,32 @@ const InventoryContent: React.FC = () => {
         if (hasConflict) return;
         try {
             let imageUrl = '';
-            if (selectedImage) {
+            if (selectedImage && typeof navigator !== 'undefined' && navigator.onLine) {
                 const uploadRes = await shopApi.uploadImage(selectedImage);
                 imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
             }
 
-            await addItem({
-                id: '', // Will be generated
-                sku: newItemData.sku || `SKU-${Date.now()}`,
-                barcode: newItemData.barcode || undefined,
-                name: newItemData.name,
-                category: newItemData.category,
-                retailPrice: Number(newItemData.retailPrice),
-                costPrice: Number(newItemData.costPrice),
-                onHand: 0,
-                available: 0,
-                reserved: 0,
-                inTransit: 0,
-                damaged: 0,
-                reorderPoint: Number(newItemData.reorderPoint),
-                unit: newItemData.unit,
-                imageUrl,
-                warehouseStock: {}
-            });
+            await addItem(
+                {
+                    id: '', // Will be generated
+                    sku: newItemData.sku || `SKU-${Date.now()}`,
+                    barcode: newItemData.barcode || undefined,
+                    name: newItemData.name,
+                    category: newItemData.category,
+                    retailPrice: Number(newItemData.retailPrice),
+                    costPrice: Number(newItemData.costPrice),
+                    onHand: 0,
+                    available: 0,
+                    reserved: 0,
+                    inTransit: 0,
+                    damaged: 0,
+                    reorderPoint: Number(newItemData.reorderPoint),
+                    unit: newItemData.unit,
+                    imageUrl,
+                    warehouseStock: {}
+                },
+                selectedImage || undefined
+            );
             setIsNewSkuModalOpen(false);
             setNewItemData({
                 sku: '',

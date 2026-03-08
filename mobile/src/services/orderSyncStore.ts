@@ -1,6 +1,10 @@
 /**
  * Offline order queue: IndexedDB store for pending orders when offline.
  * Synced to API when back online.
+ *
+ * PERMANENT LOCAL DB: We do not clear this DB on app exit or reload. The only
+ * removals are individual pending order records after they have been successfully
+ * synced to the cloud (to avoid duplicate orders). All other local data remains.
  */
 
 const DB_NAME = 'myshop_order_sync';

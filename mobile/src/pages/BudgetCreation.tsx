@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { publicApi, customerApi, getFullImageUrl } from '../api';
+import { publicApi, customerApi } from '../api';
+import CachedImage from '../components/CachedImage';
 import { useApp } from '../context/AppContext';
 
 export default function BudgetCreation() {
@@ -274,7 +275,7 @@ export default function BudgetCreation() {
                                         <div key={p.id} className="product-card">
                                             <div className="image-wrap">
                                                 {p.image_url ? (
-                                                    <img src={getFullImageUrl(p.image_url)} alt={p.name} loading="lazy" />
+                                                    <CachedImage path={p.image_url} alt={p.name} loading="lazy" />
                                                 ) : (
                                                     <svg className="placeholder-icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
                                                 )}
@@ -338,7 +339,7 @@ export default function BudgetCreation() {
                             <div key={item.productId} className="card" style={{ padding: 16 }}>
                                 <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
                                     <div style={{ width: 44, height: 44, borderRadius: 8, background: '#F1F5F9', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {item.image_url ? <img src={getFullImageUrl(item.image_url)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '🛒'}
+                                        {item.image_url ? <CachedImage path={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '🛒'}
                                     </div>
                                     <div style={{ flex: 1 }}>
                                         <div style={{ fontWeight: 700, fontSize: 15 }}>{item.name}</div>
