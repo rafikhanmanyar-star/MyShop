@@ -14,6 +14,7 @@ import { fetchAndCacheImage } from '../services/imageCache';
 import { isOnline, processPendingProductQueue } from '../services/productSyncService';
 import {
     addPendingProduct,
+    getAllPendingProducts,
     saveLocalImageBlob,
     type PendingProductPayload,
 } from '../services/productSyncStore';
@@ -40,6 +41,14 @@ interface InventoryContextType {
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
+
+/** True if the error indicates server/network unavailability so we should save locally and sync later. */
+function isRetryableServerOrNetworkError(error: any): boolean {
+    const status = error?.status;
+    if (status === 0 || status === 502 || status === 503 || status === 504) return true;
+    const msg = String(error?.error ?? error?.message ?? '').toLowerCase();
+    return /unavailable|bad gateway|network|timed out|overloaded|failed to fetch/i.test(msg);
+}
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { isAuthenticated } = useAuth();
@@ -125,10 +134,55 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     warehouseStock: stockMap[p.id]?.byWh || {}
                 }));
 
-                setItems(mappedItems);
+                const pending = await getAllPendingProducts();
+                const pendingAsItems: InventoryItem[] = pending.map((p) => ({
+                    id: `pending-${p.localId}`,
+                    sku: p.payload.sku,
+                    barcode: p.payload.barcode ?? undefined,
+                    name: p.payload.name,
+                    category: p.payload.category_id || 'General',
+                    unit: p.payload.unit || 'pcs',
+                    onHand: 0,
+                    available: 0,
+                    reserved: 0,
+                    inTransit: 0,
+                    damaged: 0,
+                    costPrice: p.payload.cost_price ?? 0,
+                    retailPrice: p.payload.retail_price ?? 0,
+                    reorderPoint: p.payload.reorder_point ?? 10,
+                    imageUrl: undefined,
+                    warehouseStock: {},
+                }));
+                setItems([...mappedItems, ...pendingAsItems]);
 
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Failed to fetch inventory data:', error);
+                if (isRetryableServerOrNetworkError(error)) {
+                    try {
+                        const pending = await getAllPendingProducts();
+                        const pendingAsItems: InventoryItem[] = pending.map((p) => ({
+                            id: `pending-${p.localId}`,
+                            sku: p.payload.sku,
+                            barcode: p.payload.barcode ?? undefined,
+                            name: p.payload.name,
+                            category: p.payload.category_id || 'General',
+                            unit: p.payload.unit || 'pcs',
+                            onHand: 0,
+                            available: 0,
+                            reserved: 0,
+                            inTransit: 0,
+                            damaged: 0,
+                            costPrice: p.payload.cost_price ?? 0,
+                            retailPrice: p.payload.retail_price ?? 0,
+                            reorderPoint: p.payload.reorder_point ?? 10,
+                            imageUrl: undefined,
+                            warehouseStock: {},
+                        }));
+                        setItems(pendingAsItems);
+                    } catch (e) {
+                        console.error('Failed to load pending products:', e);
+                    }
+                }
             }
         };
         fetchData();
@@ -195,15 +249,63 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 warehouseStock: stockMap[p.id]?.byWh || {}
             }));
 
-            setItems(mappedItems);
+            const pending = await getAllPendingProducts();
+            const pendingAsItems: InventoryItem[] = pending.map((p) => ({
+                id: `pending-${p.localId}`,
+                sku: p.payload.sku,
+                barcode: p.payload.barcode ?? undefined,
+                name: p.payload.name,
+                category: p.payload.category_id || 'General',
+                unit: p.payload.unit || 'pcs',
+                onHand: 0,
+                available: 0,
+                reserved: 0,
+                inTransit: 0,
+                damaged: 0,
+                costPrice: p.payload.cost_price ?? 0,
+                retailPrice: p.payload.retail_price ?? 0,
+                reorderPoint: p.payload.reorder_point ?? 10,
+                imageUrl: undefined,
+                warehouseStock: {},
+            }));
+            setItems([...mappedItems, ...pendingAsItems]);
             // Prefill local image cache so product images load offline
             products.filter((p: any) => p.image_url).slice(0, 50).forEach((p: any) => {
                 const path = p.image_url.startsWith('/') ? p.image_url : `/${p.image_url}`;
                 fetchAndCacheImage(`${getBaseUrl()}${path}`, path).catch(() => {});
             });
-            console.log('✅ [InventoryContext] Products refreshed:', mappedItems.length, 'items');
-        } catch (error) {
+            console.log('✅ [InventoryContext] Products refreshed:', mappedItems.length + pendingAsItems.length, 'items');
+        } catch (error: any) {
             console.error('Failed to refresh products:', error);
+            if (isRetryableServerOrNetworkError(error)) {
+                try {
+                    const pending = await getAllPendingProducts();
+                    const pendingAsItems: InventoryItem[] = pending.map((p) => ({
+                        id: `pending-${p.localId}`,
+                        sku: p.payload.sku,
+                        barcode: p.payload.barcode ?? undefined,
+                        name: p.payload.name,
+                        category: p.payload.category_id || 'General',
+                        unit: p.payload.unit || 'pcs',
+                        onHand: 0,
+                        available: 0,
+                        reserved: 0,
+                        inTransit: 0,
+                        damaged: 0,
+                        costPrice: p.payload.cost_price ?? 0,
+                        retailPrice: p.payload.retail_price ?? 0,
+                        reorderPoint: p.payload.reorder_point ?? 10,
+                        imageUrl: undefined,
+                        warehouseStock: {},
+                    }));
+                    setItems((prev) => [
+                        ...prev.filter((i) => !i.id.startsWith('pending-')),
+                        ...pendingAsItems,
+                    ]);
+                } catch (e) {
+                    console.error('Failed to merge pending on refresh error:', e);
+                }
+            }
         }
     }, []);
 
@@ -277,29 +379,40 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }, []);
 
     const addItem = useCallback(async (item: InventoryItem, imageFile?: File) => {
-        try {
-            const payload: PendingProductPayload = {
-                sku: item.sku,
-                barcode: item.barcode || null,
-                name: item.name,
-                category_id: item.category === 'General' ? null : item.category,
-                retail_price: item.retailPrice,
-                cost_price: item.costPrice,
-                unit: item.unit,
-                reorder_point: item.reorderPoint,
-            };
+        const payload: PendingProductPayload = {
+            sku: item.sku,
+            barcode: item.barcode || null,
+            name: item.name,
+            category_id: item.category === 'General' ? null : item.category,
+            retail_price: item.retailPrice,
+            cost_price: item.costPrice,
+            unit: item.unit,
+            reorder_point: item.reorderPoint,
+        };
 
-            if (!isOnline()) {
-                let localImageId: string | undefined;
-                if (imageFile) {
-                    localImageId = await saveLocalImageBlob(imageFile);
-                }
-                await addPendingProduct({ ...payload, localImageId });
-                const placeholder = { ...item, id: `pending-${Date.now()}` };
-                setItems(prev => [...prev, placeholder]);
-                return placeholder;
+        const saveOfflineAndReturn = async (): Promise<InventoryItem> => {
+            let localImageId: string | undefined;
+            if (imageFile) {
+                localImageId = await saveLocalImageBlob(imageFile);
             }
+            await addPendingProduct({ ...payload, localImageId });
+            const placeholder = { ...item, id: `pending-${Date.now()}` };
+            setItems(prev => [...prev, placeholder]);
+            return placeholder;
+        };
 
+        if (!isOnline()) {
+            try {
+                const placeholder = await saveOfflineAndReturn();
+                return placeholder;
+            } catch (e) {
+                console.error('Failed to save SKU offline:', e);
+                alert('Could not save product locally. Please try again.');
+                throw e;
+            }
+        }
+
+        try {
             const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
             if (!token || token.trim() === '') {
                 alert('Please log in to create products. Your session may have expired.');
@@ -307,20 +420,36 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }
 
             let imageUrl = item.imageUrl;
-            if (imageFile) {
-                const uploadRes = await shopApi.uploadImage(imageFile);
-                imageUrl = uploadRes.imageUrl ? getFullImageUrl(uploadRes.imageUrl) || uploadRes.imageUrl : undefined;
+            try {
+                if (imageFile) {
+                    const uploadRes = await shopApi.uploadImage(imageFile);
+                    imageUrl = uploadRes.imageUrl ? getFullImageUrl(uploadRes.imageUrl) || uploadRes.imageUrl : undefined;
+                }
+            } catch (uploadErr: any) {
+                if (isRetryableServerOrNetworkError(uploadErr)) {
+                    const placeholder = await saveOfflineAndReturn();
+                    alert('Product saved locally. It will sync to the cloud when the server is available.');
+                    return placeholder;
+                }
+                throw uploadErr;
             }
 
-            const response = await shopApi.createProduct({ ...payload, image_url: imageUrl }) as any;
-
-            if (response && response.id) {
-                const newItem = { ...item, id: response.id, imageUrl };
-                setItems(prev => [...prev, newItem]);
-                await refreshItems();
-                return newItem;
-            } else {
+            try {
+                const response = await shopApi.createProduct({ ...payload, image_url: imageUrl }) as any;
+                if (response && response.id) {
+                    const newItem = { ...item, id: response.id, imageUrl };
+                    setItems(prev => [...prev, newItem]);
+                    await refreshItems();
+                    return newItem;
+                }
                 throw new Error("Invalid response from server");
+            } catch (createErr: any) {
+                if (isRetryableServerOrNetworkError(createErr)) {
+                    const placeholder = await saveOfflineAndReturn();
+                    alert('Product saved locally. It will sync to the cloud when the server is available.');
+                    return placeholder;
+                }
+                throw createErr;
             }
         } catch (error: any) {
             console.error("Failed to create product:", error);
