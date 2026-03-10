@@ -308,9 +308,9 @@ const ProductSearch: React.FC = () => {
         const exactMatch = productsWithStock.find(p => p.barcode === query);
         if (!exactMatch) return;
 
-        // Cooldown: avoid adding the same barcode again within 400ms (e.g. effect re-run or Strict Mode)
+        // Cooldown: avoid adding the same barcode again within 800ms (e.g. effect re-run or Strict Mode)
         const now = Date.now();
-        if (lastAddedBarcodeRef.current === query && now - lastBarcodeAddTimeRef.current < 400) {
+        if (lastAddedBarcodeRef.current === query && now - lastBarcodeAddTimeRef.current < 800) {
             return;
         }
 
@@ -321,7 +321,7 @@ const ProductSearch: React.FC = () => {
             const currentMatch = productsWithStock.find(p => p.barcode === query);
             if (!currentMatch) return;
             const n = Date.now();
-            if (lastAddedBarcodeRef.current === query && n - lastBarcodeAddTimeRef.current < 400) return;
+            if (lastAddedBarcodeRef.current === query && n - lastBarcodeAddTimeRef.current < 800) return;
 
             lastAddedBarcodeRef.current = query;
             lastBarcodeAddTimeRef.current = n;
@@ -329,8 +329,8 @@ const ProductSearch: React.FC = () => {
             addToCart(currentMatch);
             setLocalQuery('');
             setSearchQuery('');
-            setTimeout(() => { justAddedFromBarcodeRef.current = false; }, 200);
-        }, 120);
+            setTimeout(() => { justAddedFromBarcodeRef.current = false; }, 500);
+        }, 300);
         return () => {
             if (barcodeAddTimeoutRef.current) {
                 clearTimeout(barcodeAddTimeoutRef.current);
