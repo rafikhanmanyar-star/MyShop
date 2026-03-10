@@ -258,6 +258,13 @@ const ProductSearch: React.FC = () => {
                     return next;
                 });
             } else if (e.key === 'Enter') {
+                if (justAddedFromBarcodeRef.current) {
+                    justAddedFromBarcodeRef.current = false;
+                    setLocalQuery('');
+                    setSearchQuery('');
+                    setKeyboardIndex(-1);
+                    return;
+                }
                 if (keyboardIndex >= 0 && filteredProducts[keyboardIndex]) {
                     addToCart(filteredProducts[keyboardIndex]);
                     setKeyboardIndex(-1);
@@ -279,21 +286,57 @@ const ProductSearch: React.FC = () => {
         return () => window.removeEventListener('keydown', handleKeys);
     }, [filteredProducts, keyboardIndex, addToCart, setSearchQuery]);
 
-    // Handle barcode "instant add"
+    // Handle barcode "instant add" — debounced and guarded to prevent multiple adds per scan
+    const barcodeAddTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastAddedBarcodeRef = useRef<string | null>(null);
+    const lastBarcodeAddTimeRef = useRef<number>(0);
+    const justAddedFromBarcodeRef = useRef(false);
+
     useEffect(() => {
         const query = localQuery.trim();
-        if (!query || query.length < 3) return;
-
-        // Only auto-add if it looks like a barcode (all numeric or specific format)
-        const isNumeric = /^\d+$/.test(query);
-        if (isNumeric) {
-            const exactMatch = productsWithStock.find(p => p.barcode === query);
-            if (exactMatch) {
-                addToCart(exactMatch);
-                setLocalQuery('');
-                setSearchQuery('');
+        if (!query || query.length < 3) {
+            if (barcodeAddTimeoutRef.current) {
+                clearTimeout(barcodeAddTimeoutRef.current);
+                barcodeAddTimeoutRef.current = null;
             }
+            return;
         }
+
+        const isNumeric = /^\d+$/.test(query);
+        if (!isNumeric) return;
+
+        const exactMatch = productsWithStock.find(p => p.barcode === query);
+        if (!exactMatch) return;
+
+        // Cooldown: avoid adding the same barcode again within 400ms (e.g. effect re-run or Strict Mode)
+        const now = Date.now();
+        if (lastAddedBarcodeRef.current === query && now - lastBarcodeAddTimeRef.current < 400) {
+            return;
+        }
+
+        // Debounce: wait for input to settle (scanner types fast, then stops)
+        if (barcodeAddTimeoutRef.current) clearTimeout(barcodeAddTimeoutRef.current);
+        barcodeAddTimeoutRef.current = setTimeout(() => {
+            barcodeAddTimeoutRef.current = null;
+            const currentMatch = productsWithStock.find(p => p.barcode === query);
+            if (!currentMatch) return;
+            const n = Date.now();
+            if (lastAddedBarcodeRef.current === query && n - lastBarcodeAddTimeRef.current < 400) return;
+
+            lastAddedBarcodeRef.current = query;
+            lastBarcodeAddTimeRef.current = n;
+            justAddedFromBarcodeRef.current = true;
+            addToCart(currentMatch);
+            setLocalQuery('');
+            setSearchQuery('');
+            setTimeout(() => { justAddedFromBarcodeRef.current = false; }, 200);
+        }, 120);
+        return () => {
+            if (barcodeAddTimeoutRef.current) {
+                clearTimeout(barcodeAddTimeoutRef.current);
+                barcodeAddTimeoutRef.current = null;
+            }
+        };
     }, [localQuery, productsWithStock, addToCart, setSearchQuery]);
 
     // Virtualized Grid Setup
