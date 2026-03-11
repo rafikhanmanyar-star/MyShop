@@ -239,6 +239,24 @@ if (-not $SkipRelease) {
         Write-Host "  Uploaded: installer + latest.yml" + $(if (Test-Path $blockmapPath) { " + blockmap (delta updates)" } else { "" }) -ForegroundColor Green
         Write-Host "  https://github.com/rafikhanmanyar-star/MyShop/releases" -ForegroundColor Green
         Write-Host "  Users can now use Settings -> App -> Check for updates." -ForegroundColor Green
+
+        # Prune old GitHub releases: keep only the latest 3
+        Write-Host "  Pruning old GitHub releases (keeping latest 3)..." -ForegroundColor Cyan
+        $releasesJson = gh release list --json tagName,publishedAt --limit 100 2>$null
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($releasesJson)) {
+            $releases = $releasesJson | ConvertFrom-Json
+            $sorted = $releases | Sort-Object { [datetime]::Parse($_.publishedAt) } -Descending
+            $toDelete = $sorted | Select-Object -Skip 3
+            foreach ($r in $toDelete) {
+                gh release delete $r.tagName --yes 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "    Deleted GitHub release: $($r.tagName)" -ForegroundColor DarkGray
+                }
+            }
+            if ($toDelete.Count -gt 0) {
+                Write-Host "  Kept latest 3 GitHub releases; removed $($toDelete.Count) older." -ForegroundColor Green
+            }
+        }
     }
     catch {
         Write-Host "  Release failed: $_" -ForegroundColor Red
@@ -251,6 +269,36 @@ if (-not $SkipRelease) {
     }
 } else {
     Write-Host "[5/5] Skipping GitHub Release (-SkipRelease)." -ForegroundColor DarkGray
+}
+
+# -----------------------------------------------------------
+# Prune local release folder: keep only the latest 3 installer builds
+# -----------------------------------------------------------
+$releaseDir = "$ProjectRoot\release"
+if (Test-Path $releaseDir) {
+    Write-Host ""
+    Write-Host "Pruning local release folder (keeping latest 3 builds)..." -ForegroundColor Yellow
+    $installers = Get-ChildItem -Path $releaseDir -Filter "MyShop-Setup-*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "unpacked" }
+    $withVersion = @()
+    foreach ($f in $installers) {
+        if ($f.Name -match "MyShop-Setup-([\d\.]+)\.exe") {
+            $withVersion += [PSCustomObject]@{ File = $f; Version = $matches[1] }
+        }
+    }
+    if ($withVersion.Count -gt 3) {
+        $sortedInstallers = $withVersion | Sort-Object { [version]$_.Version } -Descending
+        $toRemove = $sortedInstallers | Select-Object -Skip 3
+        foreach ($x in $toRemove) {
+            Remove-Item $x.File.FullName -Force -ErrorAction SilentlyContinue
+            $blockmap = $x.File.FullName + ".blockmap"
+            if (Test-Path $blockmap) { Remove-Item $blockmap -Force -ErrorAction SilentlyContinue }
+            Write-Host "  Removed local: $($x.File.Name)" -ForegroundColor DarkGray
+        }
+        Write-Host "  Local release folder: kept latest 3 builds; removed $($toRemove.Count) older." -ForegroundColor Green
+    }
+    else {
+        Write-Host "  Local release folder: $($withVersion.Count) build(s), no pruning needed." -ForegroundColor DarkGray
+    }
 }
 
 Write-Host ""

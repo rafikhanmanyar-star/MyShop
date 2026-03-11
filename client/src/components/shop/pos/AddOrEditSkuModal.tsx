@@ -40,7 +40,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     initialSkuOrBarcode = '',
     onItemReady
 }) => {
-    const { items, addItem, updateItem, refreshItems } = useInventory();
+    const { items, addItem, updateItem, deleteItem, refreshItems } = useInventory();
     const [mode, setMode] = useState<AddOrEditSkuModalMode>('choice');
     const [existingSearch, setExistingSearch] = useState('');
     const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -49,6 +49,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     const loadCategories = useCallback(async () => {
         try {
@@ -238,6 +239,24 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             setSaving(false);
         }
     }, [editingItem, formData, selectedImage, updateItem, refreshItems, handleClose, onItemReady, hasConflict]);
+
+    const handleDeleteSku = useCallback(async () => {
+        if (!editingItem || editingItem.id.startsWith('pending-')) return;
+        const confirmed = window.confirm(
+            `Are you sure you want to delete "${editingItem.name}" (SKU: ${editingItem.sku})? This cannot be undone.`
+        );
+        if (!confirmed) return;
+        setDeleting(true);
+        try {
+            await deleteItem(editingItem.id);
+            handleClose();
+        } catch (e: any) {
+            const msg = e?.message ?? e?.error ?? 'This SKU could not be deleted.';
+            alert(msg);
+        } finally {
+            setDeleting(false);
+        }
+    }, [editingItem, deleteItem, handleClose]);
 
     const title =
         mode === 'choice'
@@ -541,6 +560,19 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                         )}
 
                         <div className="flex justify-end gap-3 pt-4">
+                            {editingItem && !editingItem.id.startsWith('pending-') && (
+                                <div className="flex-1 flex justify-start">
+                                    <Button
+                                        type="button"
+                                        variant="danger"
+                                        onClick={handleDeleteSku}
+                                        disabled={saving || deleting}
+                                    >
+                                        {deleting ? 'Deleting...' : 'Delete SKU'}
+                                    </Button>
+                                </div>
+                            )}
+                            <div className="flex gap-3 justify-end flex-1">
                             <Button
                                 variant="secondary"
                                 onClick={() => {
@@ -563,6 +595,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     {saving ? 'Creating...' : 'Create product'}
                                 </Button>
                             )}
+                            </div>
                         </div>
                     </>
                 )}

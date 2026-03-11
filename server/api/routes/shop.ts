@@ -255,6 +255,24 @@ router.put('/products/:id', async (req: any, res) => {
   }
 });
 
+router.get('/products/:id/delete-status', async (req: any, res) => {
+  try {
+    const status = await getShopService().getProductDeleteStatus(req.tenantId, req.params.id);
+    res.json(status);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/products/:id', async (req: any, res) => {
+  try {
+    await getShopService().deleteProduct(req.tenantId, req.params.id);
+    res.json({ success: true, message: 'Product deleted successfully' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 router.post('/upload-image', (req, res, next) => {
   upload.single('image')(req, res, (err) => {
     if (err instanceof multer.MulterError) {

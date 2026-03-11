@@ -155,9 +155,9 @@ const StockMaster: React.FC = () => {
     });
 
     return (
-        <div className="flex gap-8 animate-fade-in relative h-full min-h-0">
-            {/* Left: Item List */}
-            <div className={`flex-1 flex flex-col gap-6 transition-all min-h-0 ${selectedItem ? 'w-1/2' : 'w-full'}`}>
+        <div className="flex gap-6 h-full max-h-full min-h-0 overflow-hidden relative">
+            {/* Left: Item List - shrinks when detail panel is open */}
+            <div className={`flex-1 min-w-0 flex flex-col gap-6 transition-[flex] duration-200 flex-shrink min-h-0`}>
                 <div className="flex flex-wrap items-center gap-4 flex-shrink-0">
                     <div className="relative group flex-1 min-w-[200px] max-w-md">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
@@ -190,8 +190,8 @@ const StockMaster: React.FC = () => {
                     </div>
                 </div>
 
-                <Card className="border-none shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
-                    <div className="overflow-auto min-h-0 flex-1">
+                <Card className="border-none shadow-sm flex-1 min-h-0 flex flex-col overflow-hidden">
+                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto" style={{ scrollbarGutter: 'stable' }}>
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
                                 <tr>
@@ -258,9 +258,9 @@ const StockMaster: React.FC = () => {
                 </Card>
             </div>
 
-            {/* Right: Item Drill-down Side Panel */}
+            {/* Right: Item Drill-down Side Panel - fixed width, no overlap */}
             {selectedItem && (
-                <div className="w-1/3 min-w-[400px] h-full min-h-0 flex flex-col sticky top-0 animate-slide-in-right">
+                <div className="flex-shrink-0 w-[420px] min-w-[360px] min-h-0 flex flex-col animate-slide-in-right">
                     <Card className="h-full min-h-0 border-none shadow-xl flex flex-col p-8 gap-8 overflow-y-auto bg-white border-l border-indigo-100 rounded-none rounded-l-3xl">
                         <div className="flex justify-between items-start">
                             <div>

@@ -386,6 +386,52 @@ export class ShopService {
     });
   }
 
+  /** Check if a product (SKU) can be deleted: not used in any sales, mobile orders, or purchase bills. */
+  async getProductDeleteStatus(tenantId: string, productId: string): Promise<{ canDelete: boolean; message?: string }> {
+    const [saleRows, mobileRows, billRows] = await Promise.all([
+      this.db.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM shop_sale_items WHERE tenant_id = $1 AND product_id = $2',
+        [tenantId, productId]
+      ),
+      this.db.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM mobile_order_items WHERE tenant_id = $1 AND product_id = $2',
+        [tenantId, productId]
+      ),
+      this.db.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM purchase_bill_items WHERE tenant_id = $1 AND product_id = $2',
+        [tenantId, productId]
+      )
+    ]);
+    const saleCount = parseInt(saleRows[0]?.count ?? '0', 10);
+    const mobileCount = parseInt(mobileRows[0]?.count ?? '0', 10);
+    const billCount = parseInt(billRows[0]?.count ?? '0', 10);
+    if (saleCount > 0) {
+      return { canDelete: false, message: 'This SKU cannot be deleted because it is used in POS sales transactions.' };
+    }
+    if (mobileCount > 0) {
+      return { canDelete: false, message: 'This SKU cannot be deleted because it is used in mobile orders.' };
+    }
+    if (billCount > 0) {
+      return { canDelete: false, message: 'This SKU cannot be deleted because it is used in purchase bills (procurement).' };
+    }
+    return { canDelete: true };
+  }
+
+  /** Delete a product (SKU). Fails if used in any transaction (sales, mobile orders, purchase bills). */
+  async deleteProduct(tenantId: string, productId: string): Promise<void> {
+    const status = await this.getProductDeleteStatus(tenantId, productId);
+    if (!status.canDelete) {
+      throw new Error(status.message ?? 'This SKU cannot be deleted because it is used in transactions.');
+    }
+    await this.db.transaction(async (client) => {
+      await client.query('DELETE FROM shop_inventory_movements WHERE tenant_id = $1 AND product_id = $2', [tenantId, productId]);
+      const res = await client.query('DELETE FROM shop_products WHERE id = $1 AND tenant_id = $2 RETURNING id', [productId, tenantId]);
+      if (res.length === 0) {
+        throw new Error('Product not found or already deleted.');
+      }
+    });
+  }
+
   // --- Inventory Methods ---
   async getInventory(tenantId: string) {
     return this.db.query(`

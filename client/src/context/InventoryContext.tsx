@@ -29,6 +29,7 @@ interface InventoryContextType {
 
     addItem: (item: InventoryItem, imageFile?: File) => Promise<InventoryItem>;
     updateItem: (id: string, updates: Partial<InventoryItem>) => Promise<void>;
+    deleteItem: (id: string) => Promise<void>;
     updateStock: (itemId: string, warehouseId: string, delta: number, type: any, referenceId: string, notes?: string) => void;
     requestTransfer: (transfer: Omit<StockTransfer, 'id' | 'timestamp' | 'status'>) => void;
     approveAdjustment: (adjustmentId: string) => void;
@@ -488,6 +489,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
     }, [refreshItems]);
 
+    const deleteItem = useCallback(async (id: string) => {
+        if (id.startsWith('pending-')) {
+            throw new Error('Cannot delete a product that has not been synced to the server yet.');
+        }
+        try {
+            await shopApi.deleteProduct(id);
+            await refreshItems();
+        } catch (error: any) {
+            const msg = error?.error ?? error?.message ?? 'Failed to delete product.';
+            throw new Error(typeof msg === 'string' ? msg : 'This SKU cannot be deleted because it is used in transactions.');
+        }
+    }, [refreshItems]);
+
     const requestTransfer = useCallback((transfer: Omit<StockTransfer, 'id' | 'timestamp' | 'status'>) => {
         const newTransfer: StockTransfer = {
             ...transfer,
@@ -529,6 +543,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         transfers,
         addItem,
         updateItem,
+        deleteItem,
         updateStock,
         requestTransfer,
         approveAdjustment,
@@ -536,7 +551,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         refreshItems,
         lowStockItems,
         totalInventoryValue
-    }), [items, warehouses, movements, adjustments, transfers, addItem, updateItem, updateStock, requestTransfer, approveAdjustment, refreshWarehouses, refreshItems, lowStockItems, totalInventoryValue]);
+    }), [items, warehouses, movements, adjustments, transfers, addItem, updateItem, deleteItem, updateStock, requestTransfer, approveAdjustment, refreshWarehouses, refreshItems, lowStockItems, totalInventoryValue]);
 
     return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 };

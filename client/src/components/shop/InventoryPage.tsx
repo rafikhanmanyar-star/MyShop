@@ -163,13 +163,15 @@ const InventoryContent: React.FC = () => {
                 </div>
             </div>
 
-            {/* Scrollable Content Area */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-8">
-                {activeTab === 'dashboard' && <InventoryDashboard />}
-                {activeTab === 'stock' && <StockMaster />}
-                {activeTab === 'movements' && <StockMovements />}
-                {activeTab === 'adjustments' && <StockAdjustments />}
-                {activeTab === 'categories' && <InventoryCategories />}
+            {/* Content area: flex so Stock Master can fill and scroll internally; other tabs can scroll here */}
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden p-8">
+                <div className="flex-1 min-h-0 min-w-0 overflow-y-auto">
+                    {activeTab === 'dashboard' && <InventoryDashboard />}
+                    {activeTab === 'stock' && <StockMaster />}
+                    {activeTab === 'movements' && <StockMovements />}
+                    {activeTab === 'adjustments' && <StockAdjustments />}
+                    {activeTab === 'categories' && <InventoryCategories />}
+                </div>
             </div>
 
             <Modal

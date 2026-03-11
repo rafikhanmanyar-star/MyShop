@@ -42,7 +42,7 @@ One command runs the PowerShell script that does all steps: bump version, build,
 
 | Command | Description |
 |--------|-------------|
-| `npm run release` | Patch bump (e.g. 1.0.47 → 1.0.48), build **cloud** Windows app, commit, push, create GitHub release and upload installer + `latest.yml` (+ blockmap if present). |
+| `npm run release` | Patch bump (e.g. 1.0.47 → 1.0.48), build **cloud** Windows app, commit, push, create GitHub release and upload installer + `latest.yml` (+ blockmap if present). **Keeps only the latest 3 GitHub releases** (deletes older ones) and **keeps only the latest 3 builds** in the local `release/` folder. |
 | `npm run release:minor` | Minor bump (e.g. 1.0.47 → 1.1.0), then same as `release`. |
 | `npm run release:major` | Major bump (e.g. 1.0.47 → 2.0.0), then same as `release`. |
 
@@ -53,6 +53,8 @@ One command runs the PowerShell script that does all steps: bump version, build,
 3. `git add -A` and commit (e.g. `build: vX.Y.Z - release build`).
 4. `git push origin`.
 5. Create GitHub release for the new tag and upload the installer, `latest.yml`, and blockmap (for in-app updates).
+6. **Prune GitHub releases**: delete all but the latest 3 releases on GitHub.
+7. **Prune local `release/` folder**: delete older installer builds so only the latest 3 remain (by version).
 
 **Requirements:** GitHub CLI (`gh`) installed and logged in (`gh auth login`). On Windows you can install with: `winget install GitHub.cli`.
 

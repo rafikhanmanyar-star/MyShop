@@ -91,6 +91,8 @@ export const shopApi = {
   getPopularProducts: (limit = 10) => apiClient.get<ShopProduct[]>(`/shop/popular-products?limit=${limit}`),
   createProduct: (data: any) => apiClient.post('/shop/products', data),
   updateProduct: (id: string, data: any) => apiClient.put(`/shop/products/${id}`, data),
+  getProductDeleteStatus: (id: string) => apiClient.get<{ canDelete: boolean; message?: string }>(`/shop/products/${id}/delete-status`),
+  deleteProduct: (id: string) => apiClient.delete(`/shop/products/${id}`),
   uploadImage: (file: File) => {
     const formData = new FormData();
     formData.append('image', file);
