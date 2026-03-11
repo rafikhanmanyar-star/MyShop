@@ -315,6 +315,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 
     const addToCart = useCallback((product: POSProduct, variant?: POSProductVariant, quantity: number = 1) => {
+        const safeQty = Math.max(1, Math.floor(quantity));
         setCart(prev => {
             const existingItemIndex = prev.findIndex(item =>
                 item.productId === product.id && item.variantId === variant?.id
@@ -323,7 +324,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (existingItemIndex > -1) {
                 const newCart = [...prev];
                 const item = newCart[existingItemIndex];
-                const newQty = item.quantity + quantity;
+                const newQty = Math.max(1, item.quantity + safeQty);
 
                 // Recalculate tax for the whole line
                 const basePrice = (item.unitPrice * newQty);
@@ -338,7 +339,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
 
             const unitPrice = product.price + (variant?.priceAdjustment || 0);
-            const tax = (unitPrice * quantity) * (product.taxRate / 100);
+            const tax = (unitPrice * safeQty) * (product.taxRate / 100);
 
             const newItem: POSCartItem = {
                 id: crypto.randomUUID(),
@@ -346,7 +347,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 variantId: variant?.id,
                 name: variant ? `${product.name} (${variant.name})` : product.name,
                 sku: variant?.sku || product.sku,
-                quantity: quantity,
+                quantity: safeQty,
                 unitPrice: unitPrice,
                 discountAmount: 0,
                 discountPercentage: 0,
@@ -368,6 +369,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCart(prev => prev.map(item => {
             if (item.id === cartItemId) {
                 const updatedItem = { ...item, ...updates };
+                // Never allow negative or zero quantity from any source (keyboard, etc.)
+                if ('quantity' in updatedItem && (typeof updatedItem.quantity !== 'number' || updatedItem.quantity < 1)) {
+                    updatedItem.quantity = 1;
+                }
                 // Recalculate tax/discount if quantity or price changed
                 if ('quantity' in updates || 'unitPrice' in updates || 'discountPercentage' in updates) {
                     const price = updatedItem.unitPrice;

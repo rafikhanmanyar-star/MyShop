@@ -76,7 +76,6 @@ export default function FilterPanel({
                                 placeholder="Min"
                                 value={localFilters.minPrice || ''}
                                 onChange={e => setLocalFilters({ ...localFilters, minPrice: e.target.value })}
-                                onWheel={(e) => e.preventDefault()}
                             />
                         </div>
                         <div style={{ color: '#94A3B8' }}>—</div>
@@ -87,7 +86,6 @@ export default function FilterPanel({
                                 placeholder="Max"
                                 value={localFilters.maxPrice || ''}
                                 onChange={e => setLocalFilters({ ...localFilters, maxPrice: e.target.value })}
-                                onWheel={(e) => e.preventDefault()}
                             />
                         </div>
                     </div>

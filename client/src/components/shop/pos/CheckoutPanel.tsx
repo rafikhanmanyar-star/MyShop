@@ -295,7 +295,6 @@ const CheckoutPanel: React.FC = () => {
                                         className="flex-1 py-3 px-2 bg-transparent text-xl font-black text-slate-900 outline-none"
                                         value={tenderAmount}
                                         onChange={e => setTenderAmount(e.target.value)}
-                                        onWheel={(e) => e.preventDefault()}
                                         onFocus={e => e.target.select()}
                                         onKeyDown={e => {
                                             if (e.key === 'Enter') {

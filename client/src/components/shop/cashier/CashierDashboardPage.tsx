@@ -210,7 +210,6 @@ export default function CashierDashboardPage() {
                 min="0"
                 value={startForm.openingCash}
                 onChange={(e) => setStartForm((f) => ({ ...f, openingCash: e.target.value }))}
-                onWheel={(e) => e.preventDefault()}
                 placeholder="0.00"
                 className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500"
                 required

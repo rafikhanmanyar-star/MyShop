@@ -125,7 +125,7 @@ const InventoryContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
+        <div className="flex flex-col h-full min-h-0 flex-1 bg-slate-50 -m-4 md:-m-8">
             {/* Header / Tab Navigation */}
             <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10">
                 <div className="flex justify-between items-center mb-6">

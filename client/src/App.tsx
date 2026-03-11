@@ -171,10 +171,11 @@ function AppLayout() {
       <AppProvider>
         <ShiftsProvider>
           <SyncOnOnline />
-      <div className="min-h-screen bg-[#f8fafc]">
+      <div className="h-screen bg-[#f8fafc] flex flex-col overflow-hidden">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
-        <main className={`transition-all duration-500 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'} p-8 min-h-screen`}>
+        <main className={`flex-1 flex flex-col min-h-0 transition-all duration-500 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'} p-8`}>
           <OfflineBanner />
+          <div className="flex-1 min-h-0 flex flex-col overflow-auto">
           <Suspense fallback={
             <div className="flex items-center justify-center min-h-[60vh]">
               <div className="relative w-12 h-12">
@@ -183,6 +184,7 @@ function AppLayout() {
               </div>
             </div>
           }>
+            <div className="flex-1 min-h-0 flex flex-col">
             <Routes>
               {/* Redirect pos_cashier to Cashier Dashboard if they try to access / */}
               <Route path="/" element={role === 'pos_cashier' ? <Navigate to="/cashier-dashboard" replace /> : <DashboardPage />} />
@@ -191,7 +193,7 @@ function AppLayout() {
               <Route path="/pos" element={<POSSalesPage />} />
               <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <MobileOrdersPage /> : <Navigate to="/" replace />} />
 
-              <Route path="/inventory" element={role === 'admin' ? <InventoryPage /> : <Navigate to="/" replace />} />
+              <Route path="/inventory" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><InventoryPage /></div> : <Navigate to="/" replace />} />
               <Route path="/procurement" element={['admin', 'accountant'].includes(role) ? <ProcurementPage /> : <Navigate to="/" replace />} />
               <Route path="/loyalty" element={role === 'admin' ? <LoyaltyPage /> : <Navigate to="/" replace />} />
               <Route path="/multi-store" element={role === 'admin' ? <MultiStorePage /> : <Navigate to="/" replace />} />
@@ -204,7 +206,9 @@ function AppLayout() {
 
               <Route path="*" element={<Navigate to={role === 'pos_cashier' ? '/cashier-dashboard' : '/'} replace />} />
             </Routes>
+            </div>
           </Suspense>
+          </div>
         </main>
       </div>
         </ShiftsProvider>

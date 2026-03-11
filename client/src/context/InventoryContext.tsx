@@ -506,10 +506,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             await refreshItems();
         } catch (error: any) {
             const msg = error?.error ?? error?.message ?? '';
-            const usedInTransactions = /used in|transaction|cannot be deleted/i.test(String(msg));
-            throw new Error(usedInTransactions
-                ? 'This SKU has been used in transactions. Please delete the transactions first if you want to delete the SKU.'
-                : (typeof msg === 'string' ? msg : 'Failed to delete product.'));
+            const msgStr = String(msg);
+            const defaultMsg = 'This SKU cannot be deleted. Clear inventory and ensure it is not used in any sales or procurement transactions.';
+            throw new Error(typeof msg === 'string' && msg.length > 0 ? msg : defaultMsg);
         }
     }, [refreshItems]);
 

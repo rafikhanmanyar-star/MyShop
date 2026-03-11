@@ -208,7 +208,7 @@ const StockMaster: React.FC = () => {
                 </div>
 
                 <Card className="border-none shadow-sm flex-1 min-h-0 flex flex-col overflow-hidden">
-                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto" style={{ scrollbarGutter: 'stable' }}>
+                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
                                 <tr>

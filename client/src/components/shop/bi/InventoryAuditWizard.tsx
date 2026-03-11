@@ -180,7 +180,6 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                                                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-black focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
                                                         value={item.physicalQty}
                                                         onChange={(e) => handleQtyChange(item.id, e.target.value)}
-                                                        onWheel={(e) => e.preventDefault()}
                                                     />
                                                 </td>
                                                 <td className="px-4 py-4 rounded-r-2xl border-y border-r">

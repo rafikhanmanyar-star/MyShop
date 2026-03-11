@@ -67,11 +67,27 @@ const CartGrid: React.FC = () => {
                                         </button>
                                         <input
                                             type="text"
+                                            inputMode="numeric"
                                             className="w-10 text-center text-sm font-bold bg-transparent border-none focus:ring-0 text-slate-900 p-0"
                                             value={item.quantity}
                                             onChange={(e) => {
-                                                const val = parseInt(e.target.value);
-                                                if (!isNaN(val)) updateCartItem(item.id, { quantity: val });
+                                                const raw = e.target.value;
+                                                if (raw === '') return;
+                                                const val = parseInt(raw, 10);
+                                                if (!isNaN(val) && val >= 1) {
+                                                    updateCartItem(item.id, { quantity: Math.floor(val) });
+                                                }
+                                            }}
+                                            onBlur={(e) => {
+                                                const val = parseInt(e.target.value, 10);
+                                                if (isNaN(val) || val < 1) {
+                                                    updateCartItem(item.id, { quantity: 1 });
+                                                }
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                                                    e.preventDefault();
+                                                }
                                             }}
                                         />
                                         <button

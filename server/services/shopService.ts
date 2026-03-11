@@ -390,9 +390,13 @@ export class ShopService {
     });
   }
 
-  /** Check if a product (SKU) can be deleted: not used in any sales, mobile orders, or purchase bills. */
+  /** Check if a product (SKU) can be deleted: no inventory on hand, and not used in any sales, mobile orders, or purchase bills. */
   async getProductDeleteStatus(tenantId: string, productId: string): Promise<{ canDelete: boolean; message?: string }> {
-    const [saleRows, mobileRows, billRows] = await Promise.all([
+    const [invRows, saleRows, mobileRows, billRows] = await Promise.all([
+      this.db.query<{ total: string }>(
+        'SELECT COALESCE(SUM(quantity_on_hand), 0)::text AS total FROM shop_inventory WHERE tenant_id = $1 AND product_id = $2',
+        [tenantId, productId]
+      ),
       this.db.query<{ count: string }>(
         'SELECT COUNT(*)::text AS count FROM shop_sale_items WHERE tenant_id = $1 AND product_id = $2',
         [tenantId, productId]
@@ -406,22 +410,26 @@ export class ShopService {
         [tenantId, productId]
       )
     ]);
+    const totalOnHand = parseFloat(invRows[0]?.total ?? '0');
     const saleCount = parseInt(saleRows[0]?.count ?? '0', 10);
     const mobileCount = parseInt(mobileRows[0]?.count ?? '0', 10);
     const billCount = parseInt(billRows[0]?.count ?? '0', 10);
+    if (totalOnHand > 0) {
+      return { canDelete: false, message: 'This SKU cannot be deleted because it has inventory on hand. Please adjust or transfer stock to zero first.' };
+    }
     if (saleCount > 0) {
-      return { canDelete: false, message: 'This SKU cannot be deleted because it is used in POS sales transactions.' };
+      return { canDelete: false, message: 'This SKU cannot be deleted because it is used in sales transactions. Please delete or void those transactions first.' };
     }
     if (mobileCount > 0) {
       return { canDelete: false, message: 'This SKU cannot be deleted because it is used in mobile orders.' };
     }
     if (billCount > 0) {
-      return { canDelete: false, message: 'This SKU cannot be deleted because it is used in purchase bills (procurement).' };
+      return { canDelete: false, message: 'This SKU cannot be deleted because it is used in procurement (purchase) bills. Please delete or amend those bills first.' };
     }
     return { canDelete: true };
   }
 
-  /** Delete a product (SKU). Fails if used in any transaction (sales, mobile orders, purchase bills). */
+  /** Delete a product (SKU). Fails if has inventory or is used in any transaction (sales, mobile orders, purchase bills). */
   async deleteProduct(tenantId: string, productId: string): Promise<void> {
     const status = await this.getProductDeleteStatus(tenantId, productId);
     if (!status.canDelete) {

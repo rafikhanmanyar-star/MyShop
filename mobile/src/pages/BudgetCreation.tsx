@@ -354,7 +354,6 @@ export default function BudgetCreation() {
                                             type="number"
                                             value={item.quantity}
                                             onChange={(e) => updateQuantity(item.productId, parseFloat(e.target.value))}
-                                            onWheel={(e) => e.preventDefault()}
                                             style={{ width: 50, border: 'none', background: 'transparent', textAlign: 'center', fontWeight: 700 }}
                                         />
                                         <button onClick={() => updateQuantity(item.productId, item.quantity + 1)} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'white', fontWeight: 800 }}>+</button>

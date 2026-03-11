@@ -97,7 +97,7 @@ const InventoryDashboard: React.FC = () => {
                             <span className="px-2 py-1 bg-rose-100 text-rose-600 text-[10px] font-black rounded uppercase">Immediate Action Needed</span>
                         </div>
                     </div>
-                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto" style={{ scrollbarGutter: 'stable' }}>
+                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
                                 <tr>

@@ -943,7 +943,6 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             step="any"
                                             value={localBranding.lat || ''}
                                             onChange={e => setLocalBranding({ ...localBranding, lat: e.target.value ? parseFloat(e.target.value) : null })}
-                                            onWheel={(e) => e.preventDefault()}
                                             placeholder="e.g. 24.8607"
                                             className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
                                         />
@@ -955,7 +954,6 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             step="any"
                                             value={localBranding.lng || ''}
                                             onChange={e => setLocalBranding({ ...localBranding, lng: e.target.value ? parseFloat(e.target.value) : null })}
-                                            onWheel={(e) => e.preventDefault()}
                                             placeholder="e.g. 67.0011"
                                             className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
                                         />
@@ -1119,7 +1117,6 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     type="number"
                                     value={localSettings.minimum_order_amount || 0}
                                     onChange={e => setLocalSettings({ ...localSettings, minimum_order_amount: parseFloat(e.target.value) })}
-                                    onWheel={(e) => e.preventDefault()}
                                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
@@ -1130,7 +1127,6 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     type="number"
                                     value={localSettings.delivery_fee || 0}
                                     onChange={e => setLocalSettings({ ...localSettings, delivery_fee: parseFloat(e.target.value) })}
-                                    onWheel={(e) => e.preventDefault()}
                                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
@@ -1141,7 +1137,6 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     type="number"
                                     value={localSettings.free_delivery_above || ''}
                                     onChange={e => setLocalSettings({ ...localSettings, free_delivery_above: e.target.value ? parseFloat(e.target.value) : null })}
-                                    onWheel={(e) => e.preventDefault()}
                                     placeholder="No free delivery"
                                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
@@ -1153,7 +1148,6 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     type="number"
                                     value={localSettings.estimated_delivery_minutes || 60}
                                     onChange={e => setLocalSettings({ ...localSettings, estimated_delivery_minutes: parseInt(e.target.value) })}
-                                    onWheel={(e) => e.preventDefault()}
                                     className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
