@@ -18,6 +18,8 @@ interface AddOrEditSkuModalProps {
     onClose: () => void;
     /** Pre-fill when adding new (e.g. from POS search - barcode or SKU typed) */
     initialSkuOrBarcode?: string;
+    /** When true, open directly in Add New SKU mode (skip choice screen). Use with initialSkuOrBarcode for quick add. */
+    openInAddMode?: boolean;
     /** After creating/updating, optionally add to cart (POS flow) */
     onItemReady?: (item: InventoryItem) => void;
 }
@@ -38,6 +40,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     isOpen,
     onClose,
     initialSkuOrBarcode = '',
+    openInAddMode = false,
     onItemReady
 }) => {
     const { items, addItem, updateItem, deleteItem, refreshItems } = useInventory();
@@ -63,10 +66,11 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     React.useEffect(() => {
         if (isOpen) {
             loadCategories();
-            setMode('choice');
+            const skuOrBarcode = (initialSkuOrBarcode || '').trim();
+            const startInAddMode = openInAddMode && !!skuOrBarcode;
+            setMode(startInAddMode ? 'add' : 'choice');
             setExistingSearch('');
             setEditingItem(null);
-            const skuOrBarcode = (initialSkuOrBarcode || '').trim();
             setFormData({
                 ...defaultForm,
                 sku: skuOrBarcode,
@@ -82,7 +86,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             setSelectedImage(null);
             setImagePreview(null);
         }
-    }, [isOpen, initialSkuOrBarcode, loadCategories]);
+    }, [isOpen, initialSkuOrBarcode, openInAddMode, loadCategories]);
 
     React.useEffect(() => {
         if (editingItem) {
@@ -251,7 +255,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             await deleteItem(editingItem.id);
             handleClose();
         } catch (e: any) {
-            const msg = e?.message ?? e?.error ?? 'This SKU could not be deleted.';
+            const msg = e?.message ?? e?.error ?? 'This SKU has been used in transactions. Please delete the transactions first if you want to delete the SKU.';
             alert(msg);
         } finally {
             setDeleting(false);
@@ -561,7 +565,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
 
                         <div className="flex justify-end gap-3 pt-4">
                             {editingItem && !editingItem.id.startsWith('pending-') && (
-                                <div className="flex-1 flex justify-start">
+                                <div className="w-full flex justify-start border-b border-slate-200 pb-4 mb-2">
                                     <Button
                                         type="button"
                                         variant="danger"
@@ -572,7 +576,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     </Button>
                                 </div>
                             )}
-                            <div className="flex gap-3 justify-end flex-1">
+                            <div className="flex gap-3 justify-end w-full">
                             <Button
                                 variant="secondary"
                                 onClick={() => {

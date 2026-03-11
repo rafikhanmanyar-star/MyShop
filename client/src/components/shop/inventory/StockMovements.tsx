@@ -18,8 +18,8 @@ const StockMovements: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 animate-fade-in shadow-inner">
-            <div className="flex justify-between items-center mb-4">
+        <div className="flex flex-col h-full min-h-0 overflow-hidden animate-fade-in">
+            <div className="flex justify-between items-center mb-4 flex-shrink-0">
                 <h3 className="text-lg font-black text-slate-800 tracking-tight">Immutable Transaction Ledger</h3>
                 <div className="flex gap-2">
                     <button className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2">
@@ -31,18 +31,18 @@ const StockMovements: React.FC = () => {
                 </div>
             </div>
 
-            <Card className="border-none shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
+            <Card className="border-none shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto" style={{ scrollbarGutter: 'stable' }}>
                     <table className="w-full text-left">
-                        <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                        <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
                             <tr>
-                                <th className="px-6 py-4">Timestamp</th>
-                                <th className="px-6 py-4">Item Detail</th>
-                                <th className="px-6 py-4">Event Type</th>
-                                <th className="px-6 py-4">Warehouse</th>
-                                <th className="px-6 py-4 text-center">Change</th>
-                                <th className="px-6 py-4">Before / After</th>
-                                <th className="px-6 py-4">Reference</th>
+                                <th className="px-6 py-4 bg-slate-50">Timestamp</th>
+                                <th className="px-6 py-4 bg-slate-50">Item Detail</th>
+                                <th className="px-6 py-4 bg-slate-50">Event Type</th>
+                                <th className="px-6 py-4 bg-slate-50">Warehouse</th>
+                                <th className="px-6 py-4 text-center bg-slate-50">Change</th>
+                                <th className="px-6 py-4 bg-slate-50">Before / After</th>
+                                <th className="px-6 py-4 bg-slate-50">Reference</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">

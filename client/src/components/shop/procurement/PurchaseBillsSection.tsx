@@ -8,6 +8,8 @@ import Button from '../../ui/Button';
 import Select from '../../ui/Select';
 import { CURRENCY } from '../../../constants';
 import { Wallet } from 'lucide-react';
+import AddVendorModal from './AddVendorModal';
+import AddOrEditSkuModal from '../pos/AddOrEditSkuModal';
 
 function normalizeList<T>(raw: unknown): T[] {
   if (Array.isArray(raw)) return raw;
@@ -43,9 +45,26 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
   const [productSearch, setProductSearch] = useState('');
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const productSearchRef = useRef<HTMLDivElement>(null);
+  const [vendorSearch, setVendorSearch] = useState('');
+  const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
+  const vendorDropdownRef = useRef<HTMLDivElement>(null);
+  const [showAddVendorModal, setShowAddVendorModal] = useState(false);
+  const [showAddSkuModal, setShowAddSkuModal] = useState(false);
 
   // Same list as Settings → Vendor Management (from AppContext + API refresh)
   const vendors = vendorsFromApi.length > 0 ? vendorsFromApi : (appState.vendors || []);
+
+  const filteredVendors = vendors.filter(
+    (v: any) =>
+      !vendorSearch ||
+      (v.name || '').toLowerCase().includes(vendorSearch.toLowerCase()) ||
+      ((v.company_name ?? v.companyName) || '').toLowerCase().includes(vendorSearch.toLowerCase())
+  );
+
+  const selectedVendor = vendors.find((v: any) => v.id === form.supplierId);
+  const vendorDisplayName = selectedVendor
+    ? `${selectedVendor.name}${(selectedVendor.company_name ?? selectedVendor.companyName) ? ` (${selectedVendor.company_name ?? selectedVendor.companyName})` : ''}`
+    : '';
 
   // Same list as Inventory → Stock Master (from InventoryContext)
   const inventoryItems = inventory?.items ?? [];
@@ -291,24 +310,67 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
           <h3 className="font-bold text-slate-800 mb-4">Create purchase bill</h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div ref={vendorDropdownRef} className="relative">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Supplier / Vendor *</label>
-                <Select
-                  value={form.supplierId}
-                  onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))}
-                  required
+                <input
+                  type="text"
+                  value={vendorDropdownOpen ? vendorSearch : vendorDisplayName || vendorSearch}
+                  onChange={(e) => {
+                    setVendorSearch(e.target.value);
+                    setVendorDropdownOpen(true);
+                  }}
+                  onFocus={() => setVendorDropdownOpen(true)}
+                  onBlur={(e) => {
+                    if (vendorDropdownRef.current?.contains(e.relatedTarget as Node)) return;
+                    setVendorDropdownOpen(false);
+                    if (!form.supplierId && vendorSearch !== vendorDisplayName) setVendorSearch('');
+                    if (form.supplierId && !vendorSearch) setVendorSearch(vendorDisplayName);
+                  }}
+                  placeholder="Search or select supplier..."
                   className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                >
-                  <option value="">Select supplier...</option>
-                  {vendors.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name}{(v.company_name ?? v.companyName) ? ` (${v.company_name ?? v.companyName})` : ''}
-                    </option>
-                  ))}
-                </Select>
-                <p className="text-xs text-slate-500 mt-1">Same list as Settings → Vendor Management. Create vendors there to see them here.</p>
+                />
+                {vendorDropdownOpen && (
+                  <ul className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                    {filteredVendors.length === 0 ? (
+                      <li className="px-3 py-2 text-slate-500 text-sm">
+                        {vendorSearch ? `No vendor matching "${vendorSearch}"` : 'Type to search'}
+                      </li>
+                    ) : (
+                      filteredVendors.slice(0, 20).map((v: any) => (
+                        <li key={v.id}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setForm((f) => ({ ...f, supplierId: v.id }));
+                              setVendorSearch(`${v.name}${(v.company_name ?? v.companyName) ? ` (${v.company_name ?? v.companyName})` : ''}`);
+                              setVendorDropdownOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 border-b border-slate-50 last:border-0"
+                          >
+                            {v.name}{(v.company_name ?? v.companyName) ? ` (${v.company_name ?? v.companyName})` : ''}
+                          </button>
+                        </li>
+                      ))
+                    )}
+                    <li className="border-t border-slate-100">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setShowAddVendorModal(true);
+                          setVendorDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 text-indigo-600 font-medium flex items-center gap-2"
+                      >
+                        + Add new vendor
+                      </button>
+                    </li>
+                  </ul>
+                )}
+                <p className="text-xs text-slate-500 mt-1">Search by name or company. Can add a new vendor here if not found.</p>
                 {!loadingData && vendors.length === 0 && (
-                  <p className="text-amber-600 text-xs mt-1">No vendors yet. Add them in Settings → Vendor Management.</p>
+                  <p className="text-amber-600 text-xs mt-1">No vendors yet. Use &quot;Add new vendor&quot; above or add in Settings → Vendor Management.</p>
                 )}
               </div>
               <div>
@@ -389,6 +451,19 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                       </li>
                     ))
                   )}
+                  <li className="border-t border-slate-100">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setShowAddSkuModal(true);
+                        setProductDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 text-indigo-600 font-medium flex items-center gap-2"
+                    >
+                      + Add new SKU{productSearch.trim() ? `: "${productSearch.trim()}"` : ''}
+                    </button>
+                  </li>
                 </ul>
               )}
             </div>
@@ -575,6 +650,37 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
         </table>
         {bills.length === 0 && <p className="text-slate-400 p-6 text-center">No purchase bills yet</p>}
       </div>
+
+      <AddVendorModal
+        isOpen={showAddVendorModal}
+        onClose={() => setShowAddVendorModal(false)}
+        initialName={vendorSearch}
+        onSaved={(created) => {
+          setForm((f) => ({ ...f, supplierId: created.id }));
+          setVendorSearch(`${created.name}${created.company_name ? ` (${created.company_name})` : ''}`);
+          loadBillsAndFormData();
+        }}
+      />
+
+      <AddOrEditSkuModal
+        isOpen={showAddSkuModal}
+        onClose={() => setShowAddSkuModal(false)}
+        initialSkuOrBarcode={productSearch}
+        openInAddMode
+        onItemReady={(item) => {
+          const p = {
+            id: item.id,
+            name: item.name,
+            sku: item.sku,
+            cost_price: item.costPrice,
+            costPrice: item.costPrice,
+            average_cost: undefined,
+          };
+          addItem(p);
+          setProductSearch('');
+          setShowAddSkuModal(false);
+        }}
+      />
     </div>
   );
 }

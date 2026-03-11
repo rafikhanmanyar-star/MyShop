@@ -163,12 +163,12 @@ const InventoryContent: React.FC = () => {
                 </div>
             </div>
 
-            {/* Content area: flex so Stock Master can fill and scroll internally; other tabs can scroll here */}
+            {/* Content area: flex so Stock Master / Dashboard / Movements can fill and scroll internally; other tabs can scroll here */}
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden p-8">
-                <div className="flex-1 min-h-0 min-w-0 overflow-y-auto">
-                    {activeTab === 'dashboard' && <InventoryDashboard />}
-                    {activeTab === 'stock' && <StockMaster />}
-                    {activeTab === 'movements' && <StockMovements />}
+                <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${['stock', 'dashboard', 'movements'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+                    {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col"><InventoryDashboard /></div>}
+                    {activeTab === 'stock' && <div className="flex-1 min-h-0 flex flex-col"><StockMaster /></div>}
+                    {activeTab === 'movements' && <div className="flex-1 min-h-0 flex flex-col"><StockMovements /></div>}
                     {activeTab === 'adjustments' && <StockAdjustments />}
                     {activeTab === 'categories' && <InventoryCategories />}
                 </div>

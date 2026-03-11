@@ -57,9 +57,9 @@ const InventoryDashboard: React.FC = () => {
     ];
 
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div className="flex flex-col h-full min-h-0 overflow-hidden gap-8 animate-fade-in">
             {/* KPI Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 flex-shrink-0">
                 {stats.map((stat, i) => (
                     <Card key={i} className="p-6 border-none shadow-sm flex items-center gap-4">
                         <div className={`w-14 h-14 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center`}>
@@ -73,10 +73,10 @@ const InventoryDashboard: React.FC = () => {
                 ))}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0 overflow-hidden">
                 {/* Low Stock Table */}
-                <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-6 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4">
+                <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden flex flex-col min-h-0">
+                    <div className="p-6 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4 flex-shrink-0">
                         <h3 className="font-bold text-slate-800">Critical Stock Alerts</h3>
                         <div className="flex items-center gap-3">
                             <label htmlFor="critical-alerts-category" className="text-xs font-bold text-slate-600 whitespace-nowrap">
@@ -97,15 +97,15 @@ const InventoryDashboard: React.FC = () => {
                             <span className="px-2 py-1 bg-rose-100 text-rose-600 text-[10px] font-black rounded uppercase">Immediate Action Needed</span>
                         </div>
                     </div>
-                    <div className="flex-1 overflow-x-auto">
+                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto" style={{ scrollbarGutter: 'stable' }}>
                         <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
                                 <tr>
-                                    <th className="px-6 py-4">Item Name / SKU</th>
-                                    <th className="px-6 py-4">Category</th>
-                                    <th className="px-6 py-4">On Hand</th>
-                                    <th className="px-6 py-4">Reorder Point</th>
-                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4 bg-slate-50">Item Name / SKU</th>
+                                    <th className="px-6 py-4 bg-slate-50">Category</th>
+                                    <th className="px-6 py-4 bg-slate-50">On Hand</th>
+                                    <th className="px-6 py-4 bg-slate-50">Reorder Point</th>
+                                    <th className="px-6 py-4 bg-slate-50">Status</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
@@ -140,7 +140,7 @@ const InventoryDashboard: React.FC = () => {
                 </Card>
 
                 {/* Warehouse Snapshot */}
-                <Card className="border-none shadow-sm p-6 space-y-6">
+                <Card className="border-none shadow-sm p-6 space-y-6 flex-shrink-0 lg:flex-shrink">
                     <h3 className="font-bold text-slate-800">Warehouse Utilization</h3>
                     <div className="space-y-6">
                         {warehouseUtilization.length > 0 ? warehouseUtilization.map((wh) => (

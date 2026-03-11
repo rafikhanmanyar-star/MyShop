@@ -12,7 +12,7 @@ import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOffli
 import { getFullImageUrl } from '../../../config/apiUrl';
 
 const StockMaster: React.FC = () => {
-    const { items, warehouses, updateStock, requestTransfer } = useInventory();
+    const { items, warehouses, updateStock, requestTransfer, deleteItem, movements, updateItem } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
     const [selectedItem, setSelectedItem] = useState<any>(null);
@@ -21,7 +21,6 @@ const StockMaster: React.FC = () => {
     const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const { movements, updateItem } = useInventory();
     const itemHistory = movements.filter(m => m.itemId === selectedItem?.id);
     const [editData, setEditData] = useState<any>(null);
     const [categories, setCategories] = useState<any[]>([]);
@@ -60,6 +59,24 @@ const StockMaster: React.FC = () => {
 
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [deleting, setDeleting] = useState(false);
+
+    const handleDeleteSku = async () => {
+        if (!selectedItem || selectedItem.id.startsWith('pending-')) return;
+        const confirmed = window.confirm(
+            `Are you sure you want to delete "${selectedItem.name}" (SKU: ${selectedItem.sku})? This cannot be undone.`
+        );
+        if (!confirmed) return;
+        setDeleting(true);
+        try {
+            await deleteItem(selectedItem.id);
+            setSelectedItem(null);
+        } catch (e: any) {
+            alert(e?.message ?? 'This SKU has been used in transactions. Please delete the transactions first if you want to delete the SKU.');
+        } finally {
+            setDeleting(false);
+        }
+    };
 
     const handleUpdateItem = async () => {
         if (!selectedItem || !editData) return;
@@ -350,6 +367,16 @@ const StockMaster: React.FC = () => {
                             >
                                 View Full Card History
                             </button>
+                            {!selectedItem.id.startsWith('pending-') && (
+                                <button
+                                    type="button"
+                                    onClick={handleDeleteSku}
+                                    disabled={deleting}
+                                    className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-xs uppercase tracking-widest border border-red-200 hover:bg-red-100 transition-all disabled:opacity-50"
+                                >
+                                    {deleting ? 'Deleting...' : 'Delete SKU'}
+                                </button>
+                            )}
                         </div>
                     </Card>
                 </div>
