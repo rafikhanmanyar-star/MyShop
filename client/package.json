@@ -1,7 +1,7 @@
 {
   "name": "myshop-client",
   "private": true,
-  "version": "1.0.70",
+  "version": "1.0.71",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,6 +17,7 @@
     "jsbarcode": "^3.12.3",
     "lodash-es": "^4.17.23",
     "lucide-react": "^0.460.0",
+    "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

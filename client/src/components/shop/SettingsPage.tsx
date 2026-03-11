@@ -27,8 +27,20 @@ function toState(v: ShopVendor) {
 }
 
 import { generateReceiptHTML, ReceiptSaleData } from '../../services/receipt/receiptBuilder';
+import QRCode from 'qrcode';
 
 const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettings }) => {
+    const [mobileQrDataUrl, setMobileQrDataUrl] = useState<string | null>(null);
+    useEffect(() => {
+        if (receiptSettings?.show_mobile_url_qr && receiptSettings?.mobile_order_url) {
+            QRCode.toDataURL(receiptSettings.mobile_order_url, { width: 200, margin: 1 })
+                .then(setMobileQrDataUrl)
+                .catch(() => setMobileQrDataUrl(null));
+        } else {
+            setMobileQrDataUrl(null);
+        }
+    }, [receiptSettings?.show_mobile_url_qr, receiptSettings?.mobile_order_url]);
+
     const saleData: ReceiptSaleData = {
         storeName: receiptSettings.shop_name || 'My Store',
         storeAddress: receiptSettings.shop_address || '123 Fake Street',
@@ -55,7 +67,10 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettin
     };
 
     const containerWidth = receiptSettings.receipt_width === '58mm' ? '58mm' : '80mm';
-    const html = generateReceiptHTML(saleData, receiptSettings);
+    const settingsWithQr = mobileQrDataUrl
+        ? { ...receiptSettings, mobile_qr_data_url: mobileQrDataUrl }
+        : receiptSettings;
+    const html = generateReceiptHTML(saleData, settingsWithQr);
 
     return (
         <Card className="border-none shadow-sm p-6 bg-slate-100 flex flex-col items-center overflow-hidden">
@@ -90,6 +105,7 @@ const SettingsContent: React.FC = () => {
         show_cashier_name: true,
         show_shift_number: true,
         footer_message: '',
+        show_mobile_url_qr: false,
         shop_name: '',
         shop_address: '',
         shop_phone: '',
@@ -736,6 +752,11 @@ const SettingsContent: React.FC = () => {
                                             <input type="checkbox" checked={!!receiptSettings.show_shift_number} onChange={e => setReceiptSettings({ ...receiptSettings, show_shift_number: e.target.checked })} className="rounded border-slate-300" />
                                             <span className="font-bold text-slate-700">Show shift number</span>
                                         </label>
+                                        <label className="flex items-center gap-3 cursor-pointer">
+                                            <input type="checkbox" checked={!!receiptSettings.show_mobile_url_qr} onChange={e => setReceiptSettings({ ...receiptSettings, show_mobile_url_qr: e.target.checked })} className="rounded border-slate-300" />
+                                            <span className="font-bold text-slate-700">Mobile URL QR code</span>
+                                        </label>
+                                        <p className="text-xs text-slate-500 -mt-2">When checked, the receipt will show a QR code at the end with &quot;Please scan to order from home&quot;</p>
                                         <Input label="Footer message" placeholder="Thank you for your business!" value={receiptSettings.footer_message || ''} onChange={e => setReceiptSettings({ ...receiptSettings, footer_message: e.target.value })} />
                                         <div className="pt-4">
                                             <Button onClick={handleSaveReceiptSettings}>Save Receipt Template</Button>

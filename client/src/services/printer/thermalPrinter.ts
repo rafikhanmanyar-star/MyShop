@@ -1,5 +1,6 @@
 import { generateReceiptHTML } from '../receipt/receiptBuilder';
 import type { ReceiptSettings, ReceiptSaleData } from '../receipt/receiptBuilder';
+import QRCode from 'qrcode';
 
 export interface ReceiptData {
   storeName?: string;
@@ -97,6 +98,13 @@ export function createThermalPrinter(config?: { receiptSettings?: ReceiptSetting
         ...receiptSettings,
         footer_message: receiptSettings?.footer_message ?? data.footer ?? null,
       };
+      if (settings.show_mobile_url_qr && settings.mobile_order_url) {
+        try {
+          settings.mobile_qr_data_url = await QRCode.toDataURL(settings.mobile_order_url, { width: 200, margin: 1 });
+        } catch (_) {
+          settings.mobile_qr_data_url = null;
+        }
+      }
       const html = generateReceiptHTML(saleData, settings);
 
       // We removed silent print. Always use iframe fallback to show the browser native print preview.

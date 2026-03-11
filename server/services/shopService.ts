@@ -1252,12 +1252,13 @@ export class ShopService {
     const shopPhone = data.shop_phone ?? null;
     const taxId = data.tax_id ?? null;
     const logoUrl = data.logo_url ?? null;
+    const showMobileUrlQr = data.show_mobile_url_qr !== undefined ? data.show_mobile_url_qr : false;
     const res = await this.db.query(
       `INSERT INTO pos_receipt_settings (
         tenant_id, show_logo, show_barcode, barcode_type, barcode_position, barcode_size,
         receipt_width, show_tax_breakdown, show_cashier_name, show_shift_number,
-        footer_message, shop_name, shop_address, shop_phone, tax_id, logo_url, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
+        footer_message, shop_name, shop_address, shop_phone, tax_id, logo_url, show_mobile_url_qr, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
       ON CONFLICT (tenant_id) DO UPDATE SET
         show_logo = EXCLUDED.show_logo,
         show_barcode = EXCLUDED.show_barcode,
@@ -1274,9 +1275,10 @@ export class ShopService {
         shop_phone = EXCLUDED.shop_phone,
         tax_id = EXCLUDED.tax_id,
         logo_url = EXCLUDED.logo_url,
+        show_mobile_url_qr = EXCLUDED.show_mobile_url_qr,
         updated_at = NOW()
       RETURNING *`,
-      [tenantId, showLogo, showBarcode, barcodeType, barcodePosition, barcodeSize, receiptWidth, showTaxBreakdown, showCashierName, showShiftNumber, footerMessage, shopName, shopAddress, shopPhone, taxId, logoUrl]
+      [tenantId, showLogo, showBarcode, barcodeType, barcodePosition, barcodeSize, receiptWidth, showTaxBreakdown, showCashierName, showShiftNumber, footerMessage, shopName, shopAddress, shopPhone, taxId, logoUrl, showMobileUrlQr]
     );
     return res[0];
   }

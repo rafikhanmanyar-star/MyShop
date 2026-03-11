@@ -15,6 +15,12 @@ export interface ReceiptSettings {
   show_cashier_name?: boolean;
   show_shift_number?: boolean;
   footer_message?: string | null;
+  /** When true, receipt shows mobile order URL QR at end with "Please scan to order from home" */
+  show_mobile_url_qr?: boolean;
+  /** Pre-generated QR data URL for mobile order (set by caller when show_mobile_url_qr is true) */
+  mobile_qr_data_url?: string | null;
+  /** Mobile order URL (server may include with receipt settings for preview/print) */
+  mobile_order_url?: string | null;
 }
 
 export interface ReceiptSaleData {
@@ -156,6 +162,14 @@ export function generateReceiptHTML(
   const footerMessage = (s.footer_message && s.footer_message.trim()) ? escapeHtml(s.footer_message.trim()) : 'Thank you for your business!';
   const totalItems = saleData.items.reduce((sum, i) => sum + i.quantity, 0);
 
+  const showMobileQr = !!s.show_mobile_url_qr && !!s.mobile_qr_data_url;
+  const mobileQrBlock = showMobileQr
+    ? `<div class="border-top text-center" style="margin-top: 2mm; padding-top: 2mm;">
+<div style="font-size: 0.85em; margin-bottom: 1mm;">Please scan to order from home</div>
+<div style="margin: 1mm 0;"><img src="${s.mobile_qr_data_url}" alt="Mobile order" style="max-width: 28mm; width: 100%; height: auto;" /></div>
+</div>`
+    : '';
+
   const pageSize = s.receipt_width === '58mm' ? '58mm auto' : '80mm auto';
   const bodyPadding = '2mm';
   const fontSize = widthMm === 58 ? '9px' : '10px';
@@ -211,5 +225,6 @@ ${footerBarcode}
 <div style="font-size: 0.8em; margin-bottom: 1mm;">Total Items: ${totalItems}</div>
 <div>${footerMessage}</div>
 </div>
+${mobileQrBlock}
 </body></html>`;
 }
