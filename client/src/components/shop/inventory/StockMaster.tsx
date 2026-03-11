@@ -8,6 +8,7 @@ import Input from '../../ui/Input';
 import Button from '../../ui/Button';
 import Select from '../../ui/Select';
 import { shopApi } from '../../../services/shopApi';
+import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import { getFullImageUrl } from '../../../config/apiUrl';
 
 const StockMaster: React.FC = () => {
@@ -28,7 +29,7 @@ const StockMaster: React.FC = () => {
     React.useEffect(() => {
         const fetchCategories = async () => {
             try {
-                const res = await shopApi.getShopCategories();
+                const res = await getShopCategoriesOfflineFirst();
                 setCategories(res);
             } catch (err) {
                 console.error('Failed to fetch categories:', err);

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
+import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
+import { createCategoryOfflineFirst } from '../../../services/categorySyncService';
 import { ICONS } from '../../../constants';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
@@ -17,7 +19,7 @@ const InventoryCategories: React.FC = () => {
     const loadCategories = useCallback(async () => {
         try {
             setError(null);
-            const list = await shopApi.getShopCategories();
+            const list = await getShopCategoriesOfflineFirst();
             setCategories(Array.isArray(list) ? list : []);
         } catch (e: any) {
             setError(e?.message || 'Failed to load categories');
@@ -51,7 +53,10 @@ const InventoryCategories: React.FC = () => {
             if (editingId) {
                 await shopApi.updateShopCategory(editingId, { name });
             } else {
-                await shopApi.createShopCategory({ name });
+                const result = await createCategoryOfflineFirst(name);
+                if (!result.synced && result.localId) {
+                    setCategories((prev) => [...prev, { id: result.localId!, name, type: 'product', created_at: new Date().toISOString() }]);
+                }
             }
             setIsModalOpen(false);
             await loadCategories();

@@ -3,6 +3,7 @@ import { useInventory } from '../../../context/InventoryContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
 import { shopApi } from '../../../services/shopApi';
+import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 
 const BAR_COLORS = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-500'];
 
@@ -14,7 +15,7 @@ const InventoryDashboard: React.FC = () => {
     useEffect(() => {
         const fetchCategories = async () => {
             try {
-                const res = await shopApi.getShopCategories();
+                const res = await getShopCategoriesOfflineFirst();
                 setCategories(Array.isArray(res) ? res : []);
             } catch (err) {
                 console.error('Failed to fetch categories:', err);

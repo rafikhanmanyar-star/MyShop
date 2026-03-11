@@ -6,6 +6,7 @@ import Input from '../../ui/Input';
 import Button from '../../ui/Button';
 import { ICONS } from '../../../constants';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
+import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import { getFullImageUrl } from '../../../config/apiUrl';
 import CachedImage from '../../ui/CachedImage';
 import Fuse from 'fuse.js';
@@ -51,7 +52,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
 
     const loadCategories = useCallback(async () => {
         try {
-            const list = await shopApi.getShopCategories();
+            const list = await getShopCategoriesOfflineFirst();
             setShopCategories(Array.isArray(list) ? list : []);
         } catch {
             setShopCategories([]);

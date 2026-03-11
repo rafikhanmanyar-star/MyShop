@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { procurementApi, shopApi } from '../../../services/shopApi';
+import { createPurchaseBillOfflineFirst, setProcurementCache } from '../../../services/procurementSyncService';
+import { getProcurementCache, getTenantId } from '../../../services/procurementOfflineCache';
 import { useAppContext } from '../../../context/AppContext';
 import { useInventory } from '../../../context/InventoryContext';
 import Button from '../../ui/Button';
@@ -58,40 +60,71 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
 
   const loadBillsAndFormData = useCallback(() => {
     setLoadingData(true);
-    Promise.all([
-      procurementApi.getPurchaseBills(),
-      shopApi.getVendors(),
-      shopApi.getWarehouses(),
-      shopApi.getBankAccounts(),
-    ])
-      .then(([b, v, w, ba]) => {
-        setBills(normalizeList(b));
-        const vList = normalizeList(v);
-        setVendorsFromApi(vList);
-        if (vList.length > 0) {
-          appDispatch({
-            type: 'SET_VENDORS',
-            payload: vList.map((x: any) => ({
-              id: x.id,
-              name: x.name,
-              companyName: x.company_name ?? x.companyName,
-              contactNo: x.contact_no ?? x.contactNo,
-              email: x.email,
-              address: x.address,
-              description: x.description,
-            })),
-          });
-        }
-        setWarehouses(normalizeList(w));
-        setBankAccounts(normalizeList(ba));
-      })
-      .catch(() => {
-        setBills([]);
-        setVendorsFromApi([]);
-        setWarehouses([]);
-        setBankAccounts([]);
-      })
-      .finally(() => setLoadingData(false));
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+
+    if (isOnline && tenantId) {
+      Promise.all([
+        procurementApi.getPurchaseBills(),
+        shopApi.getVendors(),
+        shopApi.getWarehouses(),
+        shopApi.getBankAccounts(),
+      ])
+        .then(([b, v, w, ba]) => {
+          setBills(normalizeList(b));
+          const vList = normalizeList(v);
+          setVendorsFromApi(vList);
+          if (vList.length > 0) {
+            appDispatch({
+              type: 'SET_VENDORS',
+              payload: vList.map((x: any) => ({
+                id: x.id,
+                name: x.name,
+                companyName: x.company_name ?? x.companyName,
+                contactNo: x.contact_no ?? x.contactNo,
+                email: x.email,
+                address: x.address,
+                description: x.description,
+              })),
+            });
+          }
+          setWarehouses(normalizeList(w));
+          setBankAccounts(normalizeList(ba));
+          setProcurementCache(tenantId, { purchaseBills: normalizeList(b) }).catch(() => {});
+        })
+        .catch(() => {
+          if (tenantId) {
+            getProcurementCache(tenantId).then((c) => {
+              if (c?.data?.purchaseBills?.length) setBills(c.data.purchaseBills);
+            }).catch(() => {});
+          }
+          setBills([]);
+          setVendorsFromApi([]);
+          setWarehouses([]);
+          setBankAccounts([]);
+        })
+        .finally(() => setLoadingData(false));
+      return;
+    }
+
+    if (tenantId) {
+      getProcurementCache(tenantId)
+        .then((c) => {
+          if (c?.data?.purchaseBills?.length) setBills(c.data.purchaseBills);
+        })
+        .catch(() => setBills([]))
+        .finally(() => setLoadingData(false));
+      Promise.all([shopApi.getVendors(), shopApi.getWarehouses(), shopApi.getBankAccounts()])
+        .then(([v, w, ba]) => {
+          setVendorsFromApi(normalizeList(v));
+          setWarehouses(normalizeList(w));
+          setBankAccounts(normalizeList(ba));
+        })
+        .catch(() => {});
+      return;
+    }
+
+    setLoadingData(false);
   }, [appDispatch]);
 
   useEffect(() => {
@@ -180,7 +213,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
     }
     setLoading(true);
     try {
-      await procurementApi.createPurchaseBill({
+      const payload = {
         supplierId: form.supplierId,
         billNumber: form.billNumber,
         billDate: form.billDate,
@@ -202,21 +235,38 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
         paidAmount: form.paymentStatus !== 'Credit' ? form.paidAmount || totalAmount : 0,
         bankAccountId: form.bankAccountId || undefined,
         notes: form.notes || undefined,
-      });
-      setForm({
-        supplierId: '',
-        billNumber: `PB-${Date.now()}`,
-        billDate: new Date().toISOString().slice(0, 10),
-        dueDate: '',
-        items: [],
-        paymentStatus: 'Credit',
-        paidAmount: 0,
-        bankAccountId: '',
-        notes: '',
-      });
-      setShowForm(false);
-      const list = await procurementApi.getPurchaseBills();
-      setBills(Array.isArray(list) ? list : []);
+      };
+      const result = await createPurchaseBillOfflineFirst(payload);
+      if (result.synced) {
+        setForm({
+          supplierId: '',
+          billNumber: `PB-${Date.now()}`,
+          billDate: new Date().toISOString().slice(0, 10),
+          dueDate: '',
+          items: [],
+          paymentStatus: 'Credit',
+          paidAmount: 0,
+          bankAccountId: '',
+          notes: '',
+        });
+        setShowForm(false);
+        const list = await procurementApi.getPurchaseBills();
+        setBills(Array.isArray(list) ? list : []);
+      } else if (result.localId) {
+        setForm({
+          supplierId: '',
+          billNumber: `PB-${Date.now()}`,
+          billDate: new Date().toISOString().slice(0, 10),
+          dueDate: '',
+          items: [],
+          paymentStatus: 'Credit',
+          paidAmount: 0,
+          bankAccountId: '',
+          notes: '',
+        });
+        setShowForm(false);
+        console.warn('Purchase bill saved offline. Will sync when back online.');
+      }
     } catch (err: any) {
       alert(err?.response?.data?.error || err?.message || 'Failed to create purchase bill');
     } finally {

@@ -5,6 +5,7 @@ import { ICONS, CURRENCY } from '../../../constants';
 import { POSProduct } from '../../../types/pos';
 import { InventoryItem } from '../../../types/inventory';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
+import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import { getFullImageUrl } from '../../../config/apiUrl';
 import CachedImage from '../../ui/CachedImage';
 import { FixedSizeList } from 'react-window';
@@ -89,7 +90,7 @@ const ProductSearch: React.FC = () => {
 
     const loadShopCategories = useCallback(async () => {
         try {
-            const list = await shopApi.getShopCategories();
+            const list = await getShopCategoriesOfflineFirst();
             setShopCategories(Array.isArray(list) ? list : []);
         } catch {
             setShopCategories([]);
@@ -339,25 +340,27 @@ const ProductSearch: React.FC = () => {
         };
     }, [localQuery, productsWithStock, addToCart, setSearchQuery]);
 
-    // Virtualized Grid Setup
+    // Virtualized Grid Setup — dense by default; row height sized so content doesn't overlap
     const columnCount = isDenseMode ? 3 : 2;
     const rowCount = Math.ceil(filteredProducts.length / columnCount);
+    const rowHeight = isDenseMode ? 156 : 200;
 
     const ProductRow = ({ index, style }: { index: number; style: React.CSSProperties }) => {
         const rowItems: any[] = [];
+        const cellClass = columnCount === 2 ? 'flex-[0_0_50%] min-w-0 max-w-[50%]' : 'flex-[0_0_33.333%] min-w-0 max-w-[33.333%]';
         for (let i = 0; i < columnCount; i++) {
             const itemIndex = index * columnCount + i;
             if (itemIndex < filteredProducts.length) {
                 const product = filteredProducts[itemIndex];
                 const isSelected = keyboardIndex === itemIndex;
                 rowItems.push(
-                    <div key={product.id} className={`p-2 w-full ${columnCount === 2 ? 'w-1/2' : 'w-1/3'}`}>
+                    <div key={product.id} className={`p-2 ${cellClass}`}>
                         <button
                             onClick={() => addToCart(product)}
-                            className={`group w-full relative flex flex-col p-3 bg-white border rounded-2xl text-left transition-all hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 active:scale-95 ${isSelected ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-100'
+                            className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white border rounded-2xl text-left transition-all hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 active:scale-95 overflow-hidden ${isSelected ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-100'
                                 }`}
                         >
-                            <div className={`w-full bg-slate-50 rounded-xl flex items-center justify-center border border-slate-50 overflow-hidden relative ${isDenseMode ? 'aspect-video' : 'aspect-square'}`}>
+                            <div className={`w-full flex-shrink-0 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-50 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
                                 {product.imageUrl ? (
                                     <CachedImage path={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
                                 ) : (
@@ -372,15 +375,15 @@ const ProductSearch: React.FC = () => {
                                 )}
                             </div>
 
-                            <div className={`font-bold text-slate-800 line-clamp-2 leading-tight mt-2 ${isDenseMode ? 'text-[11px] h-[1.75rem]' : 'text-[13px] h-[2.5rem]'}`}>
+                            <div className={`flex-shrink-0 font-bold text-slate-800 line-clamp-2 leading-tight mt-2 min-h-0 ${isDenseMode ? 'text-[11px] h-[1.75rem]' : 'text-[13px] h-[2.5rem]'}`}>
                                 {product.name}
                             </div>
 
-                            <div className="flex items-center justify-between mt-1">
-                                <span className={`font-black text-blue-600 ${isDenseMode ? 'text-xs' : 'text-sm'}`}>
+                            <div className="flex flex-shrink-0 items-center justify-between mt-1">
+                                <span className={`font-black text-blue-600 truncate ${isDenseMode ? 'text-xs' : 'text-sm'}`}>
                                     {CURRENCY}{product.price.toLocaleString()}
                                 </span>
-                                <span className="text-[10px] text-slate-400">
+                                <span className="text-[10px] text-slate-400 flex-shrink-0">
                                     Qty: {product.stockLevel}
                                 </span>
                             </div>
@@ -388,10 +391,10 @@ const ProductSearch: React.FC = () => {
                     </div>
                 );
             } else {
-                rowItems.push(<div key={`empty-${i}`} className={`p-2 ${columnCount === 2 ? 'w-1/2' : 'w-1/3'}`}></div>);
+                rowItems.push(<div key={`empty-${i}`} className={`p-2 ${cellClass}`}></div>);
             }
         }
-        return <div style={style} className="flex px-3">{rowItems}</div>;
+        return <div style={style} className="flex px-3 min-h-0 overflow-hidden">{rowItems}</div>;
     };
 
     return (
@@ -501,7 +504,7 @@ const ProductSearch: React.FC = () => {
                         ref={listRef}
                         height={gridHeight}
                         itemCount={rowCount}
-                        itemSize={isDenseMode ? 140 : 200}
+                        itemSize={rowHeight}
                         width="100%"
                         className="pos-scrollbar"
                     >

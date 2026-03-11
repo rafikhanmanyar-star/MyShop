@@ -12,6 +12,8 @@ import {
   BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
+import { SyncOnOnline } from './components/SyncOnOnline';
+import OfflineBanner from './components/OfflineBanner';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
 const InventoryPage = lazy(() => import('./components/shop/InventoryPage'));
@@ -168,9 +170,11 @@ function AppLayout() {
     <BranchProvider>
       <AppProvider>
         <ShiftsProvider>
+          <SyncOnOnline />
       <div className="min-h-screen bg-[#f8fafc]">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
         <main className={`transition-all duration-500 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'} p-8 min-h-screen`}>
+          <OfflineBanner />
           <Suspense fallback={
             <div className="flex items-center justify-center min-h-[60vh]">
               <div className="relative w-12 h-12">

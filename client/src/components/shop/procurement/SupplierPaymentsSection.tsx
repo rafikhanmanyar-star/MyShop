@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { procurementApi, shopApi } from '../../../services/shopApi';
+import { recordSupplierPaymentOfflineFirst, getProcurementCache, setProcurementCache } from '../../../services/procurementSyncService';
+import { getTenantId } from '../../../services/posOfflineDb';
 import Button from '../../ui/Button';
 import Select from '../../ui/Select';
 import type { PaymentPrefill } from '../ProcurementPage';
@@ -31,11 +33,27 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
   const appliedPrefillRef = useRef(false);
 
   useEffect(() => {
-    Promise.all([shopApi.getVendors(), shopApi.getBankAccounts()]).then(([v, b]) => {
-      setVendors(Array.isArray(v) ? v : []);
-      setBankAccounts(Array.isArray(b) ? b : []);
-    });
-    procurementApi.getSupplierPayments().then((r) => setPayments(Array.isArray(r) ? r : []));
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+    if (isOnline) {
+      Promise.all([shopApi.getVendors(), shopApi.getBankAccounts()]).then(([v, b]) => {
+        setVendors(Array.isArray(v) ? v : []);
+        setBankAccounts(Array.isArray(b) ? b : []);
+      });
+      procurementApi.getSupplierPayments()
+        .then((r) => {
+          const list = Array.isArray(r) ? r : [];
+          setPayments(list);
+          if (tenantId) setProcurementCache(tenantId, { supplierPayments: list }).catch(() => {});
+        })
+        .catch(() => {
+          if (tenantId) getProcurementCache(tenantId).then((c) => { if (c?.data?.supplierPayments?.length) setPayments(c.data.supplierPayments); });
+        });
+    } else if (tenantId) {
+      getProcurementCache(tenantId).then((c) => {
+        if (c?.data?.supplierPayments?.length) setPayments(c.data.supplierPayments);
+      });
+    }
   }, []);
 
   // Apply prefill when opened from "Pay remaining" on a purchase bill
@@ -58,15 +76,31 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
       setAllocateInputs({});
       return;
     }
-    procurementApi.getBillsWithBalance(form.supplierId).then((r) => {
-      const list = Array.isArray(r) ? r : [];
-      setBillsWithBalance(list);
-      if (!appliedPrefillRef.current) {
-        setForm((f) => ({ ...f, allocations: [] }));
-        setAllocateInputs({});
-      }
-      appliedPrefillRef.current = false;
-    });
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+    if (isOnline) {
+      procurementApi.getBillsWithBalance(form.supplierId)
+        .then((r) => {
+          const list = Array.isArray(r) ? r : [];
+          setBillsWithBalance(list);
+          if (tenantId) setProcurementCache(tenantId, { supplierLedger: list }, `bills_${form.supplierId}`).catch(() => {});
+          if (!appliedPrefillRef.current) {
+            setForm((f) => ({ ...f, allocations: [] }));
+            setAllocateInputs({});
+          }
+          appliedPrefillRef.current = false;
+        });
+    } else if (tenantId) {
+      getProcurementCache(tenantId, `bills_${form.supplierId}`)
+        .then((c) => {
+          if (c?.data?.supplierLedger) setBillsWithBalance(Array.isArray(c.data.supplierLedger) ? c.data.supplierLedger : []);
+          if (!appliedPrefillRef.current) {
+            setForm((f) => ({ ...f, allocations: [] }));
+            setAllocateInputs({});
+          }
+          appliedPrefillRef.current = false;
+        });
+    }
   }, [form.supplierId]);
 
   const handleAllocate = (billId: string, amountOrBlank?: number) => {
@@ -105,7 +139,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
     }
     setLoading(true);
     try {
-      await procurementApi.recordSupplierPayment({
+      const result = await recordSupplierPaymentOfflineFirst({
         supplierId: form.supplierId,
         amount: form.amount,
         paymentMethod: form.paymentMethod,
@@ -115,20 +149,34 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
         notes: form.notes || undefined,
         allocations: form.allocations,
       });
-      setForm({
-        supplierId: form.supplierId,
-        amount: 0,
-        paymentMethod: 'Cash',
-        bankAccountId: '',
-        paymentDate: new Date().toISOString().slice(0, 10),
-        reference: '',
-        notes: '',
-        allocations: [],
-      });
-      const list = await procurementApi.getSupplierPayments();
-      setPayments(Array.isArray(list) ? list : []);
-      const bills = await procurementApi.getBillsWithBalance(form.supplierId);
-      setBillsWithBalance(Array.isArray(bills) ? bills : []);
+      if (result.synced) {
+        setForm({
+          supplierId: form.supplierId,
+          amount: 0,
+          paymentMethod: 'Cash',
+          bankAccountId: '',
+          paymentDate: new Date().toISOString().slice(0, 10),
+          reference: '',
+          notes: '',
+          allocations: [],
+        });
+        const list = await procurementApi.getSupplierPayments();
+        setPayments(Array.isArray(list) ? list : []);
+        const bills = await procurementApi.getBillsWithBalance(form.supplierId);
+        setBillsWithBalance(Array.isArray(bills) ? bills : []);
+      } else if (result.localId) {
+        setForm({
+          supplierId: form.supplierId,
+          amount: 0,
+          paymentMethod: 'Cash',
+          bankAccountId: '',
+          paymentDate: new Date().toISOString().slice(0, 10),
+          reference: '',
+          notes: '',
+          allocations: [],
+        });
+        console.warn('Payment saved offline. Will sync when back online.');
+      }
     } catch (err: any) {
       alert(err?.response?.data?.error || err?.message || 'Failed to record payment');
     } finally {

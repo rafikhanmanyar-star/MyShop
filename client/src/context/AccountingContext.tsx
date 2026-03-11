@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { accountingApi } from '../services/shopApi';
+import { getAccountingCache, setAccountingCache } from '../services/accountingSyncService';
+import { getTenantId } from '../services/posOfflineDb';
+import {
+  createAccountOfflineFirst,
+  updateAccountOfflineFirst,
+  deleteAccountOfflineFirst,
+  postJournalEntryOfflineFirst,
+} from '../services/accountingSyncService';
 
 interface AccountingContextValue {
   accounts: any[];
@@ -53,116 +61,229 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
 
   const refreshAccounts = useCallback(async () => {
-    try {
-      const list = await accountingApi.getAccounts();
-      setAccounts((list || []).map((acc: any) => ({
-        id: acc.id,
-        code: acc.code || 'UNCODED',
-        name: acc.name,
-        type: acc.type,
-        balance: parseFloat(acc.balance) || 0,
-        totalDebit: parseFloat(acc.total_debit) || 0,
-        totalCredit: parseFloat(acc.total_credit) || 0,
-        isActive: acc.is_active,
-        isControlAccount: false
-      })));
-    } catch (error) {
-      console.error('Failed to fetch accounts:', error);
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+    if (isOnline) {
+      try {
+        const list = await accountingApi.getAccounts();
+        const mapped = (list || []).map((acc: any) => ({
+          id: acc.id,
+          code: acc.code || 'UNCODED',
+          name: acc.name,
+          type: acc.type,
+          balance: parseFloat(acc.balance) || 0,
+          totalDebit: parseFloat(acc.total_debit) || 0,
+          totalCredit: parseFloat(acc.total_credit) || 0,
+          isActive: acc.is_active,
+          isControlAccount: false
+        }));
+        setAccounts(mapped);
+        return;
+      } catch {
+        if (tenantId) {
+          const cached = await getAccountingCache(tenantId);
+          if (cached?.data?.accounts?.length) {
+            setAccounts(cached.data.accounts);
+          }
+        }
+        return;
+      }
+    }
+    if (tenantId) {
+      const cached = await getAccountingCache(tenantId);
+      if (cached?.data?.accounts?.length) setAccounts(cached.data.accounts);
     }
   }, []);
 
   const refreshJournalEntries = useCallback(async () => {
-    try {
-      const entries = await accountingApi.getJournalEntries();
-      setJournalEntries(entries || []);
-    } catch (error) {
-      console.error('Failed to fetch journal entries:', error);
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+    if (isOnline) {
+      try {
+        const entries = await accountingApi.getJournalEntries();
+        setJournalEntries(entries || []);
+        return;
+      } catch {
+        if (tenantId) {
+          const cached = await getAccountingCache(tenantId);
+          if (cached?.data?.journalEntries?.length) setJournalEntries(cached.data.journalEntries);
+        }
+        return;
+      }
+    }
+    if (tenantId) {
+      const cached = await getAccountingCache(tenantId);
+      if (cached?.data?.journalEntries?.length) setJournalEntries(cached.data.journalEntries);
     }
   }, []);
 
   const refreshSummary = useCallback(async () => {
-    try {
-      const data = await accountingApi.getFinancialSummary();
-      setSummary(data || {});
-    } catch (error) {
-      console.error('Failed to fetch financial summary:', error);
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+    if (isOnline) {
+      try {
+        const data = await accountingApi.getFinancialSummary();
+        setSummary(data || {});
+        return;
+      } catch {
+        if (tenantId) {
+          const cached = await getAccountingCache(tenantId);
+          if (cached?.data?.summary) setSummary(cached.data.summary);
+        }
+        return;
+      }
+    }
+    if (tenantId) {
+      const cached = await getAccountingCache(tenantId);
+      if (cached?.data?.summary) setSummary(cached.data.summary);
     }
   }, []);
 
   const refreshBankBalances = useCallback(async () => {
-    try {
-      const data = await accountingApi.getBankBalances();
-      setBankAccounts(data || []);
-    } catch (error) {
-      console.error('Failed to fetch bank balances:', error);
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+    if (isOnline) {
+      try {
+        const data = await accountingApi.getBankBalances();
+        setBankAccounts(data || []);
+        return;
+      } catch {
+        if (tenantId) {
+          const cached = await getAccountingCache(tenantId);
+          if (cached?.data?.bankBalances?.length) setBankAccounts(cached.data.bankBalances);
+        }
+        return;
+      }
+    }
+    if (tenantId) {
+      const cached = await getAccountingCache(tenantId);
+      if (cached?.data?.bankBalances?.length) setBankAccounts(cached.data.bankBalances);
     }
   }, []);
 
   const refreshSalesBySource = useCallback(async () => {
-    try {
-      const data = await accountingApi.getSalesBySource();
-      setSalesBySource(data || null);
-    } catch (error) {
-      console.error('Failed to fetch sales by source:', error);
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+    if (isOnline) {
+      try {
+        const data = await accountingApi.getSalesBySource();
+        setSalesBySource(data || null);
+        return;
+      } catch {
+        if (tenantId) {
+          const cached = await getAccountingCache(tenantId);
+          if (cached?.data?.salesBySource) setSalesBySource(cached.data.salesBySource);
+        }
+        return;
+      }
+    }
+    if (tenantId) {
+      const cached = await getAccountingCache(tenantId);
+      if (cached?.data?.salesBySource) setSalesBySource(cached.data.salesBySource);
     }
   }, []);
 
   const refreshAll = useCallback(async () => {
     setLoading(true);
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
     try {
-      await Promise.all([
-        refreshAccounts(),
-        refreshJournalEntries(),
-        refreshSummary(),
-        refreshBankBalances(),
-        refreshSalesBySource(),
-      ]);
+      if (isOnline && tenantId) {
+        try {
+          const [accounts, journalEntries, summary, bankBalances, salesBySource] = await Promise.all([
+            accountingApi.getAccounts().catch(() => []),
+            accountingApi.getJournalEntries().catch(() => []),
+            accountingApi.getFinancialSummary().catch(() => ({})),
+            accountingApi.getBankBalances().catch(() => []),
+            accountingApi.getSalesBySource().catch(() => null),
+          ]);
+          const data = {
+            accounts: accounts || [],
+            journalEntries: journalEntries || [],
+            summary: summary || {},
+            bankBalances: bankBalances || [],
+            salesBySource: salesBySource ?? null,
+          };
+          await setAccountingCache(tenantId, data);
+          setAccounts((data.accounts || []).map((acc: any) => ({
+            id: acc.id,
+            code: acc.code || 'UNCODED',
+            name: acc.name,
+            type: acc.type,
+            balance: parseFloat(acc.balance) || 0,
+            totalDebit: parseFloat(acc.total_debit) || 0,
+            totalCredit: parseFloat(acc.total_credit) || 0,
+            isActive: acc.is_active,
+            isControlAccount: false
+          })));
+          setJournalEntries(data.journalEntries || []);
+          setSummary(data.summary || {});
+          setBankAccounts(data.bankBalances || []);
+          setSalesBySource(data.salesBySource ?? null);
+          return;
+        } catch {
+          // fall through to cache read
+        }
+      }
+      if (tenantId) {
+        const cached = await getAccountingCache(tenantId);
+        if (cached?.data) {
+          const d = cached.data;
+          setAccounts((d.accounts || []).map((acc: any) => ({
+            id: acc.id,
+            code: acc.code || 'UNCODED',
+            name: acc.name,
+            type: acc.type,
+            balance: parseFloat(acc.balance) || 0,
+            totalDebit: parseFloat(acc.total_debit) || 0,
+            totalCredit: parseFloat(acc.total_credit) || 0,
+            isActive: acc.is_active,
+            isControlAccount: false
+          })));
+          setJournalEntries(d.journalEntries || []);
+          setSummary(d.summary || {});
+          setBankAccounts(d.bankBalances || []);
+          setSalesBySource(d.salesBySource ?? null);
+        }
+      }
     } finally {
       setLoading(false);
     }
-  }, [refreshAccounts, refreshJournalEntries, refreshSummary, refreshBankBalances, refreshSalesBySource]);
+  }, []);
 
   const createAccount = async (data: any) => {
-    try {
-      const result = await accountingApi.createAccount(data);
-      await refreshAll();
-      return result;
-    } catch (error) {
-      console.error('Failed to create account:', error);
-      throw error;
+    const result = await createAccountOfflineFirst(data);
+    if (result.synced) await refreshAll();
+    else if (result.localId) {
+      console.warn('Account saved offline. Will sync when back online.');
     }
+    return result.result ?? result;
   };
 
   const updateAccount = async (id: string, data: any) => {
-    try {
-      const result = await accountingApi.updateAccount(id, data);
-      await refreshAll();
-      return result;
-    } catch (error) {
-      console.error('Failed to update account:', error);
-      throw error;
+    const result = await updateAccountOfflineFirst(id, data);
+    if (result.synced) await refreshAll();
+    else if (result.localId) {
+      console.warn('Update saved offline. Will sync when back online.');
     }
+    return result.result ?? result;
   };
 
   const deleteAccount = async (id: string) => {
-    try {
-      await accountingApi.deleteAccount(id);
-      await refreshAll();
-    } catch (error) {
-      console.error('Failed to delete account:', error);
-      throw error;
+    const result = await deleteAccountOfflineFirst(id);
+    if (result.synced) await refreshAll();
+    else if (result.localId) {
+      console.warn('Delete saved offline. Will sync when back online.');
     }
   };
 
   const postJournalEntry = async (data: any) => {
-    try {
-      const result = await accountingApi.postJournalEntry(data);
-      await refreshAll();
-      return result;
-    } catch (error) {
-      console.error('Failed to post journal entry:', error);
-      throw error;
+    const result = await postJournalEntryOfflineFirst(data);
+    if (result.synced) await refreshAll();
+    else if (result.localId) {
+      console.warn('Journal entry saved offline. Will sync when back online.');
     }
+    return result.result ?? result;
   };
 
   useEffect(() => {

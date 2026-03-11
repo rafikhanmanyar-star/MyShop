@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { shopApi } from '../services/shopApi';
+import { getShopCategoriesOfflineFirst } from '../services/categoriesOfflineCache';
+import { getDashboardCache, setDashboardCache, type DashboardStats } from '../services/dashboardOfflineCache';
+import { getTenantId } from '../services/posOfflineDb';
 import { mobileOrdersApi } from '../services/mobileOrdersApi';
 import Card from '../components/ui/Card';
 import { CURRENCY } from '../constants';
@@ -20,23 +23,6 @@ import {
   ArrowRight,
   Store,
 } from 'lucide-react';
-
-interface DashboardStats {
-  totalProducts: number;
-  totalSales: number;
-  totalRevenue: number;
-  totalCustomers: number;
-  lowStockItems: number;
-  outOfStockItems: number;
-  branchesCount: number;
-  terminalsCount: number;
-  categoriesCount: number;
-  vendorsCount: number;
-  todaySalesCount: number;
-  todayRevenue: number;
-  avgOrderValue: number;
-  mobileOrdersPending: number;
-}
 
 function getTodayStart() {
   const d = new Date();
@@ -62,81 +48,113 @@ export default function DashboardPage() {
     mobileOrdersPending: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
 
   useEffect(() => {
+    const tenantId = getTenantId();
+    const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+
     async function load() {
       try {
-        const [
-          products,
-          sales,
-          loyaltyMembers,
-          inventory,
-          branches,
-          terminals,
-          categories,
-          vendors,
-          mobileOrders,
-        ] = await Promise.all([
-          shopApi.getProducts().catch(() => []),
-          shopApi.getSales().catch(() => []),
-          shopApi.getLoyaltyMembers().catch(() => []),
-          shopApi.getInventory().catch(() => []),
-          shopApi.getBranches().catch(() => []),
-          shopApi.getTerminals().catch(() => []),
-          shopApi.getShopCategories().catch(() => []),
-          shopApi.getVendors().catch(() => []),
-          mobileOrdersApi.getOrders().catch(() => []),
-        ]);
+        if (isOnline && tenantId) {
+          const [
+            products,
+            sales,
+            loyaltyMembers,
+            inventory,
+            branches,
+            terminals,
+            categories,
+            vendors,
+            mobileOrders,
+          ] = await Promise.all([
+            shopApi.getProducts().catch(() => []),
+            shopApi.getSales().catch(() => []),
+            shopApi.getLoyaltyMembers().catch(() => []),
+            shopApi.getInventory().catch(() => []),
+            shopApi.getBranches().catch(() => []),
+            shopApi.getTerminals().catch(() => []),
+            getShopCategoriesOfflineFirst().catch(() => []),
+            shopApi.getVendors().catch(() => []),
+            mobileOrdersApi.getOrders().catch(() => []),
+          ]);
 
-        const salesList = (sales as any[]) || [];
-        const totalRevenue = salesList.reduce(
-          (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
-          0
-        );
-        const invList = (inventory as any[]) || [];
-        const lowStockItems = invList.filter(
-          (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 10
-        ).length;
-        const outOfStockItems = invList.filter(
-          (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 0
-        ).length;
+          const salesList = (sales as any[]) || [];
+          const totalRevenue = salesList.reduce(
+            (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
+            0
+          );
+          const invList = (inventory as any[]) || [];
+          const lowStockItems = invList.filter(
+            (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 10
+          ).length;
+          const outOfStockItems = invList.filter(
+            (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 0
+          ).length;
 
-        const todayStart = getTodayStart();
-        const todaySales = salesList.filter((s: any) => {
-          const t = new Date(s.created_at ?? s.createdAt ?? 0).getTime();
-          return t >= todayStart;
-        });
-        const todayRevenue = todaySales.reduce(
-          (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
-          0
-        );
+          const todayStart = getTodayStart();
+          const todaySales = salesList.filter((s: any) => {
+            const t = new Date(s.created_at ?? s.createdAt ?? 0).getTime();
+            return t >= todayStart;
+          });
+          const todayRevenue = todaySales.reduce(
+            (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
+            0
+          );
 
-        const mobileList = (mobileOrders as any[]) || [];
-        const mobileOrdersPending = mobileList.filter(
-          (o: any) =>
-            (o.status ?? '').toLowerCase() === 'pending' ||
-            (o.payment_status ?? '').toLowerCase() !== 'paid'
-        ).length;
+          const mobileList = (mobileOrders as any[]) || [];
+          const mobileOrdersPending = mobileList.filter(
+            (o: any) =>
+              (o.status ?? '').toLowerCase() === 'pending' ||
+              (o.payment_status ?? '').toLowerCase() !== 'paid'
+          ).length;
 
-        const totalSalesCount = salesList.length;
-        setStats({
-          totalProducts: (products as any[]).length,
-          totalSales: totalSalesCount,
-          totalRevenue,
-          totalCustomers: (loyaltyMembers as any[]).length,
-          lowStockItems,
-          outOfStockItems,
-          branchesCount: (branches as any[]).length,
-          terminalsCount: (terminals as any[]).length,
-          categoriesCount: (categories as any[]).length,
-          vendorsCount: (vendors as any[]).length,
-          todaySalesCount: todaySales.length,
-          todayRevenue,
-          avgOrderValue: totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0,
-          mobileOrdersPending,
-        });
+          const totalSalesCount = salesList.length;
+          const nextStats: DashboardStats = {
+            totalProducts: (products as any[]).length,
+            totalSales: totalSalesCount,
+            totalRevenue,
+            totalCustomers: (loyaltyMembers as any[]).length,
+            lowStockItems,
+            outOfStockItems,
+            branchesCount: (branches as any[]).length,
+            terminalsCount: (terminals as any[]).length,
+            categoriesCount: (categories as any[]).length,
+            vendorsCount: (vendors as any[]).length,
+            todaySalesCount: todaySales.length,
+            todayRevenue,
+            avgOrderValue: totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0,
+            mobileOrdersPending,
+          };
+          setStats(nextStats);
+          setCachedAt(null);
+          await setDashboardCache(tenantId, nextStats);
+          return;
+        }
+
+        if (tenantId) {
+          const cached = await getDashboardCache(tenantId);
+          if (cached?.stats) {
+            setStats(cached.stats);
+            setCachedAt(cached.cachedAt || null);
+            return;
+          }
+        }
+
+        setCachedAt(null);
       } catch (err) {
         console.error('Failed to load dashboard:', err);
+        if (tenantId) {
+          try {
+            const cached = await getDashboardCache(tenantId);
+            if (cached?.stats) {
+              setStats(cached.stats);
+              setCachedAt(cached.cachedAt || null);
+            }
+          } catch {
+            setCachedAt(null);
+          }
+        }
       } finally {
         setLoading(false);
       }
@@ -235,6 +253,12 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+
+      {cachedAt && (
+        <div className="p-3 rounded-lg bg-amber-50 text-amber-800 text-sm border border-amber-200">
+          Offline — showing cached data. Last updated: {new Date(cachedAt).toLocaleString()}
+        </div>
+      )}
 
       {/* Primary KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

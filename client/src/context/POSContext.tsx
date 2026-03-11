@@ -104,7 +104,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [terminals, setTerminals] = useState<any[]>([]);
     const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
     const [selectedTerminalId, setSelectedTerminalId] = useState<string | null>(null);
-    const [isDenseMode, setIsDenseMode] = useState(false);
+    const [isDenseMode, setIsDenseMode] = useState(true);
     const [posSettings, setPosSettings] = useState<any>(null);
     const [receiptSettings, setReceiptSettings] = useState<any>(null);
 

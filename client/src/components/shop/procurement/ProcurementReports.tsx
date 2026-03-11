@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { procurementApi, shopApi } from '../../../services/shopApi';
+import { getProcurementCache, setProcurementCache } from '../../../services/procurementSyncService';
+import { getTenantId } from '../../../services/posOfflineDb';
 
 const CURRENCY = 'PKR';
 
@@ -21,15 +23,61 @@ export default function ProcurementReports() {
   useEffect(() => {
     if (tab === 'ledger') {
       setLoading(true);
-      procurementApi.getSupplierLedger(supplierFilter || undefined)
-        .then(setLedger)
-        .finally(() => setLoading(false));
+      const tenantId = getTenantId();
+      const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+      if (isOnline) {
+        procurementApi.getSupplierLedger(supplierFilter || undefined)
+          .then((data) => {
+            setLedger(data);
+            if (tenantId) setProcurementCache(tenantId, { supplierLedger: data }, `ledger_${supplierFilter || 'all'}`).catch(() => {});
+          })
+          .catch(() => {
+            if (tenantId) getProcurementCache(tenantId, `ledger_${supplierFilter || 'all'}`).then((c) => { if (c?.data?.supplierLedger) setLedger(c.data.supplierLedger); });
+          })
+          .finally(() => setLoading(false));
+      } else if (tenantId) {
+        getProcurementCache(tenantId, `ledger_${supplierFilter || 'all'}`)
+          .then((c) => { if (c?.data?.supplierLedger) setLedger(c.data.supplierLedger); })
+          .finally(() => setLoading(false));
+      } else setLoading(false);
     } else if (tab === 'ap-aging') {
       setLoading(true);
-      procurementApi.reports.apAging().then(setApAging).finally(() => setLoading(false));
+      const tenantId = getTenantId();
+      const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+      if (isOnline) {
+        procurementApi.reports.apAging()
+          .then((data) => {
+            setApAging(data);
+            if (tenantId) setProcurementCache(tenantId, { apAging: data }).catch(() => {});
+          })
+          .catch(() => {
+            if (tenantId) getProcurementCache(tenantId).then((c) => { if (c?.data?.apAging) setApAging(c.data.apAging); });
+          })
+          .finally(() => setLoading(false));
+      } else if (tenantId) {
+        getProcurementCache(tenantId)
+          .then((c) => { if (c?.data?.apAging) setApAging(c.data.apAging); })
+          .finally(() => setLoading(false));
+      } else setLoading(false);
     } else if (tab === 'inventory') {
       setLoading(true);
-      procurementApi.reports.inventoryValuation().then(setInventoryVal).finally(() => setLoading(false));
+      const tenantId = getTenantId();
+      const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
+      if (isOnline) {
+        procurementApi.reports.inventoryValuation()
+          .then((data) => {
+            setInventoryVal(data);
+            if (tenantId) setProcurementCache(tenantId, { inventoryValuation: data }).catch(() => {});
+          })
+          .catch(() => {
+            if (tenantId) getProcurementCache(tenantId).then((c) => { if (c?.data?.inventoryValuation) setInventoryVal(c.data.inventoryValuation); });
+          })
+          .finally(() => setLoading(false));
+      } else if (tenantId) {
+        getProcurementCache(tenantId)
+          .then((c) => { if (c?.data?.inventoryValuation) setInventoryVal(c.data.inventoryValuation); })
+          .finally(() => setLoading(false));
+      } else setLoading(false);
     }
   }, [tab, supplierFilter]);
 

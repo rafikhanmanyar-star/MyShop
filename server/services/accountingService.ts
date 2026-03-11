@@ -746,7 +746,8 @@ export class AccountingService {
    * Clear all sales transaction data for the tenant. Keeps settings, accounts, users, vendors,
    * bank accounts, products, and all inventory data (stock levels and movement history).
    * Removes: sales, journal/ledger entries, transactions table, mobile orders, customer balances,
-   * report aggregates; and zeros Cash & Bank balances so the dashboard shows 0 after clear.
+   * report aggregates; purchase bills, bill items, bill payments, supplier payments;
+   * and zeros Cash & Bank balances so the dashboard shows 0 after clear.
    */
   async clearAllTransactions(tenantId: string): Promise<void> {
     await this.db.transaction(async (client) => {
@@ -755,6 +756,14 @@ export class AccountingService {
         await client.execute('DELETE FROM expenses WHERE tenant_id = $1', [tenantId]);
       } catch (_) {
         // expenses table may not exist if migration 017 not applied
+      }
+      // Purchase bills & payments (migration 018): bill payments link bills to supplier_payments; delete in dependency order
+      try {
+        await client.execute('DELETE FROM purchase_bill_payments WHERE tenant_id = $1', [tenantId]);
+        await client.execute('DELETE FROM supplier_payments WHERE tenant_id = $1', [tenantId]);
+        await client.execute('DELETE FROM purchase_bills WHERE tenant_id = $1', [tenantId]);
+      } catch (_) {
+        // procurement tables may not exist if migration 018 not applied
       }
       // Parent tables only; child rows removed by CASCADE. Inventories (shop_inventory, shop_inventory_movements) are not touched.
       await client.execute('DELETE FROM shop_sales WHERE tenant_id = $1', [tenantId]);

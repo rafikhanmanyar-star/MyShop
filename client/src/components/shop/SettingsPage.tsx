@@ -401,7 +401,7 @@ const SettingsContent: React.FC = () => {
                         <Card className="border-none shadow-sm p-6">
                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Clear all transactions</h3>
                             <p className="text-slate-600 text-sm mb-4">
-                                Remove all sales transactions, orders, journal entries, and transaction history. Settings, chart of accounts, bank accounts, users, vendors, products, and inventories (stock levels and movement history) are kept.
+                                Remove all sales transactions, orders, journal entries, transaction history, purchase bills, and bill payments. Settings, chart of accounts, bank accounts, users, vendors, products, and inventories (stock levels and movement history) are kept.
                             </p>
                             <Button
                                 variant="secondary"
@@ -821,7 +821,7 @@ const SettingsContent: React.FC = () => {
             >
                 <div className="space-y-4">
                     <p className="text-slate-600 text-sm">
-                        This will permanently delete all sales transactions, orders, journal entries, ledger entries, and transaction history. Settings, chart of accounts, bank accounts, users, vendors, products, and inventories will be kept.
+                        This will permanently delete all sales transactions, orders, journal entries, ledger entries, transaction history, purchase bills, and bill payments. Settings, chart of accounts, bank accounts, users, vendors, products, and inventories will be kept.
                     </p>
                     <div className="flex justify-end gap-3">
                         <Button variant="secondary" onClick={() => setClearTransactionsConfirm(false)} disabled={clearingTransactions}>

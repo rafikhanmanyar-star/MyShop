@@ -10,6 +10,7 @@ import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { shopApi, ShopProductCategory } from '../../services/shopApi';
+import { getShopCategoriesOfflineFirst } from '../../services/categoriesOfflineCache';
 import { getFullImageUrl } from '../../config/apiUrl';
 
 const InventoryContent: React.FC = () => {
@@ -33,7 +34,7 @@ const InventoryContent: React.FC = () => {
 
     const loadShopCategories = useCallback(async () => {
         try {
-            const list = await shopApi.getShopCategories();
+            const list = await getShopCategoriesOfflineFirst();
             setShopCategories(Array.isArray(list) ? list : []);
         } catch {
             setShopCategories([]);

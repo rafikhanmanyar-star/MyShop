@@ -14,10 +14,13 @@ import {
 import { useShifts, type CashierShift, type ShiftStats } from '../../../context/ShiftsContext';
 import { shiftsApi } from '../../../services/shopApi';
 import { shopApi } from '../../../services/shopApi';
+import { getBranchesCache, setBranchesCache, getTerminalsCache, setTerminalsCache, getTenantId } from '../../../services/branchesTerminalsCache';
+import { useOnline } from '../../../hooks/useOnline';
 import { CURRENCY } from '../../../constants';
 import TerminalCloseModal from './TerminalCloseModal';
 
 export default function CashierDashboardPage() {
+  const isOnline = useOnline();
   const { currentShift, currentTerminalId, setCurrentTerminalId, refreshCurrentShift, startShift, isLoading, error } = useShifts();
   const [stats, setStats] = useState<ShiftStats | null>(null);
   const [branches, setBranches] = useState<any[]>([]);
@@ -28,11 +31,37 @@ export default function CashierDashboardPage() {
   const [closeModalOpen, setCloseModalOpen] = useState(false);
 
   const loadBranches = useCallback(() => {
-    shopApi.getBranches().then(setBranches).catch(() => setBranches([]));
-  }, []);
+    const tenantId = getTenantId();
+    if (isOnline) {
+      shopApi.getBranches()
+        .then((list) => {
+          setBranches(Array.isArray(list) ? list : []);
+          if (tenantId) setBranchesCache(tenantId, Array.isArray(list) ? list : []).catch(() => {});
+        })
+        .catch(() => {
+          if (tenantId) getBranchesCache(tenantId).then((c) => { if (c?.length) setBranches(c); });
+          setBranches([]);
+        });
+    } else if (tenantId) {
+      getBranchesCache(tenantId).then((c) => setBranches(c ?? []));
+    }
+  }, [isOnline]);
   const loadTerminals = useCallback(() => {
-    shopApi.getTerminals().then(setTerminals).catch(() => setTerminals([]));
-  }, []);
+    const tenantId = getTenantId();
+    if (isOnline) {
+      shopApi.getTerminals()
+        .then((list) => {
+          setTerminals(Array.isArray(list) ? list : []);
+          if (tenantId) setTerminalsCache(tenantId, Array.isArray(list) ? list : []).catch(() => {});
+        })
+        .catch(() => {
+          if (tenantId) getTerminalsCache(tenantId).then((c) => { if (c?.length) setTerminals(c); });
+          setTerminals([]);
+        });
+    } else if (tenantId) {
+      getTerminalsCache(tenantId).then((c) => setTerminals(c ?? []));
+    }
+  }, [isOnline]);
 
   useEffect(() => {
     loadBranches();
@@ -118,6 +147,11 @@ export default function CashierDashboardPage() {
   if (!currentShift) {
     return (
       <div className="max-w-md mx-auto">
+        {!isOnline && (
+          <div className="mb-4 p-3 rounded-xl bg-amber-50 text-amber-800 text-sm border border-amber-200">
+            Offline — Connect to the internet to start a shift.
+          </div>
+        )}
         <div className="rounded-2xl bg-slate-50 border border-slate-200 p-8 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
@@ -187,10 +221,10 @@ export default function CashierDashboardPage() {
             )}
             <button
               type="submit"
-              disabled={starting}
+              disabled={starting || !isOnline}
               className="w-full py-3 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-50"
             >
-              {starting ? 'Starting…' : 'Start shift'}
+              {starting ? 'Starting…' : isOnline ? 'Start shift' : 'Start shift (offline)'}
             </button>
           </form>
         </div>
@@ -200,6 +234,11 @@ export default function CashierDashboardPage() {
 
   return (
     <div className="space-y-8">
+      {!isOnline && (
+        <div className="p-3 rounded-xl bg-amber-50 text-amber-800 text-sm border border-amber-200">
+          Offline — Connect to the internet to close your shift or refresh stats.
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">My shift</h1>
@@ -222,7 +261,8 @@ export default function CashierDashboardPage() {
           <button
             type="button"
             onClick={() => setCloseModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-100 text-rose-700 font-semibold hover:bg-rose-200"
+            disabled={!isOnline}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-100 text-rose-700 font-semibold hover:bg-rose-200 disabled:opacity-50"
           >
             <LogOut className="w-5 h-5" />
             Close terminal
