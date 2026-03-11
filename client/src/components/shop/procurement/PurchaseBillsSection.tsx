@@ -72,6 +72,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
     id: item.id,
     name: item.name,
     sku: item.sku,
+    barcode: item.barcode ?? '',
     cost_price: item.costPrice,
     costPrice: item.costPrice,
     average_cost: undefined,
@@ -221,8 +222,16 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
     (p) =>
       !productSearch ||
       p.name?.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.sku?.toLowerCase().includes(productSearch.toLowerCase())
+      p.sku?.toLowerCase().includes(productSearch.toLowerCase()) ||
+      (p.barcode && (p.barcode === productSearch.trim() || p.barcode.toLowerCase().includes(productSearch.trim().toLowerCase())))
   );
+
+  // Exact barcode match (for scanner or keyboard Enter) – scanner typically sends barcode + Enter
+  const exactBarcodeMatch = productSearch.trim() && productsForDropdown.find(
+    (p) => p.barcode && p.barcode.trim() === productSearch.trim()
+  );
+  const singleMatchForEnter = filteredProducts.length === 1 ? filteredProducts[0] : null;
+  const productToAddOnEnter = exactBarcodeMatch ?? singleMatchForEnter;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -412,15 +421,22 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                   setProductSearch(e.target.value);
                   setProductDropdownOpen(true);
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && productToAddOnEnter) {
+                    e.preventDefault();
+                    addItem(productToAddOnEnter);
+                    setProductDropdownOpen(false);
+                  }
+                }}
                 onFocus={() => setProductDropdownOpen(true)}
                 onBlur={(e) => {
                   if (productSearchRef.current?.contains(e.relatedTarget as Node)) return;
                   setProductDropdownOpen(false);
                 }}
-                placeholder="Search by product name or SKU..."
+                placeholder="Search by product name, SKU, or barcode..."
                 className="w-full border border-slate-200 rounded-lg px-3 py-2"
               />
-              <p className="text-xs text-slate-500 mt-1">Same list as Inventory → Stock Master. Adding updates stock and weighted average cost.</p>
+              <p className="text-xs text-slate-500 mt-1">Same list as Inventory → Stock Master. Scan barcode or type name/SKU/barcode and press Enter to add. Adding updates stock and weighted average cost.</p>
               {!loadingData && productsForDropdown.length === 0 && (
                 <p className="text-amber-600 text-xs mt-1">No products yet. Add products in Inventory → Stock Master.</p>
               )}
@@ -428,7 +444,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                 <ul className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
                   {filteredProducts.length === 0 ? (
                     <li className="px-3 py-4 text-slate-500 text-sm text-center">
-                      {productSearch ? `No products matching "${productSearch}"` : 'Type to search by name or SKU'}
+                      {productSearch ? `No products matching "${productSearch}"` : 'Type name/SKU, or scan barcode'}
                     </li>
                   ) : (
                     filteredProducts.slice(0, 15).map((p) => (
@@ -445,6 +461,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                           <span>
                             <span className="font-medium text-slate-800">{p.name}</span>
                             <span className="ml-2 text-xs font-mono text-slate-500">SKU: {p.sku || '—'}</span>
+                            {p.barcode && <span className="ml-2 text-xs font-mono text-slate-400">Barcode: {p.barcode}</span>}
                           </span>
                           <span className="text-sm font-medium text-indigo-600">{CURRENCY} {Number(p.cost_price ?? p.costPrice ?? p.average_cost ?? 0).toLocaleString()}</span>
                         </button>

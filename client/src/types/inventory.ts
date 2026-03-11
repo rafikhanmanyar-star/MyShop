@@ -23,6 +23,8 @@ export interface InventoryItem {
     retailPrice: number;
     reorderPoint: number;
     imageUrl?: string;
+    /** Product description shown in the mobile app when user opens the product. */
+    description?: string;
     warehouseStock: Record<string, number>; // warehouseId -> quantity
 }
 

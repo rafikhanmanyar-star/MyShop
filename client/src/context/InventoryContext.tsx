@@ -132,6 +132,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     retailPrice: parseFloat(p.retail_price || '0'),
                     reorderPoint: p.reorder_point || 10,
                     imageUrl: getFullImageUrl(p.image_url) || undefined,
+                    description: p.mobile_description || p.description || undefined,
                     warehouseStock: stockMap[p.id]?.byWh || {}
                 }));
 
@@ -152,6 +153,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     retailPrice: p.payload.retail_price ?? 0,
                     reorderPoint: p.payload.reorder_point ?? 10,
                     imageUrl: undefined,
+                    description: p.payload.description ?? undefined,
                     warehouseStock: {},
                 }));
                 setItems([...mappedItems, ...pendingAsItems]);
@@ -389,6 +391,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             cost_price: item.costPrice,
             unit: item.unit,
             reorder_point: item.reorderPoint,
+            description: item.description || null,
         };
 
         const saveOfflineAndReturn = async (): Promise<InventoryItem> => {
@@ -436,7 +439,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }
 
             try {
-                const response = await shopApi.createProduct({ ...payload, image_url: imageUrl }) as any;
+                const response = await shopApi.createProduct({
+                    ...payload,
+                    image_url: imageUrl,
+                    mobile_description: payload.description || undefined,
+                }) as any;
                 if (response && response.id) {
                     const newItem = { ...item, id: response.id, imageUrl };
                     setItems(prev => [...prev, newItem]);
@@ -477,6 +484,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (updates.unit) payload.unit = updates.unit;
             if (updates.reorderPoint !== undefined) payload.reorder_point = updates.reorderPoint;
             if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
+            if (updates.description !== undefined) payload.mobile_description = updates.description;
 
             await shopApi.updateProduct(id, payload);
 

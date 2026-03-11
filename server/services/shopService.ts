@@ -321,16 +321,17 @@ export class ShopService {
       try {
         const sku = data.sku || `SKU-${Date.now()}`;
 
+        const mobileDesc = data.mobile_description ?? data.description ?? null;
         // 1. Ensure product is created
         const res = await client.query(`
           INSERT INTO shop_products (
             tenant_id, name, sku, barcode, category_id, unit,
-            cost_price, retail_price, tax_rate, reorder_point, image_url, is_active
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id
+            cost_price, retail_price, tax_rate, reorder_point, image_url, is_active, mobile_description
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id
         `, [
           tenantId, data.name, sku, data.barcode || null,
           categoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
-          data.tax_rate || 0, data.reorder_point || 10, data.image_url || null, true
+          data.tax_rate || 0, data.reorder_point || 10, data.image_url || null, true, mobileDesc
         ]);
         const productId = res[0].id;
 
@@ -367,17 +368,20 @@ export class ShopService {
   async updateProduct(tenantId: string, productId: string, data: any) {
     return this.db.transaction(async (client) => {
       try {
+        const mobileDesc = data.mobile_description !== undefined ? data.mobile_description : (data.description !== undefined ? data.description : undefined);
         await client.query(`
           UPDATE shop_products
           SET name = $1, sku = $2, barcode = $3, category_id = $4, unit = $5,
               cost_price = $6, retail_price = $7, tax_rate = $8, reorder_point = $9,
-              image_url = $10, is_active = $11, updated_at = NOW()
+              image_url = $10, is_active = $11, updated_at = NOW(),
+              mobile_description = COALESCE($14, mobile_description)
           WHERE id = $12 AND tenant_id = $13
         `, [
           data.name, data.sku, data.barcode, data.category_id || data.categoryId,
           data.unit, data.cost_price || data.cost, data.retail_price || data.price,
           data.tax_rate || data.taxRate, data.reorder_point || data.reorderPoint,
-          data.image_url, data.is_active !== undefined ? data.is_active : true, productId, tenantId
+          data.image_url, data.is_active !== undefined ? data.is_active : true, productId, tenantId,
+          mobileDesc === undefined ? null : mobileDesc
         ]);
         return { success: true };
       } catch (err: any) {

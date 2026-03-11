@@ -158,9 +158,9 @@ export default function ProductDetail() {
                     {product.available_stock > 0 ? `${product.available_stock} in stock` : 'Out of stock'}
                 </div>
 
-                {product.mobile_description && (
+                {(product.mobile_description || product.description) && (
                     <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: 20 }}>
-                        {product.mobile_description}
+                        {product.mobile_description || product.description}
                     </p>
                 )}
 

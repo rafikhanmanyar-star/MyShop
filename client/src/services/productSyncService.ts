@@ -36,7 +36,11 @@ export async function processPendingProductQueue(): Promise<{ processed: number;
           await removeLocalImageBlob(localImageId);
         }
       }
-      const payload: any = { ...rest, image_url: imageUrl || null };
+      const payload: any = {
+        ...rest,
+        image_url: imageUrl || null,
+        mobile_description: rest.description ?? null,
+      };
       const result = await shopApi.createProduct(payload) as any;
       const serverId = result?.id;
       await setProductStatus(item.localId, 'synced', serverId);

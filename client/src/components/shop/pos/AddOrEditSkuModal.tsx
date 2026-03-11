@@ -28,9 +28,12 @@ const defaultForm = {
     sku: '',
     barcode: '',
     name: '',
+    description: '',
     category: 'General',
     retailPrice: 0,
     costPrice: 0,
+    retailPriceMode: 'fixed' as 'fixed' | 'percentage',
+    retailMarkupPercent: 0,
     reorderPoint: 10,
     unit: 'pcs',
     imageUrl: ''
@@ -76,9 +79,12 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 sku: skuOrBarcode,
                 barcode: /^\d+$/.test(skuOrBarcode) ? skuOrBarcode : '',
                 name: '',
+                description: '',
                 category: 'General',
                 retailPrice: 0,
                 costPrice: 0,
+                retailPriceMode: 'percentage',
+                retailMarkupPercent: 0,
                 reorderPoint: 10,
                 unit: 'pcs',
                 imageUrl: ''
@@ -94,9 +100,12 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 sku: editingItem.sku,
                 barcode: editingItem.barcode || '',
                 name: editingItem.name,
+                description: editingItem.description || '',
                 category: editingItem.category || 'General',
                 retailPrice: editingItem.retailPrice ?? 0,
                 costPrice: editingItem.costPrice ?? 0,
+                retailPriceMode: 'fixed',
+                retailMarkupPercent: 0,
                 reorderPoint: editingItem.reorderPoint ?? 10,
                 unit: editingItem.unit || 'pcs',
                 imageUrl: editingItem.imageUrl || ''
@@ -188,6 +197,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                     sku: formData.sku || `SKU-${Date.now()}`,
                     barcode: formData.barcode || undefined,
                     name: formData.name,
+                    description: formData.description || undefined,
                     category: formData.category,
                     retailPrice: Number(formData.retailPrice),
                     costPrice: Number(formData.costPrice),
@@ -226,6 +236,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 sku: formData.sku,
                 barcode: formData.barcode || undefined,
                 name: formData.name,
+                description: formData.description || undefined,
                 category: formData.category,
                 retailPrice: Number(formData.retailPrice),
                 costPrice: Number(formData.costPrice),
@@ -423,6 +434,17 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                 helperText={nameConflictItems.length === 0 ? 'Must be unique across all products.' : undefined}
                             />
+                            <div className="space-y-1">
+                                <label className="block text-sm font-medium text-slate-700">Description</label>
+                                <textarea
+                                    placeholder="e.g. Soft cotton t-shirt, available in multiple colors. Shown in the mobile app when customers open this product."
+                                    value={formData.description}
+                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    rows={3}
+                                    className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                />
+                                <p className="text-[10px] text-slate-500">Shown in the mobile app when the user opens this product.</p>
+                            </div>
                             {nameConflictItems.length > 0 && (
                                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
                                     <div className="flex items-center gap-1.5 font-semibold text-amber-800 mb-1">
@@ -481,14 +503,79 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 label="Cost Price"
                                 type="number"
                                 value={formData.costPrice}
-                                onChange={(e) => setFormData({ ...formData, costPrice: Number(e.target.value) })}
+                                onChange={(e) => {
+                                    const cost = Number(e.target.value);
+                                    const next = { ...formData, costPrice: cost };
+                                    if (formData.retailPriceMode === 'percentage') {
+                                        next.retailPrice = Math.round((cost * (1 + formData.retailMarkupPercent / 100)) * 100) / 100;
+                                    }
+                                    setFormData(next);
+                                }}
                             />
-                            <Input
-                                label="Retail Price"
-                                type="number"
-                                value={formData.retailPrice}
-                                onChange={(e) => setFormData({ ...formData, retailPrice: Number(e.target.value) })}
-                            />
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-slate-700">Retail Price</label>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, retailPriceMode: 'fixed' })}
+                                        className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${formData.retailPriceMode === 'fixed' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
+                                    >
+                                        Fixed
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const cost = formData.costPrice;
+                                            const pct = cost > 0 ? Math.round(((formData.retailPrice - cost) / cost) * 100) : 0;
+                                            setFormData({
+                                                ...formData,
+                                                retailPriceMode: 'percentage',
+                                                retailMarkupPercent: Math.max(0, pct),
+                                                retailPrice: cost * (1 + Math.max(0, pct) / 100)
+                                            });
+                                        }}
+                                        className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${formData.retailPriceMode === 'percentage' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
+                                    >
+                                        Markup %
+                                    </button>
+                                </div>
+                                {formData.retailPriceMode === 'fixed' ? (
+                                    <Input
+                                        type="number"
+                                        placeholder="e.g. 107"
+                                        value={formData.retailPrice}
+                                        onChange={(e) => setFormData({ ...formData, retailPrice: Number(e.target.value) })}
+                                    />
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="e.g. 7"
+                                                        value={formData.retailMarkupPercent}
+                                                        onChange={(e) => {
+                                                            const pct = Number(e.target.value);
+                                                            const cost = formData.costPrice;
+                                                            const retail = Math.round((cost * (1 + pct / 100)) * 100) / 100;
+                                                            setFormData({ ...formData, retailMarkupPercent: pct, retailPrice: retail });
+                                                        }}
+                                                    />
+                                                </div>
+                                                <span className="text-slate-600 font-medium flex-shrink-0">%</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 mt-0.5">% added to cost price</p>
+                                        </div>
+                                        <div className="flex flex-col justify-end pb-1">
+                                            <p className="text-[10px] font-bold uppercase opacity-80">Sale price</p>
+                                            <p className="text-lg font-semibold text-slate-800">
+                                                {Number(formData.retailPrice).toFixed(2)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="space-y-2">
                             <label className="block text-sm font-medium text-slate-700">Product Image</label>

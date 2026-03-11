@@ -17,6 +17,7 @@ export interface PendingProductPayload {
   cost_price: number;
   unit: string;
   reorder_point: number;
+  description?: string | null;
   localImageId?: string;
 }
 
