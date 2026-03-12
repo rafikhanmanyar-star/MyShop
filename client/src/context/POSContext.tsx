@@ -315,7 +315,30 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 
     const addToCart = useCallback((product: POSProduct, variant?: POSProductVariant, quantity: number = 1) => {
-        const safeQty = Math.max(1, Math.floor(quantity));
+        const availableStock = variant != null
+            ? (variant.stockLevel ?? 0)
+            : (product.stockLevel ?? 0);
+
+        if (availableStock <= 0) {
+            alert('This product is out of stock. You cannot add it to the cart.');
+            return;
+        }
+
+        const unitPrice = product.price + (variant?.priceAdjustment || 0);
+        const cost = product.cost ?? 0;
+        const margin = unitPrice - cost;
+
+        if (unitPrice <= 0) {
+            const msg = `This product has zero or negative price (SKU: ${variant?.sku || product.sku}). Add anyway or cancel to update the SKU.`;
+            if (!window.confirm(msg)) return;
+        } else if (margin <= 0) {
+            const msg = `This product has zero or negative margin — sales price (${CURRENCY} ${unitPrice.toFixed(2)}) minus cost (${CURRENCY} ${cost.toFixed(2)}). Add anyway or cancel to update the SKU.`;
+            if (!window.confirm(msg)) return;
+        }
+
+        const requestedQty = Math.max(1, Math.floor(quantity));
+        const safeQty = Math.min(requestedQty, availableStock);
+
         setCart(prev => {
             const existingItemIndex = prev.findIndex(item =>
                 item.productId === product.id && item.variantId === variant?.id
@@ -324,21 +347,25 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (existingItemIndex > -1) {
                 const newCart = [...prev];
                 const item = newCart[existingItemIndex];
-                const newQty = Math.max(1, item.quantity + safeQty);
+                const currentInCart = item.quantity;
+                const newQty = Math.min(currentInCart + safeQty, availableStock);
 
-                // Recalculate tax for the whole line
-                const basePrice = (item.unitPrice * newQty);
+                if (currentInCart + requestedQty > availableStock) {
+                    setTimeout(() => alert(`Only ${availableStock} available in stock. Cart quantity capped at ${availableStock}.`), 0);
+                }
+
+                const basePrice = item.unitPrice * newQty;
                 const tax = basePrice * (item.taxRate / 100);
 
                 newCart[existingItemIndex] = {
                     ...item,
                     quantity: newQty,
+                    stockLevel: availableStock,
                     taxAmount: tax
                 };
                 return newCart;
             }
 
-            const unitPrice = product.price + (variant?.priceAdjustment || 0);
             const tax = (unitPrice * safeQty) * (product.taxRate / 100);
 
             const newItem: POSCartItem = {
@@ -354,7 +381,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 taxAmount: tax,
                 taxRate: product.taxRate,
                 categoryId: product.categoryId,
-                imageUrl: product.imageUrl
+                imageUrl: product.imageUrl,
+                stockLevel: availableStock
             };
             return [...prev, newItem];
         });
@@ -367,24 +395,39 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updateCartItem = useCallback((cartItemId: string, updates: Partial<POSCartItem>) => {
         setCart(prev => prev.map(item => {
-            if (item.id === cartItemId) {
-                const updatedItem = { ...item, ...updates };
-                // Never allow negative or zero quantity from any source (keyboard, etc.)
-                if ('quantity' in updatedItem && (typeof updatedItem.quantity !== 'number' || updatedItem.quantity < 1)) {
-                    updatedItem.quantity = 1;
+            if (item.id !== cartItemId) return item;
+
+            let effectiveUpdates = { ...updates };
+
+            // Enforce stock cap when quantity is increased (manual + or input)
+            if ('quantity' in effectiveUpdates && typeof effectiveUpdates.quantity === 'number') {
+                const requestedQty = Math.max(1, Math.floor(effectiveUpdates.quantity));
+                const maxAllowed = item.stockLevel;
+                if (maxAllowed != null && requestedQty > maxAllowed) {
+                    effectiveUpdates = { ...effectiveUpdates, quantity: maxAllowed };
+                    setTimeout(() => alert(`Only ${maxAllowed} available in stock. Quantity cannot exceed ${maxAllowed}.`), 0);
+                } else if (requestedQty < 1) {
+                    effectiveUpdates = { ...effectiveUpdates, quantity: 1 };
+                } else {
+                    effectiveUpdates = { ...effectiveUpdates, quantity: requestedQty };
                 }
-                // Recalculate tax/discount if quantity or price changed
-                if ('quantity' in updates || 'unitPrice' in updates || 'discountPercentage' in updates) {
-                    const price = updatedItem.unitPrice;
-                    const qty = updatedItem.quantity;
-                    const disc = updatedItem.isFree ? price * qty : (price * qty * (updatedItem.discountPercentage / 100));
-                    const taxableAmount = (price * qty) - disc;
-                    updatedItem.discountAmount = disc;
-                    updatedItem.taxAmount = taxableAmount * (updatedItem.taxRate / 100);
-                }
-                return updatedItem;
             }
-            return item;
+
+            const updatedItem = { ...item, ...effectiveUpdates };
+            // Never allow negative or zero quantity from any source (keyboard, etc.)
+            if ('quantity' in updatedItem && (typeof updatedItem.quantity !== 'number' || updatedItem.quantity < 1)) {
+                updatedItem.quantity = 1;
+            }
+            // Recalculate tax/discount if quantity or price changed
+            if ('quantity' in effectiveUpdates || 'unitPrice' in updates || 'discountPercentage' in updates) {
+                const price = updatedItem.unitPrice;
+                const qty = updatedItem.quantity;
+                const disc = updatedItem.isFree ? price * qty : (price * qty * (updatedItem.discountPercentage / 100));
+                const taxableAmount = (price * qty) - disc;
+                updatedItem.discountAmount = disc;
+                updatedItem.taxAmount = taxableAmount * (updatedItem.taxRate / 100);
+            }
+            return updatedItem;
         }));
     }, []);
 

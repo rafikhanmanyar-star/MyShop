@@ -266,6 +266,15 @@ const ProductSearch: React.FC = () => {
                     setKeyboardIndex(-1);
                     return;
                 }
+                // Barcode scanner types digits then sends Enter — only the barcode effect should add (one quantity per scan)
+                const trimmed = localQuery.trim();
+                const isBarcodeScan = /^\d+$/.test(trimmed) && filteredProducts.length === 1 && filteredProducts[0].barcode === trimmed;
+                if (isBarcodeScan) {
+                    setLocalQuery('');
+                    setSearchQuery('');
+                    setKeyboardIndex(-1);
+                    return;
+                }
                 if (keyboardIndex >= 0 && filteredProducts[keyboardIndex]) {
                     addToCart(filteredProducts[keyboardIndex]);
                     setKeyboardIndex(-1);
@@ -285,7 +294,7 @@ const ProductSearch: React.FC = () => {
 
         window.addEventListener('keydown', handleKeys);
         return () => window.removeEventListener('keydown', handleKeys);
-    }, [filteredProducts, keyboardIndex, addToCart, setSearchQuery]);
+    }, [filteredProducts, keyboardIndex, addToCart, setSearchQuery, localQuery]);
 
     // Handle barcode "instant add" — debounced and guarded to prevent multiple adds per scan
     const barcodeAddTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -327,7 +336,7 @@ const ProductSearch: React.FC = () => {
             lastAddedBarcodeRef.current = query;
             lastBarcodeAddTimeRef.current = n;
             justAddedFromBarcodeRef.current = true;
-            addToCart(currentMatch);
+            addToCart(currentMatch, undefined, 1);
             setLocalQuery('');
             setSearchQuery('');
             setTimeout(() => { justAddedFromBarcodeRef.current = false; }, 500);
@@ -356,8 +365,9 @@ const ProductSearch: React.FC = () => {
                 rowItems.push(
                     <div key={product.id} className={`p-2 ${cellClass}`}>
                         <button
-                            onClick={() => addToCart(product)}
-                            className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white border rounded-2xl text-left transition-all hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 active:scale-95 overflow-hidden ${isSelected ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-100'
+                            onClick={() => product.stockLevel > 0 && addToCart(product)}
+                            disabled={product.stockLevel <= 0}
+                            className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white border rounded-2xl text-left transition-all overflow-hidden ${product.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed border-slate-100' : 'hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 active:scale-95'} ${isSelected ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-100'
                                 }`}
                         >
                             <div className={`w-full flex-shrink-0 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-50 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
@@ -473,8 +483,9 @@ const ProductSearch: React.FC = () => {
                         {popularProducts.map(p => (
                             <button
                                 key={p.id}
-                                onClick={() => addToCart(p)}
-                                className="flex flex-col items-center p-2 bg-white rounded-xl border border-indigo-100 hover:border-indigo-400 hover:shadow-md transition-all active:scale-95"
+                                onClick={() => p.stockLevel > 0 && addToCart(p)}
+                                disabled={p.stockLevel <= 0}
+                                className={`flex flex-col items-center p-2 rounded-xl border transition-all ${p.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed bg-slate-50 border-slate-100' : 'bg-white border-indigo-100 hover:border-indigo-400 hover:shadow-md active:scale-95'}`}
                             >
                                 <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center mb-1 overflow-hidden">
                                     {p.imageUrl ? (

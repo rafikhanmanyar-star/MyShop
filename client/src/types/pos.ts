@@ -46,6 +46,8 @@ export interface POSCartItem {
     priceOverridden?: boolean;
     categoryId?: string;
     imageUrl?: string;
+    /** Max quantity allowed (stock at add time); used to cap manual quantity increases. */
+    stockLevel?: number;
 }
 
 export interface POSPayment {
