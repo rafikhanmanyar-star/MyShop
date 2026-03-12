@@ -221,8 +221,19 @@ export const procurementApi = {
     apiClient.get<any[]>(`/shop/procurement/purchase-bills${supplierId ? `?supplierId=${supplierId}` : ''}`),
   getPurchaseBillById: (id: string) => apiClient.get<any>(`/shop/procurement/purchase-bills/${id}`),
   createPurchaseBill: (data: any) => apiClient.post<{ id: string }>('/shop/procurement/purchase-bills', data),
-  updatePurchaseBill: (id: string, data: { billNumber?: string; billDate?: string; dueDate?: string; notes?: string }) =>
-    apiClient.patch(`/shop/procurement/purchase-bills/${id}`, data),
+  updatePurchaseBill: (
+    id: string,
+    data: {
+      billNumber: string;
+      billDate: string;
+      dueDate?: string;
+      notes?: string;
+      items: { productId: string; quantity: number; unitCost: number; taxAmount?: number; subtotal: number }[];
+      subtotal: number;
+      taxTotal: number;
+      totalAmount: number;
+    }
+  ) => apiClient.patch(`/shop/procurement/purchase-bills/${id}`, data),
   deletePurchaseBill: (id: string) => apiClient.delete(`/shop/procurement/purchase-bills/${id}`),
   getSupplierPayments: (supplierId?: string) =>
     apiClient.get<any[]>(`/shop/procurement/supplier-payments${supplierId ? `?supplierId=${supplierId}` : ''}`),

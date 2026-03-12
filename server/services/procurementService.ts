@@ -289,37 +289,218 @@ export class ProcurementService {
     }
   }
 
-  /** Update bill metadata only (no line items or amounts). Accounting unchanged. */
+  /**
+   * Full update of purchase bill: line items, totals, metadata.
+   * Reverses old accounting (Inv/AP only) and inventory, then re-posts with new amounts.
+   * Keeps paid_amount unchanged (initial payment + supplier payment allocations).
+   */
   async updatePurchaseBill(
     tenantId: string,
     billId: string,
-    data: { billNumber?: string; billDate?: string; dueDate?: string; notes?: string }
+    data: {
+      billNumber: string;
+      billDate: string;
+      dueDate?: string;
+      notes?: string;
+      items: PurchaseBillItemInput[];
+      subtotal: number;
+      taxTotal: number;
+      totalAmount: number;
+    }
   ): Promise<void> {
-    const updates: string[] = [];
-    const values: any[] = [];
-    let idx = 1;
-    if (data.billNumber !== undefined) {
-      updates.push(`bill_number = $${idx++}`);
-      values.push(data.billNumber);
-    }
-    if (data.billDate !== undefined) {
-      updates.push(`bill_date = $${idx++}`);
-      values.push(data.billDate);
-    }
-    if (data.dueDate !== undefined) {
-      updates.push(`due_date = $${idx++}`);
-      values.push(data.dueDate ?? null);
-    }
-    if (data.notes !== undefined) {
-      updates.push(`notes = $${idx++}`);
-      values.push(data.notes ?? null);
-    }
-    if (updates.length === 0) return;
-    values.push(billId, tenantId);
-    await this.db.query(
-      `UPDATE purchase_bills SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${idx} AND tenant_id = $${idx + 1}`,
-      values
-    );
+    return this.db.transaction(async (client) => {
+      const billRows = await client.query(
+        `SELECT id, bill_number, total_amount, paid_amount, initial_payment_bank_account_id
+         FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, billId]
+      );
+      if (billRows.length === 0) throw new Error('Purchase bill not found');
+      const bill = billRows[0];
+      const oldTotal = parseFloat(bill.total_amount) || 0;
+      const paidAmount = parseFloat(bill.paid_amount) || 0;
+      const newTotal = data.totalAmount;
+
+      const invAccId = await this.getOrCreateAccount(
+        client,
+        tenantId,
+        'Merchandise Inventory',
+        'Asset',
+        COA.MERCHANDISE_INVENTORY
+      );
+      const apAccId = await this.getOrCreateAccount(
+        client,
+        tenantId,
+        'Trade Payables (Suppliers)',
+        'Liability',
+        COA.TRADE_PAYABLES
+      );
+
+      // 1) Reverse journal: only the main purchase lines (Dr Inv, Cr AP) for old total
+      const jeRows = await client.query(
+        `SELECT id FROM journal_entries WHERE tenant_id = $1 AND source_module = 'Purchases' AND source_id = $2`,
+        [tenantId, billId]
+      );
+      if (jeRows.length > 0) {
+        const journalId = jeRows[0].id;
+        const ledgers = await client.query(
+          `SELECT account_id, debit, credit FROM ledger_entries WHERE tenant_id = $1 AND journal_entry_id = $2`,
+          [tenantId, journalId]
+        );
+        // Reverse only Inv (debit) and AP (credit) that equal oldTotal
+        const revJournalRes = await client.query(
+          `INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+           VALUES ($1, NOW(), $2, $3, 'Purchases', $4, 'Posted') RETURNING id`,
+          [tenantId, `Reversal-${bill.bill_number || billId}`, `Reversal of purchase (edit) ${bill.bill_number}`, billId]
+        );
+        const revJournalId = revJournalRes[0].id;
+        for (const row of ledgers) {
+          const debit = parseFloat(row.debit) || 0;
+          const credit = parseFloat(row.credit) || 0;
+          const amt = debit || credit;
+          if (amt > 0 && (row.account_id === invAccId || (row.account_id === apAccId && credit === oldTotal))) {
+            await client.query(
+              `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+               VALUES ($1, $2, $3, $4, $5)`,
+              [tenantId, revJournalId, row.account_id, credit, debit]
+            );
+          }
+        }
+      }
+
+      // 2) Reverse inventory: subtract old quantities
+      const oldItems = await client.query(
+        `SELECT product_id, quantity FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2`,
+        [tenantId, billId]
+      );
+      const whRows = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
+      const warehouseId = whRows.length > 0 ? whRows[0].id : null;
+      if (warehouseId) {
+        for (const item of oldItems) {
+          const qty = parseFloat(item.quantity) || 0;
+          await client.query(
+            `UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand - $1, updated_at = NOW()
+             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4`,
+            [qty, tenantId, item.product_id, warehouseId]
+          );
+        }
+      }
+
+      const balanceDue = newTotal - paidAmount;
+      const status = balanceDue <= 0 ? 'Paid' : paidAmount > 0 ? 'Partial' : 'Posted';
+
+      // 3) Update bill row
+      await client.query(
+        `UPDATE purchase_bills SET
+          bill_number = $1, bill_date = $2, due_date = $3, notes = $4,
+          subtotal = $5, tax_total = $6, total_amount = $7, balance_due = $8, status = $9, updated_at = NOW()
+         WHERE id = $10 AND tenant_id = $11`,
+        [
+          data.billNumber,
+          data.billDate,
+          data.dueDate ?? null,
+          data.notes ?? null,
+          data.subtotal,
+          data.taxTotal,
+          data.totalAmount,
+          balanceDue,
+          status,
+          billId,
+          tenantId,
+        ]
+      );
+
+      // 4) Replace items
+      await client.query('DELETE FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2', [tenantId, billId]);
+
+      if (!warehouseId) throw new Error('No warehouse found');
+      for (const item of data.items) {
+        await client.query(
+          `INSERT INTO purchase_bill_items (tenant_id, purchase_bill_id, product_id, quantity, unit_cost, tax_amount, subtotal)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            tenantId,
+            billId,
+            item.productId,
+            item.quantity,
+            item.unitCost,
+            item.taxAmount || 0,
+            item.subtotal,
+          ]
+        );
+
+        const totalCost = item.quantity * item.unitCost;
+        const invRows = await client.query(
+          `SELECT quantity_on_hand FROM shop_inventory
+           WHERE tenant_id = $1 AND product_id = $2 AND warehouse_id = $3 LIMIT 1`,
+          [tenantId, item.productId, warehouseId]
+        );
+
+        let newQty: number;
+        let newAvgCost: number;
+        if (invRows.length === 0) {
+          await client.query(
+            `INSERT INTO shop_inventory (tenant_id, product_id, warehouse_id, quantity_on_hand, updated_at)
+             VALUES ($1, $2, $3, $4, NOW())
+             ON CONFLICT (tenant_id, product_id, warehouse_id)
+             DO UPDATE SET quantity_on_hand = shop_inventory.quantity_on_hand + $4, updated_at = NOW()`,
+            [tenantId, item.productId, warehouseId, item.quantity]
+          );
+          newQty = item.quantity;
+          newAvgCost = item.unitCost;
+        } else {
+          const oldQty = parseFloat(invRows[0].quantity_on_hand) || 0;
+          const prodRows = await client.query(
+            'SELECT average_cost, cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2',
+            [item.productId, tenantId]
+          );
+          const oldCost =
+            prodRows[0]?.average_cost != null && Number(prodRows[0].average_cost) > 0
+              ? Number(prodRows[0].average_cost)
+              : Number(prodRows[0]?.cost_price) || 0;
+          newQty = oldQty + item.quantity;
+          newAvgCost = newQty > 0 ? (oldQty * oldCost + item.quantity * item.unitCost) / newQty : item.unitCost;
+
+          await client.query(
+            `UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand + $1, updated_at = NOW()
+             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4`,
+            [item.quantity, tenantId, item.productId, warehouseId]
+          );
+        }
+
+        await client.query(
+          `UPDATE shop_products SET average_cost = $1, cost_price = $2, updated_at = NOW()
+           WHERE id = $3 AND tenant_id = $4`,
+          [newAvgCost, item.unitCost, item.productId, tenantId]
+        );
+
+        await client.query(
+          `INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, unit_cost, total_cost)
+           VALUES ($1, $2, $3, 'Purchase', $4, $5, $6, $7, $8)`,
+          [tenantId, item.productId, warehouseId, item.quantity, billId, null, item.unitCost, totalCost]
+        );
+      }
+
+      // 5) Post new journal (main purchase only; initial payment lines stay as-is from original)
+      const ref = `PB-${data.billNumber}`;
+      const journalRes = await client.query(
+        `INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+         VALUES ($1, $2, $3, $4, 'Purchases', $5, 'Posted') RETURNING id`,
+        [tenantId, data.billDate, ref, `Purchase ${data.billNumber} (edit)`, billId]
+      );
+      const journalId = journalRes[0].id;
+      await client.query(
+        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+         VALUES ($1, $2, $3, $4, 0)`,
+        [tenantId, journalId, invAccId, newTotal]
+      );
+      await client.query(
+        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+         VALUES ($1, $2, $3, 0, $4)`,
+        [tenantId, journalId, apAccId, newTotal]
+      );
+
+      await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+    });
   }
 
   /**

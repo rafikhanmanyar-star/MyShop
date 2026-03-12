@@ -449,8 +449,10 @@ const SettingsContent: React.FC = () => {
                                         disabled={updateStatus?.status === 'checking' || updateStatus?.status === 'downloading'}
                                         className="flex items-center gap-2"
                                     >
-                                        {updateStatus?.status === 'checking' || updateStatus?.status === 'downloading' ? (
+                                        {updateStatus?.status === 'checking' ? (
                                             <>Checking…</>
+                                        ) : updateStatus?.status === 'downloading' ? (
+                                            <>Downloading…</>
                                         ) : (
                                             <>Check for updates</>
                                         )}
@@ -461,11 +463,21 @@ const SettingsContent: React.FC = () => {
                                             <Button variant="secondary" onClick={handleDownloadUpdate}>Download and install</Button>
                                         </div>
                                     )}
-                                    {updateStatus?.status === 'downloading' && (
-                                        <p className="text-slate-600 text-sm">
-                                            Downloading… {updateStatus.percent != null ? `${Math.round(updateStatus.percent)}%` : ''}
-                                        </p>
-                                    )}
+                                    {updateStatus?.status === 'downloading' && (() => {
+                                        const percent = updateStatus.percent != null ? Math.min(100, Math.max(0, updateStatus.percent)) : 0;
+                                        return (
+                                            <div className="space-y-2 pt-2">
+                                                <p className="text-slate-600 text-sm font-medium">Downloading update…</p>
+                                                <progress
+                                                    value={percent}
+                                                    max={100}
+                                                    className="h-2.5 w-full rounded-full [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-slate-200 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-emerald-500 [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-emerald-500"
+                                                    aria-label="Update download progress"
+                                                />
+                                                <p className="text-slate-500 text-xs tabular-nums">{Math.round(percent)}%</p>
+                                            </div>
+                                        );
+                                    })()}
                                     {updateStatus?.status === 'downloaded' && (
                                         <div className="flex items-center gap-3 pt-2">
                                             <p className="text-emerald-600 text-sm font-medium">Update ready. Restart the app to install.</p>

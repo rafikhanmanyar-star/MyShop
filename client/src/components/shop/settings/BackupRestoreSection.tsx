@@ -35,7 +35,11 @@ export default function BackupRestoreSection() {
       const list = await dataApi.backups.list();
       setBackups(Array.isArray(list) ? list : []);
     } catch (e: any) {
-      setError(e?.message || 'Failed to load backups');
+      const msg = e?.message || 'Failed to load backups';
+      const is404 = e?.status === 404 || (typeof msg === 'string' && msg.includes('404'));
+      setError(is404
+        ? 'Backup API not found. Restart the server so it uses the latest build (run "npm run build" in the server folder if needed, then restart the API).'
+        : msg);
       setBackups([]);
     } finally {
       setLoading(false);

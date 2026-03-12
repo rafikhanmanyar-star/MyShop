@@ -51,7 +51,6 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
   const [showAddVendorModal, setShowAddVendorModal] = useState(false);
   const [showAddSkuModal, setShowAddSkuModal] = useState(false);
   const [editBillId, setEditBillId] = useState<string | null>(null);
-  const [editBillForm, setEditBillForm] = useState({ billNumber: '', billDate: '', dueDate: '', notes: '' });
   const [deleteConfirmBillId, setDeleteConfirmBillId] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
 
@@ -237,6 +236,22 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
   const singleMatchForEnter = filteredProducts.length === 1 ? filteredProducts[0] : null;
   const productToAddOnEnter = exactBarcodeMatch ?? singleMatchForEnter;
 
+  const resetFormToCreate = useCallback(() => {
+    setForm({
+      supplierId: '',
+      billNumber: `PB-${Date.now()}`,
+      billDate: new Date().toISOString().slice(0, 10),
+      dueDate: '',
+      items: [],
+      paymentStatus: 'Credit',
+      paidAmount: 0,
+      bankAccountId: '',
+      notes: '',
+    });
+    setEditBillId(null);
+    setShowForm(false);
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.supplierId || form.items.length === 0) {
@@ -245,62 +260,63 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
     }
     setLoading(true);
     try {
+      const itemsPayload = form.items.map((i) => {
+        const qty = Math.max(1, Math.floor(i.quantity));
+        return {
+          productId: i.productId,
+          quantity: qty,
+          unitCost: i.unitCost,
+          taxAmount: i.taxAmount || 0,
+          subtotal: qty * i.unitCost,
+        };
+      });
+      const sub = itemsPayload.reduce((s, i) => s + i.subtotal, 0);
+      const tax = form.items.reduce((s, i) => s + (i.taxAmount || 0), 0);
+      const total = sub + tax;
+
+      if (editBillId) {
+        await procurementApi.updatePurchaseBill(editBillId, {
+          billNumber: form.billNumber,
+          billDate: form.billDate,
+          dueDate: form.dueDate || undefined,
+          notes: form.notes || undefined,
+          items: itemsPayload,
+          subtotal: sub,
+          taxTotal: tax,
+          totalAmount: total,
+        });
+        resetFormToCreate();
+        const list = await procurementApi.getPurchaseBills();
+        setBills(Array.isArray(list) ? list : []);
+        refreshItemsRef.current?.();
+        return;
+      }
+
       const payload = {
         supplierId: form.supplierId,
         billNumber: form.billNumber,
         billDate: form.billDate,
         dueDate: form.dueDate || undefined,
-        items: form.items.map((i) => {
-          const qty = Math.max(1, Math.floor(i.quantity));
-          return {
-            productId: i.productId,
-            quantity: qty,
-            unitCost: i.unitCost,
-            taxAmount: i.taxAmount || 0,
-            subtotal: qty * i.unitCost,
-          };
-        }),
-        subtotal,
-        taxTotal,
-        totalAmount,
+        items: itemsPayload,
+        subtotal: sub,
+        taxTotal: tax,
+        totalAmount: total,
         paymentStatus: form.paymentStatus,
-        paidAmount: form.paymentStatus !== 'Credit' ? form.paidAmount || totalAmount : 0,
+        paidAmount: form.paymentStatus !== 'Credit' ? form.paidAmount || total : 0,
         bankAccountId: form.bankAccountId || undefined,
         notes: form.notes || undefined,
       };
       const result = await createPurchaseBillOfflineFirst(payload);
       if (result.synced) {
-        setForm({
-          supplierId: '',
-          billNumber: `PB-${Date.now()}`,
-          billDate: new Date().toISOString().slice(0, 10),
-          dueDate: '',
-          items: [],
-          paymentStatus: 'Credit',
-          paidAmount: 0,
-          bankAccountId: '',
-          notes: '',
-        });
-        setShowForm(false);
+        resetFormToCreate();
         const list = await procurementApi.getPurchaseBills();
         setBills(Array.isArray(list) ? list : []);
       } else if (result.localId) {
-        setForm({
-          supplierId: '',
-          billNumber: `PB-${Date.now()}`,
-          billDate: new Date().toISOString().slice(0, 10),
-          dueDate: '',
-          items: [],
-          paymentStatus: 'Credit',
-          paidAmount: 0,
-          bankAccountId: '',
-          notes: '',
-        });
-        setShowForm(false);
+        resetFormToCreate();
         console.warn('Purchase bill saved offline. Will sync when back online.');
       }
     } catch (err: any) {
-      alert(err?.response?.data?.error || err?.message || 'Failed to create purchase bill');
+      alert(err?.response?.data?.error || err?.message || (editBillId ? 'Failed to update purchase bill' : 'Failed to create purchase bill'));
     } finally {
       setLoading(false);
     }
@@ -311,7 +327,13 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-bold text-slate-800">Purchase bills</h2>
         <Button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            if (showForm) {
+              resetFormToCreate();
+            } else {
+              setShowForm(true);
+            }
+          }}
           className={showForm ? 'bg-slate-200 text-slate-700' : 'bg-indigo-600 text-white'}
         >
           {showForm ? 'Cancel' : 'New purchase bill'}
@@ -320,7 +342,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
 
       {showForm && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <h3 className="font-bold text-slate-800 mb-4">Create purchase bill</h3>
+          <h3 className="font-bold text-slate-800 mb-4">{editBillId ? 'Edit purchase bill' : 'Create purchase bill'}</h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div ref={vendorDropdownRef} className="relative">
@@ -329,10 +351,11 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                   type="text"
                   value={vendorDropdownOpen ? vendorSearch : vendorDisplayName || vendorSearch}
                   onChange={(e) => {
+                    if (editBillId) return;
                     setVendorSearch(e.target.value);
                     setVendorDropdownOpen(true);
                   }}
-                  onFocus={() => setVendorDropdownOpen(true)}
+                  onFocus={() => !editBillId && setVendorDropdownOpen(true)}
                   onBlur={(e) => {
                     if (vendorDropdownRef.current?.contains(e.relatedTarget as Node)) return;
                     setVendorDropdownOpen(false);
@@ -340,7 +363,8 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                     if (form.supplierId && !vendorSearch) setVendorSearch(vendorDisplayName);
                   }}
                   placeholder="Search or select supplier..."
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                  className={`w-full border border-slate-200 rounded-lg px-3 py-2 ${editBillId ? 'bg-slate-100 cursor-not-allowed' : ''}`}
+                  readOnly={!!editBillId}
                 />
                 {vendorDropdownOpen && (
                   <ul className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
@@ -552,46 +576,48 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Payment status</label>
-                <Select
-                  value={form.paymentStatus}
-                  onChange={(e) => setForm((f) => ({ ...f, paymentStatus: e.target.value as any }))}
-                >
-                  <option value="Credit">Credit (pay later)</option>
-                  <option value="Paid">Paid in full</option>
-                  <option value="Partial">Partial payment</option>
-                </Select>
+            {!editBillId && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Payment status</label>
+                  <Select
+                    value={form.paymentStatus}
+                    onChange={(e) => setForm((f) => ({ ...f, paymentStatus: e.target.value as any }))}
+                  >
+                    <option value="Credit">Credit (pay later)</option>
+                    <option value="Paid">Paid in full</option>
+                    <option value="Partial">Partial payment</option>
+                  </Select>
+                </div>
+                {(form.paymentStatus === 'Paid' || form.paymentStatus === 'Partial') && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Amount paid now</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={form.paidAmount || ''}
+                        onChange={(e) => setForm((f) => ({ ...f, paidAmount: parseFloat(e.target.value) || 0 }))}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Bank account (if Bank)</label>
+                      <Select
+                        value={form.bankAccountId}
+                        onChange={(e) => setForm((f) => ({ ...f, bankAccountId: e.target.value }))}
+                      >
+                        <option value="">Cash</option>
+                        {bankAccounts.map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </>
+                )}
               </div>
-              {(form.paymentStatus === 'Paid' || form.paymentStatus === 'Partial') && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Amount paid now</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={form.paidAmount || ''}
-                      onChange={(e) => setForm((f) => ({ ...f, paidAmount: parseFloat(e.target.value) || 0 }))}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Bank account (if Bank)</label>
-                    <Select
-                      value={form.bankAccountId}
-                      onChange={(e) => setForm((f) => ({ ...f, bankAccountId: e.target.value }))}
-                    >
-                      <option value="">Cash</option>
-                      {bankAccounts.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </Select>
-                  </div>
-                </>
-              )}
-            </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
               <input
@@ -602,7 +628,7 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
               />
             </div>
             <Button type="submit" disabled={loading} className="bg-indigo-600 text-white">
-              {loading ? 'Saving...' : 'Save purchase bill'}
+              {loading ? 'Saving...' : editBillId ? 'Update purchase bill' : 'Save purchase bill'}
             </Button>
           </form>
         </div>
@@ -646,14 +672,36 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
                     <div className="flex items-center justify-end gap-1">
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditBillId(b.id);
-                          setEditBillForm({
-                            billNumber: b.bill_number || '',
-                            billDate: (b.bill_date || '').toString().slice(0, 10),
-                            dueDate: (b.due_date || '').toString().slice(0, 10) || '',
-                            notes: b.notes || '',
-                          });
+                        onClick={async () => {
+                          try {
+                            const bill = await procurementApi.getPurchaseBillById(b.id);
+                            if (!bill || !bill.items?.length) {
+                              alert('Could not load bill or bill has no items.');
+                              return;
+                            }
+                            setForm({
+                              supplierId: bill.supplier_id || bill.supplierId || '',
+                              billNumber: bill.bill_number || bill.billNumber || '',
+                              billDate: (bill.bill_date || bill.billDate || '').toString().slice(0, 10),
+                              dueDate: (bill.due_date || bill.dueDate || '').toString().slice(0, 10) || '',
+                              items: bill.items.map((it: any) => ({
+                                productId: it.product_id || it.productId,
+                                quantity: Number(it.quantity) || 1,
+                                unitCost: Number(it.unit_cost ?? it.unitCost) || 0,
+                                taxAmount: Number(it.tax_amount ?? it.taxAmount) || 0,
+                                subtotal: Number(it.subtotal) || 0,
+                              })),
+                              paymentStatus: 'Credit',
+                              paidAmount: 0,
+                              bankAccountId: '',
+                              notes: bill.notes || '',
+                            });
+                            setVendorSearch(bill.supplier_name || '');
+                            setEditBillId(b.id);
+                            setShowForm(true);
+                          } catch (err: any) {
+                            alert(err?.response?.data?.error || err?.message || 'Failed to load bill');
+                          }
                         }}
                         className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
                         title="Edit bill"
@@ -688,79 +736,6 @@ export default function PurchaseBillsSection({ onPayRemaining }: PurchaseBillsSe
         </table>
         {bills.length === 0 && <p className="text-slate-400 p-6 text-center">No purchase bills yet</p>}
       </div>
-
-      {editBillId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !updating && setEditBillId(null)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Edit bill</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Bill number</label>
-                <input
-                  value={editBillForm.billNumber}
-                  onChange={(e) => setEditBillForm((f) => ({ ...f, billNumber: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Bill date</label>
-                <input
-                  type="date"
-                  value={editBillForm.billDate}
-                  onChange={(e) => setEditBillForm((f) => ({ ...f, billDate: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Due date</label>
-                <input
-                  type="date"
-                  value={editBillForm.dueDate}
-                  onChange={(e) => setEditBillForm((f) => ({ ...f, dueDate: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
-                <input
-                  value={editBillForm.notes}
-                  onChange={(e) => setEditBillForm((f) => ({ ...f, notes: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <Button
-                onClick={async () => {
-                  setUpdating(true);
-                  try {
-                    await procurementApi.updatePurchaseBill(editBillId, {
-                      billNumber: editBillForm.billNumber,
-                      billDate: editBillForm.billDate,
-                      dueDate: editBillForm.dueDate || undefined,
-                      notes: editBillForm.notes,
-                    });
-                    setEditBillId(null);
-                    const list = await procurementApi.getPurchaseBills();
-                    setBills(Array.isArray(list) ? list : []);
-                  } catch (err: any) {
-                    alert(err?.response?.data?.error || err?.message || 'Failed to update bill');
-                  } finally {
-                    setUpdating(false);
-                  }
-                }}
-                disabled={updating}
-                className="bg-indigo-600 text-white"
-              >
-                {updating ? 'Saving...' : 'Save'}
-              </Button>
-              <Button onClick={() => !updating && setEditBillId(null)} className="bg-slate-200 text-slate-700">
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {deleteConfirmBillId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !updating && setDeleteConfirmBillId(null)}>
