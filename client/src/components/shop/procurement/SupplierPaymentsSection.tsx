@@ -31,6 +31,12 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
   });
   const [allocateInputs, setAllocateInputs] = useState<Record<string, string>>({});
   const appliedPrefillRef = useRef(false);
+  const [editPaymentId, setEditPaymentId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<typeof form | null>(null);
+  const [editBillsWithBalance, setEditBillsWithBalance] = useState<any[]>([]);
+  const [editAllocateInputs, setEditAllocateInputs] = useState<Record<string, string>>({});
+  const [deleteConfirmPaymentId, setDeleteConfirmPaymentId] = useState<string | null>(null);
+  const [updatingPayment, setUpdatingPayment] = useState(false);
 
   useEffect(() => {
     const tenantId = getTenantId();
@@ -345,6 +351,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                 <th className="pb-2">Supplier</th>
                 <th className="pb-2 text-right">Amount</th>
                 <th className="pb-2">Method</th>
+                <th className="pb-2 w-24 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -354,6 +361,45 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                   <td className="py-2">{p.supplier_name}</td>
                   <td className="py-2 text-right font-medium">{CURRENCY} {Number(p.amount).toLocaleString()}</td>
                   <td className="py-2">{p.payment_method}</td>
+                  <td className="py-2 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const payment = await procurementApi.getSupplierPaymentById(p.id);
+                            if (!payment) return;
+                            setEditForm({
+                              supplierId: payment.supplier_id,
+                              amount: Number(payment.amount) || 0,
+                              paymentMethod: (payment.payment_method as any) || 'Cash',
+                              bankAccountId: payment.bank_account_id || '',
+                              paymentDate: (payment.payment_date || '').toString().slice(0, 10),
+                              reference: payment.reference || '',
+                              notes: payment.notes || '',
+                              allocations: Array.isArray(payment.allocations) ? payment.allocations : [],
+                            });
+                            setEditPaymentId(p.id);
+                            setEditAllocateInputs({});
+                            const bills = await procurementApi.getBillsWithBalance(payment.supplier_id);
+                            setEditBillsWithBalance(Array.isArray(bills) ? bills : []);
+                          } catch (err: any) {
+                            alert(err?.response?.data?.error || err?.message || 'Failed to load payment');
+                          }
+                        }}
+                        className="px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmPaymentId(p.id)}
+                        className="px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -363,6 +409,200 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
           )}
         </div>
       </div>
+
+      {editPaymentId && editForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8" onClick={() => !updatingPayment && setEditPaymentId(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg my-auto" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Edit supplier payment</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Supplier</label>
+                <Select value={editForm.supplierId} onChange={(e) => setEditForm((f) => f ? { ...f, supplierId: e.target.value } : f)} required>
+                  <option value="">Select supplier...</option>
+                  {vendors.map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </Select>
+              </div>
+              {editBillsWithBalance.length > 0 && (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 p-3">
+                  <p className="text-xs font-bold text-amber-800 uppercase mb-2">Allocate to bills</p>
+                  {editBillsWithBalance.map((b) => {
+                    const billId = b.id;
+                    const inputVal = editAllocateInputs[billId] ?? '';
+                    const alloc = editForm.allocations.find((a) => a.purchaseBillId === billId);
+                    return (
+                      <div key={billId} className="flex flex-wrap items-center gap-2 py-1.5 border-b border-amber-100 last:border-0">
+                        <span className="text-sm">{b.bill_number}</span>
+                        <span className="text-xs text-slate-500">Balance: {CURRENCY} {Number(b.balance_due).toLocaleString()}</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={inputVal}
+                          onChange={(e) => setEditAllocateInputs((prev) => ({ ...prev, [billId]: e.target.value }))}
+                          className="w-20 border border-slate-200 rounded px-2 py-1 text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const num = parseFloat(inputVal);
+                            const amt = Number.isNaN(num) || num <= 0 ? Number(b.balance_due) || 0 : num;
+                            if (amt <= 0) return;
+                            setEditForm((f) => {
+                              if (!f) return f;
+                              const rest = f.allocations.filter((a) => a.purchaseBillId !== billId);
+                              const existing = f.allocations.find((a) => a.purchaseBillId === billId);
+                              return { ...f, allocations: [...rest, { purchaseBillId: billId, amount: existing ? existing.amount + amt : amt }] };
+                            });
+                            setEditAllocateInputs((prev) => ({ ...prev, [billId]: '' }));
+                          }}
+                          className="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded"
+                        >
+                          Allocate
+                        </button>
+                        {alloc && (
+                          <span className="text-xs text-emerald-600">
+                            {CURRENCY} {alloc.amount.toLocaleString()}
+                            <button type="button" onClick={() => setEditForm((f) => f ? { ...f, allocations: f.allocations.filter((a) => a.purchaseBillId !== billId) } : f)} className="ml-1 text-rose-500">✕</button>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <p className="text-xs mt-1">Total allocated: {CURRENCY} {editForm.allocations.reduce((s, a) => s + a.amount, 0).toLocaleString()}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editForm.amount || ''}
+                  onChange={(e) => setEditForm((f) => f ? { ...f, amount: parseFloat(e.target.value) || 0 } : f)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Payment method</label>
+                <Select value={editForm.paymentMethod} onChange={(e) => setEditForm((f) => f ? { ...f, paymentMethod: e.target.value as any } : f)}>
+                  <option value="Cash">Cash</option>
+                  <option value="Bank">Bank</option>
+                  <option value="Card">Card</option>
+                </Select>
+              </div>
+              {editForm.paymentMethod === 'Bank' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Bank account</label>
+                  <Select value={editForm.bankAccountId} onChange={(e) => setEditForm((f) => f ? { ...f, bankAccountId: e.target.value } : f)}>
+                    <option value="">Select...</option>
+                    {bankAccounts.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Payment date</label>
+                <input
+                  type="date"
+                  value={editForm.paymentDate}
+                  onChange={(e) => setEditForm((f) => f ? { ...f, paymentDate: e.target.value } : f)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Reference</label>
+                <input
+                  type="text"
+                  value={editForm.reference}
+                  onChange={(e) => setEditForm((f) => f ? { ...f, reference: e.target.value } : f)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                <input
+                  type="text"
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm((f) => f ? { ...f, notes: e.target.value } : f)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button
+                disabled={updatingPayment || editForm.allocations.length === 0 || Math.abs(editForm.allocations.reduce((s, a) => s + a.amount, 0) - editForm.amount) > 0.01}
+                onClick={async () => {
+                  if (!editForm) return;
+                  setUpdatingPayment(true);
+                  try {
+                    await procurementApi.updateSupplierPayment(editPaymentId, {
+                      supplierId: editForm.supplierId,
+                      amount: editForm.amount,
+                      paymentMethod: editForm.paymentMethod,
+                      bankAccountId: editForm.paymentMethod === 'Bank' && editForm.bankAccountId ? editForm.bankAccountId : undefined,
+                      paymentDate: editForm.paymentDate,
+                      reference: editForm.reference || undefined,
+                      notes: editForm.notes || undefined,
+                      allocations: editForm.allocations,
+                    });
+                    setEditPaymentId(null);
+                    setEditForm(null);
+                    const list = await procurementApi.getSupplierPayments();
+                    setPayments(Array.isArray(list) ? list : []);
+                  } catch (err: any) {
+                    alert(err?.response?.data?.error || err?.message || 'Failed to update payment');
+                  } finally {
+                    setUpdatingPayment(false);
+                  }
+                }}
+                className="bg-indigo-600 text-white"
+              >
+                {updatingPayment ? 'Saving...' : 'Save'}
+              </Button>
+              <Button onClick={() => !updatingPayment && (setEditPaymentId(null), setEditForm(null))} className="bg-slate-200 text-slate-700">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmPaymentId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !updatingPayment && setDeleteConfirmPaymentId(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <p className="text-slate-700 font-medium mb-4">
+              Delete this supplier payment? Accounting will be reversed and linked bills will show the unpaid balance again.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                disabled={updatingPayment}
+                onClick={async () => {
+                  setUpdatingPayment(true);
+                  try {
+                    await procurementApi.deleteSupplierPayment(deleteConfirmPaymentId);
+                    setDeleteConfirmPaymentId(null);
+                    const list = await procurementApi.getSupplierPayments();
+                    setPayments(Array.isArray(list) ? list : []);
+                  } catch (err: any) {
+                    alert(err?.response?.data?.error || err?.message || 'Failed to delete payment');
+                  } finally {
+                    setUpdatingPayment(false);
+                  }
+                }}
+                className="bg-rose-600 text-white"
+              >
+                {updatingPayment ? 'Deleting...' : 'Delete'}
+              </Button>
+              <Button onClick={() => !updatingPayment && setDeleteConfirmPaymentId(null)} className="bg-slate-200 text-slate-700">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -65,11 +65,14 @@ export class ProcurementService {
       const status =
         balanceDue <= 0 ? 'Paid' : (data.paidAmount && data.paidAmount > 0 ? 'Partial' : 'Posted');
 
+      const paidNow = data.paidAmount || 0;
+      const initialBankId = paidNow > 0 && (data.paymentStatus === 'Paid' || data.paymentStatus === 'Partial') ? data.bankAccountId || null : null;
+
       const billRes = await client.query(
         `INSERT INTO purchase_bills (
           tenant_id, supplier_id, bill_number, bill_date, due_date,
-          subtotal, tax_total, total_amount, paid_amount, balance_due, status, notes
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+          subtotal, tax_total, total_amount, paid_amount, balance_due, status, notes, initial_payment_bank_account_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
         [
           tenantId,
           data.supplierId,
@@ -79,10 +82,11 @@ export class ProcurementService {
           data.subtotal,
           data.taxTotal,
           data.totalAmount,
-          data.paidAmount || 0,
+          paidNow,
           balanceDue,
           status,
           data.notes || null,
+          initialBankId,
         ]
       );
       const billId = billRes[0].id;
@@ -213,7 +217,7 @@ export class ProcurementService {
     const journalId = journalRes[0].id;
 
     const totalAmount = data.totalAmount;
-    const paidNow = data.paidAmount || 0;
+    const paidNowForAccounting = data.paidAmount || 0;
 
     // Debit Inventory (asset increase)
     await client.query(
@@ -229,7 +233,7 @@ export class ProcurementService {
     );
 
     // If paid at purchase: Debit AP, Credit Cash/Bank
-    if (paidNow > 0 && (data.paymentStatus === 'Paid' || data.paymentStatus === 'Partial')) {
+    if (paidNowForAccounting > 0 && (data.paymentStatus === 'Paid' || data.paymentStatus === 'Partial')) {
       let cashBankAccId: string;
       if (data.bankAccountId) {
         const bankRows = await client.query(
@@ -267,22 +271,143 @@ export class ProcurementService {
       await client.query(
         `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
          VALUES ($1, $2, $3, $4, 0)`,
-        [tenantId, journalId, apAccId, paidNow]
+        [tenantId, journalId, apAccId, paidNowForAccounting]
       );
       await client.query(
         `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
          VALUES ($1, $2, $3, 0, $4)`,
-        [tenantId, journalId, cashBankAccId, paidNow]
+        [tenantId, journalId, cashBankAccId, paidNowForAccounting]
       );
 
       if (data.bankAccountId) {
         await client.query(
           `UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) - $1, updated_at = NOW()
            WHERE id = $2 AND tenant_id = $3`,
-          [paidNow, data.bankAccountId, tenantId]
+          [paidNowForAccounting, data.bankAccountId, tenantId]
         );
       }
     }
+  }
+
+  /** Update bill metadata only (no line items or amounts). Accounting unchanged. */
+  async updatePurchaseBill(
+    tenantId: string,
+    billId: string,
+    data: { billNumber?: string; billDate?: string; dueDate?: string; notes?: string }
+  ): Promise<void> {
+    const updates: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+    if (data.billNumber !== undefined) {
+      updates.push(`bill_number = $${idx++}`);
+      values.push(data.billNumber);
+    }
+    if (data.billDate !== undefined) {
+      updates.push(`bill_date = $${idx++}`);
+      values.push(data.billDate);
+    }
+    if (data.dueDate !== undefined) {
+      updates.push(`due_date = $${idx++}`);
+      values.push(data.dueDate ?? null);
+    }
+    if (data.notes !== undefined) {
+      updates.push(`notes = $${idx++}`);
+      values.push(data.notes ?? null);
+    }
+    if (updates.length === 0) return;
+    values.push(billId, tenantId);
+    await this.db.query(
+      `UPDATE purchase_bills SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${idx} AND tenant_id = $${idx + 1}`,
+      values
+    );
+  }
+
+  /**
+   * Delete purchase bill. Fails if any supplier payments are allocated to this bill.
+   * Reverses accounting (journal reversal), bank balance (if initial payment), and inventory.
+   */
+  async deletePurchaseBill(tenantId: string, billId: string): Promise<void> {
+    return this.db.transaction(async (client) => {
+      const linked = await client.query(
+        `SELECT 1 FROM purchase_bill_payments WHERE tenant_id = $1 AND purchase_bill_id = $2 LIMIT 1`,
+        [tenantId, billId]
+      );
+      if (linked.length > 0) {
+        throw new Error('Cannot delete bill: it has supplier payments applied. Remove or edit those payments first.');
+      }
+
+      const billRows = await client.query(
+        `SELECT id, bill_number, total_amount, paid_amount, initial_payment_bank_account_id
+         FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, billId]
+      );
+      if (billRows.length === 0) throw new Error('Purchase bill not found');
+      const bill = billRows[0];
+      const totalAmount = parseFloat(bill.total_amount) || 0;
+      const paidNow = parseFloat(bill.paid_amount) || 0;
+      const bankId = bill.initial_payment_bank_account_id;
+
+      // 1) Reverse journal: find journal for this bill and post reversing entry
+      const jeRows = await client.query(
+        `SELECT id, date, reference FROM journal_entries
+         WHERE tenant_id = $1 AND source_module = 'Purchases' AND source_id = $2`,
+        [tenantId, billId]
+      );
+      if (jeRows.length > 0) {
+        const journalId = jeRows[0].id;
+        const ledgers = await client.query(
+          `SELECT account_id, debit, credit FROM ledger_entries WHERE tenant_id = $1 AND journal_entry_id = $2`,
+          [tenantId, journalId]
+        );
+        const revRef = `Reversal-${bill.bill_number || billId}`;
+        const revJournalRes = await client.query(
+          `INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+           VALUES ($1, NOW(), $2, $3, 'Purchases', $4, 'Posted') RETURNING id`,
+          [tenantId, revRef, `Reversal of purchase ${bill.bill_number}`, billId]
+        );
+        const revJournalId = revJournalRes[0].id;
+        for (const row of ledgers) {
+          const debit = parseFloat(row.debit) || 0;
+          const credit = parseFloat(row.credit) || 0;
+          await client.query(
+            `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [tenantId, revJournalId, row.account_id, credit, debit]
+          );
+        }
+      }
+
+      // 2) Reverse bank balance if there was initial payment
+      if (paidNow > 0 && bankId) {
+        await client.query(
+          `UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW()
+           WHERE id = $2 AND tenant_id = $3`,
+          [paidNow, bankId, tenantId]
+        );
+      }
+
+      // 3) Reverse inventory: get items and subtract quantities
+      const items = await client.query(
+        `SELECT product_id, quantity, unit_cost FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2`,
+        [tenantId, billId]
+      );
+      const whRows = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
+      const warehouseId = whRows.length > 0 ? whRows[0].id : null;
+      if (warehouseId) {
+        for (const item of items) {
+          const qty = parseFloat(item.quantity) || 0;
+          await client.query(
+            `UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand - $1, updated_at = NOW()
+             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4`,
+            [qty, tenantId, item.product_id, warehouseId]
+          );
+        }
+      }
+
+      await client.query('DELETE FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2', [tenantId, billId]);
+      await client.query('DELETE FROM purchase_bills WHERE tenant_id = $1 AND id = $2', [tenantId, billId]);
+      await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+    });
   }
 
   /**
@@ -381,6 +506,222 @@ export class ProcurementService {
 
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
       return paymentId;
+    });
+  }
+
+  /**
+   * Reverse a supplier payment in accounting and on bills (for update/delete).
+   */
+  private async reverseSupplierPaymentAccounting(
+    client: any,
+    tenantId: string,
+    paymentId: string,
+    amount: number,
+    bankAccountId: string | null
+  ): Promise<void> {
+    const jeRows = await client.query(
+      `SELECT id FROM journal_entries WHERE tenant_id = $1 AND source_module = 'Purchases' AND source_id = $2`,
+      [tenantId, paymentId]
+    );
+    if (jeRows.length > 0) {
+      const journalId = jeRows[0].id;
+      const ledgers = await client.query(
+        `SELECT account_id, debit, credit FROM ledger_entries WHERE tenant_id = $1 AND journal_entry_id = $2`,
+        [tenantId, journalId]
+      );
+      const revJournalRes = await client.query(
+        `INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+         VALUES ($1, NOW(), $2, $3, 'Purchases', $4, 'Posted') RETURNING id`,
+        [tenantId, `Reversal-SP-${paymentId.slice(0, 8)}`, `Reversal of supplier payment`, paymentId]
+      );
+      const revJournalId = revJournalRes[0].id;
+      for (const row of ledgers) {
+        const debit = parseFloat(row.debit) || 0;
+        const credit = parseFloat(row.credit) || 0;
+        await client.query(
+          `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [tenantId, revJournalId, row.account_id, credit, debit]
+        );
+      }
+    }
+    if (amount > 0 && bankAccountId) {
+      await client.query(
+        `UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) + $1, updated_at = NOW()
+         WHERE id = $2 AND tenant_id = $3`,
+        [amount, bankAccountId, tenantId]
+      );
+    }
+  }
+
+  /**
+   * Update supplier payment: reverse existing allocations and accounting, then apply new data.
+   * Bills linked to this payment get their status updated from new allocations.
+   */
+  async updateSupplierPayment(
+    tenantId: string,
+    paymentId: string,
+    data: SupplierPaymentInput
+  ): Promise<void> {
+    return this.db.transaction(async (client) => {
+      const payRows = await client.query(
+        `SELECT id, amount, bank_account_id FROM supplier_payments WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, paymentId]
+      );
+      if (payRows.length === 0) throw new Error('Supplier payment not found');
+      const oldAmount = parseFloat(payRows[0].amount) || 0;
+      const oldBankId = payRows[0].bank_account_id || null;
+
+      const allocs = await client.query(
+        `SELECT purchase_bill_id, amount FROM purchase_bill_payments WHERE tenant_id = $1 AND supplier_payment_id = $2`,
+        [tenantId, paymentId]
+      );
+
+      // Reverse: un-apply from bills (add back balance, update status)
+      for (const a of allocs) {
+        const amt = parseFloat(a.amount) || 0;
+        if (amt <= 0) continue;
+        await client.query(
+          `UPDATE purchase_bills
+           SET paid_amount = paid_amount - $1, balance_due = balance_due + $1,
+               status = CASE WHEN (balance_due + $1) >= total_amount THEN 'Posted' WHEN (paid_amount - $1) > 0 THEN 'Partial' ELSE 'Posted' END,
+               updated_at = NOW()
+           WHERE id = $2 AND tenant_id = $3`,
+          [amt, a.purchase_bill_id, tenantId]
+        );
+      }
+
+      await client.query('DELETE FROM purchase_bill_payments WHERE tenant_id = $1 AND supplier_payment_id = $2', [tenantId, paymentId]);
+      await this.reverseSupplierPaymentAccounting(client, tenantId, paymentId, oldAmount, oldBankId);
+
+      // Update payment row
+      await client.query(
+        `UPDATE supplier_payments SET amount = $1, payment_method = $2, bank_account_id = $3, payment_date = $4, reference = $5, notes = $6
+         WHERE id = $7 AND tenant_id = $8`,
+        [
+          data.amount,
+          data.paymentMethod,
+          data.bankAccountId || null,
+          data.paymentDate,
+          data.reference || null,
+          data.notes || null,
+          paymentId,
+          tenantId,
+        ]
+      );
+
+      // Re-apply new allocations (same as record)
+      for (const alloc of data.allocations) {
+        if (alloc.amount <= 0) continue;
+        await client.query(
+          `INSERT INTO purchase_bill_payments (tenant_id, purchase_bill_id, supplier_payment_id, amount)
+           VALUES ($1, $2, $3, $4)`,
+          [tenantId, alloc.purchaseBillId, paymentId, alloc.amount]
+        );
+        await client.query(
+          `UPDATE purchase_bills
+           SET paid_amount = paid_amount + $1, balance_due = balance_due - $1,
+               status = CASE WHEN (balance_due - $1) <= 0 THEN 'Paid' ELSE 'Partial' END,
+               updated_at = NOW()
+           WHERE id = $2 AND tenant_id = $3`,
+          [alloc.amount, alloc.purchaseBillId, tenantId]
+        );
+      }
+
+      const apAccId = await this.getOrCreateAccount(
+        client,
+        tenantId,
+        'Trade Payables (Suppliers)',
+        'Liability',
+        COA.TRADE_PAYABLES
+      );
+      let cashBankAccId: string;
+      if (data.bankAccountId) {
+        const bankRows = await client.query(
+          'SELECT chart_account_id FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2',
+          [data.bankAccountId, tenantId]
+        );
+        cashBankAccId =
+          bankRows.length > 0 && bankRows[0].chart_account_id
+            ? bankRows[0].chart_account_id
+            : await this.getOrCreateAccount(client, tenantId, 'Main Bank Account', 'Asset', COA.MAIN_BANK);
+      } else {
+        const cashRows = await client.query(
+          `SELECT chart_account_id FROM shop_bank_accounts WHERE tenant_id = $1 AND account_type = 'Cash' AND is_active = TRUE LIMIT 1`,
+          [tenantId]
+        );
+        cashBankAccId =
+          cashRows.length > 0 && cashRows[0].chart_account_id
+            ? cashRows[0].chart_account_id
+            : await this.getOrCreateAccount(client, tenantId, 'Cash on Hand', 'Asset', COA.CASH_ON_HAND);
+      }
+
+      const ref = data.reference || `SP-${paymentId.slice(0, 8)}`;
+      const journalRes = await client.query(
+        `INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+         VALUES ($1, $2, $3, $4, 'Purchases', $5, 'Posted') RETURNING id`,
+        [tenantId, data.paymentDate, ref, `Supplier payment ${ref}`, paymentId]
+      );
+      const journalId = journalRes[0].id;
+      await client.query(
+        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+         VALUES ($1, $2, $3, $4, 0)`,
+        [tenantId, journalId, apAccId, data.amount]
+      );
+      await client.query(
+        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+         VALUES ($1, $2, $3, 0, $4)`,
+        [tenantId, journalId, cashBankAccId, data.amount]
+      );
+      if (data.bankAccountId) {
+        await client.query(
+          `UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) - $1, updated_at = NOW()
+           WHERE id = $2 AND tenant_id = $3`,
+          [data.amount, data.bankAccountId, tenantId]
+        );
+      }
+
+      await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+    });
+  }
+
+  /**
+   * Delete supplier payment. Reverses accounting and un-applies all allocations from bills.
+   */
+  async deleteSupplierPayment(tenantId: string, paymentId: string): Promise<void> {
+    return this.db.transaction(async (client) => {
+      const payRows = await client.query(
+        `SELECT id, amount, bank_account_id FROM supplier_payments WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, paymentId]
+      );
+      if (payRows.length === 0) throw new Error('Supplier payment not found');
+      const amount = parseFloat(payRows[0].amount) || 0;
+      const bankId = payRows[0].bank_account_id || null;
+
+      const allocs = await client.query(
+        `SELECT purchase_bill_id, amount FROM purchase_bill_payments WHERE tenant_id = $1 AND supplier_payment_id = $2`,
+        [tenantId, paymentId]
+      );
+      for (const a of allocs) {
+        const amt = parseFloat(a.amount) || 0;
+        if (amt <= 0) continue;
+        await client.query(
+          `UPDATE purchase_bills
+           SET paid_amount = paid_amount - $1, balance_due = balance_due + $1, updated_at = NOW()
+           WHERE id = $2 AND tenant_id = $3`,
+          [amt, a.purchase_bill_id, tenantId]
+        );
+      }
+      await client.query(
+        `UPDATE purchase_bills SET status = CASE WHEN balance_due <= 0 THEN 'Paid' WHEN paid_amount > 0 THEN 'Partial' ELSE 'Posted' END, updated_at = NOW()
+         WHERE tenant_id = $1 AND id = ANY($2::text[])`,
+        [tenantId, allocs.map((a: any) => a.purchase_bill_id)]
+      );
+
+      await client.query('DELETE FROM purchase_bill_payments WHERE tenant_id = $1 AND supplier_payment_id = $2', [tenantId, paymentId]);
+      await this.reverseSupplierPaymentAccounting(client, tenantId, paymentId, amount, bankId);
+      await client.query('DELETE FROM supplier_payments WHERE tenant_id = $1 AND id = $2', [tenantId, paymentId]);
+      await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
     });
   }
 
@@ -549,6 +890,32 @@ export class ProcurementService {
     }
     sql += ` ORDER BY sp.payment_date DESC`;
     return this.db.query(sql, params);
+  }
+
+  async getSupplierPaymentById(tenantId: string, paymentId: string) {
+    const payments = await this.db.query(
+      `SELECT sp.*, v.name as supplier_name
+       FROM supplier_payments sp
+       JOIN shop_vendors v ON sp.supplier_id = v.id AND v.tenant_id = $1
+       WHERE sp.tenant_id = $1 AND sp.id = $2`,
+      [tenantId, paymentId]
+    );
+    if (payments.length === 0) return null;
+    const allocations = await this.db.query(
+      `SELECT pbp.purchase_bill_id, pbp.amount, pb.bill_number
+       FROM purchase_bill_payments pbp
+       JOIN purchase_bills pb ON pb.id = pbp.purchase_bill_id AND pb.tenant_id = pbp.tenant_id
+       WHERE pbp.tenant_id = $1 AND pbp.supplier_payment_id = $2`,
+      [tenantId, paymentId]
+    );
+    return {
+      ...payments[0],
+      allocations: allocations.map((a: any) => ({
+        purchaseBillId: a.purchase_bill_id,
+        amount: parseFloat(a.amount) || 0,
+        bill_number: a.bill_number,
+      })),
+    };
   }
 
   async getBillsWithBalance(tenantId: string, supplierId: string) {

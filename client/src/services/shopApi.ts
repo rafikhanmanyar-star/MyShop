@@ -221,9 +221,15 @@ export const procurementApi = {
     apiClient.get<any[]>(`/shop/procurement/purchase-bills${supplierId ? `?supplierId=${supplierId}` : ''}`),
   getPurchaseBillById: (id: string) => apiClient.get<any>(`/shop/procurement/purchase-bills/${id}`),
   createPurchaseBill: (data: any) => apiClient.post<{ id: string }>('/shop/procurement/purchase-bills', data),
+  updatePurchaseBill: (id: string, data: { billNumber?: string; billDate?: string; dueDate?: string; notes?: string }) =>
+    apiClient.patch(`/shop/procurement/purchase-bills/${id}`, data),
+  deletePurchaseBill: (id: string) => apiClient.delete(`/shop/procurement/purchase-bills/${id}`),
   getSupplierPayments: (supplierId?: string) =>
     apiClient.get<any[]>(`/shop/procurement/supplier-payments${supplierId ? `?supplierId=${supplierId}` : ''}`),
+  getSupplierPaymentById: (id: string) => apiClient.get<any>(`/shop/procurement/supplier-payments/${id}`),
   recordSupplierPayment: (data: any) => apiClient.post<{ id: string }>('/shop/procurement/supplier-payments', data),
+  updateSupplierPayment: (id: string, data: any) => apiClient.put(`/shop/procurement/supplier-payments/${id}`, data),
+  deleteSupplierPayment: (id: string) => apiClient.delete(`/shop/procurement/supplier-payments/${id}`),
   getSupplierLedger: (supplierId?: string) =>
     apiClient.get<any>(`/shop/procurement/supplier-ledger${supplierId ? `?supplierId=${supplierId}` : ''}`),
   getBillsWithBalance: (supplierId: string) =>
@@ -231,6 +237,43 @@ export const procurementApi = {
   reports: {
     apAging: () => apiClient.get<any>('/shop/procurement/reports/ap-aging'),
     inventoryValuation: () => apiClient.get<any>('/shop/procurement/reports/inventory-valuation'),
+  },
+};
+
+// --- Data export/import (Settings → Data) ---
+export interface ImportRowError {
+  row: number;
+  field?: string;
+  message: string;
+}
+
+export interface ImportResult {
+  success: boolean;
+  errors: ImportRowError[];
+  imported?: number;
+}
+
+export interface BackupEntry {
+  id: string;
+  filename: string;
+  createdAt: string;
+  sizeInBytes: number;
+}
+
+export const dataApi = {
+  importSkus: (rows: any[]) =>
+    apiClient.post<ImportResult>('/shop/data/import/skus', { rows }),
+  importInventory: (rows: any[]) =>
+    apiClient.post<ImportResult>('/shop/data/import/inventory', { rows }),
+  importBills: (rows: any[]) =>
+    apiClient.post<ImportResult>('/shop/data/import/bills', { rows }),
+  importPayments: (rows: any[]) =>
+    apiClient.post<ImportResult>('/shop/data/import/payments', { rows }),
+  backups: {
+    list: () => apiClient.get<BackupEntry[]>('/shop/data/backups'),
+    create: () => apiClient.post<{ filename: string; createdAt: string; sizeInBytes: number }>('/shop/data/backups'),
+    restore: (filename: string) =>
+      apiClient.post<{ success: boolean; message: string }>('/shop/data/backups/restore', { filename }),
   },
 };
 

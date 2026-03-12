@@ -33,6 +33,24 @@ router.post('/purchase-bills', checkRole(['admin', 'accountant']), async (req: a
   }
 });
 
+router.patch('/purchase-bills/:id', checkRole(['admin', 'accountant']), async (req: any, res) => {
+  try {
+    await getProcurementService().updatePurchaseBill(req.tenantId, req.params.id, req.body);
+    res.json({ message: 'Purchase bill updated' });
+  } catch (e: any) {
+    res.status(e.statusCode === 409 ? 409 : 500).json({ error: e.message });
+  }
+});
+
+router.delete('/purchase-bills/:id', checkRole(['admin', 'accountant']), async (req: any, res) => {
+  try {
+    await getProcurementService().deletePurchaseBill(req.tenantId, req.params.id);
+    res.json({ message: 'Purchase bill deleted' });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/supplier-payments', checkRole(['admin', 'accountant']), async (req: any, res) => {
   try {
     const supplierId = req.query.supplierId as string | undefined;
@@ -47,6 +65,34 @@ router.post('/supplier-payments', checkRole(['admin', 'accountant']), async (req
   try {
     const id = await getProcurementService().recordSupplierPayment(req.tenantId, req.body);
     res.status(201).json({ id, message: 'Supplier payment recorded' });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/supplier-payments/:id', checkRole(['admin', 'accountant']), async (req: any, res) => {
+  try {
+    const payment = await getProcurementService().getSupplierPaymentById(req.tenantId, req.params.id);
+    if (!payment) return res.status(404).json({ error: 'Supplier payment not found' });
+    res.json(payment);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put('/supplier-payments/:id', checkRole(['admin', 'accountant']), async (req: any, res) => {
+  try {
+    await getProcurementService().updateSupplierPayment(req.tenantId, req.params.id, req.body);
+    res.json({ message: 'Supplier payment updated' });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/supplier-payments/:id', checkRole(['admin', 'accountant']), async (req: any, res) => {
+  try {
+    await getProcurementService().deleteSupplierPayment(req.tenantId, req.params.id);
+    res.json({ message: 'Supplier payment deleted' });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

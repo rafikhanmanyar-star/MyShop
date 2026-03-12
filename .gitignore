@@ -11,5 +11,6 @@ release/
 Thumbs.db
 *.log
 server_logs.txt
+server/backups/
 .vscode/
 *.tsbuildinfo

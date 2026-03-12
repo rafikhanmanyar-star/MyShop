@@ -3,11 +3,15 @@ import { getImageBlob } from '../services/imageCache';
 import { getFullImageUrl } from '../api';
 
 /**
- * Returns a URL suitable for <img src>: uses local cached blob if available,
- * otherwise the remote URL. Revokes object URLs on unmount.
+ * Returns a URL suitable for <img src>. Uses full remote URL immediately so
+ * images show without waiting for cache. If a cached blob is available, swaps
+ * to blob URL for offline support. Revokes object URLs on unmount.
  */
 export function useImageUrl(path: string | undefined): string | undefined {
-    const [url, setUrl] = useState<string | undefined>(undefined);
+    // Set initial URL from path so <img> has a valid src on first paint (no undefined)
+    const [url, setUrl] = useState<string | undefined>(() =>
+        path ? getFullImageUrl(path) : undefined
+    );
     const objectUrlRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -15,6 +19,9 @@ export function useImageUrl(path: string | undefined): string | undefined {
             setUrl(undefined);
             return;
         }
+        // Show remote URL immediately so images load right away
+        setUrl(getFullImageUrl(path));
+
         let cancelled = false;
         getImageBlob(path).then((blob) => {
             if (cancelled) return;
@@ -26,11 +33,10 @@ export function useImageUrl(path: string | undefined): string | undefined {
                 const objUrl = URL.createObjectURL(blob);
                 objectUrlRef.current = objUrl;
                 setUrl(objUrl);
-            } else {
-                setUrl(getFullImageUrl(path));
             }
+            // else: keep current url (already set to full remote URL above)
         }).catch(() => {
-            if (!cancelled) setUrl(getFullImageUrl(path));
+            // keep current url (full remote URL)
         });
         return () => {
             cancelled = true;

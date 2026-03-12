@@ -150,6 +150,10 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'PUT', headers: options.headers }, data);
   }
 
+  async patch<T>(endpoint: string, data?: any, options: { headers?: HeadersInit } = {}): Promise<T> {
+    return this.request<T>(endpoint, { method: 'PATCH', headers: options.headers }, data);
+  }
+
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }

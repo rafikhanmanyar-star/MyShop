@@ -201,8 +201,14 @@ export class DatabaseService implements IDatabaseService {
   }
 
   async close(): Promise<void> {
-    if (this.sqliteDb) this.sqliteDb.close();
-    if (this.pgPool) await this.pgPool.end();
+    if (this.sqliteDb) {
+      this.sqliteDb.close();
+      this.sqliteDb = null;
+    }
+    if (this.pgPool) {
+      await this.pgPool.end();
+      this.pgPool = null;
+    }
   }
 
   private convertPgToSqlite(sql: string): string {
@@ -228,4 +234,12 @@ export function getDatabaseService(): DatabaseService {
     dbServiceInstance = new DatabaseService(process.env.DATABASE_URL);
   }
   return dbServiceInstance;
+}
+
+/** Close the database and clear the singleton. Used before restore so the next request gets a fresh connection. */
+export async function closeAndResetDatabase(): Promise<void> {
+  if (dbServiceInstance) {
+    await dbServiceInstance.close();
+    dbServiceInstance = null;
+  }
 }

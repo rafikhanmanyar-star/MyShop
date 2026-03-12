@@ -13,6 +13,8 @@ import { AccountingProvider } from '../../context/AccountingContext';
 import ChartOfAccounts from './accounting/ChartOfAccounts';
 import { MobileOrdersProvider } from '../../context/MobileOrdersContext';
 import { MobileSettingsPanel } from './MobileOrdersPage';
+import DataExportImportSection from './settings/DataExportImportSection';
+import BackupRestoreSection from './settings/BackupRestoreSection';
 
 function toState(v: ShopVendor) {
     return {
@@ -413,7 +415,9 @@ const SettingsContent: React.FC = () => {
                 )}
 
                 {!isCashier && activeTab === 'data' && (
-                    <div className="space-y-6 max-w-xl">
+                    <div className="space-y-6 max-w-4xl">
+                        <DataExportImportSection />
+                        <BackupRestoreSection />
                         <Card className="border-none shadow-sm p-6">
                             <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Clear all transactions</h3>
                             <p className="text-slate-600 text-sm mb-4">
