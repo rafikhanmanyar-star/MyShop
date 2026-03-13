@@ -63,11 +63,7 @@ export default function Cart() {
                 {state.cart.map(item => (
                     <div key={item.productId} className="cart-item">
                         <div className="item-image">
-                            {item.image_url ? (
-                                <CachedImage path={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'var(--radius)' }} />
-                            ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /></svg>
-                            )}
+                            <CachedImage path={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'var(--radius)' }} />
                         </div>
                         <div className="item-details">
                             <div className="item-name">{item.name}</div>

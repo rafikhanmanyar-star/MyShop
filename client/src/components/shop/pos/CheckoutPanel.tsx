@@ -118,7 +118,7 @@ const CheckoutPanel: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white relative">
+        <div className="flex flex-col h-full min-h-0 bg-white relative overflow-hidden">
             {/* Customer Information Area */}
             <div className="p-6 border-b border-slate-100">
                 <div className="flex items-center justify-between mb-4">
@@ -286,30 +286,43 @@ const CheckoutPanel: React.FC = () => {
                                 </div>
 
                                 <div>
-                                    <label htmlFor="tender-amount-input" className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Denomination notes (amount paid by customer)</label>
                                     <div className="flex bg-slate-50 border-2 border-slate-100 rounded-xl overflow-hidden focus-within:border-blue-500 transition-colors">
-                                    <span className="flex items-center justify-center px-4 font-bold text-slate-400 bg-white">
-                                        {CURRENCY}
-                                    </span>
-                                    <input
-                                        id="tender-amount-input"
-                                        type="number"
-                                        className="flex-1 py-3 px-2 bg-transparent text-xl font-black text-slate-900 outline-none"
-                                        value={tenderAmount}
-                                        onChange={e => setTenderAmount(e.target.value)}
-                                        onFocus={e => e.target.select()}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter') {
-                                                if (!isProcessing && parseFloat(tenderAmount) >= grandTotal) {
-                                                    handleComplete();
+                                        <span className="flex items-center justify-center px-4 font-bold text-slate-400 bg-white">
+                                            {CURRENCY}
+                                        </span>
+                                        <input
+                                            id="tender-amount-input"
+                                            type="number"
+                                            aria-label="Amount tendered"
+                                            className="flex-1 py-3 px-2 bg-transparent text-xl font-black text-slate-900 outline-none"
+                                            value={tenderAmount}
+                                            onChange={e => setTenderAmount(e.target.value)}
+                                            onFocus={e => e.target.select()}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') {
+                                                    if (!isProcessing && parseFloat(tenderAmount) >= grandTotal) {
+                                                        handleComplete();
+                                                    }
                                                 }
-                                            }
-                                        }}
-                                    />
-                                    <button onClick={() => setTenderAmount(grandTotal.toString())} className="px-4 text-xs font-bold text-blue-600 hover:bg-blue-50">
-                                        EXACT
-                                    </button>
-                                </div>
+                                            }}
+                                        />
+                                        <button onClick={() => setTenderAmount(grandTotal.toString())} className="px-4 text-xs font-bold text-blue-600 hover:bg-blue-50">
+                                            EXACT
+                                        </button>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2 mt-3">
+                                        {[100, 500, 1000, 5000].map((note) => (
+                                            <button
+                                                key={note}
+                                                type="button"
+                                                onClick={() => setTenderAmount(String(note))}
+                                                className="px-4 py-2 rounded-lg font-bold text-sm border-2 border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all"
+                                            >
+                                                {CURRENCY}{note}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3 pt-5 mt-2">

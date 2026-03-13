@@ -408,7 +408,7 @@ const ProductSearch: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white relative">
+        <div className="flex flex-col h-full min-h-0 bg-white relative overflow-hidden">
             {/* Search Bar - Premium Fixed Header */}
             <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100 p-4">
                 <div className="relative group">

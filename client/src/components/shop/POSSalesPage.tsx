@@ -6,13 +6,15 @@ import POSSalesContent from './POSSalesContent';
 
 function POSSalesPage() {
     return (
-        <InventoryProvider>
-            <LoyaltyProvider>
-                <POSProvider>
-                    <POSSalesContent />
-                </POSProvider>
-            </LoyaltyProvider>
-        </InventoryProvider>
+        <div className="h-full min-h-0 flex flex-col overflow-hidden">
+            <InventoryProvider>
+                <LoyaltyProvider>
+                    <POSProvider>
+                        <POSSalesContent />
+                    </POSProvider>
+                </LoyaltyProvider>
+            </InventoryProvider>
+        </div>
     );
 }
 

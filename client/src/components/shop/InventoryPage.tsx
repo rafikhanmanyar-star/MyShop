@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { InventoryProvider, useInventory } from '../../context/InventoryContext';
 import InventoryDashboard from './inventory/InventoryDashboard';
 import StockMaster from './inventory/StockMaster';
@@ -11,6 +11,7 @@ import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { shopApi, ShopProductCategory } from '../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../services/categoriesOfflineCache';
+import { createCategoryOfflineFirst } from '../../services/categorySyncService';
 import { getFullImageUrl } from '../../config/apiUrl';
 
 const InventoryContent: React.FC = () => {
@@ -31,6 +32,10 @@ const InventoryContent: React.FC = () => {
     });
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+    const [categorySearchQuery, setCategorySearchQuery] = useState('');
+    const [addingCategory, setAddingCategory] = useState(false);
+    const categoryInputRef = useRef<HTMLDivElement>(null);
 
     const loadShopCategories = useCallback(async () => {
         try {
@@ -46,6 +51,67 @@ const InventoryContent: React.FC = () => {
         refreshItems();
         loadShopCategories();
     }, [refreshItems, loadShopCategories]);
+
+    // When modal opens, sync category search state; when it closes, collapse dropdown
+    useEffect(() => {
+        if (isNewSkuModalOpen) {
+            setCategorySearchQuery(newItemData.category);
+            setCategoryDropdownOpen(false);
+        }
+    }, [isNewSkuModalOpen]);
+
+    // Close category dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (categoryInputRef.current && !categoryInputRef.current.contains(e.target as Node)) {
+                setCategoryDropdownOpen(false);
+            }
+        };
+        if (categoryDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [categoryDropdownOpen]);
+
+    // All category names: General + existing shop categories
+    const allCategoryNames = useCallback(() => {
+        const names = new Set<string>(['General']);
+        shopCategories.forEach((c) => names.add(c.name));
+        return Array.from(names);
+    }, [shopCategories]);
+
+    const filteredCategories = React.useMemo(() => {
+        const q = (categorySearchQuery || '').trim().toLowerCase();
+        const all = allCategoryNames();
+        if (!q) return all;
+        return all.filter((name) => name.toLowerCase().includes(q));
+    }, [categorySearchQuery, allCategoryNames]);
+
+    const trimmedQuery = (categorySearchQuery || '').trim();
+    const exactMatch = trimmedQuery && allCategoryNames().some((n) => n.toLowerCase() === trimmedQuery.toLowerCase());
+    const showAddOption = trimmedQuery.length > 0 && !exactMatch;
+
+    const handleSelectCategory = (name: string) => {
+        setNewItemData((prev) => ({ ...prev, category: name }));
+        setCategorySearchQuery(name);
+        setCategoryDropdownOpen(false);
+    };
+
+    const handleAddCategoryOnTheFly = async () => {
+        if (!trimmedQuery || addingCategory) return;
+        setAddingCategory(true);
+        try {
+            await createCategoryOfflineFirst(trimmedQuery);
+            await loadShopCategories();
+            setNewItemData((prev) => ({ ...prev, category: trimmedQuery }));
+            setCategorySearchQuery(trimmedQuery);
+            setCategoryDropdownOpen(false);
+        } catch (err) {
+            console.error('Failed to create category:', err);
+        } finally {
+            setAddingCategory(false);
+        }
+    };
 
     // Real-time duplicate checks for barcode and product name
     const barcodeConflictItems = React.useMemo(() => {
@@ -255,20 +321,48 @@ const InventoryContent: React.FC = () => {
                         )}
                     </div>
                     <div className="grid grid-cols-3 gap-4">
-                        <div>
+                        <div ref={categoryInputRef} className="relative">
                             <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-                            <select
+                            <input
+                                type="text"
                                 className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                value={newItemData.category}
-                                onChange={(e) => setNewItemData({ ...newItemData, category: e.target.value })}
-                            >
-                                <option value="General">General</option>
-                                {shopCategories.map(c => (
-                                    <option key={c.id} value={c.name}>{c.name}</option>
-                                ))}
-                            </select>
-                            {shopCategories.length === 0 && (
-                                <p className="text-xs text-slate-500 mt-1">Add categories in the Categories tab to list them here.</p>
+                                placeholder="Search or add category..."
+                                value={categoryDropdownOpen ? categorySearchQuery : newItemData.category}
+                                onChange={(e) => {
+                                    setCategorySearchQuery(e.target.value);
+                                    setCategoryDropdownOpen(true);
+                                }}
+                                onFocus={() => {
+                                    setCategorySearchQuery(newItemData.category);
+                                    setCategoryDropdownOpen(true);
+                                }}
+                            />
+                            {categoryDropdownOpen && (
+                                <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white py-1 shadow-lg max-h-48 overflow-y-auto">
+                                    {filteredCategories.length === 0 && !showAddOption && (
+                                        <div className="px-3 py-2 text-sm text-slate-500">No categories match.</div>
+                                    )}
+                                    {filteredCategories.map((name) => (
+                                        <button
+                                            key={name}
+                                            type="button"
+                                            className="block w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 text-slate-800"
+                                            onClick={() => handleSelectCategory(name)}
+                                        >
+                                            {name}
+                                        </button>
+                                    ))}
+                                    {showAddOption && (
+                                        <button
+                                            type="button"
+                                            className="block w-full text-left px-3 py-2 text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium border-t border-slate-100"
+                                            onClick={handleAddCategoryOnTheFly}
+                                            disabled={addingCategory}
+                                        >
+                                            {addingCategory ? 'Adding…' : `Add "${trimmedQuery}" as new category`}
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
                         <Input

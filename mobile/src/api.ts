@@ -32,6 +32,13 @@ export function getFullImageUrl(path: string | undefined): string | undefined {
     return `${cleanBase}${cleanPath}`;
 }
 
+/** Product image path from API (supports both snake_case and camelCase). */
+export function getProductImagePath(product: { image_url?: string | null; imageUrl?: string | null } | undefined): string | undefined {
+    if (!product) return undefined;
+    const path = product.image_url ?? product.imageUrl;
+    return path && String(path).trim() ? String(path).trim() : undefined;
+}
+
 const API_BASE = `${getApiBaseUrl()}/mobile`;
 
 async function request(url: string, options: RequestInit = {}) {

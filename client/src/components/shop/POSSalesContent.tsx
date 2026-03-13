@@ -120,9 +120,9 @@ const POSSalesContent: React.FC = () => {
 
     return (
         <div
-            className={`flex flex-col bg-[#f7f9fc] overflow-hidden pos-font select-none animate-fade-in relative ${isFullScreen ? 'fixed inset-0 z-[9999] h-screen w-screen' : 'h-full -m-8'}`}
+            className={`flex flex-col bg-[#f7f9fc] overflow-hidden pos-font select-none animate-fade-in relative ${isFullScreen ? 'fixed inset-0 z-[9999] h-screen w-screen' : 'h-full min-h-0 w-full'}`}
             ref={mainRef}
-            style={isFullScreen ? { height: '100vh', width: '100vw' } : { maxHeight: 'calc(100vh - 4rem)' }}
+            style={isFullScreen ? { height: '100vh', width: '100vw' } : { minHeight: 0, flex: 1 } as React.CSSProperties}
         >
             {/* Background Decorative Elements - Subtle */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
@@ -132,28 +132,28 @@ const POSSalesContent: React.FC = () => {
             {/* Top Status Bar */}
             <POSHeader />
 
-            <div className="flex flex-1 min-h-0 relative p-6 gap-6 z-10">
+            <div className="flex flex-1 min-h-0 w-full min-w-0 relative p-4 md:p-6 gap-4 md:gap-6 z-10 overflow-hidden">
                 {/* Left Panel: Search & Products */}
-                <div className="w-[32%] flex flex-col bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20">
+                <div className="flex flex-col bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20 min-w-0 w-[28%] max-w-[420px] flex-shrink-0">
                     <ProductSearch />
                 </div>
 
                 {/* Center & Right Panel Container */}
-                <div className="flex-1 flex gap-6 min-w-0">
+                <div className="flex-1 flex gap-4 md:gap-6 min-w-0 overflow-hidden">
                     {/* Center Panel: Cart / Bill Grid */}
-                    <div className="flex-1 flex flex-col bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden">
+                    <div className="flex-1 flex flex-col min-w-0 bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden">
                         <CartGrid />
                     </div>
 
                     {/* Right Panel: Totals & Payments */}
-                    <div className="w-[380px] flex flex-col bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20">
+                    <div className="w-[320px] min-w-[280px] max-w-[380px] flex flex-col flex-shrink-0 bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20">
                         <CheckoutPanel />
                     </div>
                 </div>
             </div>
 
             {/* Bottom Bar: Action Shortcuts */}
-            <div className="z-30 relative">
+            <div className="z-30 relative flex-shrink-0">
                 <ShortcutBar isFullScreen={isFullScreen} onToggleFullScreen={toggleFullScreen} />
             </div>
 

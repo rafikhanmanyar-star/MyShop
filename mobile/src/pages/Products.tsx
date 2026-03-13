@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { publicApi } from '../api';
+import { publicApi, getProductImagePath } from '../api';
 import CachedImage from '../components/CachedImage';
 import FilterPanel from '../components/FilterPanel';
 import { useOnline } from '../hooks/useOnline';
@@ -247,7 +247,7 @@ export default function Products() {
                 sku: product.sku,
                 price: product.price,
                 quantity: 1,
-                image_url: product.image_url,
+                image_url: getProductImagePath(product),
                 available_stock: product.available_stock,
                 tax_rate: parseFloat(product.tax_rate) || 0,
             },
@@ -374,11 +374,7 @@ export default function Products() {
                                     <div className="discount-badge">-{Math.round(p.discount_percentage)}%</div>
                                 )}
                                 <div className="image-wrap">
-                                    {p.image_url ? (
-                                        <CachedImage path={p.image_url} alt={p.name} loading="lazy" />
-                                    ) : (
-                                        <svg className="placeholder-icon" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
-                                    )}
+                                    <CachedImage path={getProductImagePath(p)} alt={p.name} loading="lazy" />
                                 </div>
                                 <div className="info">
                                     <div className="name">{p.name}</div>

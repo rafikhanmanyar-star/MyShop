@@ -173,3 +173,9 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
 }
+
+/* POS layout: prevent horizontal page scroll; only inner panels scroll */
+.pos-page-root {
+    overflow-x: hidden;
+    overflow-y: hidden;
+}

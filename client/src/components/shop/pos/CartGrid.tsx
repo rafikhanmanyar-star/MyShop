@@ -6,11 +6,13 @@ import { ICONS, CURRENCY } from '../../../constants';
 const CartGrid: React.FC = () => {
     const { cart, removeFromCart, updateCartItem } = usePOS();
 
+    const gridCols = 'minmax(0,1fr) minmax(70px,100px) minmax(100px,140px) minmax(80px,100px) 48px';
+
     return (
-        <div className="flex flex-col h-full bg-white relative">
+        <div className="flex flex-col h-full min-h-0 bg-white relative overflow-hidden">
             {/* Table Header - Sticky */}
-            <div className="grid grid-cols-[1fr_100px_140px_100px_48px] gap-4 px-6 py-4 bg-slate-50 border-b border-slate-100 text-[11px] font-bold uppercase tracking-wider text-slate-500 sticky top-0 z-20 items-center">
-                <div>Item Description</div>
+            <div className="grid gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 bg-slate-50 border-b border-slate-100 text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500 sticky top-0 z-20 items-center flex-shrink-0" style={{ gridTemplateColumns: gridCols }}>
+                <div className="min-w-0">Item Description</div>
                 <div className="text-center">Rate</div>
                 <div className="text-center">Quantity</div>
                 <div className="text-right">Amount</div>
@@ -18,7 +20,7 @@ const CartGrid: React.FC = () => {
             </div>
 
             {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto pos-scrollbar bg-white">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pos-scrollbar bg-white">
                 {cart.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-300 py-20">
                         <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
@@ -32,7 +34,8 @@ const CartGrid: React.FC = () => {
                         {cart.map((item) => (
                             <div
                                 key={item.id}
-                                className="grid grid-cols-[1fr_100px_140px_100px_48px] gap-4 px-6 py-4 hover:bg-blue-50/30 transition-colors group items-center"
+                                className="grid gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 hover:bg-blue-50/30 transition-colors group items-center min-w-0"
+                                style={{ gridTemplateColumns: gridCols }}
                             >
                                 <div className="min-w-0 flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">

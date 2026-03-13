@@ -190,7 +190,7 @@ function AppLayout() {
               <Route path="/" element={role === 'pos_cashier' ? <Navigate to="/cashier-dashboard" replace /> : <DashboardPage />} />
 
               <Route path="/cashier-dashboard" element={role === 'pos_cashier' ? <CashierDashboardPage /> : <Navigate to="/" replace />} />
-              <Route path="/pos" element={<POSSalesPage />} />
+              <Route path="/pos" element={<div className="flex-1 min-h-0 flex flex-col overflow-hidden h-full"><POSSalesPage /></div>} />
               <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <MobileOrdersPage /> : <Navigate to="/" replace />} />
 
               <Route path="/inventory" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><InventoryPage /></div> : <Navigate to="/" replace />} />
