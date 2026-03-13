@@ -167,6 +167,8 @@ export const accountingApi = {
   deleteAccount: (id: string) => apiClient.delete(`/shop/accounting/accounts/${id}`),
   getJournalEntries: (limit = 200) => apiClient.get<any[]>(`/shop/accounting/journal-entries?limit=${limit}`),
   postJournalEntry: (data: any) => apiClient.post('/shop/accounting/journal-entries', data),
+  updateJournalEntry: (id: string, data: any) => apiClient.put(`/shop/accounting/journal-entries/${id}`, data),
+  deleteJournalEntry: (id: string) => apiClient.delete(`/shop/accounting/journal-entries/${id}`),
   getFinancialSummary: () => apiClient.get<any>('/shop/accounting/summary'),
   getBankBalances: () => apiClient.get<any[]>('/shop/accounting/bank-balances'),
   getSalesBySource: () => apiClient.get<any>('/shop/accounting/sales-by-source'),

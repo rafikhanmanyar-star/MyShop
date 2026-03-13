@@ -100,6 +100,38 @@ router.post('/journal-entries', checkRole(['admin', 'accountant']), async (req: 
     }
 });
 
+// --- Update Journal Entry (admin only; syncs accounts and report aggregates) ---
+router.put('/journal-entries/:id', checkRole(['admin']), async (req: any, res) => {
+    try {
+        const { id } = req.params;
+        const result = await getAccountingService().updateJournalEntry(req.tenantId, id, req.body);
+        res.json(result);
+    } catch (error: any) {
+        const status = error.statusCode || 500;
+        if (status !== 500) {
+            return res.status(status).json({ error: error.message });
+        }
+        console.error('❌ Error updating journal entry:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- Delete Journal Entry (admin only; syncs accounts and report aggregates) ---
+router.delete('/journal-entries/:id', checkRole(['admin']), async (req: any, res) => {
+    try {
+        const { id } = req.params;
+        await getAccountingService().deleteJournalEntry(req.tenantId, id);
+        res.json({ success: true });
+    } catch (error: any) {
+        const status = error.statusCode || 500;
+        if (status !== 500) {
+            return res.status(status).json({ error: error.message });
+        }
+        console.error('❌ Error deleting journal entry:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- Financial Summary (P&L, Balance Sheet metrics) ---
 router.get('/summary', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {

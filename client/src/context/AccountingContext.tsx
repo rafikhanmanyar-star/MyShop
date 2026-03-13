@@ -33,6 +33,8 @@ interface AccountingContextValue {
   updateAccount: (id: string, data: any) => Promise<any>;
   deleteAccount: (id: string) => Promise<any>;
   postJournalEntry: (data: any) => Promise<any>;
+  updateJournalEntry: (id: string, data: any) => Promise<any>;
+  deleteJournalEntry: (id: string) => Promise<any>;
   [key: string]: any;
 }
 
@@ -48,6 +50,8 @@ const defaultValue: AccountingContextValue = {
   updateAccount: async () => ({}),
   deleteAccount: async () => ({}),
   postJournalEntry: async () => ({}),
+  updateJournalEntry: async () => ({}),
+  deleteJournalEntry: async () => ({}),
 };
 
 const AccountingContext = createContext<AccountingContextValue>(defaultValue);
@@ -286,6 +290,16 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
     return result.result ?? result;
   };
 
+  const updateJournalEntry = async (id: string, data: any) => {
+    await accountingApi.updateJournalEntry(id, data);
+    await refreshAll();
+  };
+
+  const deleteJournalEntry = async (id: string) => {
+    await accountingApi.deleteJournalEntry(id);
+    await refreshAll();
+  };
+
   useEffect(() => {
     refreshAll();
   }, [refreshAll]);
@@ -315,6 +329,8 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
     updateAccount,
     deleteAccount,
     postJournalEntry,
+    updateJournalEntry,
+    deleteJournalEntry,
   };
 
   return <AccountingContext.Provider value={value}>{children}</AccountingContext.Provider>;

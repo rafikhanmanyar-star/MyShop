@@ -681,6 +681,171 @@ export class AccountingService {
   }
 
   /**
+   * Update an existing journal entry and its ledger lines. Recomputes affected account balances
+   * and invalidates report aggregates so accounts and related transactions stay in sync.
+   */
+  async updateJournalEntry(tenantId: string, journalEntryId: string, data: {
+    date: string;
+    reference: string;
+    description: string;
+    lines: Array<{
+      accountId: string;
+      debit: number;
+      credit: number;
+      description?: string;
+    }>;
+  }) {
+    const totalDebit = data.lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
+    const totalCredit = data.lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
+    if (Math.abs(totalDebit - totalCredit) > 0.01) {
+      const err: any = new Error('Journal must balance: total debits must equal total credits.');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    return this.db.transaction(async (client: any) => {
+      const existing = await client.query(
+        'SELECT id FROM journal_entries WHERE id = $1 AND tenant_id = $2',
+        [journalEntryId, tenantId]
+      );
+      if (!existing.length) {
+        const err: any = new Error('Journal entry not found');
+        err.statusCode = 404;
+        throw err;
+      }
+
+      const accountIds = [...new Set(data.lines.map((l) => l.accountId))];
+      const placeholders = accountIds.map((_, i) => `$${i + 2}`).join(', ');
+      const levelRows = await client.query(
+        `SELECT id, level FROM accounts WHERE tenant_id = $1 AND id IN (${placeholders})`,
+        [tenantId, ...accountIds]
+      );
+      const levelByAccount: Record<string, number | null> = {};
+      for (const r of levelRows) {
+        levelByAccount[r.id] = r.level != null ? Number(r.level) : null;
+      }
+      for (const aid of accountIds) {
+        const level = levelByAccount[aid];
+        if (level != null && level < 4) {
+          const err: any = new Error('Posting is only allowed to leaf (postable) accounts. This account is a parent/header account.');
+          err.statusCode = 400;
+          throw err;
+        }
+      }
+
+      const oldLines = await client.query(
+        'SELECT account_id FROM ledger_entries WHERE journal_entry_id = $1 AND tenant_id = $2',
+        [journalEntryId, tenantId]
+      );
+      const affectedAccountIds = new Set<string>([
+        ...oldLines.map((r: any) => r.account_id),
+        ...accountIds,
+      ]);
+
+      await client.query(
+        `UPDATE journal_entries SET date = $1, reference = $2, description = $3
+         WHERE id = $4 AND tenant_id = $5`,
+        [data.date, data.reference, data.description, journalEntryId, tenantId]
+      );
+
+      await client.query(
+        'DELETE FROM ledger_entries WHERE journal_entry_id = $1 AND tenant_id = $2',
+        [journalEntryId, tenantId]
+      );
+
+      for (const line of data.lines) {
+        if (line.debit > 0 || line.credit > 0) {
+          await client.query(`
+            INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [tenantId, journalEntryId, line.accountId, line.debit || 0, line.credit || 0]);
+        }
+      }
+
+      for (const accountId of affectedAccountIds) {
+        await client.query(`
+          UPDATE accounts
+          SET balance = (
+            SELECT CASE
+              WHEN a2.type IN ('Asset', 'Expense')
+                THEN COALESCE(SUM(le.debit), 0) - COALESCE(SUM(le.credit), 0)
+              ELSE
+                COALESCE(SUM(le.credit), 0) - COALESCE(SUM(le.debit), 0)
+            END
+            FROM accounts a2
+            LEFT JOIN ledger_entries le ON le.account_id = a2.id AND le.tenant_id = $1
+            WHERE a2.id = $2 AND a2.tenant_id = $1
+          ),
+          updated_at = NOW()
+          WHERE id = $2 AND tenant_id = $1
+        `, [tenantId, accountId]);
+      }
+
+      await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+
+      return { journalId: journalEntryId };
+    });
+  }
+
+  /**
+   * Delete a journal entry and its ledger lines. Cascades to ledger_entries; recomputes
+   * affected account balances and invalidates report aggregates so accounts stay in sync.
+   * Related records (e.g. expenses with journal_entry_id) may have their link set to null
+   * by the database if configured with ON DELETE SET NULL.
+   */
+  async deleteJournalEntry(tenantId: string, journalEntryId: string) {
+    return this.db.transaction(async (client: any) => {
+      const existing = await client.query(
+        'SELECT id FROM journal_entries WHERE id = $1 AND tenant_id = $2',
+        [journalEntryId, tenantId]
+      );
+      if (!existing.length) {
+        const err: any = new Error('Journal entry not found');
+        err.statusCode = 404;
+        throw err;
+      }
+
+      const oldLines = await client.query(
+        'SELECT account_id FROM ledger_entries WHERE journal_entry_id = $1 AND tenant_id = $2',
+        [journalEntryId, tenantId]
+      );
+      const affectedAccountIds = [...new Set(oldLines.map((r: any) => r.account_id))];
+
+      await client.query(
+        'DELETE FROM ledger_entries WHERE journal_entry_id = $1 AND tenant_id = $2',
+        [journalEntryId, tenantId]
+      );
+      await client.query(
+        'DELETE FROM journal_entries WHERE id = $1 AND tenant_id = $2',
+        [journalEntryId, tenantId]
+      );
+
+      for (const accountId of affectedAccountIds) {
+        await client.query(`
+          UPDATE accounts
+          SET balance = (
+            SELECT CASE
+              WHEN a2.type IN ('Asset', 'Expense')
+                THEN COALESCE(SUM(le.debit), 0) - COALESCE(SUM(le.credit), 0)
+              ELSE
+                COALESCE(SUM(le.credit), 0) - COALESCE(SUM(le.debit), 0)
+            END
+            FROM accounts a2
+            LEFT JOIN ledger_entries le ON le.account_id = a2.id AND le.tenant_id = $1
+            WHERE a2.id = $2 AND a2.tenant_id = $1
+          ),
+          updated_at = NOW()
+          WHERE id = $2 AND tenant_id = $1
+        `, [tenantId, accountId]);
+      }
+
+      await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+
+      return { success: true };
+    });
+  }
+
+  /**
    * Post cash variance on shift close (shortage or overage).
    * Shortage: Dr Cash Shortage Expense (81006), Cr Cash on Hand (11101).
    * Overage: Dr Cash on Hand (11101), Cr Cash Overage Income (71004).

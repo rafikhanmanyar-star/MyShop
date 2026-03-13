@@ -151,20 +151,20 @@ const CheckoutPanel: React.FC = () => {
                     </div>
                 ) : (
                     <button
-                        className="w-full flex items-center justify-between px-4 py-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/30 transition-all group"
+                        className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-200 border-dashed rounded-xl text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/30 transition-all group"
                         onClick={() => setIsCustomerModalOpen(true)}
                     >
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg border border-slate-200 flex items-center justify-center group-hover:bg-white transition-all text-slate-400 group-hover:text-blue-600">
-                                {React.cloneElement(ICONS.plus as React.ReactElement, { size: 18 })}
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center group-hover:bg-white transition-all text-slate-400 group-hover:text-blue-600 shrink-0">
+                                {React.cloneElement(ICONS.plus as React.ReactElement, { size: 14 })}
                             </div>
-                            <div className="text-left">
-                                <span className="text-sm font-bold block">Walk-in Customer</span>
-                                <span className="text-[11px] font-medium opacity-60">Add customer profile (F6)</span>
+                            <div className="text-left min-w-0">
+                                <span className="text-xs font-bold block">Walk-in Customer</span>
+                                <span className="text-[10px] font-medium opacity-60">Add customer profile (F6)</span>
                             </div>
                         </div>
-                        <div className="text-slate-300 group-hover:text-blue-400 transition-transform group-hover:translate-x-1">
-                            {React.cloneElement(ICONS.chevronRight as React.ReactElement, { size: 16 })}
+                        <div className="text-slate-300 group-hover:text-blue-400 transition-transform group-hover:translate-x-1 shrink-0">
+                            {React.cloneElement(ICONS.chevronRight as React.ReactElement, { size: 14 })}
                         </div>
                     </button>
                 )}
@@ -249,7 +249,7 @@ const CheckoutPanel: React.FC = () => {
                                 {ICONS.checkCircle}
                             </div>
                             <h3 className="text-lg font-bold text-emerald-700">Sale Complete</h3>
-                            <p className="text-xs text-emerald-600">Change: {CURRENCY}{(lastCompletedSale.changeDue || 0).toLocaleString()}</p>
+                            <p className="text-sm font-semibold text-emerald-700 mt-1">Refund: {CURRENCY}{(lastCompletedSale.changeDue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <button
@@ -273,19 +273,21 @@ const CheckoutPanel: React.FC = () => {
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => handleMethodSelect(POSPaymentMethod.CASH)}
-                                        className={`flex-1 py-3 px-4 rounded-xl font-bold flex flex-col items-center gap-1 transition-all border-2 ${selectedMethod === POSPaymentMethod.CASH ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-100 text-slate-500 hover:bg-slate-50'}`}
+                                        className={`flex-1 py-2 px-3 rounded-xl font-bold flex flex-col items-center gap-0.5 transition-all border-2 text-sm ${selectedMethod === POSPaymentMethod.CASH ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-100 text-slate-500 hover:bg-slate-50'}`}
                                     >
                                         {ICONS.dollarSign} CASH
                                     </button>
                                     <button
                                         onClick={() => handleMethodSelect(POSPaymentMethod.ONLINE)}
-                                        className={`flex-1 py-3 px-4 rounded-xl font-bold flex flex-col items-center gap-1 transition-all border-2 ${selectedMethod === POSPaymentMethod.ONLINE ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 text-slate-500 hover:bg-slate-50'}`}
+                                        className={`flex-1 py-2 px-3 rounded-xl font-bold flex flex-col items-center gap-0.5 transition-all border-2 text-sm ${selectedMethod === POSPaymentMethod.ONLINE ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-100 text-slate-500 hover:bg-slate-50'}`}
                                     >
                                         {ICONS.creditCard} ONLINE
                                     </button>
                                 </div>
 
-                                <div className="flex bg-slate-50 border-2 border-slate-100 rounded-xl overflow-hidden focus-within:border-blue-500 transition-colors">
+                                <div>
+                                    <label htmlFor="tender-amount-input" className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Denomination notes (amount paid by customer)</label>
+                                    <div className="flex bg-slate-50 border-2 border-slate-100 rounded-xl overflow-hidden focus-within:border-blue-500 transition-colors">
                                     <span className="flex items-center justify-center px-4 font-bold text-slate-400 bg-white">
                                         {CURRENCY}
                                     </span>
@@ -308,8 +310,9 @@ const CheckoutPanel: React.FC = () => {
                                         EXACT
                                     </button>
                                 </div>
+                                </div>
 
-                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                <div className="grid grid-cols-2 gap-3 pt-5 mt-2">
                                     <button
                                         onClick={handleHold}
                                         className="py-4 flex flex-col items-center justify-center border-2 border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all"
