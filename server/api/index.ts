@@ -14,6 +14,7 @@ import accountingRoutes from './routes/accounting.js';
 import expensesRoutes from './routes/expenses.js';
 import procurementRoutes from './routes/procurement.js';
 import shiftsRoutes from './routes/shifts.js';
+import khataRoutes from './routes/khata.js';
 import dataRoutes from './routes/data.js';
 import { runMigrations } from '../scripts/run-migrations.js';
 import { fileURLToPath } from 'url';
@@ -93,6 +94,7 @@ app.use('/api/shop/accounting', tenantMiddleware(dbService), accountingRoutes);
 app.use('/api/shop/expenses', tenantMiddleware(dbService), expensesRoutes);
 app.use('/api/shop/procurement', tenantMiddleware(dbService), procurementRoutes);
 app.use('/api/shop/shifts', tenantMiddleware(dbService), shiftsRoutes);
+app.use('/api/shop/khata', tenantMiddleware(dbService), khataRoutes);
 app.use('/api/shop/data', tenantMiddleware(dbService), dataRoutes);
 app.use('/api/shop', tenantMiddleware(dbService), shopRoutes);
 

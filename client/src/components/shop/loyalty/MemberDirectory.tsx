@@ -1,10 +1,11 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLoyalty } from '../../../context/LoyaltyContext';
-import { ICONS } from '../../../constants';
+import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
 import Modal from '../../ui/Modal';
 import { LoyaltyMember, LoyaltyTier } from '../../../types/loyalty';
+import { khataApi } from '../../../services/shopApi';
 
 const MemberDirectory: React.FC = () => {
     const { members, deleteMember, updateMember, transactions } = useLoyalty();
@@ -12,6 +13,22 @@ const MemberDirectory: React.FC = () => {
     const [activeTierFilter, setActiveTierFilter] = useState<LoyaltyTier | 'All'>('All');
     const [selectedMember, setSelectedMember] = useState<LoyaltyMember | null>(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [khataSummary, setKhataSummary] = useState<{ totalDebit: number; totalCredit: number; balance: number } | null | undefined>(undefined);
+
+    useEffect(() => {
+        if (!selectedMember?.customerId) {
+            setKhataSummary(null);
+            return;
+        }
+        setKhataSummary(undefined);
+        let cancelled = false;
+        khataApi.getCustomerSummary(selectedMember.customerId)
+            .then((data) => { if (!cancelled) setKhataSummary(data); })
+            .catch(() => { if (!cancelled) setKhataSummary(null); });
+        return () => { cancelled = true; };
+    }, [selectedMember?.customerId]);
+
+    const showKhataSummary = selectedMember?.customerId && khataSummary != null;
 
     const filteredMembers = useMemo(() => {
         return members.filter(m => {
@@ -270,6 +287,26 @@ const MemberDirectory: React.FC = () => {
                                         <p className="text-2xl font-black text-slate-900 font-mono tracking-tighter">{selectedMember.visitCount}</p>
                                     </div>
                                 </div>
+
+                                {showKhataSummary && (
+                                    <div className="p-6 bg-amber-50/80 border border-amber-100 rounded-3xl">
+                                        <h5 className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-3 flex items-center gap-2">Khata Summary</h5>
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <div>
+                                                <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest">Total Debit</p>
+                                                <p className="text-lg font-black text-slate-800 font-mono">{CURRENCY} {(khataSummary ?? { totalDebit: 0 }).totalDebit.toLocaleString()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest">Total Credit</p>
+                                                <p className="text-lg font-black text-slate-800 font-mono">{CURRENCY} {(khataSummary ?? { totalCredit: 0 }).totalCredit.toLocaleString()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest">Current Balance</p>
+                                                <p className={`text-lg font-black font-mono ${(khataSummary?.balance ?? 0) > 0 ? 'text-amber-600' : 'text-slate-800'}`}>{CURRENCY} {(khataSummary ?? { balance: 0 }).balance.toLocaleString()}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">

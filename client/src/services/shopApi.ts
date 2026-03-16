@@ -141,6 +141,39 @@ export const shopApi = {
   getSaleByInvoiceNumber: (saleNumber: string) => apiClient.get<any>(`/shop/sales/by-invoice/${encodeURIComponent(saleNumber)}`),
 };
 
+// --- Khata / Customer Credit API ---
+export interface KhataLedgerEntry {
+  id: string;
+  customer_id: string;
+  order_id: string | null;
+  type: 'debit' | 'credit';
+  amount: number;
+  note: string | null;
+  created_at: string;
+  customer_name?: string;
+  sale_number?: string;
+}
+
+export interface KhataSummaryRow {
+  customer_id: string;
+  customer_name: string;
+  total_debit: number;
+  total_credit: number;
+  balance: number;
+}
+
+export const khataApi = {
+  getLedger: (customerId?: string) =>
+    apiClient.get<KhataLedgerEntry[]>(`/shop/khata/ledger${customerId ? `?customerId=${encodeURIComponent(customerId)}` : ''}`),
+  getBalance: (customerId: string) => apiClient.get<{ balance: number }>(`/shop/khata/balance/${encodeURIComponent(customerId)}`),
+  getSummary: () => apiClient.get<KhataSummaryRow[]>('/shop/khata/summary'),
+  getCustomerSummary: (customerId: string) =>
+    apiClient.get<{ totalDebit: number; totalCredit: number; balance: number }>(`/shop/khata/customer/${encodeURIComponent(customerId)}/summary`),
+  receivePayment: (data: { customerId: string; amount: number; note?: string }) =>
+    apiClient.post<{ id: string }>('/shop/khata/receive-payment', data),
+  getCustomers: () => apiClient.get<{ id: string; name: string; contact_no: string | null }[]>('/shop/khata/customers'),
+};
+
 export interface ShopUser {
   id: string;
   username: string;

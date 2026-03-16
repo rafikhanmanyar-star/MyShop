@@ -624,6 +624,16 @@ export class ShopService {
         }
       }
 
+      // --- Khata / Credit: add debit entry to khata_ledger (customer credit system)
+      const isKhata = (saleData.paymentMethod || '').toLowerCase().includes('khata');
+      if (isKhata && saleData.customerId && saleData.grandTotal > 0) {
+        await client.query(
+          `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note)
+           VALUES ($1, $2, $3, 'debit', $4, $5)`,
+          [tenantId, saleData.customerId, saleId, saleData.grandTotal, `Sale ${saleData.saleNumber}`]
+        );
+      }
+
       return { id: saleId, barcode_value: barcodeValue };
     });
 

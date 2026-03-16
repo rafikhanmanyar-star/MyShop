@@ -61,7 +61,8 @@ export interface POSPayment {
 
 export enum POSPaymentMethod {
     CASH = 'Cash',
-    ONLINE = 'Online'
+    ONLINE = 'Online',
+    KHATA = 'Khata / Credit'
 }
 
 export interface POSHeldSale {

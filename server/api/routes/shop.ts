@@ -370,6 +370,10 @@ router.get('/sales', checkRole(['admin', 'pos_cashier', 'accountant']), async (r
 router.post('/sales', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
   try {
     const body = { ...req.body, userId: req.userId ?? req.body?.userId };
+    const pm = (body.paymentMethod || '').toLowerCase();
+    if (pm.includes('khata') && !body.customerId) {
+      return res.status(400).json({ error: 'Customer is required when payment method is Khata / Credit' });
+    }
     const result = await getShopService().createSale(req.tenantId, body);
     if (req.timedout) return;
     const saleId = typeof result === 'object' && result?.id != null ? result.id : result;

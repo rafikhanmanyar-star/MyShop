@@ -9,7 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList
+  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList, Receipt
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
 import { SyncOnOnline } from './components/SyncOnOnline';
@@ -27,6 +27,7 @@ const MobileOrdersPage = lazy(() => import('./components/shop/MobileOrdersPage')
 const ForecastPage = lazy(() => import('./components/shop/ForecastPage'));
 const CashierDashboardPage = lazy(() => import('./components/shop/cashier/CashierDashboardPage'));
 const ShiftsAdminPage = lazy(() => import('./components/shop/cashier/ShiftsAdminPage'));
+const KhataPage = lazy(() => import('./components/shop/khata/KhataPage'));
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant'] },
@@ -36,6 +37,7 @@ const navItems = [
   { path: '/inventory', label: 'Inventory', icon: Package, roles: ['admin'] },
   { path: '/procurement', label: 'Procurement', icon: Truck, roles: ['admin', 'accountant'] },
   { path: '/loyalty', label: 'Loyalty', icon: Users, roles: ['admin'] },
+  { path: '/khata', label: 'Khata Ledger', icon: Receipt, roles: ['admin', 'pos_cashier', 'accountant'] },
   { path: '/multi-store', label: 'Multi-Store', icon: Building2, roles: ['admin'] },
   { path: '/shifts', label: 'Shifts', icon: ClipboardList, roles: ['admin', 'accountant'] },
   { path: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin', 'accountant'] },
@@ -196,6 +198,7 @@ function AppLayout() {
               <Route path="/inventory" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><InventoryPage /></div> : <Navigate to="/" replace />} />
               <Route path="/procurement" element={['admin', 'accountant'].includes(role) ? <ProcurementPage /> : <Navigate to="/" replace />} />
               <Route path="/loyalty" element={role === 'admin' ? <LoyaltyPage /> : <Navigate to="/" replace />} />
+              <Route path="/khata" element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <KhataPage /> : <Navigate to="/" replace />} />
               <Route path="/multi-store" element={role === 'admin' ? <MultiStorePage /> : <Navigate to="/" replace />} />
               <Route path="/shifts" element={['admin', 'accountant'].includes(role) ? <ShiftsAdminPage /> : <Navigate to="/" replace />} />
               <Route path="/analytics" element={['admin', 'accountant'].includes(role) ? <BIDashboardsPage /> : <Navigate to="/" replace />} />

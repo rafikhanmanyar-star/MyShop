@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import Modal from '../../ui/Modal';
-import { ICONS, CURRENCY } from '../../../constants';
+import { ICONS } from '../../../constants';
 import { usePOS } from '../../../context/POSContext';
 import { ContactsApiRepository } from '../../../services/api/repositories/contactsApi';
 import { useLoyalty } from '../../../context/LoyaltyContext';
 import { POSCustomer } from '../../../types/pos';
-import { Contact } from '../../../types';
+import { Contact, ContactType } from '../../../types';
 
 interface CustomerSelectionModalProps {
     isOpen: boolean;
@@ -19,12 +19,19 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showRegisterForm, setShowRegisterForm] = useState(false);
+    const [registerForm, setRegisterForm] = useState({ name: '', contactNo: '', companyName: '' });
+    const [registerSubmitting, setRegisterSubmitting] = useState(false);
+    const [registerError, setRegisterError] = useState<string | null>(null);
 
     const contactsApi = new ContactsApiRepository();
 
     useEffect(() => {
         if (isOpen) {
             fetchContacts();
+            setShowRegisterForm(false);
+            setRegisterForm({ name: '', contactNo: '', companyName: '' });
+            setRegisterError(null);
         }
     }, [isOpen]);
 
@@ -59,6 +66,35 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
         onClose();
     };
 
+    const handleRegisterNewAccount = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setRegisterError(null);
+        const trimmedName = registerForm.name.trim();
+        if (!trimmedName) {
+            setRegisterError('Name is required.');
+            return;
+        }
+        setRegisterSubmitting(true);
+        try {
+            const newContact: Contact = {
+                id: `contact-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                name: trimmedName,
+                type: ContactType.CLIENT,
+                contactNo: registerForm.contactNo.trim() || undefined,
+                companyName: registerForm.companyName.trim() || undefined
+            };
+            const created = await contactsApi.createContact(newContact);
+            const contactToUse = created && typeof created === 'object' && 'id' in created ? created as Contact : newContact;
+            setContacts(prev => [...prev, contactToUse]);
+            handleSelect(contactToUse);
+        } catch (err) {
+            console.error('Failed to register new account:', err);
+            setRegisterError('Could not create account. Please try again.');
+        } finally {
+            setRegisterSubmitting(false);
+        }
+    };
+
     const filteredContacts = contacts.filter(c =>
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (c.contactNo && c.contactNo.includes(searchQuery))
@@ -83,94 +119,178 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
             size="lg"
         >
             <div className="space-y-6">
-                <div className="relative group">
-                    <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
-                        {React.cloneElement(ICONS.search as React.ReactElement, { size: 20 })}
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="Live search by name, contact or loyalty ID..."
-                        className="w-full pl-14 pr-6 py-5 bg-[#f8fafc] border-2 border-transparent rounded-[1.5rem] focus:bg-white focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 outline-none transition-all text-sm font-black text-slate-900 placeholder-slate-400 shadow-none"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        autoFocus
-                    />
-                </div>
-
-                <div className="max-h-[55vh] overflow-y-auto pr-2 pos-scrollbar">
-                    {loading ? (
-                        <div className="py-24 flex flex-col items-center gap-5 text-slate-300">
-                            <div className="w-12 h-12 border-[6px] border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-                            <span className="font-black text-[10px] uppercase tracking-[0.3em]">Querying Database...</span>
+                {showRegisterForm ? (
+                    <>
+                        <div className="flex items-center gap-3 mb-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowRegisterForm(false)}
+                                className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                                aria-label="Back to directory"
+                            >
+                                {ICONS.chevronRight && React.cloneElement(ICONS.chevronRight as React.ReactElement, { className: 'rotate-180' })}
+                            </button>
+                            <span className="text-sm font-black uppercase tracking-widest text-slate-500">New Customer</span>
                         </div>
-                    ) : filteredContacts.length === 0 ? (
-                        <div className="py-24 text-center text-slate-400 animate-fade-in">
-                            <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
-                                {React.cloneElement(ICONS.user as React.ReactElement, { size: 32, className: "opacity-20" })}
+                        <form onSubmit={handleRegisterNewAccount} className="space-y-5">
+                            {registerError && (
+                                <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-700 text-sm font-bold">
+                                    {registerError}
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Name *</label>
+                                <input
+                                    type="text"
+                                    value={registerForm.name}
+                                    onChange={(e) => setRegisterForm(f => ({ ...f, name: e.target.value }))}
+                                    placeholder="Full name"
+                                    className="w-full px-5 py-4 bg-[#f8fafc] border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-black text-slate-900 placeholder-slate-400"
+                                    autoFocus
+                                    disabled={registerSubmitting}
+                                />
                             </div>
-                            <h4 className="text-sm font-black uppercase tracking-widest text-slate-500">No Records Found</h4>
-                            <p className="text-[11px] font-bold mt-2 opacity-60">Refine your search parameters and try again.</p>
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Phone</label>
+                                <input
+                                    type="tel"
+                                    value={registerForm.contactNo}
+                                    onChange={(e) => setRegisterForm(f => ({ ...f, contactNo: e.target.value }))}
+                                    placeholder="Contact number"
+                                    className="w-full px-5 py-4 bg-[#f8fafc] border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-black text-slate-900 placeholder-slate-400"
+                                    disabled={registerSubmitting}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Company (optional)</label>
+                                <input
+                                    type="text"
+                                    value={registerForm.companyName}
+                                    onChange={(e) => setRegisterForm(f => ({ ...f, companyName: e.target.value }))}
+                                    placeholder="Company name"
+                                    className="w-full px-5 py-4 bg-[#f8fafc] border-2 border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-black text-slate-900 placeholder-slate-400"
+                                    disabled={registerSubmitting}
+                                />
+                            </div>
+                            <div className="pt-4 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowRegisterForm(false)}
+                                    className="flex-1 py-4 rounded-2xl border-2 border-slate-200 text-slate-600 font-black text-[11px] uppercase tracking-widest hover:bg-slate-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={registerSubmitting || !registerForm.name.trim()}
+                                    className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-black text-[11px] uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {registerSubmitting ? (
+                                        <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        ICONS.plus
+                                    )}
+                                    Register Account
+                                </button>
+                            </div>
+                        </form>
+                    </>
+                ) : (
+                    <>
+                        <div className="relative group">
+                            <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
+                                {React.cloneElement(ICONS.search as React.ReactElement, { size: 20 })}
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Live search by name, contact or loyalty ID..."
+                                className="w-full pl-14 pr-6 py-5 bg-[#f8fafc] border-2 border-transparent rounded-[1.5rem] focus:bg-white focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 outline-none transition-all text-sm font-black text-slate-900 placeholder-slate-400 shadow-none"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                autoFocus
+                            />
                         </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {filteredContacts.map(contact => {
-                                const loyaltyMember = members.find(m => m.customerId === contact.id || m.phone === contact.contactNo);
-                                return (
-                                    <button
-                                        key={contact.id}
-                                        onClick={() => handleSelect(contact)}
-                                        className="flex items-center gap-5 p-5 bg-white border border-slate-100 rounded-[2rem] hover:border-indigo-200 hover:shadow-none hover:shadow-none-500/5 transition-all text-left group relative overflow-hidden"
-                                    >
-                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/[0.02] rounded-full translate-x-10 -translate-y-10 group-hover:scale-150 transition-transform"></div>
-                                        <div className="w-14 h-14 rounded-2xl bg-[#f8fafc] flex items-center justify-center text-slate-400 font-black text-xl group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-none">
-                                            {contact.name.charAt(0)}
-                                        </div>
-                                        <div className="flex-1 min-w-0 relative z-10">
-                                            <div className="font-black text-slate-900 truncate tracking-tight text-base mb-1">{contact.name}</div>
-                                            <div className="text-[11px] text-slate-500 font-bold tracking-tight">{contact.contactNo || 'Anonymous Phone'}</div>
-                                            {loyaltyMember && (
-                                                <div className="mt-3 flex items-center gap-2">
-                                                    <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest border border-indigo-100">
-                                                        {loyaltyMember.tier}
-                                                    </span>
-                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
-                                                        {loyaltyMember.pointsBalance} <span className="opacity-60">POINTS</span>
-                                                    </span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="text-slate-200 group-hover:translate-x-1 transition-transform group-hover:text-indigo-400">
-                                            {ICONS.chevronRight}
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
 
-                <div className="pt-6 border-t border-slate-50 flex justify-between items-center bg-[#f8fafc]/50 -mx-8 px-8 -mb-8 pb-8 rounded-b-[2rem]">
-                    <button className="text-[11px] font-black uppercase tracking-widest text-white bg-indigo-600 px-6 py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-none shadow-none-200 flex items-center gap-3 active:scale-95">
-                        {ICONS.plus} Register New Account
-                    </button>
-                    <button
-                        onClick={() => {
-                            setCustomer({
-                                id: 'walk-in',
-                                name: 'Walk-in Customer',
-                                phone: '',
-                                points: 0,
-                                creditLimit: 0,
-                                balance: 0,
-                                tier: 'Standard'
-                            });
-                            onClose();
-                        }}
-                        className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors uppercase"
-                    >
-                        Skip Selection
-                    </button>
-                </div>
+                        <div className="max-h-[55vh] overflow-y-auto pr-2 pos-scrollbar">
+                            {loading ? (
+                                <div className="py-24 flex flex-col items-center gap-5 text-slate-300">
+                                    <div className="w-12 h-12 border-[6px] border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                                    <span className="font-black text-[10px] uppercase tracking-[0.3em]">Querying Database...</span>
+                                </div>
+                            ) : filteredContacts.length === 0 ? (
+                                <div className="py-24 text-center text-slate-400 animate-fade-in">
+                                    <div className="w-20 h-20 bg-slate-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
+                                        {React.cloneElement(ICONS.user as React.ReactElement, { size: 32, className: "opacity-20" })}
+                                    </div>
+                                    <h4 className="text-sm font-black uppercase tracking-widest text-slate-500">No Records Found</h4>
+                                    <p className="text-[11px] font-bold mt-2 opacity-60">Refine your search parameters and try again.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {filteredContacts.map(contact => {
+                                        const loyaltyMember = members.find(m => m.customerId === contact.id || m.phone === contact.contactNo);
+                                        return (
+                                            <button
+                                                key={contact.id}
+                                                onClick={() => handleSelect(contact)}
+                                                className="flex items-center gap-5 p-5 bg-white border border-slate-100 rounded-[2rem] hover:border-indigo-200 hover:shadow-none hover:shadow-none-500/5 transition-all text-left group relative overflow-hidden"
+                                            >
+                                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/[0.02] rounded-full translate-x-10 -translate-y-10 group-hover:scale-150 transition-transform"></div>
+                                                <div className="w-14 h-14 rounded-2xl bg-[#f8fafc] flex items-center justify-center text-slate-400 font-black text-xl group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-none">
+                                                    {contact.name.charAt(0)}
+                                                </div>
+                                                <div className="flex-1 min-w-0 relative z-10">
+                                                    <div className="font-black text-slate-900 truncate tracking-tight text-base mb-1">{contact.name}</div>
+                                                    <div className="text-[11px] text-slate-500 font-bold tracking-tight">{contact.contactNo || 'Anonymous Phone'}</div>
+                                                    {loyaltyMember && (
+                                                        <div className="mt-3 flex items-center gap-2">
+                                                            <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest border border-indigo-100">
+                                                                {loyaltyMember.tier}
+                                                            </span>
+                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                                                                {loyaltyMember.pointsBalance} <span className="opacity-60">POINTS</span>
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="text-slate-200 group-hover:translate-x-1 transition-transform group-hover:text-indigo-400">
+                                                    {ICONS.chevronRight}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="pt-6 border-t border-slate-50 flex justify-between items-center bg-[#f8fafc]/50 -mx-8 px-8 -mb-8 pb-8 rounded-b-[2rem]">
+                            <button
+                                type="button"
+                                onClick={() => setShowRegisterForm(true)}
+                                className="text-[11px] font-black uppercase tracking-widest text-white bg-indigo-600 px-6 py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-none shadow-none-200 flex items-center gap-3 active:scale-95"
+                            >
+                                {ICONS.plus} Register New Account
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setCustomer({
+                                        id: 'walk-in',
+                                        name: 'Walk-in Customer',
+                                        phone: '',
+                                        points: 0,
+                                        creditLimit: 0,
+                                        balance: 0,
+                                        tier: 'Standard'
+                                    });
+                                    onClose();
+                                }}
+                                className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors uppercase"
+                            >
+                                Skip Selection
+                            </button>
+                        </div>
+                    </>
+                )}
             </div>
         </Modal>
     );

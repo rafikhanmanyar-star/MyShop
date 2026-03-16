@@ -1,0 +1,158 @@
+import { getDatabaseService } from './databaseService.js';
+
+export interface KhataLedgerEntry {
+  id: string;
+  customer_id: string;
+  order_id: string | null;
+  type: 'debit' | 'credit';
+  amount: number;
+  note: string | null;
+  created_at: string;
+  customer_name?: string;
+  sale_number?: string;
+}
+
+export interface KhataSummaryRow {
+  customer_id: string;
+  customer_name: string;
+  total_debit: number;
+  total_credit: number;
+  balance: number;
+}
+
+let instance: KhataService | null = null;
+
+export function getKhataService(): KhataService {
+  if (!instance) instance = new KhataService();
+  return instance;
+}
+
+export class KhataService {
+  private db = getDatabaseService();
+
+  async addDebit(tenantId: string, customerId: string, orderId: string | null, amount: number, note?: string): Promise<string> {
+    const res = await this.db.query(
+      `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note)
+       VALUES ($1, $2, $3, 'debit', $4, $5)
+       RETURNING id`,
+      [tenantId, customerId, orderId, amount, note || null]
+    );
+    return res[0].id;
+  }
+
+  async addCredit(tenantId: string, customerId: string, amount: number, note?: string): Promise<string> {
+    const res = await this.db.query(
+      `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note)
+       VALUES ($1, $2, NULL, 'credit', $3, $4)
+       RETURNING id`,
+      [tenantId, customerId, amount, note || null]
+    );
+    return res[0].id;
+  }
+
+  async getLedger(tenantId: string, customerId?: string): Promise<KhataLedgerEntry[]> {
+    if (customerId) {
+      const rows = await this.db.query(
+        `SELECT k.id, k.customer_id, k.order_id, k.type, k.amount, k.note, k.created_at,
+                c.name AS customer_name, s.sale_number
+         FROM khata_ledger k
+         LEFT JOIN contacts c ON c.id = k.customer_id AND c.tenant_id = k.tenant_id
+         LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
+         WHERE k.tenant_id = $1 AND k.customer_id = $2
+         ORDER BY k.created_at DESC`,
+        [tenantId, customerId]
+      );
+      return rows.map((r: any) => ({
+        id: r.id,
+        customer_id: r.customer_id,
+        order_id: r.order_id,
+        type: r.type,
+        amount: Number(r.amount),
+        note: r.note,
+        created_at: r.created_at,
+        customer_name: r.customer_name,
+        sale_number: r.sale_number,
+      }));
+    }
+    const rows = await this.db.query(
+      `SELECT k.id, k.customer_id, k.order_id, k.type, k.amount, k.note, k.created_at,
+              c.name AS customer_name, s.sale_number
+       FROM khata_ledger k
+       LEFT JOIN contacts c ON c.id = k.customer_id AND c.tenant_id = k.tenant_id
+       LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
+       WHERE k.tenant_id = $1
+       ORDER BY k.created_at DESC`,
+      [tenantId]
+    );
+    return rows.map((r: any) => ({
+      id: r.id,
+      customer_id: r.customer_id,
+      order_id: r.order_id,
+      type: r.type,
+      amount: Number(r.amount),
+      note: r.note,
+      created_at: r.created_at,
+      customer_name: r.customer_name,
+      sale_number: r.sale_number,
+    }));
+  }
+
+  async getBalance(tenantId: string, customerId: string): Promise<number> {
+    const res = await this.db.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END), 0) -
+         COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0) AS balance
+       FROM khata_ledger WHERE tenant_id = $1 AND customer_id = $2`,
+      [tenantId, customerId]
+    );
+    return Number(res[0]?.balance ?? 0);
+  }
+
+  async getSummaryByCustomer(tenantId: string): Promise<KhataSummaryRow[]> {
+    const rows = await this.db.query(
+      `SELECT
+         k.customer_id,
+         MAX(c.name) AS customer_name,
+         COALESCE(SUM(CASE WHEN k.type = 'debit' THEN k.amount ELSE 0 END), 0) AS total_debit,
+         COALESCE(SUM(CASE WHEN k.type = 'credit' THEN k.amount ELSE 0 END), 0) AS total_credit,
+         COALESCE(SUM(CASE WHEN k.type = 'debit' THEN k.amount ELSE -k.amount END), 0) AS balance
+       FROM khata_ledger k
+       LEFT JOIN contacts c ON c.id = k.customer_id AND c.tenant_id = k.tenant_id
+       WHERE k.tenant_id = $1
+       GROUP BY k.customer_id`,
+      [tenantId]
+    );
+    return rows.map((r: any) => ({
+      customer_id: r.customer_id,
+      customer_name: r.customer_name || 'Unknown',
+      total_debit: Number(r.total_debit),
+      total_credit: Number(r.total_credit),
+      balance: Number(r.balance),
+    }));
+  }
+
+  async getCustomerSummary(tenantId: string, customerId: string): Promise<{ totalDebit: number; totalCredit: number; balance: number } | null> {
+    const rows = await this.db.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END), 0) AS total_debit,
+         COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0) AS total_credit,
+         COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE -amount END), 0) AS balance
+       FROM khata_ledger WHERE tenant_id = $1 AND customer_id = $2`,
+      [tenantId, customerId]
+    );
+    if (!rows.length) return null;
+    return {
+      totalDebit: Number(rows[0].total_debit),
+      totalCredit: Number(rows[0].total_credit),
+      balance: Number(rows[0].balance),
+    };
+  }
+
+  async listCustomers(tenantId: string): Promise<{ id: string; name: string; contact_no: string | null }[]> {
+    const rows = await this.db.query(
+      `SELECT id, name, contact_no FROM contacts WHERE tenant_id = $1 AND type IN ('Customer', 'Client') ORDER BY name`,
+      [tenantId]
+    );
+    return rows.map((r: any) => ({ id: r.id, name: r.name, contact_no: r.contact_no }));
+  }
+}

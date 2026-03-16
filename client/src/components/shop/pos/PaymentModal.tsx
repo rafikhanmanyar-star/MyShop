@@ -18,13 +18,17 @@ const PaymentModal: React.FC = () => {
         completeSale,
         printReceipt,
         lastCompletedSale,
-        setLastCompletedSale
+        setLastCompletedSale,
+        customer
     } = usePOS();
 
     const [tenderAmount, setTenderAmount] = useState('0');
     const [selectedMethod, setSelectedMethod] = useState<POSPaymentMethod>(POSPaymentMethod.CASH);
     const [bankAccounts, setBankAccounts] = useState<ShopBankAccount[]>([]);
     const [selectedBankId, setSelectedBankId] = useState<string>('');
+
+    const isKhata = selectedMethod === POSPaymentMethod.KHATA;
+    const khataRequiresCustomer = isKhata && (!customer || customer.id === 'walk-in');
 
     const loadBanks = useCallback(async () => {
         try {
@@ -49,7 +53,7 @@ const PaymentModal: React.FC = () => {
     const handleAddPayment = async () => {
         const amount = parseFloat(tenderAmount);
         if (amount > 0) {
-            const bank = bankAccounts.find(b => b.id === selectedBankId);
+            const bank = !isKhata ? bankAccounts.find(b => b.id === selectedBankId) : undefined;
             addPayment(selectedMethod, amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
             setTenderAmount('0');
         }
@@ -93,7 +97,7 @@ const PaymentModal: React.FC = () => {
                                     <span className="w-5 h-5 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-[10px]">1</span>
                                     Payment Mode
                                 </h3>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-3 gap-4">
                                     {Object.values(POSPaymentMethod).map(method => (
                                         <button
                                             key={method}
@@ -102,29 +106,37 @@ const PaymentModal: React.FC = () => {
                                                 if (method === POSPaymentMethod.CASH) {
                                                     const cashBank = bankAccounts.find(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'));
                                                     if (cashBank) setSelectedBankId(cashBank.id);
+                                                } else if (method === POSPaymentMethod.KHATA) {
+                                                    setSelectedBankId('');
                                                 } else {
                                                     const firstOnline = bankAccounts.find(b => b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash'));
                                                     if (firstOnline) setSelectedBankId(firstOnline.id);
                                                     else setSelectedBankId('');
                                                 }
                                             }}
-                                            className={`flex flex-col items-center justify-center p-8 rounded-3xl border-2 transition-all relative group overflow-hidden ${selectedMethod === method
+                                            className={`flex flex-col items-center justify-center p-6 rounded-3xl border-2 transition-all relative group overflow-hidden ${selectedMethod === method
                                                 ? 'border-indigo-600 bg-indigo-50 shadow-sm'
                                                 : 'border-slate-50 bg-white text-slate-500 hover:border-slate-200 hover:bg-slate-50'
                                                 }`}
                                         >
-                                            <div className={`mb-3 transition-transform group-hover:scale-110 ${selectedMethod === method ? 'text-indigo-600' : 'text-slate-300'}`}>
-                                                {method === POSPaymentMethod.CASH ? ICONS.dollarSign : ICONS.creditCard}
+                                            <div className={`mb-2 transition-transform group-hover:scale-110 ${selectedMethod === method ? 'text-indigo-600' : 'text-slate-300'}`}>
+                                                {method === POSPaymentMethod.CASH ? ICONS.dollarSign : method === POSPaymentMethod.KHATA ? ICONS.user : ICONS.creditCard}
                                             </div>
-                                            <span className="text-xs font-black uppercase tracking-widest leading-none">{method}</span>
+                                            <span className="text-xs font-black uppercase tracking-widest leading-none text-center">{method}</span>
                                             {selectedMethod === method && (
                                                 <div className="absolute top-4 right-4 w-3 h-3 bg-indigo-600 rounded-full animate-pulse"></div>
                                             )}
                                         </button>
                                     ))}
                                 </div>
+                                {isKhata && (
+                                    <p className="mt-3 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+                                        Customer required for Khata. Select customer in the cart area before completing.
+                                    </p>
+                                )}
                             </div>
 
+                            {!isKhata && (
                             <div>
                                 <h3 className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-[0.25em] flex items-center gap-3">
                                     <span className="w-5 h-5 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-[10px]">2</span>
@@ -152,6 +164,7 @@ const PaymentModal: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+                            )}
 
                             <div className="bg-[#f8fafc] rounded-[2rem] p-6 border border-slate-50 relative overflow-hidden group shadow-none">
                                 <div className="absolute -top-4 -right-4 p-12 opacity-[0.03] text-slate-900 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-1000">
@@ -321,7 +334,7 @@ const PaymentModal: React.FC = () => {
 
                         {!lastCompletedSale && (
                             <button
-                                disabled={balanceDue > 0}
+                                disabled={balanceDue > 0 || khataRequiresCustomer}
                                 onClick={async () => {
                                     try {
                                         const sale = await completeSale();
@@ -330,7 +343,7 @@ const PaymentModal: React.FC = () => {
                                         console.error("Sale failed", e);
                                     }
                                 }}
-                                className={`w-full py-5 rounded-[2rem] font-black text-xl transition-all active:scale-[0.97] flex items-center justify-center gap-4 relative overflow-hidden group shadow-none ${balanceDue > 0
+                                className={`w-full py-5 rounded-[2rem] font-black text-xl transition-all active:scale-[0.97] flex items-center justify-center gap-4 relative overflow-hidden group shadow-none ${balanceDue > 0 || khataRequiresCustomer
                                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                                     : 'pos-gradient-success text-white shadow-none-500/20 hover:shadow-none-500/40'
                                     }`}
@@ -338,7 +351,7 @@ const PaymentModal: React.FC = () => {
                                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
                                 <span className="relative z-10 flex items-center justify-center gap-4 leading-none uppercase tracking-[0.1em]">
                                     {ICONS.checkCircle}
-                                    PAY & PRINT
+                                    {khataRequiresCustomer ? 'SELECT CUSTOMER FOR KHATA' : 'PAY & PRINT'}
                                 </span>
                             </button>
                         )}
