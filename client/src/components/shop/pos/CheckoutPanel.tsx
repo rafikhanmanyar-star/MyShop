@@ -61,12 +61,18 @@ const CheckoutPanel: React.FC = () => {
         if (method === POSPaymentMethod.CASH) {
             const cashBank = bankAccounts.find(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'));
             if (cashBank) setSelectedBankId(cashBank.id);
+        } else if (method === POSPaymentMethod.KHATA) {
+            setSelectedBankId('');
+            setTenderAmount(grandTotal.toString());
         } else {
             const firstOnline = bankAccounts.find(b => b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash'));
             if (firstOnline) setSelectedBankId(firstOnline.id);
             else setSelectedBankId('');
         }
     };
+
+    const isKhata = selectedMethod === POSPaymentMethod.KHATA;
+    const khataRequiresCustomer = isKhata && (!customer || customer.id === 'walk-in');
 
     const handleComplete = async () => {
         if (isProcessing) return;
@@ -82,15 +88,20 @@ const CheckoutPanel: React.FC = () => {
             }
 
             // We simulate adding the payment and immediately completing
-            const bank = bankAccounts.find(b => b.id === selectedBankId);
+            if (selectedMethod === POSPaymentMethod.KHATA && (!customer || customer.id === 'walk-in')) {
+                alert('Please select a customer for Khata / Credit sale.');
+                setIsProcessing(false);
+                return;
+            }
+            const bank = !isKhata ? bankAccounts.find(b => b.id === selectedBankId) : undefined;
             const directPaymentObj = {
                 id: crypto.randomUUID(),
                 method: selectedMethod,
-                amount,
+                amount: isKhata ? grandTotal : amount,
                 bankAccountId: bank?.id,
                 bankAccountName: bank?.name
             };
-            addPayment(selectedMethod, amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
+            addPayment(selectedMethod, isKhata ? grandTotal : amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
 
             const sale = await completeSale(directPaymentObj);
 
@@ -283,7 +294,19 @@ const CheckoutPanel: React.FC = () => {
                                     >
                                         {ICONS.creditCard} ONLINE
                                     </button>
+                                    <button
+                                        onClick={() => handleMethodSelect(POSPaymentMethod.KHATA)}
+                                        className={`flex-1 py-2 px-3 rounded-xl font-bold flex flex-col items-center gap-0.5 transition-all border-2 text-sm ${selectedMethod === POSPaymentMethod.KHATA ? 'border-amber-600 bg-amber-50 text-amber-700' : 'border-slate-100 text-slate-500 hover:bg-slate-50'}`}
+                                        title="Customer required"
+                                    >
+                                        {ICONS.user} KHATA
+                                    </button>
                                 </div>
+                                {isKhata && (
+                                    <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                        Customer required for Khata. Select a customer above to complete.
+                                    </p>
+                                )}
 
                                 <div>
                                     <div className="flex bg-slate-50 border-2 border-slate-100 rounded-xl overflow-hidden focus-within:border-blue-500 transition-colors">
@@ -333,11 +356,11 @@ const CheckoutPanel: React.FC = () => {
                                         <span className="text-[11px] font-bold text-slate-500 uppercase">Save / Hold</span>
                                     </button>
                                     <button
-                                        disabled={isProcessing || parseFloat(tenderAmount) < grandTotal}
+                                        disabled={isProcessing || (!isKhata && parseFloat(tenderAmount) < grandTotal) || khataRequiresCustomer}
                                         onClick={handleComplete}
-                                        className={`py-4 flex flex-col items-center justify-center rounded-xl transition-all font-black text-lg ${parseFloat(tenderAmount) >= grandTotal ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-700' : 'bg-slate-200 text-slate-400'}`}
+                                        className={`py-4 flex flex-col items-center justify-center rounded-xl transition-all font-black text-lg ${!isProcessing && ((isKhata && !khataRequiresCustomer) || parseFloat(tenderAmount) >= grandTotal) ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-700' : 'bg-slate-200 text-slate-400'}`}
                                     >
-                                        {isProcessing ? 'PROCESSING...' : 'COMPLETE SALE'}
+                                        {isProcessing ? 'PROCESSING...' : khataRequiresCustomer ? 'SELECT CUSTOMER' : 'COMPLETE SALE'}
                                     </button>
                                 </div>
                             </div>
