@@ -148,11 +148,23 @@ export class KhataService {
     };
   }
 
-  async listCustomers(tenantId: string): Promise<{ id: string; name: string; contact_no: string | null }[]> {
+  async listCustomers(tenantId: string): Promise<{ id: string; name: string; contact_no: string | null; company_name?: string | null }[]> {
     const rows = await this.db.query(
-      `SELECT id, name, contact_no FROM contacts WHERE tenant_id = $1 AND type IN ('Customer', 'Client') ORDER BY name`,
+      `SELECT id, name, contact_no, company_name FROM contacts WHERE tenant_id = $1 AND type IN ('Customer', 'Client') ORDER BY name`,
       [tenantId]
     );
-    return rows.map((r: any) => ({ id: r.id, name: r.name, contact_no: r.contact_no }));
+    return rows.map((r: any) => ({ id: r.id, name: r.name, contact_no: r.contact_no, company_name: r.company_name }));
+  }
+
+  async createCustomer(tenantId: string, data: { name: string; contact_no?: string; company_name?: string }): Promise<{ id: string; name: string; contact_no: string | null; company_name?: string | null }> {
+    const id = `contact_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const rows = await this.db.query(
+      `INSERT INTO contacts (id, tenant_id, name, type, contact_no, company_name)
+       VALUES ($1, $2, $3, 'Client', $4, $5)
+       RETURNING id, name, contact_no, company_name`,
+      [id, tenantId, data.name, data.contact_no ?? null, data.company_name ?? null]
+    );
+    const r = rows[0];
+    return { id: r.id, name: r.name, contact_no: r.contact_no, company_name: r.company_name };
   }
 }

@@ -171,7 +171,13 @@ export const khataApi = {
     apiClient.get<{ totalDebit: number; totalCredit: number; balance: number }>(`/shop/khata/customer/${encodeURIComponent(customerId)}/summary`),
   receivePayment: (data: { customerId: string; amount: number; note?: string }) =>
     apiClient.post<{ id: string }>('/shop/khata/receive-payment', data),
-  getCustomers: () => apiClient.get<{ id: string; name: string; contact_no: string | null }[]>('/shop/khata/customers'),
+  getCustomers: () => apiClient.get<{ id: string; name: string; contact_no: string | null; company_name?: string | null }[]>('/shop/khata/customers'),
+  createCustomer: (data: { name: string; contactNo?: string; companyName?: string }) =>
+    apiClient.post<{ id: string; name: string; contact_no: string | null; company_name?: string | null }>('/shop/khata/customers', {
+      name: data.name,
+      contactNo: data.contactNo,
+      companyName: data.companyName,
+    }),
 };
 
 export interface ShopUser {

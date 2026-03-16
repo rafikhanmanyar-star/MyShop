@@ -63,4 +63,21 @@ router.get('/customers', checkRole(['admin', 'pos_cashier', 'accountant']), asyn
   }
 });
 
+router.post('/customers', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const { name, contactNo, companyName } = req.body || {};
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+    const created = await getKhataService().createCustomer(req.tenantId, {
+      name: name.trim(),
+      contact_no: contactNo != null ? String(contactNo).trim() || undefined : undefined,
+      company_name: companyName != null ? String(companyName).trim() || undefined : undefined,
+    });
+    res.status(201).json(created);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
