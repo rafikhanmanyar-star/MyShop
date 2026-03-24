@@ -4,14 +4,13 @@
  * cleared on app exit or reload; it is used when offline.
  */
 
-import { publicApi } from '../api';
+import { publicApi, getFullImageUrl, getProductImagePath } from '../api';
 import {
     setProducts,
     setCategories,
     setBrands,
 } from './offlineCache';
 import { fetchAndCacheImage } from './imageCache';
-import { getBaseUrl } from '../api';
 
 const PAGE_SIZE = 100;
 
@@ -62,14 +61,13 @@ export async function syncCatalogForShop(shopSlug: string): Promise<CatalogSyncR
 
         await setProducts(shopSlug, allItems);
 
-        // Prefill image cache so product images load offline
-        const baseUrl = getBaseUrl();
-        const pathToUrl = (p: string) => (p.startsWith('http') ? p : `${baseUrl}${p.startsWith('/') ? '' : '/'}${p}`);
+        // Prefill image cache so product images load offline (same URLs as useImageUrl / getFullImageUrl)
         await Promise.all(
             allItems
-                .filter((p: any) => p.image_url)
+                .map((p: any) => getProductImagePath(p))
+                .filter((path): path is string => Boolean(path))
                 .slice(0, 50)
-                .map((p: any) => fetchAndCacheImage(pathToUrl(p.image_url), p.image_url))
+                .map((path) => fetchAndCacheImage(getFullImageUrl(path)!, path))
         );
 
         return {

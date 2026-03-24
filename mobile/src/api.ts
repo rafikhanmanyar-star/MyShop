@@ -1,23 +1,41 @@
-function getApiBaseUrl(): string {
+/** Keep in sync with client/src/config/apiUrl.ts so API + image URLs resolve the same way. */
+const API_PORT = 3000;
+
+export function getApiBaseUrl(): string {
     const env = import.meta.env.VITE_API_URL as string | undefined;
+
+    if (typeof window !== 'undefined') {
+        const { protocol, hostname } = window.location;
+        const isElectron = protocol === 'file:' || !hostname;
+        const isDevServer = import.meta.env.DEV && !isElectron;
+
+        // Dev: relative /api so Vite proxies /api and /uploads to the backend
+        if (isDevServer) {
+            return '/api';
+        }
+
+        if (env) {
+            return env.endsWith('/api') ? env : env.replace(/\/?$/, '') + '/api';
+        }
+
+        if (isElectron) {
+            return `http://localhost:${API_PORT}/api`;
+        }
+
+        // Production without env: assume API on same host (or localhost:3000 in dev-like setups)
+        return `${protocol}//${hostname}${hostname === 'localhost' ? `:${API_PORT}` : ''}/api`;
+    }
+
     if (env) {
         return env.endsWith('/api') ? env : env.replace(/\/?$/, '') + '/api';
     }
-    return '/api';
+
+    return `http://localhost:${API_PORT}/api`;
 }
 
 export function getBaseUrl(): string {
-    const apiBase = getApiBaseUrl();
-    if (apiBase.startsWith('http')) {
-        return apiBase.replace(/\/api$/, '');
-    }
-    // If it's just '/api', we need to check if we are in a browser
-    if (typeof window !== 'undefined') {
-        const env = import.meta.env.VITE_API_URL as string | undefined;
-        if (env) return env.replace(/\/api$/, '');
-        return `${window.location.protocol}//${window.location.host}`;
-    }
-    return '';
+    const url = getApiBaseUrl();
+    return url.replace(/\/api$/, '');
 }
 
 export function getFullImageUrl(path: string | undefined): string | undefined {

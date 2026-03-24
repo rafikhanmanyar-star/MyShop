@@ -69,7 +69,8 @@ export async function fetchAndCacheImage(fullUrl: string, pathForCache: string):
         const res = await fetch(fullUrl);
         if (!res.ok) return;
         const blob = await res.blob();
-        if (blob.type.startsWith('image/')) {
+        const looksLikeImage = /\.(jpe?g|png|gif|webp|svg|bmp|ico)(\?|$)/i.test(fullUrl);
+        if (blob.type.startsWith('image/') || (blob.type === 'application/octet-stream' && looksLikeImage)) {
             await setImageBlob(pathForCache, blob);
         }
     } catch {
