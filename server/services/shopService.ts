@@ -2,6 +2,16 @@ import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
 import { COA } from '../constants/accountCodes.js';
 
+/** Strip absolute URLs (e.g. http://localhost:3000/uploads/...) to relative paths for DB storage. */
+function normalizeImageUrl(url: string | null | undefined): string | null {
+  if (!url || !url.trim()) return null;
+  const trimmed = url.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    try { return new URL(trimmed).pathname; } catch { return trimmed; }
+  }
+  return trimmed;
+}
+
 export interface ShopSale {
   id?: string;
   branchId?: string | null;
@@ -331,7 +341,7 @@ export class ShopService {
         `, [
           tenantId, data.name, sku, data.barcode || null,
           categoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
-          data.tax_rate || 0, data.reorder_point || 10, data.image_url || null, true, mobileDesc
+          data.tax_rate || 0, data.reorder_point || 10, normalizeImageUrl(data.image_url), true, mobileDesc
         ]);
         const productId = res[0].id;
 
@@ -380,7 +390,7 @@ export class ShopService {
           data.name, data.sku, data.barcode, data.category_id || data.categoryId,
           data.unit, data.cost_price || data.cost, data.retail_price || data.price,
           data.tax_rate || data.taxRate, data.reorder_point || data.reorderPoint,
-          data.image_url, data.is_active !== undefined ? data.is_active : true, productId, tenantId,
+          normalizeImageUrl(data.image_url), data.is_active !== undefined ? data.is_active : true, productId, tenantId,
           mobileDesc === undefined ? null : mobileDesc
         ]);
         return { success: true };

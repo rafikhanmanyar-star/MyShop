@@ -7,7 +7,7 @@ import Button from '../../ui/Button';
 import { ICONS } from '../../../constants';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
-import { getFullImageUrl } from '../../../config/apiUrl';
+
 import CachedImage from '../../ui/CachedImage';
 import Fuse from 'fuse.js';
 
@@ -189,7 +189,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             let imageUrl = formData.imageUrl;
             if (selectedImage && typeof navigator !== 'undefined' && navigator.onLine) {
                 const uploadRes = await shopApi.uploadImage(selectedImage);
-                imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
+                imageUrl = uploadRes.imageUrl || '';
             }
             const newItem = await addItem(
                 {
@@ -230,7 +230,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             let imageUrl = formData.imageUrl;
             if (selectedImage) {
                 const uploadRes = await shopApi.uploadImage(selectedImage);
-                imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
+                imageUrl = uploadRes.imageUrl || '';
             }
             await updateItem(editingItem.id, {
                 sku: formData.sku,

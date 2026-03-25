@@ -423,11 +423,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw new Error('No authentication token');
             }
 
-            let imageUrl = item.imageUrl;
+            let imageRelPath: string | undefined;
             try {
                 if (imageFile) {
                     const uploadRes = await shopApi.uploadImage(imageFile);
-                    imageUrl = uploadRes.imageUrl ? getFullImageUrl(uploadRes.imageUrl) || uploadRes.imageUrl : undefined;
+                    imageRelPath = uploadRes.imageUrl || undefined;
                 }
             } catch (uploadErr: any) {
                 if (isRetryableServerOrNetworkError(uploadErr)) {
@@ -438,14 +438,16 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw uploadErr;
             }
 
+            const imageUrlForDb = imageRelPath ?? item.imageUrl;
+
             try {
                 const response = await shopApi.createProduct({
                     ...payload,
-                    image_url: imageUrl,
+                    image_url: imageUrlForDb,
                     mobile_description: payload.description || undefined,
                 }) as any;
                 if (response && response.id) {
-                    const newItem = { ...item, id: response.id, imageUrl };
+                    const newItem = { ...item, id: response.id, imageUrl: imageUrlForDb ? getFullImageUrl(imageUrlForDb) : undefined };
                     setItems(prev => [...prev, newItem]);
                     await refreshItems();
                     return newItem;
