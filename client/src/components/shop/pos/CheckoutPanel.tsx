@@ -317,7 +317,7 @@ const CheckoutPanel: React.FC = () => {
                                             id="tender-amount-input"
                                             type="number"
                                             aria-label="Amount tendered"
-                                            className="flex-1 py-3 px-2 bg-transparent text-xl font-black text-slate-900 outline-none"
+                                            className="flex-1 py-3 px-2 bg-transparent text-xl font-black text-slate-900 outline-none select-text"
                                             value={tenderAmount}
                                             onChange={e => setTenderAmount(e.target.value)}
                                             onFocus={e => e.target.select()}

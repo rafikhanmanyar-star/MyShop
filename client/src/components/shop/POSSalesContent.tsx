@@ -50,29 +50,58 @@ const POSSalesContent: React.FC = () => {
         }
     }, [isActive, isFullScreen, setFullScreenEnabled]);
 
-    // Global keyboard shortcuts
+    // Global keyboard shortcuts (capture). F-keys are handled for POS; do not blanket-preventDefault
+    // on every key so we do not interfere with normal typing or IME.
     useEffect(() => {
+        const isEditableTarget = (t: EventTarget | null) => {
+            if (!t || !(t instanceof HTMLElement)) return false;
+            const tag = t.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+            return t.isContentEditable;
+        };
+
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!isActive) return;
 
-            // Prevent default for F-keys and others we use
-            if (e.key.startsWith('F')) {
-                e.preventDefault();
-            }
+            const inEditable = isEditableTarget(e.target);
+
+            const blockFnKey = () => {
+                if (/^F([1-9]|1[0-2])$/.test(e.key)) e.preventDefault();
+            };
 
             switch (e.key) {
-                case 'F1': clearCart(); break;
-                case 'F2': holdSale(`Hold-${new Date().toLocaleTimeString()}`); break;
-                case 'F3': setIsHeldSalesModalOpen(!isHeldSalesModalOpen); break;
+                case 'F1':
+                    blockFnKey();
+                    clearCart();
+                    break;
+                case 'F2':
+                    blockFnKey();
+                    holdSale(`Hold-${new Date().toLocaleTimeString()}`);
+                    break;
+                case 'F3':
+                    blockFnKey();
+                    setIsHeldSalesModalOpen(!isHeldSalesModalOpen);
+                    break;
                 case 'F4': {
+                    blockFnKey();
                     const searchInput = document.getElementById('pos-product-search');
                     if (searchInput) searchInput.focus();
                     break;
                 }
-                case 'F6': setIsCustomerModalOpen(!isCustomerModalOpen); break;
-                case 'F9': setIsSalesHistoryModalOpen(!isSalesHistoryModalOpen); break;
-                case 'F7': toggleFullScreen(); break;
+                case 'F6':
+                    blockFnKey();
+                    setIsCustomerModalOpen(!isCustomerModalOpen);
+                    break;
+                case 'F9':
+                    blockFnKey();
+                    setIsSalesHistoryModalOpen(!isSalesHistoryModalOpen);
+                    break;
+                case 'F7':
+                    blockFnKey();
+                    toggleFullScreen();
+                    break;
                 case 'F12':
+                    blockFnKey();
                     if (cart.length > 0) {
                         const tenderInput = document.getElementById('tender-amount-input');
                         if (tenderInput) tenderInput.focus();
@@ -95,6 +124,9 @@ const POSSalesContent: React.FC = () => {
                     setIsCustomerModalOpen(false);
                     setIsHeldSalesModalOpen(false);
                     setIsSalesHistoryModalOpen(false);
+                    break;
+                default:
+                    if (!inEditable) blockFnKey();
                     break;
             }
         };

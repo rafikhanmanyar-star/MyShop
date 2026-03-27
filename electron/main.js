@@ -141,14 +141,24 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
+    focusable: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: false,
       preload: preloadPath,
+      backgroundThrottling: false,
     },
     show: false,
   });
   mainWindow = win;
+
+  win.on('blur', () => {
+    if (process.env.ELECTRON_FOCUS_DEBUG) console.log('[BrowserWindow] blur');
+  });
+  win.on('focus', () => {
+    if (process.env.ELECTRON_FOCUS_DEBUG) console.log('[BrowserWindow] focus');
+  });
 
   if (isCloud) {
     const clientPath = getClientDistPath();
@@ -189,6 +199,12 @@ function printReceiptSilent(html, printerName) {
       if (settled) return;
       settled = true;
       try { fs.unlinkSync(tmpFile); } catch (_) { }
+      // Hidden print window can steal keyboard focus from the main window; restore it.
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (!mainWindow.isVisible()) mainWindow.show();
+        mainWindow.focus();
+        mainWindow.webContents.focus();
+      }
       resolve(result);
     };
 
@@ -269,6 +285,10 @@ function setupUpdaterIPC() {
           cancelId: 1,
         }).then(({ response }) => {
           if (response === 0) autoUpdater.downloadUpdate();
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.focus();
+            mainWindow.webContents.focus();
+          }
         });
       }
     });

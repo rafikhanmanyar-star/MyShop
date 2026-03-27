@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { installElectronFocusRecovery } from './utils/electronFocusRecovery';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
@@ -167,6 +168,8 @@ function AppLayout() {
     window.addEventListener('pos:fullscreen', handlePosFullScreen as EventListener);
     return () => window.removeEventListener('pos:fullscreen', handlePosFullScreen as EventListener);
   }, []);
+
+  useEffect(() => installElectronFocusRecovery(), []);
 
   return (
     <BranchProvider>

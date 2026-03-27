@@ -55,11 +55,7 @@ const ProductSearch: React.FC = () => {
         searchQuery,
         setSearchQuery,
         selectedBranchId,
-        isDenseMode,
-        isHeldSalesModalOpen,
-        isPaymentModalOpen,
-        isCustomerModalOpen,
-        isSalesHistoryModalOpen
+        isDenseMode
     } = usePOS();
     const { items: inventoryItems } = useInventory();
     const inventoryItemsRef = useRef(inventoryItems);
@@ -172,19 +168,6 @@ const ProductSearch: React.FC = () => {
         debouncedSetGlobalSearch(val);
         setKeyboardIndex(-1);
     };
-
-    // Keep focus on search input
-    useEffect(() => {
-        const interval = setInterval(() => {
-            if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
-                if (!isHeldSalesModalOpen && !isPaymentModalOpen && !isCustomerModalOpen && !isSalesHistoryModalOpen) {
-                    // Only focus if no other modal is open (checking some global states if possible)
-                }
-                searchInputRef.current?.focus();
-            }
-        }, 3000);
-        return () => clearInterval(interval);
-    }, []);
 
     const [gridHeight, setGridHeight] = useState(600);
     const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -419,7 +402,7 @@ const ProductSearch: React.FC = () => {
                         ref={searchInputRef}
                         id="pos-product-search"
                         type="text"
-                        className="w-full pl-11 pr-24 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 transition-all"
+                        className="w-full pl-11 pr-24 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 transition-all select-text"
                         placeholder="Search Products (Ctrl+F)"
                         value={localQuery}
                         onChange={(e) => handleSearchChange(e.target.value)}
