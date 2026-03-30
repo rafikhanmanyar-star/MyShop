@@ -24,28 +24,28 @@ const BIContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
+        <div className="flex flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
             {/* Header / Tab Navigation */}
-            <div className="bg-slate-900 border-b border-white/10 px-8 pt-8 shadow-2xl z-20">
+            <div className="bg-slate-900 dark:bg-slate-950 border-b border-white/10 dark:border-slate-700/80 px-8 pt-8 shadow-2xl z-20 shrink-0">
                 <div className="flex justify-between items-center mb-8">
                     <div>
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-500 rounded-lg text-white">
+                            <div className="p-2 bg-indigo-500 dark:bg-indigo-600 rounded-lg text-white shadow-lg shadow-indigo-500/20">
                                 {ICONS.globe}
                             </div>
                             <h1 className="text-2xl font-black text-white tracking-tight">Intelligence Engine</h1>
                         </div>
-                        <p className="text-muted-foreground text-sm font-medium mt-1">Enterprise Analytics & Predictive Decision Support.</p>
+                        <p className="text-slate-400 text-sm font-medium mt-1">Enterprise Analytics & Predictive Decision Support.</p>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <div className="flex bg-card/5 rounded-xl p-1 border border-white/10">
+                    <div className="flex items-center gap-4 flex-wrap justify-end">
+                        <div className="flex bg-card/5 dark:bg-slate-800/50 rounded-xl p-1 border border-white/10 dark:border-slate-600">
                             {['Today', 'MTD', 'QTD', 'YTD'].map(range => (
                                 <button
                                     key={range}
                                     onClick={() => setDateRange(range)}
                                     className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${dateRange === range
                                         ? 'bg-indigo-600 text-white shadow-lg'
-                                        : 'text-muted-foreground hover:text-white'
+                                        : 'text-slate-400 hover:text-white dark:text-slate-500 dark:hover:text-slate-200'
                                         }`}
                                 >
                                     {range}
@@ -54,7 +54,7 @@ const BIContent: React.FC = () => {
                         </div>
                         <button
                             onClick={handleExport}
-                            className="p-3 bg-card/5 text-white rounded-xl border border-white/10 hover:bg-card/10 transition-all"
+                            className="p-3 bg-card/5 dark:bg-slate-800/50 text-white rounded-xl border border-white/10 dark:border-slate-600 hover:bg-card/10 dark:hover:bg-slate-700/80 transition-all"
                             title="Export Report"
                         >
                             {ICONS.download}
@@ -62,14 +62,14 @@ const BIContent: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="flex gap-8">
+                <div className="flex gap-8 overflow-x-auto pb-1">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`pb-4 text-sm font-black transition-all relative flex items-center gap-2 tracking-widest uppercase text-[10px] ${activeTab === tab.id
+                            className={`pb-4 text-sm font-black transition-all relative flex items-center gap-2 tracking-widest uppercase text-[10px] shrink-0 ${activeTab === tab.id
                                 ? 'text-indigo-400'
-                                : 'text-muted-foreground hover:text-slate-300'
+                                : 'text-slate-400 hover:text-slate-300 dark:text-slate-500 dark:hover:text-slate-300'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 16, height: 16 })}
@@ -83,7 +83,7 @@ const BIContent: React.FC = () => {
             </div>
 
             {/* Scrollable Content Area */}
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto p-8 custom-scrollbar">
                 {activeTab === 'overview' && <ExecutiveOverview />}
                 {activeTab === 'sales' && <SalesAnalytics />}
                 {activeTab === 'inventory' && <InventoryIntelligence />}

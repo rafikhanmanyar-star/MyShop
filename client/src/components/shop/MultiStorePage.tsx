@@ -84,24 +84,24 @@ const MultiStoreContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
+        <div className="flex flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
             {/* Header / Tab Navigation */}
-            <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10 transition-all">
+            <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10 transition-all">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-foreground tracking-tight">Organization & Scale</h1>
-                        <p className="text-muted-foreground text-sm font-medium italic">Multi-branch orchestration and centralized policy engine.</p>
+                        <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Organization & Scale</h1>
+                        <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium italic">Multi-branch orchestration and centralized policy engine.</p>
                     </div>
                     <div className="flex gap-3">
                         <button
                             onClick={() => setIsRegisterModalOpen(true)}
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2"
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40 hover:bg-indigo-700 transition-all flex items-center gap-2"
                         >
                             {ICONS.plus} Register Store
                         </button>
                         <button
                             onClick={() => setIsPoliciesModalOpen(true)}
-                            className="px-4 py-2 bg-card border border-border text-muted-foreground rounded-xl text-sm font-bold hover:bg-muted/50 transition-all items-center gap-2 hidden md:flex"
+                            className="px-4 py-2 bg-card dark:bg-slate-800/80 border border-border dark:border-slate-600 text-muted-foreground rounded-xl text-sm font-bold hover:bg-muted/50 dark:hover:bg-slate-700 transition-all items-center gap-2 hidden md:flex"
                         >
                             {ICONS.settings} Global Policies
                         </button>
@@ -114,14 +114,14 @@ const MultiStoreContent: React.FC = () => {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
-                                ? 'text-indigo-600'
-                                : 'text-muted-foreground hover:text-muted-foreground'
+                                ? 'text-indigo-600 dark:text-indigo-400'
+                                : 'text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
                             {tab.label}
                             {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-t-full animate-in fade-in slide-in-from-bottom-1"></div>
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 dark:bg-indigo-400 rounded-t-full animate-in fade-in slide-in-from-bottom-1"></div>
                             )}
                         </button>
                     ))}
@@ -129,7 +129,7 @@ const MultiStoreContent: React.FC = () => {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto p-8">
+            <div className="flex-1 min-h-0 overflow-y-auto p-8">
                 {activeTab === 'org' && <OrganizationDashboard />}
                 {activeTab === 'branches' && <BranchDirectory />}
                 {activeTab === 'terminals' && <TerminalManager />}
@@ -236,15 +236,15 @@ const MultiStoreContent: React.FC = () => {
                 title="Global Organization Policies"
             >
                 <div className="space-y-6">
-                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex gap-3 text-amber-800">
-                        <div className="mt-1">{ICONS.alertTriangle}</div>
+                    <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/60 p-4 rounded-xl flex gap-3 text-amber-800 dark:text-amber-200">
+                        <div className="mt-1 shrink-0">{ICONS.alertTriangle}</div>
                         <p className="text-xs font-medium leading-relaxed">
                             Changes here affect all branches and terminals immediately. These are top-level controls for your organization's POS operations.
                         </p>
                     </div>
 
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl">
+                        <div className="flex items-center justify-between p-3 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-xl">
                             <div>
                                 <h4 className="text-sm font-bold text-foreground">Allow Negative Stock</h4>
                                 <p className="text-[10px] text-muted-foreground">Permit sales even if system inventory is zero.</p>
@@ -253,11 +253,11 @@ const MultiStoreContent: React.FC = () => {
                                 type="checkbox"
                                 checked={policyForm.allowNegativeStock}
                                 onChange={(e) => setPolicyForm({ ...policyForm, allowNegativeStock: e.target.checked })}
-                                className="w-5 h-5 text-indigo-600 rounded"
+                                className="w-5 h-5 text-indigo-600 rounded border-gray-300 dark:border-slate-600 dark:bg-slate-800"
                             />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl">
+                        <div className="flex items-center justify-between p-3 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-xl">
                             <div>
                                 <h4 className="text-sm font-bold text-foreground">Universal Pricing</h4>
                                 <p className="text-[10px] text-muted-foreground">All branches use the core catalog price.</p>
@@ -266,11 +266,11 @@ const MultiStoreContent: React.FC = () => {
                                 type="checkbox"
                                 checked={policyForm.universalPricing}
                                 onChange={(e) => setPolicyForm({ ...policyForm, universalPricing: e.target.checked })}
-                                className="w-5 h-5 text-indigo-600 rounded"
+                                className="w-5 h-5 text-indigo-600 rounded border-gray-300 dark:border-slate-600 dark:bg-slate-800"
                             />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl">
+                        <div className="flex items-center justify-between p-3 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-xl">
                             <div>
                                 <h4 className="text-sm font-bold text-foreground">Tax Inclusive Pricing</h4>
                                 <p className="text-[10px] text-muted-foreground">Prices displayed include all taxes.</p>
@@ -279,7 +279,7 @@ const MultiStoreContent: React.FC = () => {
                                 type="checkbox"
                                 checked={policyForm.taxInclusive}
                                 onChange={(e) => setPolicyForm({ ...policyForm, taxInclusive: e.target.checked })}
-                                className="w-5 h-5 text-indigo-600 rounded"
+                                className="w-5 h-5 text-indigo-600 rounded border-gray-300 dark:border-slate-600 dark:bg-slate-800"
                             />
                         </div>
 
@@ -299,7 +299,7 @@ const MultiStoreContent: React.FC = () => {
                             />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl">
+                        <div className="flex items-center justify-between p-3 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-xl">
                             <div>
                                 <h4 className="text-sm font-bold text-foreground">Require Manager Approval</h4>
                                 <p className="text-[10px] text-muted-foreground">For discounts exceeding 20% or returns.</p>
@@ -308,7 +308,7 @@ const MultiStoreContent: React.FC = () => {
                                 type="checkbox"
                                 checked={policyForm.requireManagerApproval}
                                 onChange={(e) => setPolicyForm({ ...policyForm, requireManagerApproval: e.target.checked })}
-                                className="w-5 h-5 text-indigo-600 rounded"
+                                className="w-5 h-5 text-indigo-600 rounded border-gray-300 dark:border-slate-600 dark:bg-slate-800"
                             />
                         </div>
                     </div>

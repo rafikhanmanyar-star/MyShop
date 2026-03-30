@@ -131,14 +131,14 @@ const ChartOfAccounts: React.FC = () => {
     return (
         <div className="space-y-6 animate-fade-in shadow-inner h-full flex flex-col">
             <div className="flex justify-between items-center mb-4">
-                <div className="flex gap-2 p-1 bg-card border border-border rounded-xl">
+                <div className="flex gap-2 p-1 bg-card dark:bg-slate-900 border border-border dark:border-slate-700 rounded-xl">
                     {categories.map(cat => (
                         <button
                             key={cat}
                             onClick={() => setFilter(cat)}
                             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filter === cat
-                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100'
-                                : 'text-muted-foreground hover:text-muted-foreground'
+                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100 dark:shadow-indigo-900/50'
+                                : 'text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                 }`}
                         >
                             {cat}s
@@ -154,10 +154,10 @@ const ChartOfAccounts: React.FC = () => {
                 </button>
             </div>
 
-            <Card className="border-none shadow-sm overflow-hidden flex-1 flex flex-col">
+            <Card className="border-none dark:border dark:border-slate-700/80 shadow-sm overflow-hidden flex-1 flex flex-col dark:bg-slate-900/40">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
+                        <thead className="bg-muted/80 dark:bg-slate-800 text-[10px] font-black uppercase text-muted-foreground">
                             <tr>
                                 <th className="px-6 py-4">Account Code</th>
                                 <th className="px-6 py-4">Account Name</th>
@@ -167,23 +167,23 @@ const ChartOfAccounts: React.FC = () => {
                                 <th className="px-6 py-4"></th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                             {filteredAccounts.map(acc => (
-                                <tr key={acc.id} className="hover:bg-muted/50 transition-colors">
+                                <tr key={acc.id} className="hover:bg-muted/50 dark:hover:bg-slate-800/50 transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="font-mono font-bold text-muted-foreground bg-muted px-2 py-1 rounded text-xs">{acc.code}</span>
+                                        <span className="font-mono font-bold text-muted-foreground bg-muted dark:bg-slate-800 px-2 py-1 rounded text-xs">{acc.code}</span>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-foreground text-sm">{acc.name}</div>
                                         {acc.isControlAccount && (
-                                            <div className="text-[10px] text-indigo-500 font-black uppercase tracking-tighter">Control Account</div>
+                                            <div className="text-[10px] text-indigo-500 dark:text-indigo-400 font-black uppercase tracking-tighter">Control Account</div>
                                         )}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${acc.type === 'Asset' ? 'bg-emerald-100 text-emerald-600' :
-                                            acc.type === 'Liability' ? 'bg-rose-100 text-rose-600' :
-                                                acc.type === 'Income' ? 'bg-indigo-100 text-indigo-600' :
-                                                    'bg-muted text-muted-foreground'
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${acc.type === 'Asset' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400' :
+                                            acc.type === 'Liability' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' :
+                                                acc.type === 'Income' ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400' :
+                                                    'bg-muted dark:bg-slate-800 text-muted-foreground'
                                             }`}>
                                             {acc.type}
                                         </span>
@@ -196,14 +196,14 @@ const ChartOfAccounts: React.FC = () => {
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                            <span className="text-[10px] font-bold text-emerald-600 uppercase">Active</span>
+                                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Active</span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <button
                                             type="button"
                                             onClick={() => openEditModal(acc)}
-                                            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-lg text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+                                            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-lg text-muted-foreground hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900"
                                             aria-label={`Edit ${acc.name}`}
                                         >
                                             {ICONS.edit}
@@ -266,7 +266,7 @@ const ChartOfAccounts: React.FC = () => {
                     </div>
 
                     {formError && (
-                        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-lg text-sm font-medium">
+                        <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800/60 text-rose-700 dark:text-rose-200 px-4 py-3 rounded-lg text-sm font-medium">
                             {formError}
                         </div>
                     )}

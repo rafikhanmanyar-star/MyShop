@@ -126,14 +126,14 @@ const AccountingContent: React.FC = () => {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
-                                ? 'text-indigo-600'
+                                ? 'text-indigo-600 dark:text-indigo-400'
                                 : 'text-muted-foreground dark:text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
                             {tab.label}
                             {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-t-full"></div>
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 dark:bg-indigo-500 rounded-t-full"></div>
                             )}
                         </button>
                     ))}
@@ -214,7 +214,7 @@ const AccountingContent: React.FC = () => {
                                         <td className="px-4 py-2">
                                             <input
                                                 type="number"
-                                                className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0"
+                                                className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0 dark:text-slate-100"
                                                 value={line.debit}
                                                 onChange={(e) => handleLineChange(idx, 'debit', e.target.value)}
                                                 onFocus={(e) => e.target.select()}
@@ -223,7 +223,7 @@ const AccountingContent: React.FC = () => {
                                         <td className="px-4 py-2">
                                             <input
                                                 type="number"
-                                                className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0"
+                                                className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0 dark:text-slate-100"
                                                 value={line.credit}
                                                 onChange={(e) => handleLineChange(idx, 'credit', e.target.value)}
                                                 onFocus={(e) => e.target.select()}
@@ -246,7 +246,7 @@ const AccountingContent: React.FC = () => {
                                     <td colSpan={2} className="px-4 py-3">
                                         <button
                                             onClick={handleAddLine}
-                                            className="text-indigo-600 hover:underline flex items-center gap-1"
+                                            className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
                                         >
                                             {ICONS.plus} Add Line
                                         </button>

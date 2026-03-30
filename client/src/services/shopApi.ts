@@ -233,8 +233,27 @@ export const accountingApi = {
       inventoryInQty: number;
       totalExpenses: number;
       newProductsCount: number;
+      khataDebitTotal: number;
+      khataCreditTotal: number;
+      khataNetChange: number;
+      khataEntryCount: number;
       netProfitDaily: number;
     }>(`/shop/accounting/reports/daily/summary?${q.toString()}`);
+  },
+  dailyReportKhata: (date: string) => {
+    const q = new URLSearchParams();
+    q.set('date', date);
+    return apiClient.get<{
+      rows: Array<{
+        id: string;
+        created_at: string;
+        type: string;
+        amount: number;
+        note: string;
+        customer_name: string;
+        sale_number: string;
+      }>;
+    }>(`/shop/accounting/reports/daily/khata?${q.toString()}`);
   },
   dailyReportInventoryOut: (date: string, branchId?: string | null) => {
     const q = new URLSearchParams();

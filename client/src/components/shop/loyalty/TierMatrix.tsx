@@ -12,11 +12,11 @@ const TierMatrix: React.FC = () => {
             {/* Active Rules Snapshot */}
             <div className="flex justify-between items-center mb-4 px-2">
                 <div>
-                    <h3 className="text-lg font-black text-foreground tracking-tight">Enterprise Rule Engine</h3>
+                    <h3 className="text-lg font-black text-foreground dark:text-slate-200 tracking-tight">Enterprise Rule Engine</h3>
                     <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest">Global configurations for earning & burning.</p>
                 </div>
                 <div className="flex gap-3">
-                    <button className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:bg-black transition-all">
+                    <button className="px-4 py-2 bg-slate-900 dark:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:bg-black dark:hover:bg-slate-700 transition-all border border-transparent dark:border-slate-600">
                         {ICONS.settings} Configuration Wizard
                     </button>
                 </div>
@@ -32,44 +32,44 @@ const TierMatrix: React.FC = () => {
                         <h4 className="font-black text-foreground uppercase tracking-widest text-sm">Base Earning Rules</h4>
                     </div>
                     {programs.map(prog => (
-                        <div key={prog.id} className="p-6 bg-muted/80 rounded-2xl border border-border space-y-4">
-                            <div className="flex justify-between items-center pb-4 border-b border-border/50">
+                        <div key={prog.id} className="p-6 bg-muted/80 dark:bg-slate-800/60 rounded-2xl border border-border dark:border-slate-600 space-y-4">
+                            <div className="flex justify-between items-center pb-4 border-b border-border/50 dark:border-slate-600/80">
                                 <span className="text-xs font-bold text-muted-foreground uppercase">Conversion Ratio</span>
                                 <span className="text-sm font-black text-foreground font-mono">1 Point per {1 / prog.earnRate} PKR</span>
                             </div>
                             <div className="flex justify-between items-center">
                                 <span className="text-xs font-bold text-muted-foreground uppercase">Min Redemption</span>
-                                <span className="text-sm font-black text-indigo-600 font-mono">{prog.minRedeemPoints} Pts</span>
+                                <span className="text-sm font-black text-indigo-600 dark:text-indigo-400 font-mono">{prog.minRedeemPoints} Pts</span>
                             </div>
                         </div>
                     ))}
                     <div className="space-y-3">
                         <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-4">Bonus Multipliers</p>
                         <div className="flex flex-wrap gap-2">
-                            <span className="px-3 py-1.5 bg-amber-50 border border-amber-100 text-amber-600 rounded-full text-[10px] font-black uppercase">Weekend 1.2x</span>
-                            <span className="px-3 py-1.5 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-full text-[10px] font-black uppercase">Birthday 2.0x</span>
-                            <span className="px-3 py-1.5 bg-rose-50 border border-rose-100 text-rose-600 rounded-full text-[10px] font-black uppercase">Welcome Bonus: 500 Pts</span>
+                            <span className="px-3 py-1.5 bg-amber-50 border border-amber-100 text-amber-600 dark:bg-amber-950/40 dark:border-amber-900/60 dark:text-amber-400 rounded-full text-[10px] font-black uppercase">Weekend 1.2x</span>
+                            <span className="px-3 py-1.5 bg-indigo-50 border border-indigo-100 text-indigo-600 dark:bg-indigo-950/40 dark:border-indigo-900/60 dark:text-indigo-400 rounded-full text-[10px] font-black uppercase">Birthday 2.0x</span>
+                            <span className="px-3 py-1.5 bg-rose-50 border border-rose-100 text-rose-600 dark:bg-rose-950/40 dark:border-rose-900/60 dark:text-rose-400 rounded-full text-[10px] font-black uppercase">Welcome Bonus: 500 Pts</span>
                         </div>
                     </div>
                 </Card>
 
                 {/* Redemption Rules */}
-                <Card className="border-none shadow-sm p-8 bg-card space-y-6">
+                <Card className="border-none shadow-sm dark:shadow-none dark:bg-slate-900/90 dark:border dark:border-slate-600 p-8 bg-card space-y-6">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-rose-50 text-rose-600 rounded-lg">
+                        <div className="p-2 bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 rounded-lg">
                             {ICONS.trash}
                         </div>
                         <h4 className="font-black text-foreground uppercase tracking-widest text-sm">Redemption Controls</h4>
                     </div>
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center p-4 bg-rose-50/30 rounded-xl border border-rose-100">
+                        <div className="flex justify-between items-center p-4 bg-rose-50/30 dark:bg-rose-950/30 rounded-xl border border-rose-100 dark:border-rose-900/50">
                             <div>
-                                <p className="text-xs font-black text-rose-900">Maximum Redemption / Bill</p>
-                                <p className="text-[10px] text-rose-600 opacity-70">Capped to prevent point dumping.</p>
+                                <p className="text-xs font-black text-rose-900 dark:text-rose-200">Maximum Redemption / Bill</p>
+                                <p className="text-[10px] text-rose-600 dark:text-rose-400 opacity-70">Capped to prevent point dumping.</p>
                             </div>
-                            <span className="text-sm font-black text-rose-900">30% of Bill</span>
+                            <span className="text-sm font-black text-rose-900 dark:text-rose-200">30% of Bill</span>
                         </div>
-                        <div className="flex justify-between items-center p-4 bg-muted/80 rounded-xl border border-border">
+                        <div className="flex justify-between items-center p-4 bg-muted/80 dark:bg-slate-800/60 rounded-xl border border-border dark:border-slate-600">
                             <div>
                                 <p className="text-xs font-black text-foreground">Point Expiry Period</p>
                                 <p className="text-[10px] text-muted-foreground">Rolling window for issued points.</p>
@@ -85,9 +85,9 @@ const TierMatrix: React.FC = () => {
                 <h3 className="text-lg font-black text-foreground uppercase tracking-widest text-center">Benefit Tier Lifecycle Matrix</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {tiers.map((t, i) => (
-                        <Card key={i} className={`p-8 border-none shadow-xl transform transition-all hover:-translate-y-2 flex flex-col items-center relative overflow-hidden ${t.tier === 'Platinum' ? 'bg-slate-900 text-white' :
-                                t.tier === 'Gold' ? 'bg-amber-50 border-t-8 border-amber-400' :
-                                    'bg-card border-t-8 border-border'
+                        <Card key={i} className={`p-8 border-none shadow-xl dark:shadow-none transform transition-all hover:-translate-y-2 flex flex-col items-center relative overflow-hidden ${t.tier === 'Platinum' ? 'bg-slate-900 text-white dark:bg-slate-950' :
+                                t.tier === 'Gold' ? 'bg-amber-50 border-t-8 border-amber-400 dark:bg-amber-950/40 dark:border-amber-500 dark:text-amber-100' :
+                                    'bg-card border-t-8 border-border dark:bg-slate-900/90 dark:border-slate-600'
                             }`}>
                             {t.tier === 'Platinum' && (
                                 <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -95,13 +95,13 @@ const TierMatrix: React.FC = () => {
                                 </div>
                             )}
                             <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 shadow-2xl ${t.tier === 'Platinum' ? 'bg-indigo-500/20 text-indigo-300' :
-                                    t.tier === 'Gold' ? 'bg-amber-100 text-amber-600' :
-                                        'bg-muted text-muted-foreground'
+                                    t.tier === 'Gold' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-300' :
+                                        'bg-muted text-muted-foreground dark:bg-slate-800'
                                 }`}>
                                 {React.cloneElement(ICONS.trophy as React.ReactElement<any>, { width: 32, height: 32 })}
                             </div>
-                            <h4 className="text-2xl font-black mb-1">{t.tier}</h4>
-                            <p className={`text-[10px] font-black uppercase tracking-widest inline-block px-3 py-1 rounded-full mb-8 ${t.tier === 'Platinum' ? 'bg-indigo-500/30 text-indigo-400' : 'bg-slate-200/50 text-muted-foreground'
+                            <h4 className={`text-2xl font-black mb-1 ${t.tier === 'Gold' ? 'text-amber-950 dark:text-amber-100' : ''}`}>{t.tier}</h4>
+                            <p className={`text-[10px] font-black uppercase tracking-widest inline-block px-3 py-1 rounded-full mb-8 ${t.tier === 'Platinum' ? 'bg-indigo-500/30 text-indigo-400' : 'bg-slate-200/50 text-muted-foreground dark:bg-slate-700 dark:text-slate-300'
                                 }`}>
                                 Threshold: ${t.threshold.toLocaleString()}
                             </p>
@@ -109,15 +109,15 @@ const TierMatrix: React.FC = () => {
                             <div className="w-full space-y-4 flex-1">
                                 <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">Member Privileges</p>
                                 {t.benefits.map((b, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 text-xs font-bold leading-relaxed">
-                                        <div className={`w-1.5 h-1.5 rounded-full ${t.tier === 'Platinum' ? 'bg-indigo-400' : 'bg-emerald-500'}`}></div>
+                                    <div key={idx} className={`flex items-center gap-2 text-xs font-bold leading-relaxed ${t.tier === 'Gold' ? 'text-amber-900 dark:text-amber-200/90' : ''}`}>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${t.tier === 'Platinum' ? 'bg-indigo-400' : 'bg-emerald-500 dark:bg-emerald-400'}`}></div>
                                         {b}
                                     </div>
                                 ))}
                             </div>
 
-                            <div className="mt-8 pt-6 border-t border-border/20 w-full text-center">
-                                <span className={`text-xl font-black font-mono ${t.tier === 'Platinum' ? 'text-indigo-400' : 'text-foreground'}`}>{t.multiplier}x</span>
+                            <div className="mt-8 pt-6 border-t border-border/20 dark:border-slate-600/80 w-full text-center">
+                                <span className={`text-xl font-black font-mono ${t.tier === 'Platinum' ? 'text-indigo-400' : t.tier === 'Gold' ? 'text-amber-900 dark:text-amber-200' : 'text-foreground dark:text-slate-200'}`}>{t.multiplier}x</span>
                                 <p className="text-[9px] font-black uppercase tracking-tighter opacity-40 mt-1">Multiplied Earn Velocity</p>
                             </div>
                         </Card>

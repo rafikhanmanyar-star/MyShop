@@ -110,7 +110,7 @@ const BranchDirectory: React.FC = () => {
                     </div>
                     <input
                         type="text"
-                        className="block w-full pl-10 pr-3 py-3 border border-border rounded-xl leading-5 bg-card placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-xs"
+                        className="block w-full pl-10 pr-3 py-3 border border-border dark:border-slate-600 rounded-xl leading-5 bg-card dark:bg-slate-800/80 text-foreground placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all text-xs"
                         placeholder="Search by Branch Name, Code or Region..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -119,17 +119,17 @@ const BranchDirectory: React.FC = () => {
                 <div className="flex gap-2">
                     <button
                         onClick={handleExportRoster}
-                        className="px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 transition-all flex items-center gap-2"
+                        className="px-4 py-2 bg-card dark:bg-slate-800 border border-border dark:border-slate-600 rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 dark:hover:bg-slate-700 transition-all flex items-center gap-2"
                     >
                         {ICONS.download} Export Roster
                     </button>
                 </div>
             </div>
 
-            <Card className="border-none shadow-sm overflow-hidden flex-1">
+            <Card className="border-none shadow-sm dark:shadow-none dark:bg-slate-900/90 dark:border dark:border-slate-600 overflow-hidden flex-1">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
+                        <thead className="bg-muted/80 dark:bg-slate-800/90 text-[10px] font-black uppercase text-muted-foreground">
                             <tr>
                                 <th className="px-6 py-4">Branch Detail</th>
                                 <th className="px-6 py-4">Type</th>
@@ -139,12 +139,12 @@ const BranchDirectory: React.FC = () => {
                                 <th className="px-6 py-4">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700/80">
                             {filtered.map(store => (
-                                <tr key={store.id} className="hover:bg-muted/50 transition-colors group">
+                                <tr key={store.id} className="hover:bg-muted/50 dark:hover:bg-slate-800/50 transition-colors group">
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center text-muted-foreground group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
+                                            <div className="w-10 h-10 rounded-xl bg-muted dark:bg-slate-800 flex items-center justify-center text-muted-foreground group-hover:bg-indigo-100 group-hover:text-indigo-600 dark:group-hover:bg-indigo-950/60 dark:group-hover:text-indigo-400 transition-colors">
                                                 {React.cloneElement(ICONS.building as React.ReactElement<any>, { width: 18, height: 18 })}
                                             </div>
                                             <div>
@@ -154,9 +154,9 @@ const BranchDirectory: React.FC = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${store.type === 'Flagship' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' :
-                                            store.type === 'Warehouse' ? 'bg-amber-100 text-amber-600' :
-                                                'bg-muted text-muted-foreground'
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${store.type === 'Flagship' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40' :
+                                            store.type === 'Warehouse' ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300' :
+                                                'bg-muted text-muted-foreground dark:bg-slate-800'
                                             }`}>
                                             {store.type}
                                         </span>
@@ -174,7 +174,7 @@ const BranchDirectory: React.FC = () => {
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <div className={`w-2 h-2 rounded-full ${store.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
-                                            <span className={`text-[10px] font-black uppercase ${store.status === 'Active' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                            <span className={`text-[10px] font-black uppercase ${store.status === 'Active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                                 {store.status}
                                             </span>
                                         </div>
@@ -182,7 +182,7 @@ const BranchDirectory: React.FC = () => {
                                     <td className="px-6 py-4">
                                         <button
                                             onClick={() => handleEditClick(store)}
-                                            className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"
+                                            className="p-2 text-slate-300 dark:text-slate-600 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                                         >
                                             {ICONS.edit}
                                         </button>
@@ -288,13 +288,13 @@ const BranchDirectory: React.FC = () => {
                         </Select>
                     </div>
 
-                    <div className="flex justify-between items-center mt-6 pt-4 border-t border-border">
+                    <div className="flex justify-between items-center mt-6 pt-4 border-t border-border dark:border-slate-600">
                         <div>
                             <button
                                 type="button"
                                 onClick={handleDeleteBranch}
                                 disabled={deleteLoading}
-                                className="text-xs font-medium text-rose-600 hover:text-rose-700 disabled:opacity-50"
+                                className="text-xs font-medium text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 disabled:opacity-50"
                             >
                                 {deleteLoading ? 'Checking…' : 'Delete branch'}
                             </button>

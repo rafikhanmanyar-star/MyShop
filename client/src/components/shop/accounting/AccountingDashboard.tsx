@@ -11,10 +11,10 @@ const AccountingDashboard: React.FC = () => {
     } = useAccounting();
 
     const metrics = [
-        { label: 'Total Revenue', value: totalRevenue, icon: ICONS.trendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { label: 'Gross Profit', value: grossProfit, icon: ICONS.dollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-        { label: 'Margin %', value: `${netMargin.toFixed(1)}%`, icon: ICONS.barChart, color: 'text-amber-600', bg: 'bg-amber-50', isString: true },
-        { label: 'Receivables', value: receivablesTotal, icon: ICONS.arrowDownCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
+        { label: 'Total Revenue', value: totalRevenue, icon: ICONS.trendingUp, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/50' },
+        { label: 'Gross Profit', value: grossProfit, icon: ICONS.dollarSign, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/50' },
+        { label: 'Margin %', value: `${netMargin.toFixed(1)}%`, icon: ICONS.barChart, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/50', isString: true },
+        { label: 'Receivables', value: receivablesTotal, icon: ICONS.arrowDownCircle, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/50' },
     ];
 
     const posRevenue = salesBySource?.pos?.totalRevenue ?? 0;
@@ -36,7 +36,7 @@ const AccountingDashboard: React.FC = () => {
             {/* KPI Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {metrics.map((m, i) => (
-                    <Card key={i} className="p-6 border-none shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+                    <Card key={i} className="p-6 border-none dark:border dark:border-slate-700/80 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow dark:bg-slate-900/40">
                         <div className={`w-14 h-14 rounded-2xl ${m.bg} ${m.color} flex items-center justify-center`}>
                             {React.cloneElement(m.icon as React.ReactElement<any>, { width: 28, height: 28 })}
                         </div>
@@ -52,15 +52,15 @@ const AccountingDashboard: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Revenue by Source — POS vs Mobile */}
-                <Card className="lg:col-span-2 border-none shadow-sm p-8 space-y-6">
+                <Card className="lg:col-span-2 border-none dark:border dark:border-slate-700/80 shadow-sm p-8 space-y-6 dark:bg-slate-900/40">
                     <div className="flex justify-between items-center">
                         <h3 className="font-bold text-foreground">Revenue by Source</h3>
                         <div className="flex gap-4">
-                            <span className="flex items-center gap-2 text-[10px] font-bold text-indigo-600">
-                                <span className="w-2 h-2 bg-indigo-600 rounded-full"></span> POS Sales
+                            <span className="flex items-center gap-2 text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                                <span className="w-2 h-2 bg-indigo-600 dark:bg-indigo-500 rounded-full"></span> POS Sales
                             </span>
-                            <span className="flex items-center gap-2 text-[10px] font-bold text-emerald-600">
-                                <span className="w-2 h-2 bg-emerald-500 rounded-full"></span> Mobile App Orders
+                            <span className="flex items-center gap-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                <span className="w-2 h-2 bg-emerald-500 dark:bg-emerald-400 rounded-full"></span> Mobile App Orders
                             </span>
                         </div>
                     </div>
@@ -79,8 +79,8 @@ const AccountingDashboard: React.FC = () => {
                                         <p className="text-[10px] text-indigo-500 font-black">{posPercent.toFixed(1)}%</p>
                                     </div>
                                 </div>
-                                <div className="h-3 bg-muted/80 rounded-full overflow-hidden">
-                                    <div className="h-full bg-indigo-600 transition-all duration-1000 rounded-full" style={{ width: `${posPercent}%` }}></div>
+                                <div className="h-3 bg-muted/80 dark:bg-slate-800 rounded-full overflow-hidden">
+                                    <div className="h-full bg-indigo-600 dark:bg-indigo-500 transition-all duration-1000 rounded-full" style={{ width: `${posPercent}%` }}></div>
                                 </div>
                             </div>
 
@@ -96,12 +96,12 @@ const AccountingDashboard: React.FC = () => {
                                         <p className="text-[10px] text-emerald-500 font-black">{mobilePercent.toFixed(1)}%</p>
                                     </div>
                                 </div>
-                                <div className="h-3 bg-muted/80 rounded-full overflow-hidden">
-                                    <div className="h-full bg-emerald-500 transition-all duration-1000 rounded-full" style={{ width: `${mobilePercent}%` }}></div>
+                                <div className="h-3 bg-muted/80 dark:bg-slate-800 rounded-full overflow-hidden">
+                                    <div className="h-full bg-emerald-500 dark:bg-emerald-400 transition-all duration-1000 rounded-full" style={{ width: `${mobilePercent}%` }}></div>
                                 </div>
                                 {(salesBySource?.mobile?.unpaidCount || 0) > 0 && (
-                                    <div className="flex items-center gap-2 mt-1 px-3 py-1.5 bg-orange-50 rounded-lg border border-orange-100">
-                                        <span className="text-[10px] font-bold text-orange-600">
+                                    <div className="flex items-center gap-2 mt-1 px-3 py-1.5 bg-orange-50 dark:bg-orange-950/40 rounded-lg border border-orange-100 dark:border-orange-800/50">
+                                        <span className="text-[10px] font-bold text-orange-600 dark:text-orange-300">
                                             {salesBySource?.mobile?.unpaidCount} unpaid — {CURRENCY} {(salesBySource?.mobile?.unpaidTotal || 0).toLocaleString()} receivable
                                         </span>
                                     </div>
@@ -109,29 +109,29 @@ const AccountingDashboard: React.FC = () => {
                             </div>
 
                             {/* Avg Order Value Comparison */}
-                            <div className="flex gap-4 pt-4 border-t border-border">
-                                <div className="flex-1 p-4 bg-indigo-50 rounded-xl">
-                                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">POS Avg. Order</p>
-                                    <p className="text-lg font-black text-indigo-900 font-mono">{CURRENCY} {(salesBySource?.pos?.avgOrderValue || 0).toFixed(0)}</p>
+                            <div className="flex gap-4 pt-4 border-t border-border dark:border-slate-700">
+                                <div className="flex-1 p-4 bg-indigo-50 dark:bg-indigo-950/40 dark:border dark:border-indigo-800/40 rounded-xl">
+                                    <p className="text-[10px] font-black text-indigo-400 dark:text-indigo-500 uppercase tracking-widest">POS Avg. Order</p>
+                                    <p className="text-lg font-black text-indigo-900 dark:text-indigo-200 font-mono">{CURRENCY} {(salesBySource?.pos?.avgOrderValue || 0).toFixed(0)}</p>
                                 </div>
-                                <div className="flex-1 p-4 bg-emerald-50 rounded-xl">
-                                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">Mobile Avg. Order</p>
-                                    <p className="text-lg font-black text-emerald-900 font-mono">{CURRENCY} {(salesBySource?.mobile?.avgOrderValue || 0).toFixed(0)}</p>
+                                <div className="flex-1 p-4 bg-emerald-50 dark:bg-emerald-950/40 dark:border dark:border-emerald-800/40 rounded-xl">
+                                    <p className="text-[10px] font-black text-emerald-400 dark:text-emerald-500 uppercase tracking-widest">Mobile Avg. Order</p>
+                                    <p className="text-lg font-black text-emerald-900 dark:text-emerald-200 font-mono">{CURRENCY} {(salesBySource?.mobile?.avgOrderValue || 0).toFixed(0)}</p>
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="h-64 bg-muted/80 rounded-2xl border border-dashed border-border flex items-center justify-center text-slate-300">
+                        <div className="h-64 bg-muted/80 dark:bg-slate-800/50 rounded-2xl border border-dashed border-border dark:border-slate-600 flex items-center justify-center text-slate-300 dark:text-slate-500">
                             <div className="text-center">
-                                {React.cloneElement(ICONS.barChart as React.ReactElement<any>, { width: 48, height: 48, className: 'mx-auto opacity-20' })}
-                                <p className="text-xs font-bold uppercase tracking-widest mt-2">No sales data yet. Complete a POS or mobile sale to see data here.</p>
+                                {React.cloneElement(ICONS.barChart as React.ReactElement<any>, { width: 48, height: 48, className: 'mx-auto opacity-20 dark:opacity-30' })}
+                                <p className="text-xs font-bold uppercase tracking-widest mt-2 text-muted-foreground dark:text-slate-400">No sales data yet. Complete a POS or mobile sale to see data here.</p>
                             </div>
                         </div>
                     )}
                 </Card>
 
                 {/* Cash & Bank Summary */}
-                <Card className="border-none shadow-sm p-6 space-y-6 flex flex-col">
+                <Card className="border-none dark:border dark:border-slate-700/80 shadow-sm p-6 space-y-6 flex flex-col dark:bg-slate-900/40">
                     <h3 className="font-bold text-foreground">Cash & Bank Balances</h3>
                     <div className="space-y-4 flex-1 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
                         {bankAccounts.length === 0 ? (
@@ -140,9 +140,9 @@ const AccountingDashboard: React.FC = () => {
                             </div>
                         ) : (
                             bankAccounts.map((acc: any, i: number) => (
-                                <div key={i} className="flex items-center justify-between p-4 bg-muted/80 rounded-2xl border border-border group hover:border-indigo-200 transition-all">
+                                <div key={i} className="flex items-center justify-between p-4 bg-muted/80 dark:bg-slate-800/60 rounded-2xl border border-border dark:border-slate-700 group hover:border-indigo-200 dark:hover:border-indigo-600/50 transition-all">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-card flex items-center justify-center text-muted-foreground shadow-sm border border-border group-hover:text-indigo-600">
+                                        <div className="w-10 h-10 rounded-xl bg-card dark:bg-slate-900 flex items-center justify-center text-muted-foreground shadow-sm border border-border dark:border-slate-600 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
                                             {acc.account_type === 'Cash' ? ICONS.wallet : ICONS.building}
                                         </div>
                                         <div className="min-w-0">
@@ -160,7 +160,7 @@ const AccountingDashboard: React.FC = () => {
 
                     {/* Account Ledger Balances */}
                     {accounts.filter(a => a.type === 'Asset').length > 0 && (
-                        <div className="border-t border-border pt-4">
+                        <div className="border-t border-border dark:border-slate-700 pt-4">
                             <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Ledger Account Balances</p>
                             <div className="space-y-2">
                                 {accounts.filter(a => a.type === 'Asset' || a.type === 'Income').slice(0, 5).map((acc: any, i: number) => (
@@ -178,34 +178,34 @@ const AccountingDashboard: React.FC = () => {
             {/* Exception Alerts */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {totalCOGS > 0 && (
-                    <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center gap-4">
-                        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                    <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-800/50 rounded-2xl flex items-center gap-4">
+                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/80 text-indigo-600 dark:text-indigo-400 rounded-lg">
                             {ICONS.dollarSign}
                         </div>
                         <div>
-                            <p className="text-sm font-bold text-indigo-900">Cost of Goods Sold</p>
-                            <p className="text-xs text-indigo-700">{CURRENCY} {totalCOGS.toLocaleString()} — deducted from revenue for gross profit.</p>
+                            <p className="text-sm font-bold text-indigo-900 dark:text-indigo-200">Cost of Goods Sold</p>
+                            <p className="text-xs text-indigo-700 dark:text-indigo-300/90">{CURRENCY} {totalCOGS.toLocaleString()} — deducted from revenue for gross profit.</p>
                         </div>
                     </div>
                 )}
                 {netProfit > 0 ? (
-                    <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-4">
-                        <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                    <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/50 rounded-2xl flex items-center gap-4">
+                        <div className="p-2 bg-emerald-100 dark:bg-emerald-900/80 text-emerald-600 dark:text-emerald-400 rounded-lg">
                             {ICONS.trendingUp}
                         </div>
                         <div>
-                            <p className="text-sm font-bold text-emerald-900">Net Profit</p>
-                            <p className="text-xs text-emerald-700">{CURRENCY} {netProfit.toLocaleString()} — all accounts reconciled from ledger.</p>
+                            <p className="text-sm font-bold text-emerald-900 dark:text-emerald-200">Net Profit</p>
+                            <p className="text-xs text-emerald-700 dark:text-emerald-300/90">{CURRENCY} {netProfit.toLocaleString()} — all accounts reconciled from ledger.</p>
                         </div>
                     </div>
                 ) : (
-                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-center gap-4">
-                        <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+                    <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-800/50 rounded-2xl flex items-center gap-4">
+                        <div className="p-2 bg-amber-100 dark:bg-amber-900/80 text-amber-600 dark:text-amber-400 rounded-lg">
                             {ICONS.alertTriangle}
                         </div>
                         <div>
-                            <p className="text-sm font-bold text-amber-900">No Profit Data</p>
-                            <p className="text-xs text-amber-700">Complete sales transactions to see profit analysis.</p>
+                            <p className="text-sm font-bold text-amber-900 dark:text-amber-200">No Profit Data</p>
+                            <p className="text-xs text-amber-700 dark:text-amber-300/90">Complete sales transactions to see profit analysis.</p>
                         </div>
                     </div>
                 )}

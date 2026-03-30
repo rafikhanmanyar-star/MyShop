@@ -36,11 +36,11 @@ const ExpensePage: React.FC = () => {
   }, [onExpenseSaved]);
 
   return (
-    <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
-      <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
+    <div className="flex flex-col h-full bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
+      <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
         <div className="mb-6">
-          <h1 className="text-2xl font-black text-foreground tracking-tight">Expense Management</h1>
-          <p className="text-muted-foreground text-sm font-medium">Record, manage, and analyze shop expenses with full accounting integration.</p>
+          <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Expense Management</h1>
+          <p className="text-muted-foreground dark:text-slate-400 text-sm font-medium">Record, manage, and analyze shop expenses with full accounting integration.</p>
         </div>
         <div className="flex gap-6">
           {tabs.map((tab) => (
@@ -48,13 +48,13 @@ const ExpensePage: React.FC = () => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${
-                activeTab === tab.id ? 'text-indigo-600' : 'text-muted-foreground hover:text-muted-foreground'
+                activeTab === tab.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
               }`}
             >
               <tab.icon className="w-5 h-5" />
               {tab.label}
               {activeTab === tab.id && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t-full" />
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 dark:bg-indigo-500 rounded-t-full" />
               )}
             </button>
           ))}

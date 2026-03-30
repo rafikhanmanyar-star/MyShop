@@ -1,6 +1,7 @@
 import React, { useMemo, useCallback } from 'react';
 import Modal from '../../ui/Modal';
 import type { InventoryItem, Warehouse } from '../../../types/inventory';
+import { useTheme } from '../../../context/ThemeContext';
 
 const MAX_CATEGORY_COLUMNS = 18;
 
@@ -12,13 +13,13 @@ type WarehouseHeatmapModalProps = {
     categories: { id: string; name: string }[];
 };
 
-function cellBackground(units: number, maxUnits: number): React.CSSProperties {
+function cellBackground(units: number, maxUnits: number, isDark: boolean): React.CSSProperties {
     if (maxUnits <= 0 || units <= 0) {
-        return { backgroundColor: 'rgb(248 250 252)' };
+        return { backgroundColor: isDark ? 'rgb(30 41 59)' : 'rgb(248 250 252)' };
     }
     const t = Math.min(1, units / maxUnits);
-    const alpha = 0.12 + t * 0.55;
-    return { backgroundColor: `rgba(79, 70, 229, ${alpha})` };
+    const alpha = isDark ? 0.18 + t * 0.45 : 0.12 + t * 0.55;
+    return { backgroundColor: `rgba(99, 102, 241, ${alpha})` };
 }
 
 const WarehouseHeatmapModal: React.FC<WarehouseHeatmapModalProps> = ({
@@ -28,6 +29,8 @@ const WarehouseHeatmapModal: React.FC<WarehouseHeatmapModalProps> = ({
     warehouses,
     categories,
 }) => {
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
     const resolveCategoryName = useCallback(
         (itemCategory: string | undefined) => {
             if (!itemCategory) return 'General';
@@ -126,7 +129,7 @@ const WarehouseHeatmapModal: React.FC<WarehouseHeatmapModalProps> = ({
                 ) : (
                     <>
                     {!hasWarehouseBreakdown && items.some((i) => i.onHand > 0) && warehouses.length !== 1 && (
-                        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
                             Per-branch quantities are not recorded for your products yet, so all cells show 0. Stock
                             movements that assign units to warehouses will fill this heatmap.
                         </p>
@@ -148,17 +151,17 @@ const WarehouseHeatmapModal: React.FC<WarehouseHeatmapModalProps> = ({
                                     <th className="min-w-[72px] bg-muted px-2 py-3 text-center text-foreground">Total</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className="divide-y divide-border">
                                 {rows.map((r) => (
                                     <tr key={r.warehouse.id}>
-                                        <td className="sticky left-0 z-[1] bg-card px-3 py-2 font-bold text-foreground shadow-[2px_0_6px_-2px_rgba(0,0,0,0.06)]">
+                                        <td className="sticky left-0 z-[1] bg-card px-3 py-2 font-bold text-foreground shadow-[2px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[2px_0_6px_-2px_rgba(0,0,0,0.25)]">
                                             {r.warehouse.name}
                                         </td>
                                         {r.cells.map((units, i) => (
                                             <td
                                                 key={`${r.warehouse.id}-${columnCategories[i]}`}
                                                 className="px-1 py-1 text-center font-mono text-[11px] font-semibold text-foreground"
-                                                style={cellBackground(units, maxCell)}
+                                                style={cellBackground(units, maxCell, isDark)}
                                                 title={`${r.warehouse.name} · ${columnCategories[i]}: ${units} units`}
                                             >
                                                 {units}
@@ -176,7 +179,7 @@ const WarehouseHeatmapModal: React.FC<WarehouseHeatmapModalProps> = ({
                                             {t}
                                         </td>
                                     ))}
-                                    <td className="bg-muted px-2 py-2 text-center font-mono text-[11px] text-indigo-700">
+                                    <td className="bg-muted px-2 py-2 text-center font-mono text-[11px] text-indigo-700 dark:text-indigo-400">
                                         {grandTotal}
                                     </td>
                                 </tr>

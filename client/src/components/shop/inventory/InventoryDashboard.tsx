@@ -23,11 +23,11 @@ const DEFAULT_COL_WIDTHS: Record<ColWidthKey, number> = {
 };
 
 function SortGlyph({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
-    if (!active) return <ArrowUpDown className="w-3.5 h-3.5 shrink-0 opacity-40" strokeWidth={2} aria-hidden />;
+    if (!active) return <ArrowUpDown className="w-3.5 h-3.5 shrink-0 opacity-40 dark:opacity-50" strokeWidth={2} aria-hidden />;
     return dir === 'asc' ? (
-        <ChevronUp className="w-3.5 h-3.5 shrink-0 text-indigo-600" strokeWidth={2} aria-hidden />
+        <ChevronUp className="w-3.5 h-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" strokeWidth={2} aria-hidden />
     ) : (
-        <ChevronDown className="w-3.5 h-3.5 shrink-0 text-indigo-600" strokeWidth={2} aria-hidden />
+        <ChevronDown className="w-3.5 h-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" strokeWidth={2} aria-hidden />
     );
 }
 
@@ -187,7 +187,7 @@ const InventoryDashboard: React.FC = () => {
                                 id="critical-alerts-category"
                                 value={selectedCategoryId}
                                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                                className="block rounded-lg border border-border bg-card py-2 pl-3 pr-8 text-sm font-medium text-foreground shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[160px]"
+                                className="block rounded-lg border border-border bg-card py-2 pl-3 pr-8 text-sm font-medium text-foreground shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[160px] dark:border-slate-600"
                             >
                                 <option value="">All categories</option>
                                 <option value="General">General</option>
@@ -195,7 +195,7 @@ const InventoryDashboard: React.FC = () => {
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
-                            <span className="px-2 py-1 bg-rose-100 text-rose-600 text-[10px] font-black rounded uppercase">Immediate Action Needed</span>
+                            <span className="px-2 py-1 bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300 text-[10px] font-black rounded uppercase">Immediate Action Needed</span>
                         </div>
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
@@ -216,7 +216,7 @@ const InventoryDashboard: React.FC = () => {
                                             <SortGlyph active={sortKey === 'name'} dir={sortDir} />
                                         </button>
                                         <div
-                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30"
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30 dark:hover:bg-indigo-400/20"
                                             onMouseDown={(e) => beginColumnResize(e, 'item')}
                                             title="Drag to resize"
                                             role="separator"
@@ -237,7 +237,7 @@ const InventoryDashboard: React.FC = () => {
                                             <SortGlyph active={sortKey === 'category'} dir={sortDir} />
                                         </button>
                                         <div
-                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30"
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30 dark:hover:bg-indigo-400/20"
                                             onMouseDown={(e) => beginColumnResize(e, 'category')}
                                             title="Drag to resize"
                                             role="separator"
@@ -258,7 +258,7 @@ const InventoryDashboard: React.FC = () => {
                                             <SortGlyph active={sortKey === 'onHand'} dir={sortDir} />
                                         </button>
                                         <div
-                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30"
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30 dark:hover:bg-indigo-400/20"
                                             onMouseDown={(e) => beginColumnResize(e, 'onHand')}
                                             title="Drag to resize"
                                             role="separator"
@@ -279,7 +279,7 @@ const InventoryDashboard: React.FC = () => {
                                             <SortGlyph active={sortKey === 'reorderPoint'} dir={sortDir} />
                                         </button>
                                         <div
-                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30"
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30 dark:hover:bg-indigo-400/20"
                                             onMouseDown={(e) => beginColumnResize(e, 'reorder')}
                                             title="Drag to resize"
                                             role="separator"
@@ -302,7 +302,7 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-50">
+                            <tbody className="divide-y divide-border">
                                 {filteredLowStockItems.length > 0 ? sortedLowStockItems.map(item => (
                                     <tr key={item.id} className="hover:bg-muted/50 transition-colors">
                                         <td className="min-w-0 px-6 py-4">
@@ -315,7 +315,7 @@ const InventoryDashboard: React.FC = () => {
                                         <td className="min-w-0 px-6 py-4 text-sm font-black font-mono">{item.onHand} {item.unit}</td>
                                         <td className="min-w-0 px-6 py-4 text-sm font-medium text-muted-foreground font-mono">{item.reorderPoint}</td>
                                         <td className="min-w-0 px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-[10px] font-bold ${item.onHand <= 0 ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold ${item.onHand <= 0 ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'
                                                 }`}>
                                                 {item.onHand <= 0 ? 'OUT OF STOCK' : 'LOW STOCK'}
                                             </span>
@@ -359,7 +359,7 @@ const InventoryDashboard: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => setHeatmapOpen(true)}
-                            className="w-full py-3 bg-card border border-border text-muted-foreground rounded-xl text-xs font-bold hover:bg-muted/50 hover:border-indigo-200 hover:text-indigo-700 transition-all flex items-center justify-center gap-2"
+                            className="w-full py-3 bg-card border border-border text-muted-foreground rounded-xl text-xs font-bold hover:bg-muted/50 hover:border-indigo-200 dark:hover:border-indigo-500/40 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all flex items-center justify-center gap-2"
                         >
                             {ICONS.trendingUp} View Detailed Heatmap
                         </button>

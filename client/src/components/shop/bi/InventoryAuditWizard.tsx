@@ -102,15 +102,15 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                         { s: 3, l: 'Finalize & Sync', icon: ICONS.checkCircle },
                     ].map((st) => (
                         <div key={st.s} className="flex flex-col items-center gap-2 flex-1 relative">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 ${step >= st.s ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-card border-border text-muted-foreground'
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 ${step >= st.s ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-indigo-900/50' : 'bg-card border-border dark:border-slate-600 text-muted-foreground'
                                 }`}>
                                 {React.isValidElement(st.icon) ? React.cloneElement(st.icon as React.ReactElement<any>, { width: 18, height: 18 }) : st.icon}
                             </div>
-                            <span className={`text-[10px] font-black uppercase tracking-widest ${step >= st.s ? 'text-indigo-600' : 'text-muted-foreground'}`}>
+                            <span className={`text-[10px] font-black uppercase tracking-widest ${step >= st.s ? 'text-indigo-600 dark:text-indigo-400' : 'text-muted-foreground'}`}>
                                 {st.l}
                             </span>
                             {st.s < 3 && (
-                                <div className={`absolute top-5 left-[60%] w-[80%] h-0.5 transition-all duration-500 ${step > st.s ? 'bg-indigo-600' : 'bg-muted'}`} />
+                                <div className={`absolute top-5 left-[60%] w-[80%] h-0.5 transition-all duration-500 ${step > st.s ? 'bg-indigo-600 dark:bg-indigo-500' : 'bg-muted dark:bg-slate-700'}`} />
                             )}
                         </div>
                     ))}
@@ -118,7 +118,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
 
                 {step === 1 && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-500">
-                        <div className="flex justify-between items-center bg-muted/80 p-4 rounded-2xl border border-border">
+                        <div className="flex justify-between items-center bg-muted/80 dark:bg-slate-800/80 p-4 rounded-2xl border border-border dark:border-slate-600">
                             <div>
                                 <h4 className="font-black text-foreground text-lg">Physical Stock Count</h4>
                                 <p className="text-xs text-muted-foreground font-medium">Enter actual quantities found on shelf</p>
@@ -130,7 +130,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                                 <input
                                     type="text"
                                     placeholder="Search products/SKU..."
-                                    className="w-full pl-12 pr-4 py-3 bg-card border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    className="w-full pl-12 pr-4 py-3 bg-card dark:bg-slate-800/90 border border-border dark:border-slate-600 rounded-xl text-sm text-foreground focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 outline-none transition-all"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
@@ -139,7 +139,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
 
                         <div className="max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                             <table className="w-full border-separate border-spacing-y-3">
-                                <thead className="sticky top-0 bg-card z-10">
+                                <thead className="sticky top-0 bg-card dark:bg-slate-900 z-10">
                                     <tr className="text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                                         <th className="px-4 pb-2">Product Details</th>
                                         <th className="px-4 pb-2">Category</th>
@@ -153,7 +153,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                                         <tr>
                                             <td colSpan={5} className="py-20 text-center">
                                                 <div className="flex flex-col items-center gap-4">
-                                                    <div className="w-12 h-12 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
+                                                    <div className="w-12 h-12 border-4 border-indigo-600/20 border-t-indigo-600 dark:border-indigo-500/30 dark:border-t-indigo-400 rounded-full animate-spin" />
                                                     <p className="text-sm font-black text-muted-foreground animate-pulse">Scanning Inventory...</p>
                                                 </div>
                                             </td>
@@ -161,10 +161,10 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                                     ) : filteredItems.map(item => {
                                         const variance = item.physicalQty - item.systemQty;
                                         return (
-                                            <tr key={item.id} className="bg-card border border-border shadow-sm rounded-xl transition-all hover:border-indigo-200 group">
+                                            <tr key={item.id} className="bg-card dark:bg-slate-900/80 border border-border dark:border-slate-600 shadow-sm rounded-xl transition-all hover:border-indigo-200 dark:hover:border-indigo-500/40 group">
                                                 <td className="px-4 py-4 rounded-l-2xl border-y border-l">
                                                     <div className="flex flex-col">
-                                                        <span className="font-bold text-foreground text-sm group-hover:text-indigo-600 transition-colors">{item.name}</span>
+                                                        <span className="font-bold text-foreground text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{item.name}</span>
                                                         <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{item.sku}</span>
                                                     </div>
                                                 </td>
@@ -177,14 +177,14 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                                                 <td className="px-4 py-4 border-y">
                                                     <input
                                                         type="number"
-                                                        className="w-full px-4 py-2 bg-muted/80 border border-border rounded-lg text-sm font-black focus:bg-card focus:ring-2 focus:ring-indigo-500 transition-all"
+                                                        className="w-full px-4 py-2 bg-muted/80 dark:bg-slate-800 border border-border dark:border-slate-600 rounded-lg text-sm font-black text-foreground focus:bg-card dark:focus:bg-slate-800 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 transition-all"
                                                         value={item.physicalQty}
                                                         onChange={(e) => handleQtyChange(item.id, e.target.value)}
                                                     />
                                                 </td>
                                                 <td className="px-4 py-4 rounded-r-2xl border-y border-r">
-                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${variance === 0 ? 'bg-muted text-muted-foreground' :
-                                                        variance > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${variance === 0 ? 'bg-muted text-muted-foreground dark:bg-slate-800' :
+                                                        variance > 0 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'
                                                         }`}>
                                                         {variance === 0 ? 'No Change' : `${variance > 0 ? '+' : ''}${variance}`}
                                                     </span>
@@ -196,10 +196,10 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                             </table>
                         </div>
 
-                        <div className="flex justify-end pt-6 border-t border-border">
+                        <div className="flex justify-end pt-6 border-t border-border dark:border-slate-600">
                             <button
                                 onClick={() => setStep(2)}
-                                className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-2"
+                                className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-200 dark:shadow-indigo-900/40 hover:bg-indigo-700 transition-all flex items-center gap-2"
                             >
                                 Next: Analyze Discrepancies {ICONS.arrowRight}
                             </button>
@@ -210,15 +210,15 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                 {step === 2 && (
                     <div className="space-y-8 animate-in slide-in-from-right duration-500">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <Card className="p-6 bg-rose-50 border-rose-100 border-2">
-                                <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-1">Total Loss Items</p>
-                                <p className="text-3xl font-black text-rose-900">{discrepancies.filter(d => d.physicalQty < d.systemQty).length}</p>
+                            <Card className="p-6 bg-rose-50 dark:bg-rose-950/40 border-rose-100 dark:border-rose-900/60 border-2">
+                                <p className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest mb-1">Total Loss Items</p>
+                                <p className="text-3xl font-black text-rose-900 dark:text-rose-200">{discrepancies.filter(d => d.physicalQty < d.systemQty).length}</p>
                             </Card>
-                            <Card className="p-6 bg-emerald-50 border-emerald-100 border-2">
-                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Found Surplus</p>
-                                <p className="text-3xl font-black text-emerald-900">{discrepancies.filter(d => d.physicalQty > d.systemQty).length}</p>
+                            <Card className="p-6 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-100 dark:border-emerald-900/60 border-2">
+                                <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1">Found Surplus</p>
+                                <p className="text-3xl font-black text-emerald-900 dark:text-emerald-200">{discrepancies.filter(d => d.physicalQty > d.systemQty).length}</p>
                             </Card>
-                            <Card className="p-6 bg-slate-900 border-none shadow-xl">
+                            <Card className="p-6 bg-slate-900 dark:bg-slate-950 border-none shadow-xl dark:border dark:border-slate-700">
                                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Net Valuation Impact</p>
                                 <p className={`text-3xl font-black ${totalLossGain >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                     {totalLossGain >= 0 ? '+' : ''}{CURRENCY} {Math.abs(totalLossGain).toLocaleString()}
@@ -226,23 +226,23 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                             </Card>
                         </div>
 
-                        <div className="bg-card rounded-3xl border border-border p-8 space-y-6">
+                        <div className="bg-card dark:bg-slate-900/90 rounded-3xl border border-border dark:border-slate-600 p-8 space-y-6">
                             <h4 className="font-black text-foreground uppercase tracking-widest text-xs flex items-center gap-2">
                                 {ICONS.alertTriangle} Discrepancy Breakdown
                             </h4>
                             <div className="space-y-4">
                                 {discrepancies.length === 0 ? (
-                                    <div className="py-12 text-center bg-muted/80 rounded-2xl border-2 border-dashed border-border">
-                                        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 scale-150">
+                                    <div className="py-12 text-center bg-muted/80 dark:bg-slate-800/60 rounded-2xl border-2 border-dashed border-border dark:border-slate-600">
+                                        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 scale-150">
                                             {ICONS.checkCircle}
                                         </div>
                                         <p className="font-black text-foreground">Perfect Sync!</p>
                                         <p className="text-xs text-muted-foreground">No discrepancies found in the audited items.</p>
                                     </div>
                                 ) : discrepancies.map(item => (
-                                    <div key={item.id} className="flex items-center justify-between p-4 bg-muted/80 rounded-2xl border border-border">
+                                    <div key={item.id} className="flex items-center justify-between p-4 bg-muted/80 dark:bg-slate-800/60 rounded-2xl border border-border dark:border-slate-600">
                                         <div className="flex items-center gap-4">
-                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.physicalQty > item.systemQty ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.physicalQty > item.systemQty ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'}`}>
                                                 {item.physicalQty > item.systemQty ? ICONS.plus : ICONS.minus}
                                             </div>
                                             <div>
@@ -253,7 +253,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className={`font-black text-sm ${item.physicalQty > item.systemQty ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                            <p className={`font-black text-sm ${item.physicalQty > item.systemQty ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                                 {item.physicalQty > item.systemQty ? '+' : '-'}{CURRENCY} {Math.abs((item.physicalQty - item.systemQty) * item.costPrice).toLocaleString()}
                                             </p>
                                             <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Impact</p>
@@ -263,16 +263,16 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                             </div>
                         </div>
 
-                        <div className="flex justify-between pt-6 border-t border-border">
+                        <div className="flex justify-between pt-6 border-t border-border dark:border-slate-600">
                             <button
                                 onClick={() => setStep(1)}
-                                className="px-8 py-3 text-muted-foreground font-black text-xs uppercase tracking-widest hover:text-foreground transition-all"
+                                className="px-8 py-3 text-muted-foreground font-black text-xs uppercase tracking-widest hover:text-foreground dark:hover:text-slate-200 transition-all"
                             >
                                 Back
                             </button>
                             <button
                                 onClick={() => setStep(3)}
-                                className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-black transition-all"
+                                className="px-8 py-3 bg-slate-900 dark:bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-black dark:hover:bg-slate-700 transition-all border border-transparent dark:border-slate-600"
                             >
                                 Continue to Finalize
                             </button>
@@ -282,24 +282,24 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
 
                 {step === 3 && (
                     <div className="space-y-8 animate-in zoom-in duration-500 py-10 text-center">
-                        <div className="w-32 h-32 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-8 relative">
-                            <div className="absolute inset-0 bg-indigo-200 rounded-full animate-ping opacity-20" />
+                        <div className="w-32 h-32 bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-8 relative">
+                            <div className="absolute inset-0 bg-indigo-200 dark:bg-indigo-600/20 rounded-full animate-ping opacity-20" />
                             {React.isValidElement(ICONS.shield) ? React.cloneElement(ICONS.shield as React.ReactElement<any>, { width: 64, height: 64 }) : ICONS.shield}
                         </div>
                         <div className="max-w-md mx-auto space-y-4">
-                            <h3 className="text-2xl font-black text-foreground">Ready to Synchronize?</h3>
+                            <h3 className="text-2xl font-black text-foreground dark:text-slate-200">Ready to Synchronize?</h3>
                             <p className="text-sm text-muted-foreground leading-relaxed font-medium">
-                                You are about to adjust <span className="text-indigo-600 font-black">{discrepancies.length}</span> items in your live inventory.
+                                You are about to adjust <span className="text-indigo-600 dark:text-indigo-400 font-black">{discrepancies.length}</span> items in your live inventory.
                                 This will generate audit trail entries and update your valuation reports.
                             </p>
                         </div>
 
                         <div className="max-w-xl mx-auto grid grid-cols-2 gap-4 mt-8">
-                            <div className="p-6 bg-muted/80 rounded-3xl border border-border text-left">
+                            <div className="p-6 bg-muted/80 dark:bg-slate-800/80 rounded-3xl border border-border dark:border-slate-600 text-left">
                                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Audit Reference</p>
                                 <p className="text-sm font-black text-foreground">AUDIT-{new Date().getTime().toString().slice(-6)}</p>
                             </div>
-                            <div className="p-6 bg-muted/80 rounded-3xl border border-border text-left">
+                            <div className="p-6 bg-muted/80 dark:bg-slate-800/80 rounded-3xl border border-border dark:border-slate-600 text-left">
                                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Authorized By</p>
                                 <p className="text-sm font-black text-foreground">Current Administrator</p>
                             </div>
@@ -309,7 +309,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                             <button
                                 onClick={handleFinalize}
                                 disabled={loading}
-                                className={`w-full max-w-sm py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl transition-all flex items-center justify-center gap-3 ${loading ? 'bg-slate-400 cursor-not-allowed text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                className={`w-full max-w-sm py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl transition-all flex items-center justify-center gap-3 ${loading ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700 dark:hover:bg-indigo-500'
                                     }`}
                             >
                                 {loading ? (

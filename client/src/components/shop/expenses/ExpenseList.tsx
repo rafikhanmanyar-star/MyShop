@@ -132,24 +132,24 @@ const ExpenseList: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <Card className="p-4 border-none shadow-sm">
+      <Card className="p-4 border-none dark:border dark:border-slate-700/80 shadow-sm dark:bg-slate-900/50">
         <div className="flex flex-wrap items-center gap-4">
           <input
             type="date"
             value={filters.fromDate}
             onChange={(e) => setFilters((f) => ({ ...f, fromDate: e.target.value }))}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-background dark:bg-slate-900 text-foreground"
           />
           <input
             type="date"
             value={filters.toDate}
             onChange={(e) => setFilters((f) => ({ ...f, toDate: e.target.value }))}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-background dark:bg-slate-900 text-foreground"
           />
           <select
             value={filters.categoryId}
             onChange={(e) => setFilters((f) => ({ ...f, categoryId: e.target.value }))}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-background dark:bg-slate-900 text-foreground"
           >
             <option value="">All categories</option>
             {categories.map((c) => (
@@ -159,7 +159,7 @@ const ExpenseList: React.FC = () => {
           <select
             value={filters.vendorId}
             onChange={(e) => setFilters((f) => ({ ...f, vendorId: e.target.value }))}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-background dark:bg-slate-900 text-foreground"
           >
             <option value="">All vendors</option>
             {vendors.map((v) => (
@@ -169,7 +169,7 @@ const ExpenseList: React.FC = () => {
           <select
             value={filters.paymentMethod}
             onChange={(e) => setFilters((f) => ({ ...f, paymentMethod: e.target.value }))}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+            className="border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm bg-background dark:bg-slate-900 text-foreground"
           >
             <option value="">All methods</option>
             <option value="Cash">Cash</option>
@@ -183,13 +183,13 @@ const ExpenseList: React.FC = () => {
               placeholder="Search description..."
               value={filters.search}
               onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-              className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm"
+              className="w-full pl-9 pr-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm bg-background dark:bg-slate-900 text-foreground placeholder:text-muted-foreground"
             />
           </div>
           <Button onClick={load} variant="secondary">Apply</Button>
           <button
             onClick={exportCsv}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-foreground hover:bg-muted/50 text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-foreground hover:bg-muted/50 dark:hover:bg-slate-800 text-sm font-medium bg-background dark:bg-slate-900"
           >
             <Download className="w-4 h-4" /> Export CSV
           </button>
@@ -202,8 +202,8 @@ const ExpenseList: React.FC = () => {
       </Card>
 
       {pendingItems.length > 0 && (
-        <Card className="p-4 border-none shadow-sm bg-amber-50 border border-amber-200 flex flex-wrap items-center justify-between gap-3">
-          <span className="flex items-center gap-2 text-amber-800 font-medium">
+        <Card className="p-4 border-none shadow-sm bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 flex flex-wrap items-center justify-between gap-3">
+          <span className="flex items-center gap-2 text-amber-800 dark:text-amber-200 font-medium">
             <CloudOff className="w-5 h-5" />
             {pendingItems.length} expense(s) saved offline. They will sync when you’re back online.
           </span>
@@ -214,7 +214,7 @@ const ExpenseList: React.FC = () => {
         </Card>
       )}
 
-      <Card className="border-none shadow-sm overflow-hidden">
+      <Card className="border-none dark:border dark:border-slate-700/80 shadow-sm overflow-hidden dark:bg-slate-900/50">
         {loading ? (
           <div className="p-12 text-center">
             <div className="inline-block w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -223,7 +223,7 @@ const ExpenseList: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-muted/80 border-b border-border">
+                <tr className="bg-muted/80 dark:bg-slate-800 border-b border-border dark:border-slate-700">
                   {isAdmin && (
                     <th className="text-left p-3">
                       <input
@@ -263,12 +263,12 @@ const ExpenseList: React.FC = () => {
                 ].map((row) => (
                   <tr
                     key={row.id}
-                    className={`border-b border-border hover:bg-muted/50/50 ${(row as any)._pending ? 'bg-amber-50/50' : ''}`}
+                    className={`border-b border-border dark:border-slate-700 hover:bg-muted/50/50 dark:hover:bg-slate-800/50 ${(row as any)._pending ? 'bg-amber-50/50 dark:bg-amber-950/25' : ''}`}
                   >
                     {isAdmin && (
                       <td className="p-3">
                         {(row as any)._pending ? (
-                          <span className="text-slate-300">—</span>
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
                         ) : (
                           <input
                             type="checkbox"
@@ -287,10 +287,10 @@ const ExpenseList: React.FC = () => {
                       <span
                         className={
                           (row as any)._pending
-                            ? 'text-amber-600 font-medium'
+                            ? 'text-amber-600 dark:text-amber-400 font-medium'
                             : row.status === 'paid'
-                              ? 'text-emerald-600'
-                              : 'text-amber-600'
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-amber-600 dark:text-amber-400'
                         }
                       >
                         {row.status}
@@ -306,7 +306,7 @@ const ExpenseList: React.FC = () => {
             )}
           </div>
         )}
-        <div className="px-4 py-2 border-t border-border text-sm text-muted-foreground">
+        <div className="px-4 py-2 border-t border-border dark:border-slate-700 text-sm text-muted-foreground">
           Total: {data.total} expense(s)
           {pendingItems.length > 0 && ` · ${pendingItems.length} pending sync`}
         </div>

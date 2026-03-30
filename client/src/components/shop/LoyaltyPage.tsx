@@ -45,18 +45,18 @@ const LoyaltyContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
+        <div className="flex flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
             {/* Header / Tab Navigation */}
-            <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
+            <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-foreground tracking-tight">Customer Retention Engine</h1>
-                        <p className="text-muted-foreground text-sm font-medium">Enterprise Loyalty & Reward Lifecycle Management.</p>
+                        <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Customer Retention Engine</h1>
+                        <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">Enterprise Loyalty & Reward Lifecycle Management.</p>
                     </div>
                     <div className="flex gap-3">
                         <button
                             onClick={() => setIsEnrollModalOpen(true)}
-                            className="px-4 py-2 bg-rose-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-rose-100 hover:bg-rose-700 transition-all flex items-center gap-2"
+                            className="px-4 py-2 bg-rose-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-rose-100 dark:shadow-rose-900/40 hover:bg-rose-700 transition-all flex items-center gap-2"
                         >
                             {ICONS.plus} Enroll Member
                         </button>
@@ -69,14 +69,14 @@ const LoyaltyContent: React.FC = () => {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
-                                ? 'text-rose-600'
-                                : 'text-muted-foreground hover:text-muted-foreground'
+                                ? 'text-rose-600 dark:text-rose-400'
+                                : 'text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
                             {tab.label}
                             {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-rose-600 rounded-t-full"></div>
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-rose-600 dark:bg-rose-400 rounded-t-full"></div>
                             )}
                         </button>
                     ))}
@@ -84,7 +84,7 @@ const LoyaltyContent: React.FC = () => {
             </div>
 
             {/* Scrollable Content Area */}
-            <div className="flex-1 overflow-y-auto p-8">
+            <div className="flex-1 min-h-0 overflow-y-auto p-8">
                 {activeTab === 'dashboard' && <LoyaltyDashboard />}
                 {activeTab === 'members' && <MemberDirectory />}
                 {activeTab === 'tiers' && <TierMatrix />}
@@ -128,14 +128,14 @@ const LoyaltyContent: React.FC = () => {
                         />
                     </div>
 
-                    <div className="bg-rose-50 p-4 rounded-xl border border-rose-100 mt-2">
+                    <div className="bg-rose-50 dark:bg-rose-950/40 p-4 rounded-xl border border-rose-100 dark:border-rose-900/60 mt-2">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
+                            <div className="p-2 bg-rose-100 text-rose-600 dark:bg-rose-950/80 dark:text-rose-400 rounded-lg">
                                 {ICONS.trophy}
                             </div>
                             <div>
-                                <p className="text-sm font-bold text-rose-900">Sign-up Bonus</p>
-                                <p className="text-xs text-rose-700">New members automatically receive 50 bonus points upon enrollment.</p>
+                                <p className="text-sm font-bold text-rose-900 dark:text-rose-200">Sign-up Bonus</p>
+                                <p className="text-xs text-rose-700 dark:text-rose-300/90">New members automatically receive 50 bonus points upon enrollment.</p>
                             </div>
                         </div>
                     </div>

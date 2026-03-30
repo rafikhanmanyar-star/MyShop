@@ -47,6 +47,8 @@ export class KhataService {
        RETURNING id`,
       [tenantId, customerId, amount, note || null]
     );
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
     return res[0].id;
   }
 

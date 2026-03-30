@@ -9,6 +9,11 @@ export interface DailyReportSummary {
   inventoryInQty: number;
   totalExpenses: number;
   newProductsCount: number;
+  /** Khata (customer credit) — tenant-wide; not filtered by branch */
+  khataDebitTotal: number;
+  khataCreditTotal: number;
+  khataNetChange: number;
+  khataEntryCount: number;
   netProfitDaily: number;
 }
 
@@ -73,12 +78,26 @@ export class DailyReportService {
       [tenantId, start, end]
     );
 
+    const khata = await db.query<{ d: string; c: string; n: string }>(
+      `SELECT
+         COALESCE(SUM(CASE WHEN type = 'debit' THEN amount::numeric ELSE 0 END), 0)::text AS d,
+         COALESCE(SUM(CASE WHEN type = 'credit' THEN amount::numeric ELSE 0 END), 0)::text AS c,
+         COUNT(*)::text AS n
+       FROM khata_ledger
+       WHERE tenant_id = $1 AND created_at >= $2::timestamptz AND created_at < $3::timestamptz`,
+      [tenantId, start, end]
+    );
+
     const posSales = parseFloat(pos[0]?.s || '0') || 0;
     const mobileSales = parseFloat(mobile[0]?.s || '0') || 0;
     const inventoryOutQty = parseFloat(outQ[0]?.s || '0') || 0;
     const inventoryInQty = parseFloat(inQ[0]?.s || '0') || 0;
     const totalExpenses = parseFloat(exp[0]?.s || '0') || 0;
     const newProductsCount = parseInt(prodC[0]?.c || '0', 10) || 0;
+    const khataDebitTotal = parseFloat(khata[0]?.d || '0') || 0;
+    const khataCreditTotal = parseFloat(khata[0]?.c || '0') || 0;
+    const khataEntryCount = parseInt(khata[0]?.n || '0', 10) || 0;
+    const khataNetChange = khataDebitTotal - khataCreditTotal;
 
     return {
       date: dateStr,
@@ -89,8 +108,32 @@ export class DailyReportService {
       inventoryInQty,
       totalExpenses,
       newProductsCount,
+      khataDebitTotal,
+      khataCreditTotal,
+      khataNetChange,
+      khataEntryCount,
       netProfitDaily: posSales + mobileSales - totalExpenses,
     };
+  }
+
+  async getKhataDetail(tenantId: string, dateStr: string) {
+    const db = getDatabaseService();
+    const { start, end } = dayRangeUtc(dateStr);
+    return db.query(
+      `SELECT k.id,
+              k.created_at::text AS created_at,
+              k.type,
+              k.amount::numeric AS amount,
+              COALESCE(k.note, '') AS note,
+              COALESCE(c.name, '') AS customer_name,
+              COALESCE(s.sale_number, '') AS sale_number
+       FROM khata_ledger k
+       LEFT JOIN contacts c ON c.id = k.customer_id AND c.tenant_id = k.tenant_id
+       LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
+       WHERE k.tenant_id = $1 AND k.created_at >= $2::timestamptz AND k.created_at < $3::timestamptz
+       ORDER BY k.created_at DESC, k.id DESC`,
+      [tenantId, start, end]
+    );
   }
 
   async getInventoryOutDetail(tenantId: string, dateStr: string, branchId: string | null) {

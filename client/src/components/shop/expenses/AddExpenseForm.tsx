@@ -154,13 +154,13 @@ const AddExpenseForm: React.FC<AddExpenseFormProps> = ({ onSaved }) => {
   }
 
   return (
-    <Card className="max-w-2xl p-8 border-none shadow-sm">
+    <Card className="max-w-2xl p-8 border-none dark:border dark:border-slate-700/80 shadow-sm dark:bg-slate-900/50">
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="p-3 rounded-lg bg-rose-50 text-rose-700 text-sm">{error}</div>
+          <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-200 text-sm border border-rose-200/80 dark:border-rose-800/60">{error}</div>
         )}
         {offlineMessage && (
-          <div className="p-3 rounded-lg bg-amber-50 text-amber-800 text-sm border border-amber-200">{offlineMessage}</div>
+          <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 text-sm border border-amber-200 dark:border-amber-800/50">{offlineMessage}</div>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
@@ -281,10 +281,10 @@ const AddExpenseForm: React.FC<AddExpenseFormProps> = ({ onSaved }) => {
               type="file"
               accept="image/*,.pdf"
               onChange={handleFileChange}
-              className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700"
+              className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 dark:file:bg-indigo-950/60 file:text-indigo-700 dark:file:text-indigo-300"
             />
             {form.attachmentUrl && (
-              <a href={form.attachmentUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-sm flex items-center gap-1">
+              <a href={form.attachmentUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 text-sm flex items-center gap-1 hover:underline">
                 <Paperclip className="w-4 h-4" /> View
               </a>
             )}

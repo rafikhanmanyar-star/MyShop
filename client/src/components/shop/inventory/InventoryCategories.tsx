@@ -170,8 +170,8 @@ const InventoryCategories: React.FC = () => {
     const totalSubs = categories.filter((c) => c.parent_id).length;
 
     return (
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-border flex justify-between items-center">
+        <div className="flex flex-col flex-1 min-h-0 bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="flex-shrink-0 p-6 border-b border-border flex justify-between items-center">
                 <div>
                     <h2 className="text-lg font-bold text-foreground">Product Categories</h2>
                     <p className="text-muted-foreground text-sm mt-0.5">
@@ -180,9 +180,9 @@ const InventoryCategories: React.FC = () => {
                 </div>
                 <Button onClick={() => openAdd()}>{ICONS.plus} Add Category</Button>
             </div>
-            <div className="p-6">
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 overscroll-contain">
                 {loading && <p className="text-muted-foreground text-sm">Loading...</p>}
-                {error && <p className="text-rose-600 text-sm mb-3">{error}</p>}
+                {error && <p className="text-rose-600 dark:text-rose-400 text-sm mb-3">{error}</p>}
                 {!loading && categories.length === 0 && !error && (
                     <p className="text-muted-foreground text-sm">No categories yet. Add one to use in product creation.</p>
                 )}
@@ -199,13 +199,13 @@ const InventoryCategories: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={allExpanded ? collapseAll : expandAll}
-                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                                    className="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium"
                                 >
                                     {allExpanded ? 'Collapse all' : 'Expand all'}
                                 </button>
                             )}
                         </div>
-                        <div className="divide-y divide-slate-100">
+                        <div className="divide-y divide-border">
                             {categoryTree.map(({ category: main, children: subs }) => {
                                 const hasSubs = subs.length > 0;
                                 const isExpanded = expandedIds.has(main.id);
@@ -244,7 +244,7 @@ const InventoryCategories: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => openAdd(main.id)}
-                                                    className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
+                                                    className="text-xs text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 font-medium"
                                                     title="Add subcategory"
                                                 >
                                                     + Sub
@@ -252,14 +252,14 @@ const InventoryCategories: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => openEdit(main)}
-                                                    className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                                                    className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium"
                                                 >
                                                     Edit
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleDelete(main.id)}
-                                                    className="text-sm text-rose-600 hover:text-rose-800 font-medium"
+                                                    className="text-sm text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 font-medium"
                                                 >
                                                     Delete
                                                 </button>
@@ -277,14 +277,14 @@ const InventoryCategories: React.FC = () => {
                                                             <button
                                                                 type="button"
                                                                 onClick={() => openEdit(sub)}
-                                                                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                                                                className="text-sm text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium"
                                                             >
                                                                 Edit
                                                             </button>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleDelete(sub.id)}
-                                                                className="text-sm text-rose-600 hover:text-rose-800 font-medium"
+                                                                className="text-sm text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 font-medium"
                                                             >
                                                                 Delete
                                                             </button>
@@ -360,7 +360,7 @@ const InventoryCategories: React.FC = () => {
                                     ))}
                             </Select>
                             {mainCategories.length === 0 && (
-                                <p className="text-xs text-amber-700">
+                                <p className="text-xs text-amber-700 dark:text-amber-300">
                                     Add at least one main category first, then you can create subcategories under it.
                                 </p>
                             )}

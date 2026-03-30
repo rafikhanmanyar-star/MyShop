@@ -86,7 +86,7 @@ const StockAdjustments: React.FC = () => {
                 <h3 className="text-lg font-black text-foreground tracking-tight">Adjustment Approval Queue</h3>
                 <button
                     onClick={handleOpenModal}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2"
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40 hover:bg-indigo-700 transition-all flex items-center gap-2"
                 >
                     {ICONS.plus} New Request
                 </button>
@@ -98,10 +98,10 @@ const StockAdjustments: React.FC = () => {
                     const warehouse = warehouses.find(w => w.id === adj.warehouseId);
 
                     return (
-                        <Card key={adj.id} className={`p-6 border-2 transition-all group ${adj.status === 'Approved' ? 'border-emerald-100 bg-emerald-50/20' : 'border-amber-100 bg-amber-50/20 shadow-xl'
+                        <Card key={adj.id} className={`p-6 border-2 transition-all group ${adj.status === 'Approved' ? 'border-emerald-100 bg-emerald-50/20 dark:border-emerald-800/50 dark:bg-emerald-950/25' : 'border-amber-100 bg-amber-50/20 dark:border-amber-800/50 dark:bg-amber-950/25 shadow-xl'
                             }`}>
                             <div className="flex justify-between items-start mb-4">
-                                <div className={`p-2 rounded-lg ${adj.type === 'Increase' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                                <div className={`p-2 rounded-lg ${adj.type === 'Increase' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300'}`}>
                                     {adj.type === 'Increase' ? ICONS.plus : ICONS.minus}
                                 </div>
                                 <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${adj.status === 'Approved' ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
@@ -119,7 +119,7 @@ const StockAdjustments: React.FC = () => {
 
                             <div className="flex items-center justify-between p-4 bg-card rounded-xl border border-border shadow-sm mb-6">
                                 <span className="text-xs font-bold text-muted-foreground">Adjustment Qty</span>
-                                <span className={`text-xl font-black font-mono ${adj.type === 'Increase' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                <span className={`text-xl font-black font-mono ${adj.type === 'Increase' ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                                     {adj.type === 'Increase' ? '+' : '-'}{adj.quantity}
                                 </span>
                             </div>
@@ -127,7 +127,7 @@ const StockAdjustments: React.FC = () => {
                             {adj.status === 'Pending' ? (
                                 <button
                                     onClick={() => approveAdjustment(adj.id)}
-                                    className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all"
+                                    className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 transition-all"
                                 >
                                     Approve & Commit
                                 </button>
@@ -139,7 +139,7 @@ const StockAdjustments: React.FC = () => {
                         </Card>
                     );
                 }) : (
-                    <div className="col-span-full py-20 bg-card border border-dashed border-border rounded-3xl flex flex-col items-center justify-center text-slate-300 gap-4">
+                    <div className="col-span-full py-20 bg-card border border-dashed border-border rounded-3xl flex flex-col items-center justify-center text-slate-300 dark:text-slate-500 gap-4">
                         <div className="w-16 h-16 bg-muted/80 rounded-full flex items-center justify-center">
                             {React.cloneElement(ICONS.settings as React.ReactElement<any>, { width: 32, height: 32 })}
                         </div>
@@ -165,7 +165,7 @@ const StockAdjustments: React.FC = () => {
                             <select
                                 value={selectedItemId}
                                 onChange={(e) => setSelectedItemId(e.target.value)}
-                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-foreground dark:border-slate-600"
                                 required
                             >
                                 <option value="">-- Select an item --</option>
@@ -185,7 +185,7 @@ const StockAdjustments: React.FC = () => {
                             <select
                                 value={selectedWarehouseId}
                                 onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-foreground dark:border-slate-600"
                                 required
                             >
                                 {warehouses.map(wh => (
@@ -204,7 +204,7 @@ const StockAdjustments: React.FC = () => {
                             <select
                                 value={adjustmentType}
                                 onChange={(e) => setAdjustmentType(e.target.value as 'Increase' | 'Decrease')}
-                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-foreground dark:border-slate-600"
                                 required
                             >
                                 <option value="Increase">Increase (+)</option>
@@ -225,7 +225,7 @@ const StockAdjustments: React.FC = () => {
                                 min="0.01"
                                 step="0.01"
                                 required
-                                className="border-2 border-border"
+                                className="border-2 border-border dark:border-slate-600"
                             />
                         </div>
 
@@ -237,7 +237,7 @@ const StockAdjustments: React.FC = () => {
                             <select
                                 value={reasonCode}
                                 onChange={(e) => setReasonCode(e.target.value)}
-                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-foreground dark:border-slate-600"
                                 required
                             >
                                 <option value="">-- Select reason --</option>
@@ -255,19 +255,19 @@ const StockAdjustments: React.FC = () => {
                                 onChange={(e) => setNotes(e.target.value)}
                                 placeholder="Add any additional details about this adjustment..."
                                 rows={3}
-                                className="!border-2 !border-border"
+                                className="!border-2 !border-border dark:!border-slate-600"
                             />
                         </div>
                     </div>
 
                     {/* Summary Box */}
                     {selectedItemId && quantity && (
-                        <div className={`p-4 rounded-xl border-2 ${adjustmentType === 'Increase' ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                        <div className={`p-4 rounded-xl border-2 ${adjustmentType === 'Increase' ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/60' : 'bg-rose-50 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800/60'}`}>
                             <div className="flex items-center justify-between">
                                 <span className="text-sm font-bold text-foreground">
                                     {items.find(i => i.id === selectedItemId)?.name}
                                 </span>
-                                <span className={`text-xl font-black font-mono ${adjustmentType === 'Increase' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                <span className={`text-xl font-black font-mono ${adjustmentType === 'Increase' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                     {adjustmentType === 'Increase' ? '+' : '-'}{quantity} {items.find(i => i.id === selectedItemId)?.unit}
                                 </span>
                             </div>

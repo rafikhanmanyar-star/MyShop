@@ -21,13 +21,13 @@ interface ShopBranchOption {
 
 // ─── Status Config ────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-    Pending: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', icon: Clock },
-    Confirmed: { label: 'Confirmed', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200', icon: Check },
-    Packed: { label: 'Packed', color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200', icon: Package },
-    OutForDelivery: { label: 'Out for Delivery', color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', icon: Truck },
-    Delivered: { label: 'Delivered', color: 'text-green-700', bg: 'bg-green-50 border-green-200', icon: Check },
-    Unpaid: { label: 'Unpaid', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200', icon: Banknote },
-    Cancelled: { label: 'Cancelled', color: 'text-red-700', bg: 'bg-red-50 border-red-200', icon: X },
+    Pending: { label: 'Pending', color: 'text-amber-700 dark:text-amber-300', bg: 'bg-amber-50 border-amber-200 dark:bg-amber-950/50 dark:border-amber-800', icon: Clock },
+    Confirmed: { label: 'Confirmed', color: 'text-blue-700 dark:text-blue-300', bg: 'bg-blue-50 border-blue-200 dark:bg-blue-950/50 dark:border-blue-800', icon: Check },
+    Packed: { label: 'Packed', color: 'text-indigo-700 dark:text-indigo-300', bg: 'bg-indigo-50 border-indigo-200 dark:bg-indigo-950/50 dark:border-indigo-800', icon: Package },
+    OutForDelivery: { label: 'Out for Delivery', color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-950/50 dark:border-emerald-800', icon: Truck },
+    Delivered: { label: 'Delivered', color: 'text-green-700 dark:text-green-300', bg: 'bg-green-50 border-green-200 dark:bg-green-950/50 dark:border-green-800', icon: Check },
+    Unpaid: { label: 'Unpaid', color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 border-orange-200 dark:bg-orange-950/50 dark:border-orange-800', icon: Banknote },
+    Cancelled: { label: 'Cancelled', color: 'text-red-700 dark:text-red-300', bg: 'bg-red-50 border-red-200 dark:bg-red-950/50 dark:border-red-800', icon: X },
 };
 
 const NEXT_STATUS: Record<string, string> = {
@@ -160,43 +160,45 @@ function MobileOrdersPageContent() {
     const pendingCount = orders.filter(o => o.status === 'Pending').length;
 
     return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                        <Smartphone className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-foreground">Mobile Orders</h1>
-                        <div className="flex items-center gap-3 mt-0.5">
-                            <span className="flex items-center gap-1.5 text-xs font-medium">
-                                {sseConnected ? (
-                                    <><Wifi className="w-3.5 h-3.5 text-green-500" /><span className="text-green-600">Live</span></>
-                                ) : (
-                                    <><WifiOff className="w-3.5 h-3.5 text-red-400" /><span className="text-red-500">Disconnected</span></>
-                                )}
-                            </span>
-                            {pendingCount > 0 && (
-                                <span className="flex items-center gap-1 bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-xs font-bold">
-                                    <Bell className="w-3 h-3" /> {pendingCount} pending
+        <div className="flex flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
+            <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-6 sm:px-8 pt-6 pb-4 shadow-sm z-10">
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-12 h-12 shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/40">
+                            <Smartphone className="w-6 h-6 text-white" />
+                        </div>
+                        <div className="min-w-0">
+                            <h1 className="text-2xl font-bold text-foreground dark:text-slate-200 tracking-tight">Mobile Orders</h1>
+                            <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                                <span className="flex items-center gap-1.5 text-xs font-medium">
+                                    {sseConnected ? (
+                                        <><Wifi className="w-3.5 h-3.5 text-green-500 dark:text-green-400" /><span className="text-green-600 dark:text-green-400">Live</span></>
+                                    ) : (
+                                        <><WifiOff className="w-3.5 h-3.5 text-red-400" /><span className="text-red-500 dark:text-red-400">Disconnected</span></>
+                                    )}
                                 </span>
-                            )}
+                                {pendingCount > 0 && (
+                                    <span className="flex items-center gap-1 bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded-full text-xs font-bold">
+                                        <Bell className="w-3 h-3" /> {pendingCount} pending
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => loadOrders(statusFilter === 'All' ? undefined : statusFilter)}
-                        className="p-2.5 bg-card border border-border rounded-xl hover:bg-muted transition-colors"
-                        title="Refresh"
-                    >
-                        <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button
+                            onClick={() => loadOrders(statusFilter === 'All' ? undefined : statusFilter)}
+                            className="p-2.5 bg-card dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl hover:bg-muted dark:hover:bg-slate-700/80 transition-colors"
+                            title="Refresh"
+                        >
+                            <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
+            <div className="flex-1 min-h-0 overflow-auto p-6 sm:p-8 space-y-6">
             {/* Status Filter */}
             <div className="flex gap-2 overflow-x-auto pb-1">
                 {STATUS_FILTERS.map(s => {
@@ -212,8 +214,8 @@ function MobileOrdersPageContent() {
                             onClick={() => setStatusFilter(s)}
                             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all border
                 ${statusFilter === s
-                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20'
-                                    : 'bg-card text-muted-foreground border-border hover:border-indigo-300'
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/40'
+                                    : 'bg-card dark:bg-slate-900/80 text-muted-foreground border-border dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-500/40'
                                 }`}
                         >
                             {s === 'All' ? 'All' : cfg?.label || s}
@@ -231,7 +233,7 @@ function MobileOrdersPageContent() {
                 <div className="flex-1 space-y-3">
                     {loading && orders.length === 0 ? (
                         <div className="flex items-center justify-center h-64">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400" />
                         </div>
                     ) : orders.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
@@ -249,7 +251,7 @@ function MobileOrdersPageContent() {
                                 <div
                                     key={order.id}
                                     onClick={() => handleViewDetail(order)}
-                                    className={`bg-card rounded-2xl border p-4 cursor-pointer transition-all hover:shadow-md hover:border-indigo-200 ${detailOrder?.id === order.id ? 'ring-2 ring-indigo-500 border-indigo-300' : 'border-border'
+                                    className={`bg-card dark:bg-slate-900/90 rounded-2xl border p-4 cursor-pointer transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-500/40 ${detailOrder?.id === order.id ? 'ring-2 ring-indigo-500 border-indigo-300 dark:ring-indigo-400 dark:border-indigo-500/60' : 'border-border dark:border-slate-600'
                                         }`}
                                 >
                                     <div className="flex items-start justify-between mb-3">
@@ -263,7 +265,7 @@ function MobileOrdersPageContent() {
                                             </div>
                                             <p className="text-xs text-muted-foreground mt-1">{formatDate(order.created_at)}</p>
                                         </div>
-                                        <span className="text-lg font-bold text-indigo-600">{formatPrice(order.grand_total)}</span>
+                                        <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{formatPrice(order.grand_total)}</span>
                                     </div>
 
                                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -275,7 +277,7 @@ function MobileOrdersPageContent() {
                                         <span className="flex items-center gap-1">
                                             <Phone className="w-3 h-3" />{order.customer_phone}
                                         </span>
-                                        <span className={`flex items-center gap-1 font-medium ${order.payment_status === 'Paid' ? 'text-green-600' : 'text-orange-600'}`}>
+                                        <span className={`flex items-center gap-1 font-medium ${order.payment_status === 'Paid' ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
                                             <FileText className="w-3 h-3" />{formatMobilePaymentMethod(order.payment_method)} ({order.payment_status || 'Unpaid'})
                                         </span>
                                     </div>
@@ -301,7 +303,7 @@ function MobileOrdersPageContent() {
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, 'Cancelled'); }}
                                                     disabled={actionLoading === order.id}
-                                                    className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors border border-red-200"
+                                                    className="px-4 py-2 bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 rounded-xl text-sm font-semibold hover:bg-red-100 dark:hover:bg-red-950/70 transition-colors border border-red-200 dark:border-red-800"
                                                 >
                                                     <X className="w-3.5 h-3.5" />
                                                 </button>
@@ -333,8 +335,8 @@ function MobileOrdersPageContent() {
                 {/* Order Detail Panel */}
                 <div className="w-[400px] flex-shrink-0">
                     {detailLoading ? (
-                        <div className="bg-card rounded-2xl border border-border p-8 flex items-center justify-center h-96">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+                        <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 p-8 flex items-center justify-center h-96">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400" />
                         </div>
                     ) : detailOrder ? (
                         <OrderDetailPanel
@@ -349,7 +351,7 @@ function MobileOrdersPageContent() {
                             formatDate={formatFullDate}
                         />
                     ) : (
-                        <div className="bg-card rounded-2xl border border-border p-8 flex flex-col items-center justify-center h-96 text-muted-foreground">
+                        <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 p-8 flex flex-col items-center justify-center h-96 text-muted-foreground">
                             <Eye className="w-12 h-12 mb-3 opacity-30" />
                             <p className="font-semibold text-muted-foreground">Select an order</p>
                             <p className="text-sm">Click on an order to view details</p>
@@ -360,12 +362,12 @@ function MobileOrdersPageContent() {
 
             {/* Payment Collection Modal */}
             {paymentModal && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setPaymentModal(null)}>
-                    <div className="bg-card rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="p-6 bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100">
+                <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50" onClick={() => setPaymentModal(null)}>
+                    <div className="bg-card dark:bg-slate-900 rounded-2xl shadow-2xl w-[420px] overflow-hidden border border-border dark:border-slate-600" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/80 dark:to-amber-950/50 border-b border-orange-100 dark:border-orange-900/60">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
-                                    <Banknote className="w-5 h-5 text-orange-600" />
+                                <div className="w-10 h-10 bg-orange-100 dark:bg-orange-950/80 rounded-xl flex items-center justify-center">
+                                    <Banknote className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-foreground">Collect Payment</h3>
@@ -382,7 +384,7 @@ function MobileOrdersPageContent() {
                             <div>
                                 <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Deposit To Account</label>
                                 {bankAccounts.length === 0 ? (
-                                    <p className="text-sm text-red-500">No bank accounts found. Create one in Settings first.</p>
+                                    <p className="text-sm text-red-500 dark:text-red-400">No bank accounts found. Create one in Settings first.</p>
                                 ) : (
                                     <div className="space-y-2">
                                         {bankAccounts.map((acc: any) => (
@@ -390,8 +392,8 @@ function MobileOrdersPageContent() {
                                                 key={acc.id}
                                                 className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
                                                     selectedBankAccount === acc.id
-                                                        ? 'border-orange-400 bg-orange-50'
-                                                        : 'border-border hover:border-orange-200'
+                                                        ? 'border-orange-400 bg-orange-50 dark:border-orange-600 dark:bg-orange-950/40'
+                                                        : 'border-border dark:border-slate-600 hover:border-orange-200 dark:hover:border-orange-600/50'
                                                 }`}
                                             >
                                                 <input
@@ -403,7 +405,7 @@ function MobileOrdersPageContent() {
                                                     className="sr-only"
                                                 />
                                                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                                                    selectedBankAccount === acc.id ? 'bg-orange-100 text-orange-600' : 'bg-muted text-muted-foreground'
+                                                    selectedBankAccount === acc.id ? 'bg-orange-100 text-orange-600 dark:bg-orange-950/80 dark:text-orange-400' : 'bg-muted text-muted-foreground dark:bg-slate-800'
                                                 }`}>
                                                     {acc.account_type === 'Cash' ? <Wallet className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
                                                 </div>
@@ -420,10 +422,10 @@ function MobileOrdersPageContent() {
                                 )}
                             </div>
                         </div>
-                        <div className="p-4 border-t border-border flex gap-3">
+                        <div className="p-4 border-t border-border dark:border-slate-600 flex gap-3">
                             <button
                                 onClick={() => setPaymentModal(null)}
-                                className="flex-1 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
+                                className="flex-1 py-2.5 bg-muted dark:bg-slate-800 text-foreground rounded-xl text-sm font-semibold hover:bg-muted dark:hover:bg-slate-700 transition-colors"
                             >
                                 Cancel
                             </button>
@@ -453,6 +455,7 @@ function MobileOrdersPageContent() {
                     </div>
                 </div>
             )}
+            </div>
         </div>
     );
 }
@@ -478,14 +481,14 @@ function OrderDetailPanel({
     const isUnpaid = order.status === 'Delivered' && order.payment_status !== 'Paid';
 
     return (
-        <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm relative">
+        <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 overflow-hidden shadow-sm relative">
             {/* Header */}
-            <div className="p-5 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
+            <div className="p-5 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/60 dark:to-purple-950/50 border-b border-indigo-100 dark:border-indigo-900/50">
                 <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-lg text-foreground">{order.order_number}</span>
+                    <span className="font-bold text-lg text-foreground dark:text-slate-200">{order.order_number}</span>
                     <div className="flex items-center gap-2">
                         {isUnpaid && (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border bg-orange-50 border-orange-200 text-orange-700">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950/50 dark:border-orange-800 dark:text-orange-300">
                                 <Banknote className="w-3 h-3" />
                                 Unpaid
                             </span>
@@ -520,7 +523,7 @@ function OrderDetailPanel({
                                     setNewPw('');
                                     setConfirmPw('');
                                 }}
-                                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
                             >
                                 <KeyRound className="w-3.5 h-3.5" />
                                 Reset app password
@@ -534,7 +537,7 @@ function OrderDetailPanel({
                     <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Payment</h4>
                     <div className="flex items-center gap-2 text-sm">
                         <span className="text-foreground">{formatMobilePaymentMethod(order.payment_method)}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${order.payment_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${order.payment_status === 'Paid' ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300'}`}>
                             {order.payment_status || 'Unpaid'}
                         </span>
                     </div>
@@ -573,7 +576,7 @@ function OrderDetailPanel({
                 </div>
 
                 {/* Totals */}
-                <div className="bg-muted -mx-5 px-5 py-3 space-y-1.5 text-sm">
+                <div className="bg-muted dark:bg-slate-800/80 -mx-5 px-5 py-3 space-y-1.5 text-sm">
                     <div className="flex justify-between text-muted-foreground">
                         <span>Subtotal</span><span>{formatPrice(order.subtotal)}</span>
                     </div>
@@ -599,7 +602,7 @@ function OrderDetailPanel({
                         <div className="space-y-2">
                             {order.status_history.map(h => (
                                 <div key={h.id} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <div className="w-2 h-2 rounded-full bg-indigo-400" />
+                                    <div className="w-2 h-2 rounded-full bg-indigo-400 dark:bg-indigo-500" />
                                     <span className="font-medium text-foreground">{h.to_status}</span>
                                     <span>•</span>
                                     <span>{formatDate(h.created_at)}</span>
@@ -632,7 +635,7 @@ function OrderDetailPanel({
                         <button
                             onClick={() => onStatusUpdate(order.id, 'Cancelled')}
                             disabled={actionLoading === order.id}
-                            className="px-4 py-3 bg-red-50 text-red-600 rounded-xl font-semibold text-sm hover:bg-red-100 transition-colors border border-red-200"
+                            className="px-4 py-3 bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 rounded-xl font-semibold text-sm hover:bg-red-100 dark:hover:bg-red-950/70 transition-colors border border-red-200 dark:border-red-800"
                         >
                             Cancel
                         </button>
@@ -653,17 +656,17 @@ function OrderDetailPanel({
 
             {pwResetOpen && order.customer_id && (
                 <div
-                    className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+                    className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50"
                     onClick={() => !pwResetLoading && setPwResetOpen(false)}
                 >
                     <div
-                        className="bg-card rounded-2xl shadow-2xl w-[400px] overflow-hidden"
+                        className="bg-card dark:bg-slate-900 rounded-2xl shadow-2xl w-[400px] overflow-hidden border border-border dark:border-slate-600"
                         onClick={e => e.stopPropagation()}
                     >
-                        <div className="p-5 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-indigo-100">
+                        <div className="p-5 bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-indigo-950/70 dark:to-violet-950/50 border-b border-indigo-100 dark:border-indigo-900/60">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-                                    <KeyRound className="w-5 h-5 text-indigo-600" />
+                                <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-950/80 rounded-xl flex items-center justify-center">
+                                    <KeyRound className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-foreground">Reset mobile app password</h3>
@@ -682,7 +685,7 @@ function OrderDetailPanel({
                                     autoComplete="new-password"
                                     value={newPw}
                                     onChange={e => setNewPw(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                    className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                                     placeholder="At least 6 characters"
                                 />
                             </div>
@@ -693,11 +696,11 @@ function OrderDetailPanel({
                                     autoComplete="new-password"
                                     value={confirmPw}
                                     onChange={e => setConfirmPw(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                    className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                                 />
                             </div>
                         </div>
-                        <div className="p-4 border-t border-border flex gap-3">
+                        <div className="p-4 border-t border-border dark:border-slate-600 flex gap-3">
                             <button
                                 type="button"
                                 onClick={() => setPwResetOpen(false)}
@@ -916,22 +919,22 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
             {/* Header */}
             <div className="flex items-center gap-3">
                 {onBack && (
-                    <button onClick={onBack} className="p-2 bg-card border border-border rounded-xl hover:bg-muted transition-colors">
+                    <button onClick={onBack} className="p-2 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-xl hover:bg-muted dark:hover:bg-slate-800 transition-colors">
                         <ChevronRight className="w-5 h-5 text-muted-foreground rotate-180" />
                     </button>
                 )}
                 <div>
-                    <h1 className="text-2xl font-bold text-foreground">Mobile branding</h1>
+                    <h1 className="text-2xl font-bold text-foreground dark:text-slate-200">Mobile branding</h1>
                     <p className="text-sm text-muted-foreground">Configure your mobile ordering experience</p>
                 </div>
             </div>
 
             <div className="grid grid-cols-2 gap-6">
                 {/* QR Code Card */}
-                <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
+                <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 p-6 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
-                        <QrCode className="w-5 h-5 text-indigo-600" />
-                        <h2 className="text-lg font-bold text-foreground">Shop QR Code</h2>
+                        <QrCode className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                        <h2 className="text-lg font-bold text-foreground dark:text-slate-200">Shop QR Code</h2>
                     </div>
 
                     <p className="text-xs text-muted-foreground mb-4">
@@ -954,7 +957,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
 
                             <p className="text-sm font-bold text-foreground mb-0.5">{qrData.url}</p>
                             <p className="text-xs text-muted-foreground mb-5">
-                                Slug: <code className="bg-muted px-2 py-0.5 rounded font-mono text-indigo-600">{qrData.slug}</code>
+                                Slug: <code className="bg-muted dark:bg-slate-800 px-2 py-0.5 rounded font-mono text-indigo-600 dark:text-indigo-400">{qrData.slug}</code>
                             </p>
 
                             {/* Action buttons */}
@@ -969,16 +972,16 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                 <div className="flex gap-2">
                                     <button
                                         onClick={handleDownloadQR}
-                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
+                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-muted dark:bg-slate-800 text-foreground rounded-xl text-sm font-semibold hover:bg-muted dark:hover:bg-slate-700 transition-colors"
                                     >
                                         <Download className="w-3.5 h-3.5" />
                                         Download PNG
                                     </button>
                                     <button
                                         onClick={handleCopyUrl}
-                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
+                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-muted dark:bg-slate-800 text-foreground rounded-xl text-sm font-semibold hover:bg-muted dark:hover:bg-slate-700 transition-colors"
                                     >
-                                        {copied ? <CheckCircle className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                        {copied ? <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
                                         {copied ? 'Copied!' : 'Copy URL'}
                                     </button>
                                 </div>
@@ -986,7 +989,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                         </div>
                     ) : (
                         <div className="text-center py-8">
-                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto mb-3" />
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-3" />
                             <p className="text-sm text-muted-foreground">Generating QR code...</p>
                             <p className="text-xs text-muted-foreground mt-1">Make sure you have set a shop slug in the Branding section</p>
                         </div>
@@ -994,11 +997,11 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                 </div>
 
                 {/* Branding Card */}
-                <div className="bg-card rounded-2xl border border-border p-6 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 p-6 shadow-sm overflow-hidden flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
-                            <Palette className="w-5 h-5 text-indigo-600" />
-                            <h2 className="text-lg font-bold text-foreground">App Branding</h2>
+                            <Palette className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                            <h2 className="text-lg font-bold text-foreground dark:text-slate-200">App Branding</h2>
                         </div>
                         <button
                             onClick={handleSaveBranding}
@@ -1017,7 +1020,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                 <select
                                     value={selectedBranchId}
                                     onChange={e => setSelectedBranchId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-card"
+                                    className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-card dark:bg-slate-800/80 text-foreground"
                                 >
                                     <option value="">Default (first branch)</option>
                                     {branches.map(b => (
@@ -1028,7 +1031,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     Select the branch whose door QR and URL you are configuring. Orders from that URL will go to this branch&apos;s POS.
                                 </p>
                                 {(localBranding.branch_name || localBranding.branch_location) && (
-                                    <p className="text-xs text-indigo-600 mt-1">
+                                    <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
                                         {[localBranding.branch_name, localBranding.branch_location].filter(Boolean).join(' · ')}
                                     </p>
                                 )}
@@ -1043,7 +1046,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         value={localBranding.slug || ''}
                                         onChange={e => setLocalBranding({ ...localBranding, slug: e.target.value })}
                                         placeholder="my-shop"
-                                        className="flex-1 px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-indigo-600"
+                                        className="flex-1 px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-indigo-600 dark:text-indigo-400 bg-background dark:bg-slate-800/80"
                                     />
                                 </div>
                                 <p className="text-[10px] text-muted-foreground mt-1">This determines your shop address: {qrData?.url}</p>
@@ -1058,7 +1061,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         onChange={e => setLocalBranding({ ...localBranding, address: e.target.value })}
                                         placeholder="Enter full shop address"
                                         rows={2}
-                                        className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
                                     />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -1070,7 +1073,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             value={localBranding.lat || ''}
                                             onChange={e => setLocalBranding({ ...localBranding, lat: e.target.value ? parseFloat(e.target.value) : null })}
                                             placeholder="e.g. 24.8607"
-                                            className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                                            className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono bg-background dark:bg-slate-800/80 text-foreground"
                                         />
                                     </div>
                                     <div>
@@ -1081,7 +1084,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             value={localBranding.lng || ''}
                                             onChange={e => setLocalBranding({ ...localBranding, lng: e.target.value ? parseFloat(e.target.value) : null })}
                                             placeholder="e.g. 67.0011"
-                                            className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                                            className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono bg-background dark:bg-slate-800/80 text-foreground"
                                         />
                                     </div>
                                 </div>
@@ -1089,9 +1092,9 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                             </div>
 
                             {/* Logo Upload */}
-                            <div className="p-4 bg-muted rounded-2xl border-2 border-dashed border-border">
+                            <div className="p-4 bg-muted dark:bg-slate-800/60 rounded-2xl border-2 border-dashed border-border dark:border-slate-600">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 rounded-xl bg-card shadow-sm border border-border overflow-hidden flex items-center justify-center flex-shrink-0">
+                                    <div className="w-16 h-16 rounded-xl bg-card dark:bg-slate-900 shadow-sm border border-border dark:border-slate-600 overflow-hidden flex items-center justify-center flex-shrink-0">
                                         {localBranding.logo_url ? (
                                             <img src={getFullImageUrl(localBranding.logo_url)} alt="Logo" className="w-full h-full object-cover" />
                                         ) : (
@@ -1110,7 +1113,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         <button
                                             onClick={() => fileInputRef.current?.click()}
                                             disabled={uploading}
-                                            className="px-3 py-1.5 bg-card border border-border rounded-lg text-xs font-bold text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                                            className="px-3 py-1.5 bg-card dark:bg-slate-800 border border-border dark:border-slate-600 rounded-lg text-xs font-bold text-foreground hover:bg-muted dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
                                         >
                                             {uploading ? 'Uploading...' : 'Upload New'}
                                         </button>
@@ -1133,7 +1136,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             type="text"
                                             value={localBranding.primary_color || localBranding.brand_color || '#4F46E5'}
                                             onChange={e => setLocalBranding({ ...localBranding, primary_color: e.target.value, brand_color: e.target.value })}
-                                            className="flex-1 px-2 py-1.5 border border-border rounded-lg text-xs font-mono"
+                                            className="flex-1 px-2 py-1.5 border border-border dark:border-slate-600 rounded-lg text-xs font-mono bg-background dark:bg-slate-800/80 text-foreground"
                                         />
                                     </div>
                                 </div>
@@ -1150,7 +1153,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             type="text"
                                             value={localBranding.accent_color || '#f59e0b'}
                                             onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
-                                            className="flex-1 px-2 py-1.5 border border-border rounded-lg text-xs font-mono"
+                                            className="flex-1 px-2 py-1.5 border border-border dark:border-slate-600 rounded-lg text-xs font-mono bg-background dark:bg-slate-800/80 text-foreground"
                                         />
                                     </div>
                                 </div>
@@ -1165,8 +1168,8 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             key={mode}
                                             onClick={() => setLocalBranding({ ...localBranding, theme_mode: mode })}
                                             className={`px-3 py-2 rounded-xl text-xs font-bold capitalize border transition-all ${localBranding.theme_mode === mode
-                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                                                : 'bg-card border-border text-muted-foreground hover:border-border'
+                                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/60 dark:border-indigo-700 dark:text-indigo-300'
+                                                : 'bg-card dark:bg-slate-800/80 border-border dark:border-slate-600 text-muted-foreground hover:border-border dark:hover:border-slate-500'
                                                 }`}
                                         >
                                             {mode}
@@ -1178,7 +1181,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                             {/* Live Preview (Mini) */}
                             <div className="pt-4 border-t border-border/60">
                                 <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Mobile Preview</label>
-                                <div className="w-full aspect-[9/16] max-w-[200px] mx-auto border-4 border-gray-800 rounded-[2rem] overflow-hidden bg-card shadow-lg flex flex-col"
+                                <div className="w-full aspect-[9/16] max-w-[200px] mx-auto border-4 border-gray-800 dark:border-slate-600 rounded-[2rem] overflow-hidden bg-card shadow-lg flex flex-col"
                                     style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#1e293b' : 'white' }}>
                                     <div className="h-8 flex items-center px-4 justify-between border-b border-border/60"
                                         style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#0f172a' : 'white', borderColor: localBranding.theme_mode === 'dark' ? '#1e293b' : '#f1f5f9' }}>
@@ -1210,17 +1213,17 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center py-12">
-                            <RefreshCw className="w-8 h-8 text-indigo-100 animate-spin mb-4" />
+                            <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin mb-4" />
                             <p className="text-sm text-muted-foreground">Loading branding...</p>
                         </div>
                     )}
                 </div>
 
                 {/* Ordering Settings */}
-                <div className="col-span-2 bg-card rounded-2xl border border-border p-6 shadow-sm">
+                <div className="col-span-2 bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 p-6 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
-                        <SettingsIcon className="w-5 h-5 text-indigo-600" />
-                        <h2 className="text-lg font-bold text-foreground">Ordering Settings</h2>
+                        <SettingsIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                        <h2 className="text-lg font-bold text-foreground dark:text-slate-200">Ordering Settings</h2>
                     </div>
 
                     {localSettings && (
@@ -1230,10 +1233,10 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     className="flex items-center gap-3 cursor-pointer"
                                     onClick={() => setLocalSettings({ ...localSettings, is_enabled: !localSettings.is_enabled })}
                                 >
-                                    <div className={`w-12 h-7 rounded-full transition-colors relative ${localSettings.is_enabled ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                                    <div className={`w-12 h-7 rounded-full transition-colors relative ${localSettings.is_enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-600'}`}>
                                         <div className={`absolute top-0.5 w-6 h-6 bg-white dark:bg-slate-200 rounded-full shadow transition-transform ${localSettings.is_enabled ? 'left-5' : 'left-0.5'}`} />
                                     </div>
-                                    <span className="font-bold text-foreground">Mobile Ordering Enabled</span>
+                                    <span className="font-bold text-foreground dark:text-slate-200">Mobile Ordering Enabled</span>
                                 </div>
                             </div>
 
@@ -1243,7 +1246,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     type="number"
                                     value={localSettings.minimum_order_amount || 0}
                                     onChange={e => setLocalSettings({ ...localSettings, minimum_order_amount: parseFloat(e.target.value) })}
-                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
                                 />
                             </div>
 
@@ -1253,7 +1256,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     type="number"
                                     value={localSettings.delivery_fee || 0}
                                     onChange={e => setLocalSettings({ ...localSettings, delivery_fee: parseFloat(e.target.value) })}
-                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
                                 />
                             </div>
 
@@ -1264,7 +1267,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     value={localSettings.free_delivery_above || ''}
                                     onChange={e => setLocalSettings({ ...localSettings, free_delivery_above: e.target.value ? parseFloat(e.target.value) : null })}
                                     placeholder="No free delivery"
-                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
                                 />
                             </div>
 
@@ -1274,7 +1277,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     type="number"
                                     value={localSettings.estimated_delivery_minutes || 60}
                                     onChange={e => setLocalSettings({ ...localSettings, estimated_delivery_minutes: parseInt(e.target.value) })}
-                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
                                 />
                             </div>
 
@@ -1284,7 +1287,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     type="time"
                                     value={localSettings.order_acceptance_start || '09:00'}
                                     onChange={e => setLocalSettings({ ...localSettings, order_acceptance_start: e.target.value })}
-                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
                                 />
                             </div>
 
@@ -1294,7 +1297,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     type="time"
                                     value={localSettings.order_acceptance_end || '21:00'}
                                     onChange={e => setLocalSettings({ ...localSettings, order_acceptance_end: e.target.value })}
-                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
                                 />
                             </div>
 
@@ -1304,7 +1307,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         type="checkbox"
                                         checked={localSettings.auto_confirm_orders}
                                         onChange={e => setLocalSettings({ ...localSettings, auto_confirm_orders: e.target.checked })}
-                                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        className="w-4 h-4 rounded border-gray-300 dark:border-slate-600 dark:bg-slate-800 text-indigo-600 focus:ring-indigo-500"
                                     />
                                     <span className="text-sm font-medium text-foreground">Auto-confirm incoming orders (skip manual approval)</span>
                                 </label>

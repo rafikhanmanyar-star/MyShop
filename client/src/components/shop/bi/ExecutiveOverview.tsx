@@ -12,13 +12,13 @@ const ExecutiveOverview: React.FC = () => {
             {/* KPI Executive Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {kpis.map((kpi, i) => (
-                    <Card key={i} className="p-6 border-none shadow-sm flex flex-col gap-4 relative overflow-hidden group hover:shadow-xl transition-all bg-card">
+                    <Card key={i} className="p-6 border-none shadow-sm dark:shadow-none dark:bg-slate-900/90 dark:border dark:border-slate-600 flex flex-col gap-4 relative overflow-hidden group hover:shadow-xl transition-all bg-card">
                         <div className="flex justify-between items-start">
                             <div>
                                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">{kpi.label}</p>
-                                <p className="text-3xl font-black text-foreground tracking-tighter mt-1">{kpi.value}</p>
+                                <p className="text-3xl font-black text-foreground dark:text-slate-100 tracking-tighter mt-1">{kpi.value}</p>
                             </div>
-                            <div className={`flex items-center gap-1 text-[10px] font-black p-1.5 rounded-lg ${kpi.status === 'up' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                            <div className={`flex items-center gap-1 text-[10px] font-black p-1.5 rounded-lg ${kpi.status === 'up' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'
                                 }`}>
                                 {kpi.status === 'up' ? ICONS.trendingUp : ICONS.trendingDown}
                                 {Math.abs(kpi.trend)}%
@@ -60,7 +60,7 @@ const ExecutiveOverview: React.FC = () => {
                             return (
                                 <div key={idx} className="flex-1 flex flex-col items-center gap-2 relative group cursor-pointer h-full justify-end">
                                     <div
-                                        className="w-full bg-muted/80 border border-border rounded-t-lg transition-all duration-700 min-h-[4px] relative overflow-hidden"
+                                        className="w-full bg-muted/80 dark:bg-slate-800 border border-border dark:border-slate-600 rounded-t-lg transition-all duration-700 min-h-[4px] relative overflow-hidden"
                                         style={{ height: `${(data.revenue / maxRevenue) * 100}%` }}
                                     >
                                         <div className="absolute inset-0 bg-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -73,18 +73,18 @@ const ExecutiveOverview: React.FC = () => {
                 </Card>
 
                 {/* Top Branches Card */}
-                <Card className="border-none shadow-sm p-8 space-y-6 flex flex-col">
-                    <h3 className="font-bold text-foreground text-lg">Top Performing Nodes</h3>
+                <Card className="border-none shadow-sm dark:shadow-none dark:bg-slate-900/90 dark:border dark:border-slate-600 p-8 space-y-6 flex flex-col">
+                    <h3 className="font-bold text-foreground dark:text-slate-200 text-lg">Top Performing Nodes</h3>
                     <div className="space-y-6 flex-1">
                         {storeRankings.map((store, i) => (
                             <div key={i} className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-muted/80 flex items-center justify-center text-[10px] font-black text-muted-foreground border border-border">
+                                    <div className="w-8 h-8 rounded-full bg-muted/80 dark:bg-slate-800 flex items-center justify-center text-[10px] font-black text-muted-foreground border border-border dark:border-slate-600">
                                         0{i + 1}
                                     </div>
                                     <div>
                                         <p className="text-sm font-bold text-foreground leading-none">{store.storeName}</p>
-                                        <p className="text-[10px] text-emerald-500 font-bold mt-1">+{store.growth}% Growth</p>
+                                        <p className="text-[10px] text-emerald-500 dark:text-emerald-400 font-bold mt-1">+{store.growth}% Growth</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
@@ -96,7 +96,7 @@ const ExecutiveOverview: React.FC = () => {
                             </div>
                         ))}
                     </div>
-                    <button className="w-full py-4 bg-muted/80 text-muted-foreground rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border border-dashed border-border hover:bg-muted transition-all">
+                    <button className="w-full py-4 bg-muted/80 dark:bg-slate-800/80 text-muted-foreground rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border border-dashed border-border dark:border-slate-600 hover:bg-muted dark:hover:bg-slate-700/80 transition-all">
                         Full Performance Audit
                     </button>
                 </Card>
@@ -104,7 +104,7 @@ const ExecutiveOverview: React.FC = () => {
 
             {/* AI Insights - populated when enough data is available */}
             {salesTrend.some((d: any) => d.revenue > 0) ? null : (
-                <div className="p-6 rounded-2xl border border-dashed border-border bg-muted/80 text-center">
+                <div className="p-6 rounded-2xl border border-dashed border-border dark:border-slate-600 bg-muted/80 dark:bg-slate-900/60 text-center">
                     <p className="text-xs font-bold text-muted-foreground">Insights will appear here once enough sales data is collected.</p>
                 </div>
             )}

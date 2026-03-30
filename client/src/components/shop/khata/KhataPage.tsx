@@ -252,7 +252,7 @@ const KhataPage: React.FC = () => {
               aria-label="Select customer"
               value={receiveCustomerId}
               onChange={(e) => setReceiveCustomerId(e.target.value)}
-              className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-colors"
               required
             >
               <option value="">Select customer</option>
@@ -269,7 +269,7 @@ const KhataPage: React.FC = () => {
               min="0.01"
               value={receiveAmount}
               onChange={(e) => setReceiveAmount(e.target.value)}
-              className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-colors"
               placeholder="0.00"
               required
             />
@@ -280,7 +280,7 @@ const KhataPage: React.FC = () => {
               type="text"
               value={receiveNote}
               onChange={(e) => setReceiveNote(e.target.value)}
-              className="w-full px-4 py-3 border border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-colors"
               placeholder="e.g. Cash received"
             />
           </div>
@@ -289,14 +289,14 @@ const KhataPage: React.FC = () => {
               type="button"
               onClick={() => setReceiveModalOpen(false)}
               disabled={receiveSubmitting}
-              className="flex-1 py-3 rounded-xl border-2 border-border text-muted-foreground font-bold hover:bg-muted/50"
+              className="flex-1 py-3 rounded-xl border-2 border-border dark:border-slate-600 text-muted-foreground font-bold hover:bg-muted/50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={receiveSubmitting || !receiveCustomerId || !receiveAmount || parseFloat(receiveAmount) <= 0}
-              className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 dark:hover:bg-emerald-500 shadow-sm dark:shadow-emerald-900/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {receiveSubmitting ? 'Saving…' : 'Save as credit'}
             </button>

@@ -192,7 +192,7 @@ const InventoryContent: React.FC = () => {
                     <div className="flex gap-3">
                         <button
                             onClick={() => setIsNewSkuModalOpen(true)}
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2"
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40 hover:bg-indigo-700 transition-all flex items-center gap-2"
                         >
                             {ICONS.plus} New SKU
                         </button>
@@ -205,14 +205,14 @@ const InventoryContent: React.FC = () => {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
-                                ? 'text-indigo-600'
+                                ? 'text-indigo-600 dark:text-indigo-400'
                                 : 'text-muted-foreground dark:text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
                             {tab.label}
                             {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-t-full"></div>
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 dark:bg-indigo-400 rounded-t-full"></div>
                             )}
                         </button>
                     ))}
@@ -221,12 +221,16 @@ const InventoryContent: React.FC = () => {
 
             {/* Content area: flex so Stock Master / Dashboard / Movements can fill and scroll internally; other tabs can scroll here */}
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden p-8">
-                <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${['stock', 'dashboard', 'movements'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+                <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${['stock', 'dashboard', 'movements', 'categories'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                     {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col"><InventoryDashboard /></div>}
                     {activeTab === 'stock' && <div className="flex-1 min-h-0 flex flex-col"><StockMaster /></div>}
                     {activeTab === 'movements' && <div className="flex-1 min-h-0 flex flex-col"><StockMovements /></div>}
                     {activeTab === 'adjustments' && <StockAdjustments />}
-                    {activeTab === 'categories' && <InventoryCategories />}
+                    {activeTab === 'categories' && (
+                        <div className="flex-1 min-h-0 flex flex-col min-w-0">
+                            <InventoryCategories />
+                        </div>
+                    )}
                 </div>
             </div>
 

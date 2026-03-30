@@ -100,7 +100,7 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-bold text-foreground">Recurring expense definitions</h2>
+        <h2 className="text-lg font-bold text-foreground dark:text-slate-200">Recurring expense definitions</h2>
         <div className="flex gap-2">
           {canManage && (
             <>
@@ -115,7 +115,7 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
         </div>
       </div>
 
-      <Card className="border-none shadow-sm overflow-hidden">
+      <Card className="border-none dark:border dark:border-slate-700/80 shadow-sm overflow-hidden dark:bg-slate-900/50">
         {loading ? (
           <div className="p-12 text-center">
             <div className="inline-block w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
@@ -125,7 +125,7 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-muted/80 border-b border-border">
+              <tr className="bg-muted/80 dark:bg-slate-800 border-b border-border dark:border-slate-700">
                 <th className="text-left p-3 font-semibold text-foreground">Category</th>
                 <th className="text-right p-3 font-semibold text-foreground">Amount</th>
                 <th className="text-left p-3 font-semibold text-foreground">Frequency</th>
@@ -135,7 +135,7 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
             </thead>
             <tbody>
               {list.map((r) => (
-                <tr key={r.id} className="border-b border-border">
+                <tr key={r.id} className="border-b border-border dark:border-slate-700 hover:bg-muted/30 dark:hover:bg-slate-800/40">
                   <td className="p-3">{r.categoryName}</td>
                   <td className="p-3 text-right font-medium">{CURRENCY} {Number(r.amount).toLocaleString()}</td>
                   <td className="p-3">{r.frequency}</td>
@@ -150,7 +150,7 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Add Recurring Expense" size="md">
         <form onSubmit={handleCreate} className="space-y-4">
-          {error && <div className="p-2 rounded bg-rose-50 text-rose-700 text-sm">{error}</div>}
+          {error && <div className="p-2 rounded bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-200 text-sm border border-rose-200/80 dark:border-rose-800/60">{error}</div>}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Category</label>
             <Select value={form.categoryId} onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))} required>

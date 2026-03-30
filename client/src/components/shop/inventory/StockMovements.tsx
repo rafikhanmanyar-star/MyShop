@@ -9,10 +9,10 @@ const StockMovements: React.FC = () => {
 
     const getMovementStyle = (type: string) => {
         switch (type) {
-            case 'Sale': return 'bg-rose-100 text-rose-600';
-            case 'Purchase': return 'bg-emerald-100 text-emerald-600';
-            case 'Transfer': return 'bg-indigo-100 text-indigo-600';
-            case 'Adjustment': return 'bg-amber-100 text-amber-600';
+            case 'Sale': return 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300';
+            case 'Purchase': return 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300';
+            case 'Transfer': return 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300';
+            case 'Adjustment': return 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300';
             default: return 'bg-muted text-muted-foreground';
         }
     };
@@ -22,10 +22,10 @@ const StockMovements: React.FC = () => {
             <div className="flex justify-between items-center mb-4 flex-shrink-0">
                 <h3 className="text-lg font-black text-foreground tracking-tight">Immutable Transaction Ledger</h3>
                 <div className="flex gap-2">
-                    <button className="px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 transition-all flex items-center gap-2">
+                    <button className="px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 dark:border-slate-600 transition-all flex items-center gap-2">
                         {ICONS.calendar} Date Filter
                     </button>
-                    <button className="px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 transition-all flex items-center gap-2">
+                    <button className="px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 dark:border-slate-600 transition-all flex items-center gap-2">
                         {ICONS.fileText} Export Trace Log
                     </button>
                 </div>
@@ -45,7 +45,7 @@ const StockMovements: React.FC = () => {
                                 <th className="px-6 py-4 bg-muted/80">Reference</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-border">
                             {movements.length > 0 ? movements.map(move => (
                                 <tr key={move.id} className="hover:bg-muted/50 transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap">
@@ -69,13 +69,13 @@ const StockMovements: React.FC = () => {
                                         {warehouses.find(w => w.id === move.warehouseId)?.code || '---'}
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <span className={`text-sm font-black font-mono ${move.quantity > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                        <span className={`text-sm font-black font-mono ${move.quantity > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                                             {move.quantity > 0 ? '+' : ''}{move.quantity}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className="text-muted-foreground text-[10px] font-mono">{move.beforeQty}</span>
-                                        <span className="mx-2 text-slate-300">→</span>
+                                        <span className="mx-2 text-slate-300 dark:text-slate-600">→</span>
                                         <span className="text-foreground text-sm font-black font-mono">{move.afterQty}</span>
                                     </td>
                                     <td className="px-6 py-4">

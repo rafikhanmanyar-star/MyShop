@@ -78,15 +78,15 @@ const MemberDirectory: React.FC = () => {
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {[
-                    { label: 'Total Roster', count: tierStats.Total, tier: 'All', color: 'bg-slate-900' },
-                    { label: 'Silver Tier', count: tierStats.Silver, tier: 'Silver', color: 'bg-slate-400' },
-                    { label: 'Gold Tier', count: tierStats.Gold, tier: 'Gold', color: 'bg-amber-400' },
-                    { label: 'Platinum Tier', count: tierStats.Platinum, tier: 'Platinum', color: 'bg-rose-500' }
+                    { label: 'Total Roster', count: tierStats.Total, tier: 'All', color: 'bg-slate-900 dark:bg-slate-200' },
+                    { label: 'Silver Tier', count: tierStats.Silver, tier: 'Silver', color: 'bg-slate-400 dark:bg-slate-500' },
+                    { label: 'Gold Tier', count: tierStats.Gold, tier: 'Gold', color: 'bg-amber-400 dark:bg-amber-500' },
+                    { label: 'Platinum Tier', count: tierStats.Platinum, tier: 'Platinum', color: 'bg-rose-500 dark:bg-rose-400' }
                 ].map(stat => (
                     <button
                         key={stat.label}
                         onClick={() => setActiveTierFilter(stat.tier as any)}
-                        className={`p-4 rounded-2xl transition-all shadow-sm flex flex-col items-start gap-1 border-2 ${activeTierFilter === stat.tier ? 'border-rose-500 ring-2 ring-rose-100 shadow-lg scale-[1.02]' : 'border-transparent bg-card hover:border-border'}`}
+                        className={`p-4 rounded-2xl transition-all shadow-sm flex flex-col items-start gap-1 border-2 ${activeTierFilter === stat.tier ? 'border-rose-500 dark:border-rose-400 ring-2 ring-rose-100 dark:ring-rose-900/50 shadow-lg scale-[1.02]' : 'border-transparent bg-card dark:bg-slate-900/90 hover:border-border dark:hover:border-slate-600'}`}
                     >
                         <div className={`w-2 h-2 rounded-full ${stat.color} mb-1`}></div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
@@ -96,14 +96,14 @@ const MemberDirectory: React.FC = () => {
             </div>
 
             {/* Filter & Search Toolbar */}
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-card p-4 rounded-2xl shadow-sm border border-border">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-card dark:bg-slate-900/90 p-4 rounded-2xl shadow-sm border border-border dark:border-slate-600">
                 <div className="relative group flex-1 max-w-md">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted-foreground group-focus-within:text-rose-500 transition-colors">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted-foreground group-focus-within:text-rose-500 dark:group-focus-within:text-rose-400 transition-colors">
                         {ICONS.search}
                     </div>
                     <input
                         type="text"
-                        className="block w-full pl-11 pr-4 py-3 bg-muted/80 border border-border rounded-xl leading-5 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-xs font-medium placeholder-slate-400"
+                        className="block w-full pl-11 pr-4 py-3 bg-muted/80 dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl leading-5 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 dark:focus:border-rose-400 transition-all text-xs font-medium placeholder-slate-400 dark:placeholder-slate-500 text-foreground"
                         placeholder="Search by Name, Card ID, or Phone..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -111,7 +111,7 @@ const MemberDirectory: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button className="px-4 py-3 bg-card border border-border rounded-xl text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:bg-muted/50 transition-all flex items-center gap-2">
+                    <button className="px-4 py-3 bg-card dark:bg-slate-800 border border-border dark:border-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:bg-muted/50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
                         {ICONS.download} Export
                     </button>
                 </div>
@@ -131,32 +131,32 @@ const MemberDirectory: React.FC = () => {
                                 <th className="px-8 py-5"></th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-50">
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-700/80">
                             {filteredMembers.length > 0 ? filteredMembers.map(m => (
                                 <tr
                                     key={m.id}
                                     onClick={() => handleViewDetails(m)}
-                                    className="hover:bg-rose-50/20 transition-all group cursor-pointer"
+                                    className="hover:bg-rose-50/20 dark:hover:bg-rose-950/30 transition-all group cursor-pointer"
                                 >
                                     <td className="px-8 py-5 whitespace-nowrap">
                                         <div className="flex items-center gap-4">
-                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm transition-all group-hover:scale-110 shadow-sm ${m.tier === 'Platinum' ? 'bg-slate-900 text-rose-500' :
-                                                m.tier === 'Gold' ? 'bg-amber-100 text-amber-600' :
-                                                    'bg-muted text-muted-foreground'
+                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm transition-all group-hover:scale-110 shadow-sm ${m.tier === 'Platinum' ? 'bg-slate-900 text-rose-500 dark:bg-slate-950 dark:text-rose-400' :
+                                                m.tier === 'Gold' ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300' :
+                                                    'bg-muted text-muted-foreground dark:bg-slate-800'
                                                 }`}>
                                                 {m.customerName.charAt(0)}
                                             </div>
                                             <div>
-                                                <div className="font-bold text-foreground text-sm group-hover:text-rose-600 transition-colors">{m.customerName}</div>
+                                                <div className="font-bold text-foreground text-sm group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">{m.customerName}</div>
                                                 <div className="text-[10px] text-muted-foreground font-mono italic tracking-tighter">ID: {m.cardNumber}</div>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex flex-col">
-                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block w-fit shadow-sm ${m.tier === 'Platinum' ? 'bg-rose-600 text-white' :
-                                                m.tier === 'Gold' ? 'bg-amber-400 text-amber-900' :
-                                                    'bg-slate-200 text-muted-foreground'
+                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block w-fit shadow-sm ${m.tier === 'Platinum' ? 'bg-rose-600 text-white dark:bg-rose-700' :
+                                                m.tier === 'Gold' ? 'bg-amber-400 text-amber-900 dark:bg-amber-600 dark:text-amber-950' :
+                                                    'bg-slate-200 text-muted-foreground dark:bg-slate-700 dark:text-slate-300'
                                                 }`}>
                                                 {m.tier} Member
                                             </span>
@@ -168,7 +168,7 @@ const MemberDirectory: React.FC = () => {
                                     </td>
                                     <td className="px-6 py-5 text-right">
                                         <div className="text-sm font-black text-foreground font-mono tracking-tighter">{m.pointsBalance.toLocaleString()}</div>
-                                        <div className="text-[9px] text-rose-500 font-bold uppercase tracking-widest mt-0.5 animate-pulse">Available</div>
+                                        <div className="text-[9px] text-rose-500 dark:text-rose-400 font-bold uppercase tracking-widest mt-0.5 animate-pulse">Available</div>
                                     </td>
                                     <td className="px-6 py-5 text-right font-mono">
                                         <div className="text-sm font-black text-foreground tracking-tighter">${m.totalSpend.toLocaleString()}</div>
@@ -176,7 +176,7 @@ const MemberDirectory: React.FC = () => {
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex items-center gap-1.5 focus:ring-2">
-                                            <div className={`w-2 h-2 rounded-full ${m.status === 'Active' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`}></div>
+                                            <div className={`w-2 h-2 rounded-full ${m.status === 'Active' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] dark:shadow-emerald-500/30' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
                                             <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{m.status}</span>
                                         </div>
                                     </td>
@@ -184,7 +184,7 @@ const MemberDirectory: React.FC = () => {
                                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button
                                                 onClick={(e) => handleDelete(m.id, e)}
-                                                className="p-2 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                                className="p-2 text-slate-300 dark:text-slate-600 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-all"
                                             >
                                                 {ICONS.trash}
                                             </button>
@@ -198,7 +198,7 @@ const MemberDirectory: React.FC = () => {
                                 <tr>
                                     <td colSpan={7} className="px-8 py-20 text-center">
                                         <div className="flex flex-col items-center justify-center gap-3">
-                                            <div className="p-6 bg-muted/80 rounded-3xl text-slate-200">
+                                            <div className="p-6 bg-muted/80 dark:bg-slate-800 rounded-3xl text-slate-200 dark:text-slate-500">
                                                 {React.cloneElement(ICONS.users as React.ReactElement<any>, { width: 48, height: 48 })}
                                             </div>
                                             <div className="space-y-1">
@@ -207,7 +207,7 @@ const MemberDirectory: React.FC = () => {
                                             </div>
                                             <button
                                                 onClick={() => { setSearchQuery(''); setActiveTierFilter('All'); }}
-                                                className="mt-4 px-6 py-2 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest"
+                                                className="mt-4 px-6 py-2 bg-slate-900 dark:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 dark:hover:bg-slate-600"
                                             >
                                                 Reset Filters
                                             </button>
@@ -232,17 +232,17 @@ const MemberDirectory: React.FC = () => {
                         <div className="flex flex-col md:flex-row gap-8 items-start">
                             {/* Left Side: Basic Info Card */}
                             <div className="w-full md:w-1/3 space-y-4">
-                                <div className="p-8 bg-muted/80 rounded-[32px] border border-border flex flex-col items-center text-center">
-                                    <div className={`w-28 h-28 rounded-[40px] flex items-center justify-center font-black text-4xl mb-6 shadow-xl ${selectedMember.tier === 'Platinum' ? 'bg-slate-900 text-rose-600' :
-                                        selectedMember.tier === 'Gold' ? 'bg-amber-400 text-amber-900' :
-                                            'bg-card text-slate-300 border-2 border-border'
+                                <div className="p-8 bg-muted/80 dark:bg-slate-800/80 rounded-[32px] border border-border dark:border-slate-600 flex flex-col items-center text-center">
+                                    <div className={`w-28 h-28 rounded-[40px] flex items-center justify-center font-black text-4xl mb-6 shadow-xl ${selectedMember.tier === 'Platinum' ? 'bg-slate-900 text-rose-600 dark:bg-slate-950 dark:text-rose-400' :
+                                        selectedMember.tier === 'Gold' ? 'bg-amber-400 text-amber-900 dark:bg-amber-600 dark:text-amber-950' :
+                                            'bg-card text-slate-300 border-2 border-border dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600'
                                         }`}>
                                         {(selectedMember.customerName || 'U').charAt(0)}
                                     </div>
                                     <h4 className="text-2xl font-black text-foreground tracking-tight">{selectedMember.customerName || 'Unnamed Member'}</h4>
-                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rose-600 mt-1">{selectedMember.tier} Elite Member</p>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rose-600 dark:text-rose-400 mt-1">{selectedMember.tier} Elite Member</p>
 
-                                    <div className="w-full mt-8 pt-8 border-t border-border space-y-4">
+                                    <div className="w-full mt-8 pt-8 border-t border-border dark:border-slate-600 space-y-4">
                                         <div className="flex justify-between items-center text-xs">
                                             <span className="font-bold text-muted-foreground uppercase tracking-widest text-[9px]">Card Number</span>
                                             <span className="font-mono text-foreground font-black">{selectedMember.cardNumber}</span>
@@ -259,7 +259,7 @@ const MemberDirectory: React.FC = () => {
                                 </div>
 
                                 <button
-                                    className="w-full py-4 bg-muted text-muted-foreground rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all border border-transparent hover:border-rose-100"
+                                    className="w-full py-4 bg-muted dark:bg-slate-800 text-muted-foreground rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition-all border border-transparent dark:border-slate-600 hover:border-rose-100 dark:hover:border-rose-800"
                                     onClick={() => {
                                         if (window.confirm('Deactivate this member?')) {
                                             updateMember(selectedMember.id, { status: selectedMember.status === 'Active' ? 'Inactive' : 'Active' });
@@ -274,15 +274,15 @@ const MemberDirectory: React.FC = () => {
                             {/* Right Side: Performance stats and history */}
                             <div className="flex-1 space-y-8">
                                 <div className="grid grid-cols-3 gap-4">
-                                    <div className="p-6 bg-card border border-border rounded-3xl shadow-sm">
+                                    <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Points</p>
-                                        <p className="text-2xl font-black text-rose-600 font-mono tracking-tighter">{selectedMember.pointsBalance.toLocaleString()}</p>
+                                        <p className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tighter">{selectedMember.pointsBalance.toLocaleString()}</p>
                                     </div>
-                                    <div className="p-6 bg-card border border-border rounded-3xl shadow-sm">
+                                    <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Total LTV</p>
                                         <p className="text-2xl font-black text-foreground font-mono tracking-tighter">${selectedMember.totalSpend.toLocaleString()}</p>
                                     </div>
-                                    <div className="p-6 bg-card border border-border rounded-3xl shadow-sm">
+                                    <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Visit Count</p>
                                         <p className="text-2xl font-black text-foreground font-mono tracking-tighter">{selectedMember.visitCount}</p>
                                     </div>
@@ -297,12 +297,12 @@ const MemberDirectory: React.FC = () => {
                                                 <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {(khataSummary ?? { totalDebit: 0 }).totalDebit.toLocaleString()}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest">Total Credit</p>
+                                                <p className="text-[9px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest">Total Credit</p>
                                                 <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {(khataSummary ?? { totalCredit: 0 }).totalCredit.toLocaleString()}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest">Current Balance</p>
-                                                <p className={`text-lg font-black font-mono ${(khataSummary?.balance ?? 0) > 0 ? 'text-amber-600' : 'text-foreground'}`}>{CURRENCY} {(khataSummary ?? { balance: 0 }).balance.toLocaleString()}</p>
+                                                <p className="text-[9px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest">Current Balance</p>
+                                                <p className={`text-lg font-black font-mono ${(khataSummary?.balance ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>{CURRENCY} {(khataSummary ?? { balance: 0 }).balance.toLocaleString()}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -313,16 +313,16 @@ const MemberDirectory: React.FC = () => {
                                         <h5 className="text-sm font-black text-foreground tracking-tight flex items-center gap-2 uppercase">
                                             {ICONS.barChart} Transaction History
                                         </h5>
-                                        <button className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Full Ledger</button>
+                                        <button className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest">Full Ledger</button>
                                     </div>
 
-                                    <div className="bg-muted/80/50 rounded-3xl border border-border overflow-hidden">
+                                    <div className="bg-muted/80/50 dark:bg-slate-800/50 rounded-3xl border border-border dark:border-slate-600 overflow-hidden">
                                         {getMemberTransactions(selectedMember.id).length > 0 ? (
-                                            <div className="divide-y divide-slate-100">
+                                            <div className="divide-y divide-slate-100 dark:divide-slate-700">
                                                 {getMemberTransactions(selectedMember.id).map(tx => (
-                                                    <div key={tx.id} className="p-4 flex justify-between items-center hover:bg-card transition-colors">
+                                                    <div key={tx.id} className="p-4 flex justify-between items-center hover:bg-card dark:hover:bg-slate-800/80 transition-colors">
                                                         <div className="flex items-center gap-4">
-                                                            <div className={`p-2 rounded-lg ${tx.type === 'Earn' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                            <div className={`p-2 rounded-lg ${tx.type === 'Earn' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'}`}>
                                                                 {tx.type === 'Earn' ? ICONS.plus : ICONS.minus}
                                                             </div>
                                                             <div>
@@ -331,7 +331,7 @@ const MemberDirectory: React.FC = () => {
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <p className={`text-xs font-black font-mono ${tx.type === 'Earn' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                            <p className={`text-xs font-black font-mono ${tx.type === 'Earn' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                                                 {tx.type === 'Earn' ? '+' : '-'}{tx.points} Pts
                                                             </p>
                                                             <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-[0.1em]">Verified</p>
@@ -349,16 +349,16 @@ const MemberDirectory: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center gap-4 mt-4">
-                            <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl">
+                        <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-2xl flex items-center gap-4 mt-4">
+                            <div className="p-3 bg-indigo-100 text-indigo-600 dark:bg-indigo-950/80 dark:text-indigo-400 rounded-xl">
                                 {ICONS.trophy}
                             </div>
                             <div className="flex-1">
-                                <p className="text-[11px] font-black text-indigo-900 uppercase tracking-widest">Tier Evolution</p>
-                                <p className="text-xs text-indigo-700 font-medium">Spending another <span className="font-black">$2,400</span> will upgrade this customer to <span className="font-black italic underline">Platinum Status</span>.</p>
+                                <p className="text-[11px] font-black text-indigo-900 dark:text-indigo-200 uppercase tracking-widest">Tier Evolution</p>
+                                <p className="text-xs text-indigo-700 dark:text-indigo-300/90 font-medium">Spending another <span className="font-black">$2,400</span> will upgrade this customer to <span className="font-black italic underline">Platinum Status</span>.</p>
                             </div>
-                            <div className="w-48 h-2 bg-indigo-200 rounded-full overflow-hidden">
-                                <div className="h-full bg-indigo-600 w-3/4 rounded-full"></div>
+                            <div className="w-48 h-2 bg-indigo-200 dark:bg-indigo-950 rounded-full overflow-hidden">
+                                <div className="h-full bg-indigo-600 dark:bg-indigo-500 w-3/4 rounded-full"></div>
                             </div>
                         </div>
                     </div>

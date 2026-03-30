@@ -79,10 +79,12 @@ function formatQty(n: number) {
 }
 
 const ReportShell: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="flex flex-col h-full bg-muted/50 -m-4 md:-m-8">
-    <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
-      <h1 className="text-2xl font-black text-foreground tracking-tight">{title}</h1>
-      <p className="text-muted-foreground text-sm font-medium mt-1">Single source of truth — POS, mobile, inventory, expenses.</p>
+  <div className="flex flex-col h-full bg-muted/50 dark:bg-slate-800 -m-4 md:-m-8">
+    <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
+      <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">{title}</h1>
+      <p className="text-muted-foreground dark:text-slate-400 text-sm font-medium mt-1">
+        Single source of truth — POS, mobile, inventory, expenses, khata.
+      </p>
     </div>
     <div className="flex-1 overflow-y-auto p-8">{children}</div>
   </div>
@@ -147,7 +149,7 @@ const DailyReportDashboard: React.FC = () => {
   }, [date, branchId]);
 
   const cardClass =
-    'rounded-2xl border border-border bg-card p-5 shadow-sm transition hover:border-indigo-500/40 dark:hover:border-indigo-400/30 hover:shadow-md cursor-pointer text-left';
+    'rounded-2xl border border-border dark:border-slate-700 bg-card dark:bg-slate-900/60 p-5 shadow-sm transition hover:border-indigo-500/40 dark:hover:border-indigo-400/40 hover:shadow-md cursor-pointer text-left';
 
   return (
     <ReportShell title="Daily Report">
@@ -183,7 +185,7 @@ const DailyReportDashboard: React.FC = () => {
         </div>
 
         {error && (
-          <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 text-sm font-medium">
+          <div className="rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-200 px-4 py-3 text-sm font-medium">
             {error}
           </div>
         )}
@@ -218,7 +220,7 @@ const DailyReportDashboard: React.FC = () => {
             <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : formatQty(summary?.inventoryOutQty ?? 0)}
             </div>
-            <div className="text-[11px] text-indigo-600 mt-2 font-semibold">Click for detail →</div>
+            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
           </button>
 
           <button
@@ -232,7 +234,7 @@ const DailyReportDashboard: React.FC = () => {
             <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : formatQty(summary?.inventoryInQty ?? 0)}
             </div>
-            <div className="text-[11px] text-indigo-600 mt-2 font-semibold">Click for detail →</div>
+            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
           </button>
 
           <button
@@ -246,7 +248,7 @@ const DailyReportDashboard: React.FC = () => {
             <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.totalExpenses ?? 0)}`}
             </div>
-            <div className="text-[11px] text-indigo-600 mt-2 font-semibold">Click for detail →</div>
+            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
           </button>
 
           <button
@@ -260,16 +262,47 @@ const DailyReportDashboard: React.FC = () => {
             <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : summary?.newProductsCount ?? 0}
             </div>
-            <div className="text-[11px] text-indigo-600 mt-2 font-semibold">Click for detail →</div>
+            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
+          </button>
+
+          <button
+            type="button"
+            className={cardClass}
+            onClick={() => navigate(`/accounting/reports/daily/khata?${q}`)}
+            aria-label="Khata ledger"
+          >
+            <div className="text-2xl mb-1">📒</div>
+            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Khata ledger</div>
+            <div className="mt-2 space-y-1 text-xs">
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">Debits (on credit)</span>
+                <span className="font-mono font-semibold text-foreground">
+                  {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.khataDebitTotal ?? 0)}`}
+                </span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">Credits (payments)</span>
+                <span className="font-mono font-semibold text-foreground">
+                  {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.khataCreditTotal ?? 0)}`}
+                </span>
+              </div>
+            </div>
+            <div className="text-lg font-black text-foreground mt-2">
+              Net {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.khataNetChange ?? 0)}`}
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-1">
+              {loading ? '—' : `${summary?.khataEntryCount ?? 0} entries · all locations`}
+            </div>
+            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
           </button>
         </div>
 
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-5">
-          <div className="text-xs font-bold uppercase text-emerald-700 tracking-wider">Net profit (daily)</div>
-          <div className="text-2xl font-black text-emerald-900 mt-1">
+        <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/80 dark:bg-emerald-950/40 p-5">
+          <div className="text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">Net profit (daily)</div>
+          <div className="text-2xl font-black text-emerald-900 dark:text-emerald-200 mt-1">
             {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.netProfitDaily ?? 0)}`}
           </div>
-          <div className="text-xs text-emerald-800/80 mt-1">POS + Mobile sales − expenses (same day)</div>
+          <div className="text-xs text-emerald-800/80 dark:text-emerald-300/90 mt-1">POS + Mobile sales − expenses (same day)</div>
         </div>
       </div>
     </ReportShell>
@@ -310,7 +343,7 @@ const InventoryOutDrill: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}
-          className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800"
+          className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to daily report
@@ -324,9 +357,9 @@ const InventoryOutDrill: React.FC = () => {
             </>
           ) : null}
         </p>
-        <div className="rounded-xl border border-border overflow-hidden bg-card">
+        <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
           <table className="w-full text-sm">
-            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
+            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Item</th>
                 <th className="text-left px-4 py-3">SKU</th>
@@ -334,7 +367,7 @@ const InventoryOutDrill: React.FC = () => {
                 <th className="text-left px-4 py-3">Unit</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {loading ? (
                 <tr>
                   <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
@@ -349,7 +382,7 @@ const InventoryOutDrill: React.FC = () => {
                 </tr>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.item_id} className="hover:bg-muted/50">
+                  <tr key={r.item_id} className="hover:bg-muted/50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-2 font-medium text-foreground">{r.item_name}</td>
                     <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.sku}</td>
                     <td className="px-4 py-2 text-right font-mono">{formatQty(Number(r.total_qty_out))}</td>
@@ -399,14 +432,14 @@ const InventoryInDrill: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}
-          className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800"
+          className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to daily report
         </button>
-        <div className="rounded-xl border border-border overflow-hidden bg-card">
+        <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
           <table className="w-full text-sm">
-            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
+            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Item</th>
                 <th className="text-left px-4 py-3">SKU</th>
@@ -415,7 +448,7 @@ const InventoryInDrill: React.FC = () => {
                 <th className="text-left px-4 py-3">Supplier</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {loading ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
@@ -430,7 +463,7 @@ const InventoryInDrill: React.FC = () => {
                 </tr>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.item_id} className="hover:bg-muted/50">
+                  <tr key={r.item_id} className="hover:bg-muted/50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-2 font-medium text-foreground">{r.item_name}</td>
                     <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.sku}</td>
                     <td className="px-4 py-2 text-right font-mono">{formatQty(Number(r.total_qty_in))}</td>
@@ -481,14 +514,14 @@ const ExpensesDrill: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}
-          className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800"
+          className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to daily report
         </button>
-        <div className="rounded-xl border border-border overflow-hidden bg-card">
+        <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
           <table className="w-full text-sm">
-            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
+            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Date</th>
                 <th className="text-left px-4 py-3">Category</th>
@@ -497,7 +530,7 @@ const ExpensesDrill: React.FC = () => {
                 <th className="text-left px-4 py-3">Paid from</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {loading ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
@@ -512,7 +545,7 @@ const ExpensesDrill: React.FC = () => {
                 </tr>
               ) : (
                 rows.map((r, i) => (
-                  <tr key={i} className="hover:bg-muted/50">
+                  <tr key={i} className="hover:bg-muted/50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-2 font-mono text-xs">{r.date}</td>
                     <td className="px-4 py-2">{r.expense_category}</td>
                     <td className="px-4 py-2 text-right font-mono">
@@ -563,14 +596,14 @@ const ProductsCreatedDrill: React.FC = () => {
         <button
           type="button"
           onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}
-          className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800"
+          className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to daily report
         </button>
-        <div className="rounded-xl border border-border overflow-hidden bg-card">
+        <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
           <table className="w-full text-sm">
-            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
+            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">SKU</th>
                 <th className="text-left px-4 py-3">Product</th>
@@ -579,7 +612,7 @@ const ProductsCreatedDrill: React.FC = () => {
                 <th className="text-left px-4 py-3">Created at</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {loading ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
@@ -594,12 +627,99 @@ const ProductsCreatedDrill: React.FC = () => {
                 </tr>
               ) : (
                 rows.map((r, i) => (
-                  <tr key={`${r.sku}-${i}`} className="hover:bg-muted/50">
+                  <tr key={`${r.sku}-${i}`} className="hover:bg-muted/50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-2 font-mono text-xs">{r.sku}</td>
                     <td className="px-4 py-2 font-medium">{r.product_name}</td>
                     <td className="px-4 py-2 text-muted-foreground">{r.category || '—'}</td>
                     <td className="px-4 py-2 text-muted-foreground">{r.created_by || '—'}</td>
                     <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.created_at}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </ReportShell>
+  );
+};
+
+const KhataDrill: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { rows: r } = await accountingApi.dailyReportKhata(date);
+      setRows(r || []);
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [date]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <ReportShell title="Khata ledger — detail">
+      <div className="max-w-5xl mx-auto space-y-4">
+        <button
+          type="button"
+          onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}
+          className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to daily report
+        </button>
+        <p className="text-sm text-muted-foreground">
+          All branches · date <span className="font-mono font-semibold text-foreground">{date}</span>
+        </p>
+        <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
+          <table className="w-full text-sm">
+            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
+              <tr>
+                <th className="text-left px-4 py-3">Time</th>
+                <th className="text-left px-4 py-3">Customer</th>
+                <th className="text-left px-4 py-3">Type</th>
+                <th className="text-right px-4 py-3">Amount</th>
+                <th className="text-left px-4 py-3">Note</th>
+                <th className="text-left px-4 py-3">Sale</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border dark:divide-slate-700">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    Loading…
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    No khata entries for this day.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => (
+                  <tr key={r.id} className="hover:bg-muted/50 dark:hover:bg-slate-800/50">
+                    <td className="px-4 py-2 font-mono text-xs whitespace-nowrap">{r.created_at}</td>
+                    <td className="px-4 py-2 font-medium">{r.customer_name || '—'}</td>
+                    <td className="px-4 py-2 capitalize">{r.type}</td>
+                    <td className="px-4 py-2 text-right font-mono">
+                      {CURRENCY} {formatMoney(Number(r.amount))}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground max-w-xs truncate" title={r.note}>
+                      {r.note || '—'}
+                    </td>
+                    <td className="px-4 py-2 font-mono text-xs">{r.sale_number || '—'}</td>
                   </tr>
                 ))
               )}
@@ -619,6 +739,7 @@ const DailyReportPage: React.FC = () => {
       <Route path="inventory-in" element={<InventoryInDrill />} />
       <Route path="expenses" element={<ExpensesDrill />} />
       <Route path="products-created" element={<ProductsCreatedDrill />} />
+      <Route path="khata" element={<KhataDrill />} />
       <Route path="*" element={<Navigate to="/accounting/reports/daily" replace />} />
     </Routes>
   );

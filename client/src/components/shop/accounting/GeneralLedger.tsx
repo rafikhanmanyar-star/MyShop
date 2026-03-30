@@ -37,13 +37,13 @@ const GeneralLedger: React.FC = () => {
     const getSourceBadge = (source: string) => {
         switch (source) {
             case 'POS':
-                return <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded text-[9px] font-black uppercase">POS Sale</span>;
+                return <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded text-[9px] font-black uppercase">POS Sale</span>;
             case 'MobileApp':
-                return <span className="px-2 py-0.5 bg-emerald-100 text-emerald-600 rounded text-[9px] font-black uppercase">Mobile App</span>;
+                return <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded text-[9px] font-black uppercase">Mobile App</span>;
             case 'Manual':
-                return <span className="px-2 py-0.5 bg-amber-100 text-amber-600 rounded text-[9px] font-black uppercase">Manual</span>;
+                return <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded text-[9px] font-black uppercase">Manual</span>;
             default:
-                return <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-[9px] font-black uppercase">{source || 'System'}</span>;
+                return <span className="px-2 py-0.5 bg-muted dark:bg-slate-800 text-muted-foreground rounded text-[9px] font-black uppercase">{source || 'System'}</span>;
         }
     };
 
@@ -142,7 +142,7 @@ const GeneralLedger: React.FC = () => {
                         </div>
                         <input
                             type="text"
-                            className="block w-full pl-10 pr-3 py-2 border border-border rounded-xl leading-5 bg-card placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-xs"
+                            className="block w-full pl-10 pr-3 py-2 border border-border dark:border-slate-700 rounded-xl leading-5 bg-card dark:bg-slate-900 placeholder-slate-400 dark:placeholder-slate-500 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-xs"
                             placeholder="Search by Reference, Description..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -150,14 +150,14 @@ const GeneralLedger: React.FC = () => {
                     </div>
 
                     {/* Source Filter */}
-                    <div className="flex bg-card border border-border rounded-xl p-1">
+                    <div className="flex bg-card dark:bg-slate-900 border border-border dark:border-slate-700 rounded-xl p-1">
                         {(['all', 'POS', 'MobileApp', 'Manual'] as const).map(filter => (
                             <button
                                 key={filter}
                                 onClick={() => setSourceFilter(filter)}
                                 className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${sourceFilter === filter
-                                    ? 'bg-slate-900 text-white shadow'
-                                    : 'text-muted-foreground hover:text-muted-foreground'
+                                    ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow'
+                                    : 'text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                     }`}
                             >
                                 {filter === 'all' ? 'All' : filter === 'MobileApp' ? 'Mobile' : filter}
@@ -168,13 +168,13 @@ const GeneralLedger: React.FC = () => {
 
                 <div className="flex gap-2 items-center">
                     <span className="text-[10px] font-bold text-muted-foreground">{filteredEntries.length} entries</span>
-                    <button className="px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 transition-all flex items-center gap-2">
+                    <button className="px-4 py-2 bg-card dark:bg-slate-900 border border-border dark:border-slate-700 rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 dark:hover:bg-slate-800 transition-all flex items-center gap-2">
                         {ICONS.export} Export CSV
                     </button>
                 </div>
             </div>
 
-            <Card className="border-none shadow-sm overflow-hidden flex-1 overflow-y-auto">
+            <Card className="border-none dark:border dark:border-slate-700/80 shadow-sm overflow-hidden flex-1 overflow-y-auto dark:bg-slate-900/40">
                 {loading ? (
                     <div className="py-20 text-center">
                         <div className="animate-spin inline-block w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
@@ -182,7 +182,7 @@ const GeneralLedger: React.FC = () => {
                     </div>
                 ) : (
                     <table className="w-full text-left">
-                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground sticky top-0 z-20">
+                        <thead className="bg-muted/80 dark:bg-slate-800 text-[10px] font-black uppercase text-muted-foreground sticky top-0 z-20">
                             <tr>
                                 <th className="px-6 py-4">Date</th>
                                 <th className="px-6 py-4">Reference</th>
@@ -193,15 +193,15 @@ const GeneralLedger: React.FC = () => {
                                 {isAdmin && <th className="px-6 py-4 text-center w-28">Actions</th>}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                             {filteredEntries.length > 0 ? filteredEntries.map((entry: any) => (
                                 <React.Fragment key={entry.id}>
-                                    <tr className="bg-muted/80/50">
+                                    <tr className="bg-muted/80/50 dark:bg-slate-800/40">
                                         <td className="px-6 py-4 text-xs font-bold text-muted-foreground">
                                             {new Date(entry.date).toLocaleDateString()}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="font-mono text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-1 rounded uppercase tracking-tighter">
+                                            <span className="font-mono text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded uppercase tracking-tighter">
                                                 {entry.reference}
                                             </span>
                                         </td>
@@ -220,7 +220,7 @@ const GeneralLedger: React.FC = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => openEditModal(entry)}
-                                                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                                                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                                                         title="Edit entry"
                                                     >
                                                         {React.cloneElement(ICONS.edit as React.ReactElement<any>, { width: 16, height: 16 })}
@@ -228,7 +228,7 @@ const GeneralLedger: React.FC = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => setDeleteConfirmId(entry.id)}
-                                                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                                                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
                                                         title="Delete entry"
                                                     >
                                                         {React.cloneElement(ICONS.trash as React.ReactElement<any>, { width: 16, height: 16 })}
@@ -238,10 +238,10 @@ const GeneralLedger: React.FC = () => {
                                         )}
                                     </tr>
                                     {(entry.lines || []).map((line: any, idx: number) => (
-                                        <tr key={`${entry.id}-${idx}`} className="hover:bg-muted/50/30">
+                                        <tr key={`${entry.id}-${idx}`} className="hover:bg-muted/50/30 dark:hover:bg-slate-800/50">
                                             <td colSpan={2}></td>
                                             <td className="px-6 py-3">
-                                                <div className="text-xs font-bold text-foreground pl-4 border-l-2 border-indigo-100 italic">
+                                                <div className="text-xs font-bold text-foreground pl-4 border-l-2 border-indigo-100 dark:border-indigo-800 italic">
                                                     {line.accountCode} — {line.accountName}
                                                 </div>
                                             </td>
@@ -258,12 +258,12 @@ const GeneralLedger: React.FC = () => {
                                 </React.Fragment>
                             )) : (
                                 <tr>
-                                    <td colSpan={isAdmin ? 7 : 6} className="px-6 py-20 text-center text-slate-300 italic">
-                                        <div className="w-16 h-16 bg-muted/80 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <td colSpan={isAdmin ? 7 : 6} className="px-6 py-20 text-center text-slate-300 dark:text-slate-500 italic">
+                                        <div className="w-16 h-16 bg-muted/80 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
                                             {React.cloneElement(ICONS.clipboard as React.ReactElement<any>, { width: 32, height: 32 })}
                                         </div>
-                                        <p className="font-bold uppercase tracking-[0.2em] text-[10px]">No ledger entries found</p>
-                                        <p className="text-[10px] text-slate-300 mt-1">Complete a sale to generate automatic journal entries</p>
+                                        <p className="font-bold uppercase tracking-[0.2em] text-[10px] text-muted-foreground dark:text-slate-400">No ledger entries found</p>
+                                        <p className="text-[10px] text-slate-300 dark:text-slate-500 mt-1">Complete a sale to generate automatic journal entries</p>
                                     </td>
                                 </tr>
                             )}
@@ -301,9 +301,9 @@ const GeneralLedger: React.FC = () => {
                         />
                     </div>
 
-                    <div className="bg-muted/80 border border-border rounded-xl overflow-hidden">
+                    <div className="bg-muted/80 dark:bg-slate-800 border border-border dark:border-slate-700 rounded-xl overflow-hidden">
                         <table className="w-full text-left">
-                            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
+                            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3 w-[30%]">Account</th>
                                     <th className="px-4 py-3 w-[30%]">Description</th>
@@ -312,7 +312,7 @@ const GeneralLedger: React.FC = () => {
                                     <th className="px-4 py-3 w-[5%]"></th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                 {editForm.lines.map((line, idx) => (
                                     <tr key={idx}>
                                         <td className="px-4 py-2">
@@ -332,7 +332,7 @@ const GeneralLedger: React.FC = () => {
                                             <input
                                                 type="text"
                                                 placeholder="Line description"
-                                                className="w-full bg-transparent border-none text-xs focus:ring-0 placeholder-slate-300"
+                                                className="w-full bg-transparent border-none text-xs focus:ring-0 placeholder-slate-300 dark:placeholder-slate-600 dark:text-slate-100"
                                                 value={line.description || ''}
                                                 onChange={(e) => handleEditLineChange(idx, 'description', e.target.value)}
                                             />
@@ -341,7 +341,7 @@ const GeneralLedger: React.FC = () => {
                                             <input
                                                 type="number"
                                                 aria-label={`Line ${idx + 1} debit`}
-                                                className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0"
+                                                className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0 dark:text-slate-100"
                                                 value={line.debit}
                                                 onChange={(e) => handleEditLineChange(idx, 'debit', e.target.value)}
                                                 onFocus={(e) => e.target.select()}
@@ -351,7 +351,7 @@ const GeneralLedger: React.FC = () => {
                                             <input
                                                 type="number"
                                                 aria-label={`Line ${idx + 1} credit`}
-                                                className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0"
+                                                className="w-full bg-transparent border-none text-right font-mono text-sm focus:ring-0 dark:text-slate-100"
                                                 value={line.credit}
                                                 onChange={(e) => handleEditLineChange(idx, 'credit', e.target.value)}
                                                 onFocus={(e) => e.target.select()}
@@ -361,7 +361,7 @@ const GeneralLedger: React.FC = () => {
                                             <button
                                                 type="button"
                                                 onClick={() => handleRemoveEditLine(idx)}
-                                                className="text-slate-300 hover:text-rose-500 transition-colors"
+                                                className="text-slate-300 dark:text-muted-foreground hover:text-rose-500 transition-colors"
                                                 disabled={editForm.lines.length <= 2}
                                             >
                                                 {ICONS.x}
@@ -370,13 +370,13 @@ const GeneralLedger: React.FC = () => {
                                     </tr>
                                 ))}
                             </tbody>
-                            <tfoot className="bg-muted/80 font-bold text-xs border-t border-border">
+                            <tfoot className="bg-muted/80 dark:bg-slate-800 font-bold text-xs border-t border-border dark:border-slate-700">
                                 <tr>
                                     <td colSpan={2} className="px-4 py-3">
                                         <button
                                             type="button"
                                             onClick={handleAddEditLine}
-                                            className="text-indigo-600 hover:underline flex items-center gap-1"
+                                            className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
                                         >
                                             {ICONS.plus} Add Line
                                         </button>

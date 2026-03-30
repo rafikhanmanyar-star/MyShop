@@ -330,4 +330,15 @@ router.get('/reports/daily/products-created', checkRole(['admin', 'accountant'])
     }
 });
 
+router.get('/reports/daily/khata', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const rows = await getDailyReportService().getKhataDetail(req.tenantId, date);
+        res.json({ rows });
+    } catch (error: any) {
+        console.error('❌ Error daily report khata:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

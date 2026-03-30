@@ -65,15 +65,15 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
   return (
     <aside className={`fixed inset-y-0 left-0 z-30 bg-[#0f172a] border-r border-slate-800/50 flex flex-col transition-all duration-500 ease-in-out shadow-2xl ${collapsed ? 'w-20' : 'w-72'}`}>
-      <div className="flex items-center justify-between h-24 px-6">
+      <div className="flex items-center justify-between h-20 shrink-0 px-5">
         {!collapsed && (
-          <div className="flex items-center gap-3 group cursor-pointer">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform duration-300">
-              <Store className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-2.5 group cursor-pointer">
+            <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform duration-300">
+              <Store className="w-[1.125rem] h-[1.125rem] text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="font-extrabold text-white text-lg tracking-tight leading-none text-shadow-sm">MyShop</span>
-              <span className="text-[10px] text-slate-400 font-medium uppercase tracking-[0.2em]">Point of Sale</span>
+              <span className="font-extrabold text-white text-[1.0125rem] tracking-tight leading-none text-shadow-sm">MyShop</span>
+              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-[0.2em]">Point of Sale</span>
             </div>
           </div>
         )}
@@ -87,26 +87,26 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           </button>
         )}
         {!collapsed && (
-          <button onClick={onToggle} className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-all duration-200">
-            <X className="w-5 h-5" />
+          <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-all duration-200">
+            <X className="w-[1.125rem] h-[1.125rem]" />
           </button>
         )}
       </div>
 
-      <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto custom-scrollbar pt-4">
+      <nav className="flex-1 min-h-0 px-3 space-y-0.5 overflow-y-auto custom-scrollbar pt-2">
         {filteredNavItems.map(item => (
           <NavLink
             key={item.path}
             to={item.path}
             end={item.path === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-300 group tracking-wide
+              `flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-300 group tracking-wide text-[0.7875rem]
               ${isActive
-                ? 'bg-indigo-500/15 border border-indigo-500/30 text-primary font-semibold text-sm shadow-sm'
-                : 'text-sm font-medium text-slate-400 hover:bg-slate-800/50 hover:text-white'}`
+                ? 'bg-indigo-500/15 border border-indigo-500/30 text-primary font-semibold shadow-sm'
+                : 'font-medium text-slate-400 hover:bg-slate-800/50 hover:text-white'}`
             }
           >
-            <item.icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${collapsed ? 'mx-auto' : ''}`} />
+            <item.icon className={`w-[1.125rem] h-[1.125rem] flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${collapsed ? 'mx-auto' : ''}`} />
             {!collapsed && <span>{item.label}</span>}
             {!collapsed && (
               <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
@@ -117,28 +117,28 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
         ))}
       </nav>
 
-      <div className="p-4 mt-auto">
-        <div className={`bg-slate-800/40 rounded-3xl p-4 border border-slate-700/50 transition-all duration-300 ${collapsed ? 'px-2' : ''}`}>
+      <div className="p-3 mt-auto shrink-0">
+        <div className={`bg-slate-800/40 rounded-2xl p-3 border border-slate-700/50 transition-all duration-300 ${collapsed ? 'px-2' : ''}`}>
           {!collapsed && user && (
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center border-2 border-indigo-500/50 overflow-hidden">
-                <Users className="w-5 h-5 text-indigo-400" />
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center border-2 border-indigo-500/50 overflow-hidden">
+                <Users className="w-[1.125rem] h-[1.125rem] text-indigo-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-white truncate">{user.name}</p>
-                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">{user.role.replace('_', ' ')}</p>
+                <p className="text-[0.7875rem] font-bold text-white truncate">{user.name}</p>
+                <p className="text-[9px] text-slate-400 uppercase tracking-widest font-semibold">{user.role.replace('_', ' ')}</p>
               </div>
             </div>
           )}
           <button
             onClick={handleLogout}
-            className={`flex items-center gap-3 text-slate-400 hover:text-rose-400 transition-colors w-full group ${collapsed ? 'justify-center' : 'px-2 py-1'}`}
+            className={`flex items-center gap-2 text-slate-400 hover:text-rose-400 transition-colors w-full group ${collapsed ? 'justify-center' : 'px-2 py-1'}`}
           >
-            <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-            {!collapsed && <span className="font-semibold text-xs tracking-wide">Sign out</span>}
+            <LogOut className="w-[1.125rem] h-[1.125rem] group-hover:-translate-x-1 transition-transform" />
+            {!collapsed && <span className="font-semibold text-[0.675rem] tracking-wide">Sign out</span>}
           </button>
           {!collapsed && (
-            <p className="text-[10px] text-slate-500 text-center mt-3 pt-2 border-t border-slate-700/50">
+            <p className="text-[9px] text-slate-500 text-center mt-2 pt-1.5 border-t border-slate-700/50">
               v{__APP_VERSION__}
             </p>
           )}
@@ -199,22 +199,22 @@ function AppLayout() {
 
               <Route path="/cashier-dashboard" element={role === 'pos_cashier' ? <CashierDashboardPage /> : <Navigate to="/" replace />} />
               <Route path="/pos" element={<div className="flex-1 min-h-0 flex flex-col overflow-hidden h-full"><POSSalesPage /></div>} />
-              <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <MobileOrdersPage /> : <Navigate to="/" replace />} />
+              <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MobileOrdersPage /></div> : <Navigate to="/" replace />} />
 
               <Route path="/inventory" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><InventoryPage /></div> : <Navigate to="/" replace />} />
               <Route path="/procurement" element={['admin', 'accountant'].includes(role) ? <ProcurementPage /> : <Navigate to="/" replace />} />
-              <Route path="/loyalty" element={role === 'admin' ? <LoyaltyPage /> : <Navigate to="/" replace />} />
+              <Route path="/loyalty" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><LoyaltyPage /></div> : <Navigate to="/" replace />} />
               <Route path="/khata" element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <KhataPage /> : <Navigate to="/" replace />} />
-              <Route path="/multi-store" element={role === 'admin' ? <MultiStorePage /> : <Navigate to="/" replace />} />
-              <Route path="/shifts" element={['admin', 'accountant'].includes(role) ? <ShiftsAdminPage /> : <Navigate to="/" replace />} />
-              <Route path="/analytics" element={['admin', 'accountant'].includes(role) ? <BIDashboardsPage /> : <Navigate to="/" replace />} />
-              <Route path="/accounting" element={['admin', 'accountant'].includes(role) ? <AccountingPage /> : <Navigate to="/" replace />} />
+              <Route path="/multi-store" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MultiStorePage /></div> : <Navigate to="/" replace />} />
+              <Route path="/shifts" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><ShiftsAdminPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/analytics" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><BIDashboardsPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/accounting" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><AccountingPage /></div> : <Navigate to="/" replace />} />
               <Route
                 path="/accounting/reports/daily/*"
-                element={['admin', 'accountant'].includes(role) ? <DailyReportPage /> : <Navigate to="/" replace />}
+                element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><DailyReportPage /></div> : <Navigate to="/" replace />}
               />
-              <Route path="/expenses" element={['admin', 'accountant'].includes(role) ? <ExpensePage /> : <Navigate to="/" replace />} />
-              <Route path="/forecast" element={['admin', 'accountant'].includes(role) ? <ForecastPage /> : <Navigate to="/" replace />} />
+              <Route path="/expenses" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><ExpensePage /></div> : <Navigate to="/" replace />} />
+              <Route path="/forecast" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><ForecastPage /></div> : <Navigate to="/" replace />} />
               <Route path="/settings" element={<SettingsPage />} />
 
               <Route path="*" element={<Navigate to={role === 'pos_cashier' ? '/cashier-dashboard' : '/'} replace />} />
