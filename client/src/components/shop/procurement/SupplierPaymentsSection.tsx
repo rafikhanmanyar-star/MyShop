@@ -6,7 +6,8 @@ import Button from '../../ui/Button';
 import Select from '../../ui/Select';
 import type { PaymentPrefill } from '../ProcurementPage';
 
-const CURRENCY = 'PKR';
+import { CURRENCY } from '../../../constants';
+import { showProcurementToast } from './utils/showProcurementToast';
 
 interface SupplierPaymentsSectionProps {
   initialPrefill?: PaymentPrefill | null;
@@ -132,15 +133,18 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.supplierId || form.amount <= 0) {
-      alert('Select supplier and enter amount.');
+      showProcurementToast('Select supplier and enter amount.', 'error');
       return;
     }
     if (form.allocations.length === 0) {
-      alert('Allocate at least one bill (enter amount next to a bill and click Allocate).');
+      showProcurementToast('Allocate at least one bill (enter amount next to a bill and click Allocate).', 'error');
       return;
     }
     if (Math.abs(totalAllocated - form.amount) > 0.01) {
-      alert(`Total allocated (${totalAllocated}) must equal payment amount (${form.amount}).`);
+      showProcurementToast(
+        `Total allocated (${totalAllocated}) must equal payment amount (${form.amount}).`,
+        'error'
+      );
       return;
     }
     setLoading(true);
@@ -156,6 +160,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
         allocations: form.allocations,
       });
       if (result.synced) {
+        showProcurementToast('Payment recorded', 'success');
         setForm({
           supplierId: form.supplierId,
           amount: 0,
@@ -171,6 +176,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
         const bills = await procurementApi.getBillsWithBalance(form.supplierId);
         setBillsWithBalance(Array.isArray(bills) ? bills : []);
       } else if (result.localId) {
+        showProcurementToast('Payment queued offline — will sync when online', 'success');
         setForm({
           supplierId: form.supplierId,
           amount: 0,
@@ -184,19 +190,20 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
         console.warn('Payment saved offline. Will sync when back online.');
       }
     } catch (err: any) {
-      alert(err?.response?.data?.error || err?.message || 'Failed to record payment');
+      const msg = err?.response?.data?.error || err?.message || 'Failed to record payment';
+      showProcurementToast(msg, 'error');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-        <h2 className="text-lg font-bold text-slate-800 mb-4">Record Supplier Payment</h2>
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="card p-6">
+        <h2 className="mb-4 text-lg font-bold text-foreground">Record supplier payment</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Supplier</label>
+            <label className="mb-1 block text-sm font-medium text-muted-foreground">Supplier</label>
             <Select
               value={form.supplierId}
               onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))}
@@ -209,8 +216,8 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
             </Select>
           </div>
           {billsWithBalance.length > 0 && (
-            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
-              <p className="text-xs font-bold text-amber-800 uppercase mb-2">Bills with balance — allocate payment to bills</p>
+            <div className="rounded-xl border border-warning/30 bg-amber-500/10 p-4 dark:bg-amber-500/5">
+              <p className="mb-2 text-xs font-bold uppercase text-warning">Bills with balance — allocate payment to bills</p>
               {billsWithBalance.map((b) => {
                 const billId = b.id;
                 const inputVal = allocateInputs[billId] ?? '';
@@ -233,7 +240,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                           handleAllocate(billId, parseFloat(inputVal) || 0);
                         }
                       }}
-                      className="w-24 border border-slate-200 rounded px-2 py-1.5 text-sm"
+                      className="input w-24 rounded-lg px-2 py-1.5 text-sm"
                     />
                     <button
                       type="button"
@@ -243,7 +250,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                         const num = parseFloat(inputVal);
                         handleAllocate(billId, Number.isNaN(num) || num <= 0 ? undefined : num);
                       }}
-                      className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg cursor-pointer transition-colors select-none"
+                      className="btn-primary cursor-pointer select-none px-3 py-1.5 text-xs"
                     >
                       Allocate
                     </button>
@@ -281,7 +288,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Payment amount</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">Payment amount</label>
             <input
               type="number"
               step="0.01"
@@ -289,11 +296,11 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
               required
               value={form.amount || ''}
               onChange={(e) => setForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2"
+              className="input"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Payment method</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">Payment method</label>
             <Select
               value={form.paymentMethod}
               onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value as any }))}
@@ -305,7 +312,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
           </div>
           {form.paymentMethod === 'Bank' && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Bank account</label>
+              <label className="mb-1 block text-sm font-medium text-foreground">Bank account</label>
               <Select
                 value={form.bankAccountId}
                 onChange={(e) => setForm((f) => ({ ...f, bankAccountId: e.target.value }))}
@@ -318,50 +325,50 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Payment date</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">Payment date</label>
             <input
               type="date"
               value={form.paymentDate}
               onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2"
+              className="input"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Reference (optional)</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">Reference (optional)</label>
             <input
               type="text"
               value={form.reference}
               onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2"
+              className="input"
               placeholder="Chq no, transfer ref..."
             />
           </div>
-          <Button type="submit" disabled={loading} className="bg-indigo-600 text-white">
+          <Button type="submit" disabled={loading} variant="primary">
             {loading ? 'Saving...' : 'Record Payment'}
           </Button>
         </form>
       </div>
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-        <h2 className="text-lg font-bold text-slate-800 mb-4">Recent supplier payments</h2>
+      <div className="card p-6">
+        <h2 className="mb-4 text-lg font-bold text-foreground">Recent supplier payments</h2>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="table-modern w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500 border-b">
-                <th className="pb-2">Date</th>
-                <th className="pb-2">Supplier</th>
-                <th className="pb-2 text-right">Amount</th>
-                <th className="pb-2">Method</th>
-                <th className="pb-2 w-24 text-right">Actions</th>
+              <tr>
+                <th className="py-3 px-4">Date</th>
+                <th className="py-3 px-4">Supplier</th>
+                <th className="py-3 px-4 text-right">Amount</th>
+                <th className="py-3 px-4">Method</th>
+                <th className="w-24 py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {payments.slice(0, 20).map((p) => (
-                <tr key={p.id} className="border-b border-slate-100">
-                  <td className="py-2">{p.payment_date?.slice(0, 10)}</td>
-                  <td className="py-2">{p.supplier_name}</td>
-                  <td className="py-2 text-right font-medium">{CURRENCY} {Number(p.amount).toLocaleString()}</td>
-                  <td className="py-2">{p.payment_method}</td>
-                  <td className="py-2 text-right">
+                <tr key={p.id}>
+                  <td className="py-3 px-4">{p.payment_date?.slice(0, 10)}</td>
+                  <td className="py-3 px-4">{p.supplier_name}</td>
+                  <td className="py-3 px-4 text-right font-medium">{CURRENCY} {Number(p.amount).toLocaleString()}</td>
+                  <td className="py-3 px-4">{p.payment_method}</td>
+                  <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
                         type="button"
@@ -387,14 +394,14 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                             alert(err?.response?.data?.error || err?.message || 'Failed to load payment');
                           }
                         }}
-                        className="px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 rounded"
+                        className="rounded px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-accent"
                       >
                         Edit
                       </button>
                       <button
                         type="button"
                         onClick={() => setDeleteConfirmPaymentId(p.id)}
-                        className="px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded"
+                        className="rounded px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-red-500/10"
                       >
                         Delete
                       </button>
@@ -405,15 +412,15 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
             </tbody>
           </table>
           {payments.length === 0 && (
-            <p className="text-slate-400 py-6 text-center">No payments yet</p>
+            <p className="py-6 text-center text-muted-foreground">No payments yet</p>
           )}
         </div>
       </div>
 
       {editPaymentId && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8" onClick={() => !updatingPayment && setEditPaymentId(null)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg my-auto" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Edit supplier payment</h3>
+          <div className="card my-auto w-full max-w-lg p-6 shadow-erp-md" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-4 text-lg font-bold text-foreground">Edit supplier payment</h3>
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Supplier</label>
@@ -572,8 +579,8 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
 
       {deleteConfirmPaymentId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !updatingPayment && setDeleteConfirmPaymentId(null)}>
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <p className="text-slate-700 font-medium mb-4">
+          <div className="card w-full max-w-sm p-6 shadow-erp-md" onClick={(e) => e.stopPropagation()}>
+            <p className="mb-4 font-medium text-foreground">
               Delete this supplier payment? Accounting will be reversed and linked bills will show the unpaid balance again.
             </p>
             <div className="flex gap-2">

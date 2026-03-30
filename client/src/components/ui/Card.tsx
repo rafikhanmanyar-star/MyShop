@@ -1,13 +1,23 @@
-
 import React, { ReactNode } from 'react';
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children?: ReactNode;
+  padding?: 'none' | 'sm' | 'md' | 'lg';
 }
 
-const Card: React.FC<CardProps> = ({ children, className = '', ...props }) => {
+const paddingClass = {
+  none: '',
+  sm: 'p-4',
+  md: 'p-5 sm:p-6',
+  lg: 'p-6 sm:p-8',
+};
+
+const Card: React.FC<CardProps> = ({ children, className = '', padding = 'md', ...props }) => {
   return (
-    <div className={`bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all duration-300 ${className}`} {...props}>
+    <div
+      className={`card ${paddingClass[padding]} hover:shadow-erp-md ${className}`}
+      {...props}
+    >
       {children}
     </div>
   );

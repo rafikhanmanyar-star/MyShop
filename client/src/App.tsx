@@ -15,6 +15,7 @@ import {
 import { BranchProvider } from './context/BranchContext';
 import { SyncOnOnline } from './components/SyncOnOnline';
 import OfflineBanner from './components/OfflineBanner';
+import AppHeader from './components/AppHeader';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
 const InventoryPage = lazy(() => import('./components/shop/InventoryPage'));
@@ -177,9 +178,10 @@ function AppLayout() {
       <AppProvider>
         <ShiftsProvider>
           <SyncOnOnline />
-      <div className="h-screen bg-[#f8fafc] flex flex-col overflow-hidden">
+      <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
-        <main className={`flex-1 flex flex-col min-h-0 transition-all duration-500 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'} p-8`}>
+        <main className={`flex min-h-0 flex-1 flex-col transition-all duration-500 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'} p-6 sm:p-8`}>
+          {!posFullScreen && <AppHeader />}
           <OfflineBanner />
           <div className="flex-1 min-h-0 flex flex-col overflow-auto">
           <Suspense fallback={
@@ -234,8 +236,8 @@ export default function App() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground transition-colors duration-300">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
       </div>
     );
   }

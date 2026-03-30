@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Store, Eye, EyeOff } from 'lucide-react';
 import { getQrParamsFromUrl } from '../utils/urlParams';
 import { setAppContext, getAppContext } from '../services/appContext';
+import ThemeToggle from '../components/ui/ThemeToggle';
 
 export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => void }) {
   const { login } = useAuth();
@@ -12,7 +13,6 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // On load: parse QR params from URL and persist org + branch BEFORE login
   useEffect(() => {
     const qr = getQrParamsFromUrl();
     if (qr) {
@@ -39,67 +39,79 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 flex items-center justify-center p-4">
+    <div className="relative flex min-h-screen flex-col items-center justify-center bg-background p-4 text-foreground transition-colors duration-300">
+      <div className="absolute right-4 top-4 z-10 flex items-center gap-2 sm:right-6 sm:top-6">
+        <ThemeToggle />
+      </div>
+
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl mb-4">
-            <Store className="w-8 h-8 text-white" />
+        <div className="mb-8 text-center">
+          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary">
+            <Store className="h-8 w-8 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">MyShop</h1>
-          <p className="text-gray-500 mt-1">POS & Inventory Management</p>
+          <h1 className="text-3xl font-bold text-foreground">MyShop</h1>
+          <p className="mt-1 text-muted-foreground">POS & Inventory Management</p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign in to your account</h2>
+        <div className="rounded-2xl border border-border bg-card p-8 text-card-foreground shadow-erp-md">
+          <h2 className="mb-6 text-xl font-semibold text-foreground">Sign in to your account</h2>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">{error}</div>
+            <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <label className="mb-1 block text-sm font-medium text-foreground">Username</label>
               <input
                 type="text"
                 value={username}
-                onChange={e => setUsername(e.target.value)}
+                onChange={(e) => setUsername(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                className="input"
                 placeholder="Enter your username"
+                autoComplete="username"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <label className="mb-1 block text-sm font-medium text-foreground">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition pr-10"
+                  className="input pr-10"
                   placeholder="Enter your password"
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition disabled:opacity-50"
+              className="btn-primary w-full disabled:opacity-50"
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
 
           <div className="mt-6 text-center">
-            <span className="text-sm text-gray-500">Don't have an account? </span>
-            <button onClick={onSwitchToRegister} className="text-sm text-indigo-600 font-medium hover:text-indigo-700">
+            <span className="text-sm text-muted-foreground">Don&apos;t have an account? </span>
+            <button
+              type="button"
+              onClick={onSwitchToRegister}
+              className="text-sm font-medium text-primary hover:underline"
+            >
               Create one
             </button>
           </div>

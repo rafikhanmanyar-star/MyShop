@@ -13,6 +13,7 @@ import { shopApi, ShopProductCategory } from '../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../services/categoriesOfflineCache';
 import { createCategoryOfflineFirst } from '../../services/categorySyncService';
 import { getFullImageUrl } from '../../config/apiUrl';
+import { useClickOutside } from '../../hooks/useClickOutside';
 
 const InventoryContent: React.FC = () => {
     const { items, addItem, refreshItems } = useInventory();
@@ -60,18 +61,7 @@ const InventoryContent: React.FC = () => {
         }
     }, [isNewSkuModalOpen]);
 
-    // Close category dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (categoryInputRef.current && !categoryInputRef.current.contains(e.target as Node)) {
-                setCategoryDropdownOpen(false);
-            }
-        };
-        if (categoryDropdownOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
-            return () => document.removeEventListener('mousedown', handleClickOutside);
-        }
-    }, [categoryDropdownOpen]);
+    useClickOutside(categoryInputRef, () => setCategoryDropdownOpen(false), categoryDropdownOpen);
 
     // All category names: General + existing shop categories
     const allCategoryNames = useCallback(() => {

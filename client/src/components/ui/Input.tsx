@@ -1,34 +1,43 @@
-
 import React from 'react';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   helperText?: string;
+  error?: string;
   enableSpellCheck?: boolean;
   icon?: React.ReactNode;
   horizontal?: boolean;
   compact?: boolean;
 }
 
-const Input: React.FC<InputProps> = ({ label, id, helperText, onKeyDown, name, enableSpellCheck = true, icon, horizontal = false, compact = false, ...props }) => {
-  // Mobile: py-3 and text-base to prevent zoom and increase touch area
-  // Desktop: py-2 and text-sm for compactness
-  // Added tabular-nums for consistent number width
-  // Spinner removal classes for number inputs
-  const spinnerRemovalClasses = `[appearance:textfield] [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`;
+const Input: React.FC<InputProps> = ({
+  label,
+  id,
+  helperText,
+  error,
+  onKeyDown,
+  name,
+  enableSpellCheck = true,
+  icon,
+  horizontal = false,
+  compact = false,
+  ...props
+}) => {
+  const spinnerRemovalClasses =
+    `[appearance:textfield] [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`;
 
   const isNumberInput = props.type === 'number';
-  const baseClassName = `block w-full border rounded-lg shadow-sm placeholder-gray-400 focus:outline-none disabled:bg-gray-100 disabled:cursor-not-allowed focus:ring-2 focus:ring-green-500/50 focus:border-green-500 border-gray-300 transition-colors tabular-nums ${
-    compact ? 'py-1 px-2 text-xs' : 'px-3 py-3 sm:py-2 text-base sm:text-sm'
-  }`;
+  const compactPad = compact ? 'py-1 px-2 text-xs' : 'px-3 py-3 sm:py-2 text-base sm:text-sm';
+  const baseClassName = `input block w-full tabular-nums ${compactPad} ${error ? 'border-destructive focus:ring-destructive/30' : ''}`;
 
-  // If custom className is provided, append spinner removal classes for number inputs
-  // Otherwise use the default className with spinner removal classes
   const finalClassName = props.className
-    ? (isNumberInput ? `${props.className} ${spinnerRemovalClasses}` : props.className)
-    : (isNumberInput ? `${baseClassName} ${spinnerRemovalClasses}` : baseClassName);
+    ? isNumberInput
+      ? `${props.className} ${spinnerRemovalClasses}`
+      : props.className
+    : isNumberInput
+      ? `${baseClassName} ${spinnerRemovalClasses}`
+      : baseClassName;
 
-  // Generate an id if not provided but label exists (for accessibility)
   const inputId = id || (label ? `input-${name || label.toLowerCase().replace(/\s+/g, '-')}` : undefined);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -40,14 +49,13 @@ const Input: React.FC<InputProps> = ({ label, id, helperText, onKeyDown, name, e
     }
   };
 
-  // Determine if spell check should be enabled
-  // Disable for number, email, password, tel, url input types
-  const shouldEnableSpellCheck = enableSpellCheck && !['number', 'email', 'password', 'tel', 'url'].includes(props.type || 'text');
+  const shouldEnableSpellCheck =
+    enableSpellCheck && !['number', 'email', 'password', 'tel', 'url'].includes(props.type || 'text');
 
   const inputElement = (
     <div className="relative w-full">
       {icon && (
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
           {icon}
         </div>
       )}
@@ -57,22 +65,36 @@ const Input: React.FC<InputProps> = ({ label, id, helperText, onKeyDown, name, e
         name={name || inputId}
         onKeyDown={handleKeyDown}
         className={`${finalClassName} ${icon ? 'pl-10' : ''}`}
-        autoComplete={props.autoComplete || "off"}
-        autoCorrect={shouldEnableSpellCheck ? "on" : "off"}
+        autoComplete={props.autoComplete || 'off'}
+        autoCorrect={shouldEnableSpellCheck ? 'on' : 'off'}
         spellCheck={shouldEnableSpellCheck}
-        aria-describedby={helperText && inputId ? `${inputId}-helper-text` : undefined}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={
+          (helperText || error) && inputId
+            ? `${inputId}-${error ? 'error' : 'helper-text'}`
+            : undefined
+        }
       />
     </div>
   );
 
-  const helperTextElement = helperText ? (
-    <p id={inputId ? `${inputId}-helper-text` : undefined} className="mt-1 text-xs text-gray-500">{helperText}</p>
+  const helperTextElement = helperText && !error ? (
+    <p id={inputId ? `${inputId}-helper-text` : undefined} className="mt-1 text-xs text-muted-foreground">
+      {helperText}
+    </p>
+  ) : null;
+
+  const errorElement = error ? (
+    <p id={inputId ? `${inputId}-error` : undefined} className="mt-1 text-xs font-medium text-destructive" role="alert">
+      {error}
+    </p>
   ) : null;
 
   if (!label) {
     return (
       <div>
         {inputElement}
+        {errorElement}
         {helperTextElement}
       </div>
     );
@@ -81,11 +103,12 @@ const Input: React.FC<InputProps> = ({ label, id, helperText, onKeyDown, name, e
   if (horizontal) {
     return (
       <div className="flex items-center gap-2">
-        <label htmlFor={inputId} className="block text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0 w-24">
+        <label htmlFor={inputId} className="w-24 shrink-0 text-xs font-bold uppercase tracking-wider text-muted-foreground">
           {label}
         </label>
         <div className="flex-1">
           {inputElement}
+          {errorElement}
           {helperTextElement}
         </div>
       </div>
@@ -94,10 +117,11 @@ const Input: React.FC<InputProps> = ({ label, id, helperText, onKeyDown, name, e
 
   return (
     <div>
-      <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-1.5">
+      <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-foreground">
         {label}
       </label>
       {inputElement}
+      {errorElement}
       {helperTextElement}
     </div>
   );

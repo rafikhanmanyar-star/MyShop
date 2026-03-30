@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { procurementApi, shopApi } from '../../../services/shopApi';
 import { getProcurementCache, setProcurementCache } from '../../../services/procurementSyncService';
 import { getTenantId } from '../../../services/posOfflineDb';
-
-const CURRENCY = 'PKR';
+import { CURRENCY } from '../../../constants';
 
 type ReportTab = 'ledger' | 'ap-aging' | 'inventory';
 
@@ -84,12 +83,17 @@ export default function ProcurementReports() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex gap-2 border border-slate-200 rounded-xl p-1 bg-slate-50">
+        <div className="flex gap-1 rounded-xl border border-border bg-muted p-1">
           {(['ledger', 'ap-aging', 'inventory'] as ReportTab[]).map((t) => (
             <button
               key={t}
+              type="button"
               onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-lg text-sm font-bold capitalize ${tab === t ? 'bg-white shadow text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`rounded-lg px-4 py-2 text-sm font-bold capitalize transition-all duration-200 active:scale-[0.98] ${
+                tab === t
+                  ? 'bg-card text-primary shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
               {t === 'ledger' ? 'Supplier Ledger' : t === 'ap-aging' ? 'AP Aging' : 'Inventory Valuation'}
             </button>
@@ -99,7 +103,7 @@ export default function ProcurementReports() {
           <select
             value={supplierFilter}
             onChange={(e) => setSupplierFilter(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+            className="input rounded-xl py-2"
           >
             <option value="">All suppliers</option>
             {vendors.map((v) => (
@@ -109,17 +113,17 @@ export default function ProcurementReports() {
         )}
       </div>
 
-      {loading && <p className="text-slate-500">Loading...</p>}
+      {loading && <p className="text-muted-foreground">Loading...</p>}
 
       {tab === 'ledger' && ledger && !loading && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <h3 className="p-4 font-bold text-slate-800 border-b">Purchases &amp; payments</h3>
+        <div className="card overflow-hidden p-0">
+          <h3 className="border-b border-border p-4 font-bold text-foreground">Purchases &amp; payments</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
             <div>
-              <h4 className="text-sm font-bold text-slate-500 uppercase mb-2">Purchases</h4>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <h4 className="mb-2 text-sm font-bold uppercase text-muted-foreground">Purchases</h4>
+              <div className="max-h-96 space-y-2 overflow-y-auto">
                 {(ledger.purchases || []).map((p: any) => (
-                  <div key={p.id} className="flex justify-between text-sm border-b border-slate-100 pb-2">
+                  <div key={p.id} className="flex justify-between border-b border-border pb-2 text-sm">
                     <span>{p.bill_number} ({p.bill_date?.slice(0, 10)})</span>
                     <span>{CURRENCY} {Number(p.total_amount).toLocaleString()} | Due: {CURRENCY} {Number(p.balance_due).toLocaleString()}</span>
                   </div>
@@ -127,10 +131,10 @@ export default function ProcurementReports() {
               </div>
             </div>
             <div>
-              <h4 className="text-sm font-bold text-slate-500 uppercase mb-2">Payments</h4>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <h4 className="mb-2 text-sm font-bold uppercase text-muted-foreground">Payments</h4>
+              <div className="max-h-96 space-y-2 overflow-y-auto">
                 {(ledger.payments || []).map((p: any) => (
-                  <div key={p.id} className="flex justify-between text-sm border-b border-slate-100 pb-2">
+                  <div key={p.id} className="flex justify-between border-b border-border pb-2 text-sm">
                     <span>{p.payment_date?.slice(0, 10)} {p.reference && `- ${p.reference}`}</span>
                     <span className="text-emerald-600">-{CURRENCY} {Number(p.amount).toLocaleString()}</span>
                   </div>
@@ -139,8 +143,8 @@ export default function ProcurementReports() {
             </div>
           </div>
           {Object.keys(ledger.outstandingBySupplier || {}).length > 0 && (
-            <div className="p-4 bg-amber-50 border-t">
-              <h4 className="text-sm font-bold text-amber-800 uppercase mb-2">Outstanding by supplier</h4>
+            <div className="border-t border-border bg-amber-500/10 p-4 dark:bg-amber-500/5">
+              <h4 className="mb-2 text-sm font-bold uppercase text-warning">Outstanding by supplier</h4>
               <ul className="text-sm">
                 {Object.entries(ledger.outstandingBySupplier).map(([sid, amt]: [string, any]) => (
                   <li key={sid}>
@@ -154,8 +158,8 @@ export default function ProcurementReports() {
       )}
 
       {tab === 'ap-aging' && apAging && !loading && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <h3 className="p-4 font-bold text-slate-800 border-b">Accounts Payable Aging</h3>
+        <div className="card overflow-hidden p-0">
+          <h3 className="border-b border-border p-4 font-bold text-foreground">Accounts Payable Aging</h3>
           <div className="p-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="rounded-xl bg-slate-50 p-4">
@@ -203,8 +207,8 @@ export default function ProcurementReports() {
       )}
 
       {tab === 'inventory' && inventoryVal && !loading && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <h3 className="p-4 font-bold text-slate-800 border-b">Inventory valuation (weighted average cost)</h3>
+        <div className="card overflow-hidden p-0">
+          <h3 className="border-b border-border p-4 font-bold text-foreground">Inventory valuation (weighted average cost)</h3>
           <div className="p-6">
             <p className="text-lg font-bold text-slate-700 mb-4">Total inventory value: {CURRENCY} {Number(inventoryVal.totalValue || 0).toLocaleString()}</p>
             <div className="overflow-x-auto">

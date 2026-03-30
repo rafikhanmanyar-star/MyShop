@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { FileText, CreditCard, BarChart3 } from 'lucide-react';
 import { InventoryProvider } from '../../context/InventoryContext';
-import PurchaseBillsSection from './procurement/PurchaseBillsSection';
+import PurchaseBillsSection, { type PurchaseBillsSectionHandle } from './procurement/PurchaseBillsSection';
 import SupplierPaymentsSection from './procurement/SupplierPaymentsSection';
 import ProcurementReports from './procurement/ProcurementReports';
 
@@ -23,6 +23,7 @@ const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
 const ProcurementPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('bills');
   const [paymentPrefill, setPaymentPrefill] = useState<PaymentPrefill | null>(null);
+  const purchaseRef = useRef<PurchaseBillsSectionHandle>(null);
 
   const handlePayRemaining = useCallback((bill: { id: string; supplier_id?: string; supplier_name?: string; balance_due: number }) => {
     const supplierId = bill.supplier_id ?? (bill as any).supplierId;
@@ -39,37 +40,60 @@ const ProcurementPage: React.FC = () => {
 
   const clearPaymentPrefill = useCallback(() => setPaymentPrefill(null), []);
 
+  const handleNewBill = () => {
+    setActiveTab('bills');
+    purchaseRef.current?.openNewPurchaseBill();
+  };
+
   return (
-    <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
-      <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10">
-        <div className="mb-6">
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight">Procurement & Supplier Payments</h1>
-          <p className="text-slate-500 text-sm font-medium">
-            Purchase bills, supplier payments, and double-entry accounting. Inventory is recorded as an asset; COGS when sold.
-          </p>
-        </div>
-        <div className="flex gap-6">
-          {tabs.map((tab) => (
+    <div className="flex min-h-full flex-col bg-background transition-all duration-200">
+      <header className="sticky top-0 z-20 border-b border-border bg-card px-4 py-5 shadow-erp sm:px-8 lg:px-10">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black tracking-tight text-foreground">Procurement</h1>
+            <p className="mt-1 text-sm font-medium text-muted-foreground">Manage purchase bills, suppliers, and inventory intake</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${
-                activeTab === tab.id ? 'text-indigo-600' : 'text-slate-400 hover:text-slate-600'
-              }`}
+              type="button"
+              onClick={() => setActiveTab('reports')}
+              className="btn-secondary rounded-xl px-4 py-2.5 text-sm active:scale-[0.98]"
             >
-              <tab.icon className="w-5 h-5" />
-              {tab.label}
-              {activeTab === tab.id && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-t-full" />
-              )}
+              View Reports
             </button>
-          ))}
+            <button type="button" onClick={handleNewBill} className="btn-primary rounded-xl">
+              New Bill
+            </button>
+          </div>
         </div>
-      </div>
-      <div className="flex-1 overflow-y-auto p-8">
+
+        <nav className="mt-6 flex flex-wrap gap-2" aria-label="Procurement sections">
+          {tabs.map((tab) => {
+            const active = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.98] ${
+                  active
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-accent hover:text-primary'
+                }`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-8 lg:px-10">
         {activeTab === 'bills' && (
           <InventoryProvider>
-            <PurchaseBillsSection onPayRemaining={handlePayRemaining} />
+            <PurchaseBillsSection ref={purchaseRef} onPayRemaining={handlePayRemaining} />
           </InventoryProvider>
         )}
         {activeTab === 'payments' && (
