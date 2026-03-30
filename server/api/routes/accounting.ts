@@ -1,6 +1,8 @@
 import express from 'express';
 import { getAccountingService } from '../../services/accountingService.js';
 import { getCoaSeedService } from '../../services/coaSeedService.js';
+import { getDailyReportService } from '../../services/dailyReportService.js';
+import { getDatabaseService } from '../../services/databaseService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
 
 const router = express.Router();
@@ -218,6 +220,112 @@ router.post('/clear-transactions', checkRole(['admin']), async (req: any, res) =
         res.json({ success: true, message: 'All transactions have been cleared.' });
     } catch (error: any) {
         console.error('❌ Error clearing transactions:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- Daily report (POS + mobile + inventory + expenses + products) — real-time via SSE /reports/daily/stream ---
+router.get('/reports/daily/stream', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    const tenantId = req.tenantId;
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+    res.write(`data: ${JSON.stringify({ type: 'connected', tenantId })}\n\n`);
+    const heartbeat = setInterval(() => {
+        res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+    }, 30000);
+    const db = getDatabaseService();
+    const pool = db.getPool();
+    let pgClient: any = null;
+    if (pool) {
+        try {
+            pgClient = await pool.connect();
+            await pgClient.query('LISTEN daily_report_updated');
+            pgClient.on('notification', (msg: any) => {
+                try {
+                    const payload = JSON.parse(msg.payload);
+                    if (payload.tenantId === tenantId) {
+                        res.write(`data: ${JSON.stringify({ type: 'daily_report_updated', ...payload })}\n\n`);
+                    }
+                } catch (err) {
+                    console.error('SSE daily_report parse error:', err);
+                }
+            });
+        } catch (err) {
+            console.error('SSE daily_report LISTEN error:', err);
+        }
+    }
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        if (pgClient) {
+            pgClient.query('UNLISTEN daily_report_updated').catch(() => { });
+            pgClient.release();
+        }
+    });
+});
+
+router.get('/reports/daily/summary', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const raw = (req.query.branchId as string) || '';
+        const branchId = raw && raw !== 'all' ? raw : null;
+        const data = await getDailyReportService().getSummary(req.tenantId, date, branchId);
+        res.json(data);
+    } catch (error: any) {
+        console.error('❌ Error daily report summary:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/reports/daily/inventory-out', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const raw = (req.query.branchId as string) || '';
+        const branchId = raw && raw !== 'all' ? raw : null;
+        const rows = await getDailyReportService().getInventoryOutDetail(req.tenantId, date, branchId);
+        res.json({ rows });
+    } catch (error: any) {
+        console.error('❌ Error daily report inventory-out:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/reports/daily/inventory-in', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const raw = (req.query.branchId as string) || '';
+        const branchId = raw && raw !== 'all' ? raw : null;
+        const rows = await getDailyReportService().getInventoryInDetail(req.tenantId, date, branchId);
+        res.json({ rows });
+    } catch (error: any) {
+        console.error('❌ Error daily report inventory-in:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/reports/daily/expenses', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const raw = (req.query.branchId as string) || '';
+        const branchId = raw && raw !== 'all' ? raw : null;
+        const rows = await getDailyReportService().getExpensesDetail(req.tenantId, date, branchId);
+        res.json({ rows });
+    } catch (error: any) {
+        console.error('❌ Error daily report expenses:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/reports/daily/products-created', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const rows = await getDailyReportService().getProductsCreated(req.tenantId, date);
+        res.json({ rows });
+    } catch (error: any) {
+        console.error('❌ Error daily report products:', error);
         res.status(500).json({ error: error.message });
     }
 });

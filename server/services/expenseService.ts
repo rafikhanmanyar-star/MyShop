@@ -82,7 +82,7 @@ export class ExpenseService {
       throw err;
     }
 
-    return this.db.transaction(async (client: any) => {
+    const result = await this.db.transaction(async (client: any) => {
       await this.ensureDefaultCategories(tenantId);
 
       const categoryRow = await client.query(
@@ -166,6 +166,9 @@ export class ExpenseService {
 
       return { id: expenseId, journalEntryId: journalId };
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
+    return result;
   }
 
   /** List expenses with optional filters */
@@ -326,10 +329,12 @@ export class ExpenseService {
     }
     if (!expense.journalEntryId) {
       await this.db.query('DELETE FROM expenses WHERE id = $1 AND tenant_id = $2', [expenseId, tenantId]);
+      const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+      notifyDailyReportUpdated(tenantId).catch(() => {});
       return;
     }
 
-    return this.db.transaction(async (client: any) => {
+    await this.db.transaction(async (client: any) => {
       const lines = await client.query(
         `SELECT account_id, debit, credit FROM ledger_entries WHERE journal_entry_id = $1 AND tenant_id = $2`,
         [expense.journalEntryId, tenantId]
@@ -358,6 +363,8 @@ export class ExpenseService {
       await client.execute('DELETE FROM expenses WHERE id = $1 AND tenant_id = $2', [expenseId, tenantId]);
       await client.execute('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
   }
 
   /** Get expense categories for tenant */

@@ -3,15 +3,16 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { customerApi } from '../api';
 
-const STATUS_STEPS = ['Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
+const DELIVERY_STEPS = ['Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
+const PICKUP_STEPS = ['Pending', 'Confirmed', 'Packed', 'Delivered'];
 
-const statusLabel = (s: string): string => {
+const statusLabel = (s: string, isPickup: boolean): string => {
     const labels: Record<string, string> = {
         Pending: 'Order Placed',
         Confirmed: 'Confirmed by Shop',
         Packed: 'Packed & Ready',
         OutForDelivery: 'Out for Delivery',
-        Delivered: 'Delivered',
+        Delivered: isPickup ? 'Collected' : 'Delivered',
         Cancelled: 'Cancelled',
     };
     return labels[s] || s;
@@ -91,7 +92,9 @@ export default function OrderDetail() {
         );
     }
 
-    const currentStepIdx = STATUS_STEPS.indexOf(order.status);
+    const isPickup = order.payment_method === 'SelfCollection';
+    const statusSteps = isPickup ? PICKUP_STEPS : DELIVERY_STEPS;
+    const currentStepIdx = statusSteps.indexOf(order.status);
 
     return (
         <div className="page slide-up">
@@ -108,7 +111,7 @@ export default function OrderDetail() {
                     <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatDate(order.created_at)}</p>
                 </div>
                 <span className={`status-badge status-${order.status}`} style={{ marginLeft: 'auto' }}>
-                    {statusLabel(order.status)}
+                    {statusLabel(order.status, isPickup)}
                 </span>
             </div>
 
@@ -120,7 +123,7 @@ export default function OrderDetail() {
                 }}>
                     <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Order Status</h3>
                     <div className="status-timeline">
-                        {STATUS_STEPS.map((step, idx) => {
+                        {statusSteps.map((step, idx) => {
                             const isCompleted = idx < currentStepIdx;
                             const isActive = idx === currentStepIdx;
                             return (
@@ -133,7 +136,7 @@ export default function OrderDetail() {
                                         ) : null}
                                     </div>
                                     <div className="step-info">
-                                        <h4>{statusLabel(step)}</h4>
+                                        <h4>{statusLabel(step, isPickup)}</h4>
                                         {(isActive || isCompleted) && order.status_history && (
                                             <p>{formatDate(order.status_history.find((h: any) => h.to_status === step)?.created_at || order.created_at)}</p>
                                         )}
@@ -188,7 +191,12 @@ export default function OrderDetail() {
                         </div>
                     )}
                     <div className="summary-row">
-                        <span>Delivery</span><span>{formatPrice(parseFloat(order.delivery_fee))}</span>
+                        <span>{isPickup ? 'Pickup' : 'Delivery'}</span>
+                        <span>
+                            {parseFloat(order.delivery_fee) === 0
+                                ? <span style={{ color: 'var(--accent)' }}>FREE</span>
+                                : formatPrice(parseFloat(order.delivery_fee))}
+                        </span>
                     </div>
                     <div className="summary-row total">
                         <span>Total</span><span>{formatPrice(parseFloat(order.grand_total))}</span>
@@ -196,19 +204,31 @@ export default function OrderDetail() {
                 </div>
             </div>
 
-            {/* Delivery Info */}
+            {/* Delivery / pickup */}
             {order.delivery_address && (
                 <div style={{
                     background: 'white', borderRadius: 'var(--radius-lg)',
                     border: '1px solid var(--border-light)', padding: 16, marginBottom: 16,
                 }}>
-                    <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>📍 Delivery</h3>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{isPickup ? '🏪 Pickup' : '📍 Delivery'}</h3>
                     <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{order.delivery_address}</p>
                     {order.delivery_notes && (
                         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Note: {order.delivery_notes}</p>
                     )}
                 </div>
             )}
+
+            <div style={{
+                background: 'white', borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--border-light)', padding: 16, marginBottom: 16,
+            }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>💳 Payment</h3>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                    {order.payment_method === 'SelfCollection'
+                        ? 'Self collection — pay at the branch when you collect'
+                        : 'Cash on delivery'}
+                </p>
+            </div>
 
             {/* Cancel button */}
             {order.status === 'Pending' && (

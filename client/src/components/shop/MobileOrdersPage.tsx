@@ -37,6 +37,20 @@ const NEXT_STATUS: Record<string, string> = {
     OutForDelivery: 'Delivered',
 };
 
+/** Self-collection orders skip the courier step: Packed → Delivered. */
+function getNextMobileOrderStatus(order: Pick<MobileOrder, 'status' | 'payment_method'>): string | undefined {
+    if (order.status === 'Packed' && order.payment_method === 'SelfCollection') {
+        return 'Delivered';
+    }
+    return NEXT_STATUS[order.status];
+}
+
+function formatMobilePaymentMethod(pm: string | undefined): string {
+    if (pm === 'SelfCollection') return 'Self collection';
+    if (pm === 'COD') return 'Cash on delivery';
+    return pm || '—';
+}
+
 const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Unpaid', 'Cancelled'];
 
 // ─── Main Page ────────────────────────────────────────────
@@ -229,7 +243,7 @@ function MobileOrdersPageContent() {
                         orders.map(order => {
                             const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Pending;
                             const StatusIcon = cfg.icon;
-                            const nextStatus = NEXT_STATUS[order.status];
+                            const nextStatus = getNextMobileOrderStatus(order);
 
                             return (
                                 <div
@@ -262,7 +276,7 @@ function MobileOrdersPageContent() {
                                             <Phone className="w-3 h-3" />{order.customer_phone}
                                         </span>
                                         <span className={`flex items-center gap-1 font-medium ${order.payment_status === 'Paid' ? 'text-green-600' : 'text-orange-600'}`}>
-                                            <FileText className="w-3 h-3" />{order.payment_method} ({order.payment_status || 'Unpaid'})
+                                            <FileText className="w-3 h-3" />{formatMobilePaymentMethod(order.payment_method)} ({order.payment_status || 'Unpaid'})
                                         </span>
                                     </div>
 
@@ -279,7 +293,9 @@ function MobileOrdersPageContent() {
                                                 ) : (
                                                     <Check className="w-3.5 h-3.5" />
                                                 )}
-                                                {nextStatus === 'Delivered' ? 'Mark Delivered' : STATUS_CONFIG[nextStatus]?.label || nextStatus}
+                                                {nextStatus === 'Delivered'
+                                                    ? (order.status === 'Packed' && order.payment_method === 'SelfCollection' ? 'Mark Collected' : 'Mark Delivered')
+                                                    : STATUS_CONFIG[nextStatus]?.label || nextStatus}
                                             </button>
                                             {order.status === 'Pending' && (
                                                 <button
@@ -453,7 +469,7 @@ function OrderDetailPanel({
     formatDate: (d: string) => string;
 }) {
     const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Pending;
-    const nextStatus = NEXT_STATUS[order.status];
+    const nextStatus = getNextMobileOrderStatus(order);
     const isUnpaid = order.status === 'Delivered' && order.payment_status !== 'Paid';
 
     return (
@@ -498,7 +514,7 @@ function OrderDetailPanel({
                 <div>
                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Payment</h4>
                     <div className="flex items-center gap-2 text-sm">
-                        <span className="text-gray-700">{order.payment_method}</span>
+                        <span className="text-gray-700">{formatMobilePaymentMethod(order.payment_method)}</span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${order.payment_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                             {order.payment_status || 'Unpaid'}
                         </span>
@@ -589,7 +605,9 @@ function OrderDetailPanel({
                         ) : (
                             <Check className="w-4 h-4" />
                         )}
-                        {nextStatus === 'Delivered' ? 'Mark Delivered' : `Mark as ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
+                        {nextStatus === 'Delivered'
+                            ? (order.status === 'Packed' && order.payment_method === 'SelfCollection' ? 'Mark Collected' : 'Mark Delivered')
+                            : `Mark as ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
                     </button>
                     {order.status === 'Pending' && (
                         <button

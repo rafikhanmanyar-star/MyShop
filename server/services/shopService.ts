@@ -318,7 +318,7 @@ export class ShopService {
   }
 
   async createProduct(tenantId: string, data: any) {
-    return this.db.transaction(async (client) => {
+    const productId = await this.db.transaction(async (client) => {
       let categoryId = data.category_id || null;
       if (categoryId && categoryId.length < 32) {
         const catRes = await client.query(
@@ -332,20 +332,20 @@ export class ShopService {
         const sku = data.sku || `SKU-${Date.now()}`;
 
         const mobileDesc = data.mobile_description ?? data.description ?? null;
-        // 1. Ensure product is created
+        const createdBy = data.created_by || data.createdBy || null;
         const res = await client.query(`
           INSERT INTO shop_products (
             tenant_id, name, sku, barcode, category_id, unit,
-            cost_price, retail_price, tax_rate, reorder_point, image_url, is_active, mobile_description
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id
+            cost_price, retail_price, tax_rate, reorder_point, image_url, is_active, mobile_description, created_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id
         `, [
           tenantId, data.name, sku, data.barcode || null,
           categoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
-          data.tax_rate || 0, data.reorder_point || 10, normalizeImageUrl(data.image_url), true, mobileDesc
+          data.tax_rate || 0, data.reorder_point || 10, normalizeImageUrl(data.image_url), true, mobileDesc,
+          createdBy,
         ]);
-        const productId = res[0].id;
+        const pid = res[0].id;
 
-        // 2. Ensure default warehouse exists and link product to it
         let whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
         let warehouseId;
 
@@ -359,20 +359,22 @@ export class ShopService {
           warehouseId = whRes[0].id;
         }
 
-        // 3. Create initial inventory record
         await client.query(`
           INSERT INTO shop_inventory (tenant_id, product_id, warehouse_id, quantity_on_hand)
           VALUES ($1, $2, $3, 0)
           ON CONFLICT (tenant_id, product_id, warehouse_id) DO NOTHING
-        `, [tenantId, productId, warehouseId]);
+        `, [tenantId, pid, warehouseId]);
 
-        return productId;
+        return pid;
       } catch (err: any) {
         console.error('❌ [ShopService] createProduct failed:', err);
         if (err.code === '23505') throw new Error(`SKU already exists.`);
         throw new Error(err.message || 'Unknown database error');
       }
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
+    return productId;
   }
 
   async updateProduct(tenantId: string, productId: string, data: any) {
@@ -486,7 +488,7 @@ export class ShopService {
     productId: string; warehouseId: string; quantity: number;
     type: string; referenceId?: string; reason?: string; userId: string;
   }) {
-    return this.db.transaction(async (client) => {
+    const row = await this.db.transaction(async (client) => {
       const updateRes = await client.query(`
         INSERT INTO shop_inventory (tenant_id, product_id, warehouse_id, quantity_on_hand, updated_at)
         VALUES ($1, $2, $3, $4, NOW())
@@ -503,6 +505,9 @@ export class ShopService {
 
       return updateRes[0];
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
+    return row;
   }
 
   // --- Sales Methods ---
@@ -649,6 +654,9 @@ export class ShopService {
 
     // Fire-and-forget: update popularity scores outside the transaction
     this.recalculatePopularityScores(tenantId).catch(err => console.error('PopScore Error:', err));
+
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
 
     return result;
   }

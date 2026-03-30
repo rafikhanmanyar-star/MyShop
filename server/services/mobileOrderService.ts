@@ -286,7 +286,7 @@ export class MobileOrderService {
             if (defaultBranch.length > 0) effectiveBranchId = defaultBranch[0].id;
         }
 
-        return this.db.transaction(async (client: any) => {
+        const placed = await this.db.transaction(async (client: any) => {
             // 1. Get all products and lock inventory rows for order products (for consistent stock check)
             const productIds = [...new Set(input.items.map((i: any) => i.productId))];
             const invRows = productIds.length > 0
@@ -421,6 +421,9 @@ export class MobileOrderService {
             }
 
             // 3. Get delivery fee from settings
+            const rawPm = (input.paymentMethod || 'COD').trim();
+            const paymentMethod = rawPm === 'SelfCollection' ? 'SelfCollection' : 'COD';
+
             const settingsRes = await client.query(
                 'SELECT delivery_fee, free_delivery_above, minimum_order_amount FROM mobile_ordering_settings WHERE tenant_id = $1',
                 [tenantId]
@@ -435,6 +438,9 @@ export class MobileOrderService {
                 if (s.minimum_order_amount && subtotal < parseFloat(s.minimum_order_amount)) {
                     throw new Error(`Minimum order amount is ${s.minimum_order_amount}. Your cart total is ${subtotal.toFixed(2)}.`);
                 }
+            }
+            if (paymentMethod === 'SelfCollection') {
+                deliveryFee = 0;
             }
 
             subtotal = Math.round(subtotal * 100) / 100;
@@ -456,7 +462,7 @@ export class MobileOrderService {
                 [
                     orderId, tenantId, input.customerId, effectiveBranchId,
                     orderNumber, subtotal, taxTotal, deliveryFee, grandTotal,
-                    input.paymentMethod || 'COD',
+                    paymentMethod,
                     input.deliveryAddress || null, input.deliveryLat || null,
                     input.deliveryLng || null, input.deliveryNotes || null,
                     input.idempotencyKey || null,
@@ -517,6 +523,9 @@ export class MobileOrderService {
                 duplicate: false,
             };
         });
+        const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+        notifyDailyReportUpdated(tenantId).catch(() => {});
+        return placed;
     }
 
     // ─── Order Queries ─────────────────────────────────────────────────
@@ -616,18 +625,23 @@ export class MobileOrderService {
         }
 
         const orders = await this.db.query(
-            'SELECT id, status, customer_id FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
+            'SELECT id, status, customer_id, payment_method FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
             [orderId, tenantId]
         );
         if (orders.length === 0) throw new Error('Order not found');
 
         const currentStatus = orders[0].status;
-        const allowed = VALID_TRANSITIONS[currentStatus] || [];
+        const paymentMethod = orders[0].payment_method || 'COD';
+
+        let allowed = [...(VALID_TRANSITIONS[currentStatus] || [])];
+        if (currentStatus === 'Packed' && paymentMethod === 'SelfCollection') {
+            allowed.push('Delivered');
+        }
         if (!allowed.includes(newStatus)) {
             throw new Error(`Cannot transition from "${currentStatus}" to "${newStatus}". Allowed: ${allowed.join(', ') || 'none (terminal state)'}`);
         }
 
-        return this.db.transaction(async (client: any) => {
+        const result = await this.db.transaction(async (client: any) => {
             // Update order
             const updateFields: string[] = [`status = $1`, `updated_at = NOW()`];
             const updateParams: any[] = [newStatus];
@@ -707,6 +721,9 @@ export class MobileOrderService {
 
             return { success: true, orderId, from: currentStatus, to: newStatus };
         });
+        const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+        notifyDailyReportUpdated(tenantId).catch(() => {});
+        return result;
     }
 
     private async adjustInventoryForOrder(client: any, tenantId: string, orderId: string, action: 'confirm' | 'cancel') {

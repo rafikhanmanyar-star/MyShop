@@ -239,7 +239,10 @@ router.get('/popular-products', async (req: any, res) => {
 
 router.post('/products', async (req: any, res) => {
   try {
-    const productId = await getShopService().createProduct(req.tenantId, req.body);
+    const productId = await getShopService().createProduct(req.tenantId, {
+      ...req.body,
+      created_by: req.userId,
+    });
     res.status(201).json({ id: productId, message: 'Product created successfully' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

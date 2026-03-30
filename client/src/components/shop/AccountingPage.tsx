@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AccountingProvider, useAccounting } from '../../context/AccountingContext';
 import AccountingDashboard from './accounting/AccountingDashboard';
 import GeneralLedger from './accounting/GeneralLedger';
@@ -103,7 +104,13 @@ const AccountingContent: React.FC = () => {
                         <h1 className="text-2xl font-black text-slate-800 tracking-tight">Financial Engine</h1>
                         <p className="text-slate-500 text-sm font-medium">POS source-of-truth automated accounting.</p>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 flex-wrap">
+                        <Link
+                            to="/accounting/reports/daily"
+                            className="px-4 py-2 bg-white border border-slate-200 text-slate-800 rounded-xl text-sm font-bold shadow-sm hover:border-indigo-300 hover:text-indigo-700 transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"
+                        >
+                            {ICONS.barChart} Daily Report
+                        </Link>
                         <button
                             onClick={() => setIsJournalModalOpen(true)}
                             className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold shadow-lg shadow-slate-200 hover:bg-black transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"

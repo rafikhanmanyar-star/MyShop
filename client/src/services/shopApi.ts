@@ -215,6 +215,46 @@ export const accountingApi = {
   getCategoryPerformance: () => apiClient.get<any[]>('/shop/accounting/category-performance'),
   getTransactions: (limit = 50) => apiClient.get<any[]>(`/shop/accounting/transactions?limit=${limit}`),
   clearAllTransactions: () => apiClient.post<{ success: boolean; message: string }>('/shop/accounting/clear-transactions'),
+
+  dailyReportSummary: (date: string, branchId?: string | null) => {
+    const q = new URLSearchParams();
+    q.set('date', date);
+    if (branchId) q.set('branchId', branchId);
+    return apiClient.get<{
+      date: string;
+      branchId: string | null;
+      posSales: number;
+      mobileSales: number;
+      inventoryOutQty: number;
+      inventoryInQty: number;
+      totalExpenses: number;
+      newProductsCount: number;
+      netProfitDaily: number;
+    }>(`/shop/accounting/reports/daily/summary?${q.toString()}`);
+  },
+  dailyReportInventoryOut: (date: string, branchId?: string | null) => {
+    const q = new URLSearchParams();
+    q.set('date', date);
+    if (branchId) q.set('branchId', branchId);
+    return apiClient.get<{ rows: any[] }>(`/shop/accounting/reports/daily/inventory-out?${q.toString()}`);
+  },
+  dailyReportInventoryIn: (date: string, branchId?: string | null) => {
+    const q = new URLSearchParams();
+    q.set('date', date);
+    if (branchId) q.set('branchId', branchId);
+    return apiClient.get<{ rows: any[] }>(`/shop/accounting/reports/daily/inventory-in?${q.toString()}`);
+  },
+  dailyReportExpenses: (date: string, branchId?: string | null) => {
+    const q = new URLSearchParams();
+    q.set('date', date);
+    if (branchId) q.set('branchId', branchId);
+    return apiClient.get<{ rows: any[] }>(`/shop/accounting/reports/daily/expenses?${q.toString()}`);
+  },
+  dailyReportProductsCreated: (date: string) => {
+    const q = new URLSearchParams();
+    q.set('date', date);
+    return apiClient.get<{ rows: any[] }>(`/shop/accounting/reports/daily/products-created?${q.toString()}`);
+  },
 };
 
 // --- Expenses API ---

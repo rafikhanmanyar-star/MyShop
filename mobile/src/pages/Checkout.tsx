@@ -5,6 +5,8 @@ import { customerApi } from '../api';
 import { useOnline } from '../hooks/useOnline';
 import { placeOrderOfflineFirst } from '../services/orderSyncService';
 
+type PaymentChoice = 'COD' | 'SelfCollection';
+
 export default function Checkout() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
@@ -13,6 +15,7 @@ export default function Checkout() {
 
     const [address, setAddress] = useState('');
     const [notes, setNotes] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>('COD');
     const [loading, setLoading] = useState(false);
     const defaultAddressFetched = useRef(false);
 
@@ -36,7 +39,10 @@ export default function Checkout() {
 
     const deliveryFee = state.settings?.delivery_fee || 0;
     const freeAbove = state.settings?.free_delivery_above;
-    const actualDelivery = freeAbove && cartTotal >= freeAbove ? 0 : deliveryFee;
+    const isPickup = paymentMethod === 'SelfCollection';
+    const actualDelivery = isPickup
+        ? 0
+        : (freeAbove && cartTotal >= freeAbove ? 0 : deliveryFee);
     const tax = state.cart.reduce((sum, i) => sum + i.price * i.quantity * (i.tax_rate / 100), 0);
     const grandTotal = cartTotal + tax + actualDelivery;
 
@@ -46,8 +52,14 @@ export default function Checkout() {
         return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
     };
 
+    const selfCollectionAddress = () => {
+        const branch = state.shop?.branchName || state.shop?.company_name || 'the branch';
+        const loc = state.shop?.address ? ` ${state.shop.address}` : '';
+        return `Self collection — ${branch}.${loc}`.trim();
+    };
+
     const handlePlaceOrder = async () => {
-        if (!address.trim()) {
+        if (!isPickup && !address.trim()) {
             showToast('Please enter your delivery address');
             return;
         }
@@ -55,11 +67,12 @@ export default function Checkout() {
         setLoading(true);
         try {
             const idempotencyKey = `order_${state.customerId ?? 'guest'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const deliveryAddress = isPickup ? selfCollectionAddress() : address.trim();
             const payload = {
                 items: state.cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
-                deliveryAddress: address,
+                deliveryAddress,
                 deliveryNotes: notes || undefined,
-                paymentMethod: 'COD' as const,
+                paymentMethod,
                 idempotencyKey,
                 ...(state.branchId ? { branchId: state.branchId } : {}),
             };
@@ -68,7 +81,8 @@ export default function Checkout() {
 
             if (result.synced && result.orderId) {
                 dispatch({ type: 'CLEAR_CART' });
-                navigate(`/${shopSlug}/order-confirmed/${result.orderId}`, { replace: true });
+                const q = paymentMethod === 'SelfCollection' ? '?pickup=1' : '';
+                navigate(`/${shopSlug}/order-confirmed/${result.orderId}${q}`, { replace: true });
             } else if (result.localId) {
                 dispatch({ type: 'CLEAR_CART' });
                 showToast('Order saved. We\'ll send it when you\'re back online.');
@@ -83,10 +97,21 @@ export default function Checkout() {
         }
     };
 
+    const canSubmit = isPickup || address.trim().length > 0;
+
     if (state.cart.length === 0) {
         navigate(`/${shopSlug}/cart`, { replace: true });
         return null;
     }
+
+    const optionCard = (active: boolean) => ({
+        display: 'flex', alignItems: 'flex-start', gap: 12,
+        padding: '12px', background: 'var(--bg)', borderRadius: 'var(--radius)',
+        border: active ? '2px solid var(--primary)' : '1px solid var(--border-light)',
+        cursor: 'pointer',
+        textAlign: 'left' as const,
+        width: '100%',
+    });
 
     return (
         <div className="page slide-up">
@@ -100,62 +125,108 @@ export default function Checkout() {
                 <h1>Checkout</h1>
             </div>
 
-            {/* Delivery Address */}
+            {/* Payment / fulfillment — choose before address so copy matches */}
             <div style={{
                 background: 'white', borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-light)', padding: 16, marginBottom: 16,
             }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>📍 Delivery Address</h3>
-                <textarea
-                    className="input"
-                    placeholder="Enter your full delivery address"
-                    rows={3}
-                    value={address}
-                    onChange={e => setAddress(e.target.value)}
-                    style={{ resize: 'none' }}
-                />
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-                    Your default address from registration is shown. You can edit it for this order.
-                </p>
-
-                <div className="input-group" style={{ marginTop: 12, marginBottom: 0 }}>
-                    <label>Delivery Notes (optional)</label>
-                    <input
-                        className="input"
-                        type="text"
-                        placeholder="e.g. Ring the bell, leave at door"
-                        value={notes}
-                        onChange={e => setNotes(e.target.value)}
-                    />
-                </div>
-            </div>
-
-            {/* Payment Method */}
-            <div style={{
-                background: 'white', borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--border-light)', padding: 16, marginBottom: 16,
-            }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>💳 Payment Method</h3>
-                <div style={{
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '12px', background: 'var(--bg)', borderRadius: 'var(--radius)',
-                    border: '2px solid var(--primary)',
-                }}>
-                    <div style={{
-                        width: 20, height: 20, borderRadius: '50%',
-                        border: '2px solid var(--primary)', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center',
-                    }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>💳 How do you want to receive your order?</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <button type="button" onClick={() => setPaymentMethod('COD')} style={optionCard(paymentMethod === 'COD')}>
                         <div style={{
-                            width: 10, height: 10, borderRadius: '50%', background: 'var(--primary)',
-                        }} />
-                    </div>
-                    <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>Cash on Delivery</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Pay when your order arrives</div>
-                    </div>
+                            width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                            border: '2px solid var(--primary)', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            {paymentMethod === 'COD' && (
+                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--primary)' }} />
+                            )}
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>Cash on delivery</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                We deliver to your address. Pay when the order arrives.
+                            </div>
+                        </div>
+                    </button>
+                    <button type="button" onClick={() => setPaymentMethod('SelfCollection')} style={optionCard(paymentMethod === 'SelfCollection')}>
+                        <div style={{
+                            width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                            border: '2px solid var(--primary)', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            {paymentMethod === 'SelfCollection' && (
+                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--primary)' }} />
+                            )}
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>Self collection</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                The branch will pack your items. You visit the branch, pay the bill, and collect your order.
+                            </div>
+                        </div>
+                    </button>
                 </div>
             </div>
+
+            {isPickup ? (
+                <div style={{
+                    background: 'white', borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--border-light)', padding: 16, marginBottom: 16,
+                }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>🏪 Pickup</h3>
+                    <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                        No delivery fee. When your order is ready, come to the branch to pay and pick up your items.
+                    </p>
+                    {(state.shop?.branchName || state.shop?.address) && (
+                        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 10 }}>
+                            {state.shop?.branchName && <strong>{state.shop.branchName}</strong>}
+                            {state.shop?.address && (
+                                <span>{state.shop.branchName ? ' · ' : ''}{state.shop.address}</span>
+                            )}
+                        </p>
+                    )}
+                    <div className="input-group" style={{ marginTop: 14, marginBottom: 0 }}>
+                        <label>Notes for the shop (optional)</label>
+                        <input
+                            className="input"
+                            type="text"
+                            placeholder="e.g. Call me when ready"
+                            value={notes}
+                            onChange={e => setNotes(e.target.value)}
+                        />
+                    </div>
+                </div>
+            ) : (
+                <div style={{
+                    background: 'white', borderRadius: 'var(--radius-lg)',
+                    border: '1px solid var(--border-light)', padding: 16, marginBottom: 16,
+                }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>📍 Delivery Address</h3>
+                    <textarea
+                        className="input"
+                        placeholder="Enter your full delivery address"
+                        rows={3}
+                        value={address}
+                        onChange={e => setAddress(e.target.value)}
+                        style={{ resize: 'none' }}
+                    />
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                        Your default address from registration is shown. You can edit it for this order.
+                    </p>
+
+                    <div className="input-group" style={{ marginTop: 12, marginBottom: 0 }}>
+                        <label>Delivery Notes (optional)</label>
+                        <input
+                            className="input"
+                            type="text"
+                            placeholder="e.g. Ring the bell, leave at door"
+                            value={notes}
+                            onChange={e => setNotes(e.target.value)}
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* Order Summary */}
             <div style={{
@@ -186,8 +257,12 @@ export default function Checkout() {
                         </div>
                     )}
                     <div className="summary-row">
-                        <span>Delivery</span>
-                        <span>{actualDelivery === 0 ? <span style={{ color: 'var(--accent)' }}>FREE</span> : formatPrice(actualDelivery)}</span>
+                        <span>{isPickup ? 'Pickup' : 'Delivery'}</span>
+                        <span>
+                            {actualDelivery === 0
+                                ? <span style={{ color: 'var(--accent)' }}>FREE</span>
+                                : formatPrice(actualDelivery)}
+                        </span>
                     </div>
                     <div className="summary-row total">
                         <span>Total</span>
@@ -196,8 +271,8 @@ export default function Checkout() {
                 </div>
             </div>
 
-            {/* ETA */}
-            {state.settings?.estimated_delivery_minutes && (
+            {/* ETA — home delivery only */}
+            {!isPickup && state.settings?.estimated_delivery_minutes && (
                 <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
                     🕐 Estimated delivery in {state.settings.estimated_delivery_minutes} minutes
                 </p>
@@ -212,7 +287,7 @@ export default function Checkout() {
             <button
                 className="btn btn-primary btn-full"
                 onClick={handlePlaceOrder}
-                disabled={loading || !address.trim()}
+                disabled={loading || !canSubmit}
                 style={{ padding: 16, fontSize: 16, borderRadius: 'var(--radius-lg)' }}
             >
                 {loading ? (

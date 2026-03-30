@@ -1,9 +1,11 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 export default function OrderConfirm() {
     const { shopSlug, orderId } = useParams();
+    const [searchParams] = useSearchParams();
     const { state } = useApp();
+    const isPickup = searchParams.get('pickup') === '1';
 
     return (
         <div className="page fade-in" style={{ textAlign: 'center', paddingTop: 60 }}>
@@ -24,7 +26,9 @@ export default function OrderConfirm() {
                 Order Placed!
             </h1>
             <p style={{ fontSize: 15, color: 'var(--text-secondary)', marginBottom: 24 }}>
-                Your order has been placed successfully
+                {isPickup
+                    ? 'We will prepare your items. Visit the branch to pay and collect when ready.'
+                    : 'Your order has been placed successfully'}
             </p>
 
             <div style={{
@@ -40,7 +44,7 @@ export default function OrderConfirm() {
                     <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Status</span>
                     <span className="status-badge status-Pending">Pending</span>
                 </div>
-                {state.settings?.estimated_delivery_minutes && (
+                {!isPickup && state.settings?.estimated_delivery_minutes && (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Estimated Delivery</span>
                         <span style={{ fontSize: 14, fontWeight: 600 }}>

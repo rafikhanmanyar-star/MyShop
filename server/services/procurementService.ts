@@ -60,7 +60,7 @@ export class ProcurementService {
    * insert movements, post double-entry (Inventory ↑, AP or Cash/Bank).
    */
   async createPurchaseBill(tenantId: string, data: CreatePurchaseBillInput): Promise<string> {
-    return this.db.transaction(async (client) => {
+    const billId = await this.db.transaction(async (client) => {
       const balanceDue = data.totalAmount - (data.paidAmount || 0);
       const status =
         balanceDue <= 0 ? 'Paid' : (data.paidAmount && data.paidAmount > 0 ? 'Partial' : 'Posted');
@@ -185,6 +185,9 @@ export class ProcurementService {
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
       return billId;
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
+    return billId;
   }
 
   private async postPurchaseToAccounting(
@@ -308,7 +311,7 @@ export class ProcurementService {
       totalAmount: number;
     }
   ): Promise<void> {
-    return this.db.transaction(async (client) => {
+    await this.db.transaction(async (client) => {
       const billRows = await client.query(
         `SELECT id, bill_number, total_amount, paid_amount, initial_payment_bank_account_id
          FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
@@ -501,6 +504,8 @@ export class ProcurementService {
 
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
   }
 
   /**
@@ -508,7 +513,7 @@ export class ProcurementService {
    * Reverses accounting (journal reversal), bank balance (if initial payment), and inventory.
    */
   async deletePurchaseBill(tenantId: string, billId: string): Promise<void> {
-    return this.db.transaction(async (client) => {
+    await this.db.transaction(async (client) => {
       const linked = await client.query(
         `SELECT 1 FROM purchase_bill_payments WHERE tenant_id = $1 AND purchase_bill_id = $2 LIMIT 1`,
         [tenantId, billId]
@@ -589,6 +594,8 @@ export class ProcurementService {
       await client.query('DELETE FROM purchase_bills WHERE tenant_id = $1 AND id = $2', [tenantId, billId]);
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
   }
 
   /**

@@ -23,6 +23,7 @@ const LoyaltyPage = lazy(() => import('./components/shop/LoyaltyPage'));
 const MultiStorePage = lazy(() => import('./components/shop/MultiStorePage'));
 const BIDashboardsPage = lazy(() => import('./components/shop/BIDashboardsPage'));
 const AccountingPage = lazy(() => import('./components/shop/AccountingPage'));
+const DailyReportPage = lazy(() => import('./components/shop/accounting/DailyReportPage'));
 const ExpensePage = lazy(() => import('./components/shop/expenses/ExpensePage'));
 const MobileOrdersPage = lazy(() => import('./components/shop/MobileOrdersPage'));
 const ForecastPage = lazy(() => import('./components/shop/ForecastPage'));
@@ -206,6 +207,10 @@ function AppLayout() {
               <Route path="/shifts" element={['admin', 'accountant'].includes(role) ? <ShiftsAdminPage /> : <Navigate to="/" replace />} />
               <Route path="/analytics" element={['admin', 'accountant'].includes(role) ? <BIDashboardsPage /> : <Navigate to="/" replace />} />
               <Route path="/accounting" element={['admin', 'accountant'].includes(role) ? <AccountingPage /> : <Navigate to="/" replace />} />
+              <Route
+                path="/accounting/reports/daily/*"
+                element={['admin', 'accountant'].includes(role) ? <DailyReportPage /> : <Navigate to="/" replace />}
+              />
               <Route path="/expenses" element={['admin', 'accountant'].includes(role) ? <ExpensePage /> : <Navigate to="/" replace />} />
               <Route path="/forecast" element={['admin', 'accountant'].includes(role) ? <ForecastPage /> : <Navigate to="/" replace />} />
               <Route path="/settings" element={<SettingsPage />} />

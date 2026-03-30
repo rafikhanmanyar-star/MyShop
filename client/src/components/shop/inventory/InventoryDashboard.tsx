@@ -1,16 +1,44 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import { useInventory } from '../../../context/InventoryContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
-import { shopApi } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
+import type { InventoryItem } from '../../../types/inventory';
+import WarehouseHeatmapModal from './WarehouseHeatmapModal';
 
 const BAR_COLORS = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-500'];
+
+type CriticalSortKey = 'name' | 'category' | 'onHand' | 'reorderPoint' | 'status';
+
+type ColWidthKey = 'item' | 'category' | 'onHand' | 'reorder' | 'status';
+
+const MIN_COL_PX = 72;
+const DEFAULT_COL_WIDTHS: Record<ColWidthKey, number> = {
+    item: 220,
+    category: 140,
+    onHand: 100,
+    reorder: 120,
+    status: 128,
+};
+
+function SortGlyph({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
+    if (!active) return <ArrowUpDown className="w-3.5 h-3.5 shrink-0 opacity-40" strokeWidth={2} aria-hidden />;
+    return dir === 'asc' ? (
+        <ChevronUp className="w-3.5 h-3.5 shrink-0 text-indigo-600" strokeWidth={2} aria-hidden />
+    ) : (
+        <ChevronDown className="w-3.5 h-3.5 shrink-0 text-indigo-600" strokeWidth={2} aria-hidden />
+    );
+}
 
 const InventoryDashboard: React.FC = () => {
     const { items, lowStockItems, totalInventoryValue, warehouses } = useInventory();
     const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+    const [sortKey, setSortKey] = useState<CriticalSortKey>('name');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+    const [colWidths, setColWidths] = useState<Record<ColWidthKey, number>>(() => ({ ...DEFAULT_COL_WIDTHS }));
+    const [heatmapOpen, setHeatmapOpen] = useState(false);
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -43,11 +71,84 @@ const InventoryDashboard: React.FC = () => {
         );
     }, [lowStockItems, selectedCategoryId, categories]);
 
-    const getCategoryDisplayName = (itemCategory: string | undefined) => {
+    const getCategoryDisplayName = useCallback((itemCategory: string | undefined) => {
         if (!itemCategory) return 'General';
         const cat = categories.find(c => c.id === itemCategory || c.name === itemCategory);
         return cat ? cat.name : itemCategory;
-    };
+    }, [categories]);
+
+    const toggleSort = useCallback((key: CriticalSortKey) => {
+        setSortKey((prev) => {
+            if (prev === key) {
+                setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+                return prev;
+            }
+            setSortDir('asc');
+            return key;
+        });
+    }, []);
+
+    const colWidthsRef = useRef(colWidths);
+    colWidthsRef.current = colWidths;
+
+    const beginColumnResize = useCallback((e: React.MouseEvent, column: ColWidthKey) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX;
+        const startW = colWidthsRef.current[column];
+        const onMove = (ev: MouseEvent) => {
+            const delta = ev.clientX - startX;
+            const next = Math.max(MIN_COL_PX, startW + delta);
+            setColWidths((w) => ({ ...w, [column]: next }));
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    }, []);
+
+    const sortedLowStockItems = useMemo(() => {
+        const list: InventoryItem[] = [...filteredLowStockItems];
+        const mul = sortDir === 'asc' ? 1 : -1;
+        list.sort((a, b) => {
+            let cmp = 0;
+            switch (sortKey) {
+                case 'name': {
+                    const an = `${a.name}\0${a.sku}`.toLowerCase();
+                    const bn = `${b.name}\0${b.sku}`.toLowerCase();
+                    cmp = an.localeCompare(bn);
+                    break;
+                }
+                case 'category':
+                    cmp = getCategoryDisplayName(a.category).localeCompare(getCategoryDisplayName(b.category));
+                    break;
+                case 'onHand':
+                    cmp = a.onHand - b.onHand;
+                    break;
+                case 'reorderPoint':
+                    cmp = a.reorderPoint - b.reorderPoint;
+                    break;
+                case 'status': {
+                    const av = a.onHand <= 0 ? 0 : 1;
+                    const bv = b.onHand <= 0 ? 0 : 1;
+                    cmp = av - bv;
+                    if (cmp === 0) cmp = a.onHand - b.onHand;
+                    break;
+                }
+                default:
+                    break;
+            }
+            if (cmp === 0) cmp = a.name.localeCompare(b.name);
+            return cmp * mul;
+        });
+        return list;
+    }, [filteredLowStockItems, sortKey, sortDir, getCategoryDisplayName]);
 
     const stats = [
         { label: 'Total SKUs', value: items.length, icon: ICONS.package, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -98,29 +199,122 @@ const InventoryDashboard: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
-                        <table className="w-full text-left">
+                        <table className="w-full table-fixed text-left">
                             <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
                                 <tr>
-                                    <th className="px-6 py-4 bg-slate-50">Item Name / SKU</th>
-                                    <th className="px-6 py-4 bg-slate-50">Category</th>
-                                    <th className="px-6 py-4 bg-slate-50">On Hand</th>
-                                    <th className="px-6 py-4 bg-slate-50">Reorder Point</th>
-                                    <th className="px-6 py-4 bg-slate-50">Status</th>
+                                    <th
+                                        style={{ width: colWidths.item, minWidth: MIN_COL_PX }}
+                                        className="relative px-6 py-4 bg-slate-50 group align-bottom"
+                                        {...(sortKey === 'name' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            onClick={() => toggleSort('name')}
+                                        >
+                                            Item Name / SKU
+                                            <SortGlyph active={sortKey === 'name'} dir={sortDir} />
+                                        </button>
+                                        <div
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30"
+                                            onMouseDown={(e) => beginColumnResize(e, 'item')}
+                                            title="Drag to resize"
+                                            role="separator"
+                                            aria-orientation="vertical"
+                                        />
+                                    </th>
+                                    <th
+                                        style={{ width: colWidths.category, minWidth: MIN_COL_PX }}
+                                        className="relative px-6 py-4 bg-slate-50 group align-bottom"
+                                        {...(sortKey === 'category' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            onClick={() => toggleSort('category')}
+                                        >
+                                            Category
+                                            <SortGlyph active={sortKey === 'category'} dir={sortDir} />
+                                        </button>
+                                        <div
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30"
+                                            onMouseDown={(e) => beginColumnResize(e, 'category')}
+                                            title="Drag to resize"
+                                            role="separator"
+                                            aria-orientation="vertical"
+                                        />
+                                    </th>
+                                    <th
+                                        style={{ width: colWidths.onHand, minWidth: MIN_COL_PX }}
+                                        className="relative px-6 py-4 bg-slate-50 group align-bottom"
+                                        {...(sortKey === 'onHand' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            onClick={() => toggleSort('onHand')}
+                                        >
+                                            On Hand
+                                            <SortGlyph active={sortKey === 'onHand'} dir={sortDir} />
+                                        </button>
+                                        <div
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30"
+                                            onMouseDown={(e) => beginColumnResize(e, 'onHand')}
+                                            title="Drag to resize"
+                                            role="separator"
+                                            aria-orientation="vertical"
+                                        />
+                                    </th>
+                                    <th
+                                        style={{ width: colWidths.reorder, minWidth: MIN_COL_PX }}
+                                        className="relative px-6 py-4 bg-slate-50 group align-bottom"
+                                        {...(sortKey === 'reorderPoint' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            onClick={() => toggleSort('reorderPoint')}
+                                        >
+                                            Reorder Point
+                                            <SortGlyph active={sortKey === 'reorderPoint'} dir={sortDir} />
+                                        </button>
+                                        <div
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30"
+                                            onMouseDown={(e) => beginColumnResize(e, 'reorder')}
+                                            title="Drag to resize"
+                                            role="separator"
+                                            aria-orientation="vertical"
+                                        />
+                                    </th>
+                                    <th
+                                        style={{ width: colWidths.status, minWidth: MIN_COL_PX }}
+                                        className="relative px-6 py-4 bg-slate-50 align-bottom"
+                                        {...(sortKey === 'status' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            onClick={() => toggleSort('status')}
+                                        >
+                                            Status
+                                            <SortGlyph active={sortKey === 'status'} dir={sortDir} />
+                                        </button>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
-                                {filteredLowStockItems.length > 0 ? filteredLowStockItems.map(item => (
+                                {filteredLowStockItems.length > 0 ? sortedLowStockItems.map(item => (
                                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-slate-800 text-sm">{item.name}</div>
-                                            <div className="text-[10px] text-slate-400 font-mono italic">{item.sku}</div>
+                                        <td className="min-w-0 px-6 py-4">
+                                            <div className="truncate font-bold text-slate-800 text-sm" title={item.name}>{item.name}</div>
+                                            <div className="truncate text-[10px] text-slate-400 font-mono italic" title={item.sku}>{item.sku}</div>
                                         </td>
-                                        <td className="px-6 py-4">
+                                        <td className="min-w-0 px-6 py-4">
                                             <span className="text-sm font-medium text-slate-600">{getCategoryDisplayName(item.category)}</span>
                                         </td>
-                                        <td className="px-6 py-4 text-sm font-black font-mono">{item.onHand} {item.unit}</td>
-                                        <td className="px-6 py-4 text-sm font-medium text-slate-500 font-mono">{item.reorderPoint}</td>
-                                        <td className="px-6 py-4">
+                                        <td className="min-w-0 px-6 py-4 text-sm font-black font-mono">{item.onHand} {item.unit}</td>
+                                        <td className="min-w-0 px-6 py-4 text-sm font-medium text-slate-500 font-mono">{item.reorderPoint}</td>
+                                        <td className="min-w-0 px-6 py-4">
                                             <span className={`px-2 py-1 rounded text-[10px] font-bold ${item.onHand <= 0 ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
                                                 }`}>
                                                 {item.onHand <= 0 ? 'OUT OF STOCK' : 'LOW STOCK'}
@@ -162,12 +356,24 @@ const InventoryDashboard: React.FC = () => {
                     </div>
 
                     <div className="pt-6 border-t border-slate-100">
-                        <button className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setHeatmapOpen(true)}
+                            className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 hover:border-indigo-200 hover:text-indigo-700 transition-all flex items-center justify-center gap-2"
+                        >
                             {ICONS.trendingUp} View Detailed Heatmap
                         </button>
                     </div>
                 </Card>
             </div>
+
+            <WarehouseHeatmapModal
+                isOpen={heatmapOpen}
+                onClose={() => setHeatmapOpen(false)}
+                items={items}
+                warehouses={warehouses}
+                categories={categories}
+            />
         </div>
     );
 };
