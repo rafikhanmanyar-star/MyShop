@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const http = require('http');
 
 let serverProcess = null;
 let mainWindow = null;
@@ -119,16 +120,23 @@ function startServer() {
     let attempts = 0;
     const checkReady = () => {
       attempts++;
-      fetch(`http://localhost:${PORT}/api/health`)
-        .then((res) => res.json())
-        .then(() => resolve())
-        .catch(() => {
-          if (attempts >= maxAttempts) {
-            reject(new Error('Server failed to start in time'));
-          } else {
-            setTimeout(checkReady, 500);
-          }
+      const req = http.get(`http://127.0.0.1:${PORT}/api/health`, (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          try { JSON.parse(body); resolve(); } catch { retryReady(); }
         });
+      });
+      req.on('error', retryReady);
+      req.setTimeout(3000, () => { req.destroy(); retryReady(); });
+
+      function retryReady() {
+        if (attempts >= maxAttempts) {
+          reject(new Error('Server failed to start in time'));
+        } else {
+          setTimeout(checkReady, 500);
+        }
+      }
     };
     setTimeout(checkReady, 1000);
   });
@@ -318,13 +326,20 @@ app.whenReady().then(async () => {
         const maxAttempts = 60;
         let attempts = 0;
         const check = () => {
-          fetch(`http://localhost:${PORT}/api/health`)
-            .then((res) => res.json())
-            .then(() => resolve())
-            .catch(() => {
-              if (++attempts >= maxAttempts) reject(new Error('Server not ready. Run "npm run dev:server" first.'));
-              else setTimeout(check, 500);
+          const req = http.get(`http://127.0.0.1:${PORT}/api/health`, (res) => {
+            let body = '';
+            res.on('data', (chunk) => { body += chunk; });
+            res.on('end', () => {
+              try { JSON.parse(body); resolve(); } catch { retry(); }
             });
+          });
+          req.on('error', retry);
+          req.setTimeout(3000, () => { req.destroy(); retry(); });
+
+          function retry() {
+            if (++attempts >= maxAttempts) reject(new Error('Server not ready. Run "npm run dev:server" first.'));
+            else setTimeout(check, 500);
+          }
         };
         setTimeout(check, 500);
       });

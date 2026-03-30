@@ -135,7 +135,7 @@ const CategoryTreeBranch: React.FC<{
                         {hasChildren ? (
                             <button
                                 type="button"
-                                className="w-7 shrink-0 flex items-center justify-center text-slate-400 hover:text-blue-600 rounded-lg"
+                                className="w-7 shrink-0 flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg"
                                 onClick={() => onToggleExpand(node.id)}
                                 aria-expanded={expanded ? 'true' : 'false'}
                             >
@@ -151,7 +151,7 @@ const CategoryTreeBranch: React.FC<{
                             type="button"
                             className={`flex-1 min-w-0 text-left py-1.5 px-2 rounded-lg text-[11px] font-semibold truncate transition-colors ${isSelected
                                 ? 'bg-blue-600 text-white shadow-sm'
-                                : 'text-slate-700 hover:bg-white/80'
+                                : 'text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-700/60'
                                 }`}
                             onClick={() => onSelect(node.id)}
                         >
@@ -568,14 +568,14 @@ const ProductSearch: React.FC = () => {
                         <button
                             onClick={() => product.stockLevel > 0 && addToCart(product)}
                             disabled={product.stockLevel <= 0}
-                            className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white border rounded-2xl text-left transition-all overflow-hidden ${product.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed border-slate-100' : 'hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 active:scale-95'} ${isSelected ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-100'
+                            className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white dark:bg-slate-800 border rounded-2xl text-left transition-all overflow-hidden ${product.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed border-slate-100 dark:border-slate-700' : 'hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 active:scale-95'} ${isSelected ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-100 dark:border-slate-700'
                                 }`}
                         >
-                            <div className={`w-full flex-shrink-0 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-50 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
+                            <div className={`w-full flex-shrink-0 bg-slate-50 dark:bg-slate-700 rounded-xl flex items-center justify-center border border-slate-50 dark:border-slate-600 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
                                 {product.imageUrl ? (
                                     <CachedImage path={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
                                 ) : (
-                                    <div className="text-slate-200">
+                                    <div className="text-slate-200 dark:text-slate-500">
                                         {React.cloneElement(ICONS.package as any, { size: isDenseMode ? 24 : 40 })}
                                     </div>
                                 )}
@@ -586,15 +586,15 @@ const ProductSearch: React.FC = () => {
                                 )}
                             </div>
 
-                            <div className={`flex-shrink-0 font-bold text-slate-800 line-clamp-2 leading-tight mt-2 min-h-0 ${isDenseMode ? 'text-[11px] h-[1.75rem]' : 'text-[13px] h-[2.5rem]'}`}>
+                            <div className={`flex-shrink-0 font-bold text-slate-800 dark:text-slate-200 line-clamp-2 leading-tight mt-2 min-h-0 ${isDenseMode ? 'text-[11px] h-[1.75rem]' : 'text-[13px] h-[2.5rem]'}`}>
                                 {product.name}
                             </div>
 
                             <div className="flex flex-shrink-0 items-center justify-between mt-1">
-                                <span className={`font-black text-blue-600 truncate ${isDenseMode ? 'text-xs' : 'text-sm'}`}>
+                                <span className={`font-black text-blue-600 dark:text-blue-400 truncate ${isDenseMode ? 'text-xs' : 'text-sm'}`}>
                                     {CURRENCY}{product.price.toLocaleString()}
                                 </span>
-                                <span className="text-[10px] text-slate-400 flex-shrink-0">
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500 flex-shrink-0">
                                     Qty: {product.stockLevel}
                                 </span>
                             </div>

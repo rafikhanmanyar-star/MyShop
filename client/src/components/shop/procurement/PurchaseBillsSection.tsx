@@ -493,76 +493,75 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-lg font-bold text-foreground">Purchase bills</h2>
-          <p className="text-sm text-muted-foreground">Review and manage recorded purchase bills.</p>
+          <h2 className="section-title">Purchase bills</h2>
+          <p className="body-text text-muted-foreground">Review and manage recorded purchase bills.</p>
         </div>
 
         {showForm && (
           <div
-            className={`card p-5 sm:p-6 ${
-              form.items.length > 0 ? 'pb-40 md:pb-6' : ''
+            className={`card p-4 sm:p-5 ${
+              form.items.length > 0 ? 'pb-40 md:pb-5' : ''
             }`}
           >
-            <h3 className="mb-4 text-base font-bold text-foreground">
+            <h3 className="card-title mb-3">
               {editBillId ? 'Edit purchase bill' : 'Create purchase bill'}
             </h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div ref={vendorDropdownRef}>
-                <SupplierSelect
-                  vendors={vendors}
-                  supplierId={form.supplierId}
-                  vendorSearch={vendorSearch}
-                  vendorDisplayName={vendorDisplayName}
-                  vendorDropdownOpen={vendorDropdownOpen}
-                  autoFocus={!editBillId}
-                  disabled={!!editBillId}
-                  loadingData={loadingData}
-                  onVendorSearchChange={setVendorSearch}
-                  onOpenChange={setVendorDropdownOpen}
-                  onSelect={(v) => {
-                    setForm((f) => ({ ...f, supplierId: v.id }));
-                    setVendorSearch(
-                      `${v.name}${(v.company_name ?? v.companyName) ? ` (${v.company_name ?? v.companyName})` : ''}`
-                    );
-                    setVendorDropdownOpen(false);
-                    if (formErrors.supplier) setFormErrors((e) => ({ ...e, supplier: undefined }));
-                  }}
-                  onAddSupplier={() => setShowAddVendorModal(true)}
-                />
-                {formErrors.supplier && <p className="mt-1 text-xs font-medium text-destructive">{formErrors.supplier}</p>}
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start">
+                <div ref={vendorDropdownRef} className="min-w-0">
+                  <SupplierSelect
+                    vendors={vendors}
+                    supplierId={form.supplierId}
+                    vendorSearch={vendorSearch}
+                    vendorDisplayName={vendorDisplayName}
+                    vendorDropdownOpen={vendorDropdownOpen}
+                    autoFocus={!editBillId}
+                    disabled={!!editBillId}
+                    loadingData={loadingData}
+                    onVendorSearchChange={setVendorSearch}
+                    onOpenChange={setVendorDropdownOpen}
+                    onSelect={(v) => {
+                      setForm((f) => ({ ...f, supplierId: v.id }));
+                      setVendorSearch(
+                        `${v.name}${(v.company_name ?? v.companyName) ? ` (${v.company_name ?? v.companyName})` : ''}`
+                      );
+                      setVendorDropdownOpen(false);
+                      if (formErrors.supplier) setFormErrors((e) => ({ ...e, supplier: undefined }));
+                    }}
+                    onAddSupplier={() => setShowAddVendorModal(true)}
+                  />
+                  {formErrors.supplier && <p className="mt-1 text-xs font-medium text-destructive">{formErrors.supplier}</p>}
+                </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-muted-foreground">Bill number</label>
+                  <label className="label mb-0.5 block">Bill date *</label>
+                  <input
+                    type="date"
+                    value={form.billDate}
+                    onChange={(e) => setForm((f) => ({ ...f, billDate: e.target.value }))}
+                    aria-label="Bill date"
+                    className="input input-text"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label mb-0.5 block">Bill number</label>
                   <input
                     type="text"
                     readOnly={!editBillId}
                     value={form.billNumber}
                     onChange={(e) => setForm((f) => ({ ...f, billNumber: e.target.value }))}
                     aria-label="Bill number"
-                    className="input cursor-default bg-muted read-only:opacity-90"
+                    className="input input-text cursor-default bg-muted read-only:opacity-90"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-muted-foreground">Due date</label>
+                  <label className="label mb-0.5 block">Due date</label>
                   <input
                     type="date"
                     value={form.dueDate}
                     onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
                     aria-label="Due date"
-                    className="input"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-muted-foreground">Bill date *</label>
-                  <input
-                    type="date"
-                    value={form.billDate}
-                    onChange={(e) => setForm((f) => ({ ...f, billDate: e.target.value }))}
-                    aria-label="Bill date"
-                    className="input"
-                    required
+                    className="input input-text"
                   />
                 </div>
               </div>
@@ -589,12 +588,12 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                     <table className="table-modern min-w-[640px]">
                       <thead className="sticky top-0 z-10 hidden border-b border-border bg-card shadow-erp md:table-header-group">
                         <tr>
-                          <th className="whitespace-nowrap">Product name</th>
-                          <th className="whitespace-nowrap">Stock</th>
-                          <th className="whitespace-nowrap">Quantity</th>
-                          <th className="whitespace-nowrap text-right">Unit cost</th>
-                          <th className="whitespace-nowrap text-right">Subtotal</th>
-                          <th className="w-12" />
+                          <th className="table-header whitespace-nowrap">Product name</th>
+                          <th className="table-header whitespace-nowrap">Stock</th>
+                          <th className="table-header whitespace-nowrap">Quantity</th>
+                          <th className="table-header whitespace-nowrap text-right">Unit cost</th>
+                          <th className="table-header whitespace-nowrap text-right">Subtotal</th>
+                          <th className="table-header w-12" />
                         </tr>
                       </thead>
                       <tbody>
@@ -645,18 +644,18 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                 />
               )}
 
-              <details className="group rounded-xl border border-border bg-muted open:bg-card">
-                <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-foreground">
+              <details className="group rounded-lg border border-border bg-muted open:bg-card">
+                <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-foreground">
                   <span className="text-muted-foreground">Notes</span>
                   <span className="ml-2 text-xs font-normal text-muted-foreground">(optional — click to expand)</span>
                 </summary>
-                <div className="border-t border-border px-4 pb-4 pt-2">
+                <div className="border-t border-border px-3 pb-3 pt-2">
                   <textarea
                     value={form.notes}
                     onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                    className="input min-h-[88px] resize-y"
+                    className="input input-text min-h-[72px] resize-y placeholder:text-muted-foreground"
                     placeholder="Add remarks for this purchase..."
-                    rows={4}
+                    rows={3}
                   />
                 </div>
               </details>
@@ -673,7 +672,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                 </label>
               )}
 
-              <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-2 border-t border-border pt-3 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => closeForm()}
@@ -698,14 +697,14 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
             <table className="table-modern min-w-[800px]">
               <thead>
                 <tr>
-                  <th className="py-3 px-4">Bill #</th>
-                  <th className="p-3">Supplier</th>
-                  <th className="p-3">Date</th>
-                  <th className="p-3 text-right">Total</th>
-                  <th className="p-3 text-right">Paid</th>
-                  <th className="p-3 text-right">Balance</th>
-                  <th className="p-3">Status</th>
-                  <th className="w-44 p-3 text-right">Actions</th>
+                  <th className="table-header py-3 px-4">Bill #</th>
+                  <th className="table-header p-3">Supplier</th>
+                  <th className="table-header p-3">Date</th>
+                  <th className="table-header p-3 text-right">Total</th>
+                  <th className="table-header p-3 text-right">Paid</th>
+                  <th className="table-header p-3 text-right">Balance</th>
+                  <th className="table-header p-3">Status</th>
+                  <th className="table-header w-44 p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -717,16 +716,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                       key={b.id}
                       className="transition-all duration-200 border-b border-border hover:bg-table-row-hover"
                     >
-                      <td className="p-3 font-medium text-foreground">{b.bill_number}</td>
-                      <td className="p-3 text-foreground">{b.supplier_name}</td>
-                      <td className="p-3 text-muted-foreground">{b.bill_date?.slice(0, 10)}</td>
-                      <td className="p-3 text-right text-foreground">
+                      <td className="p-3 text-sm font-medium text-foreground">{b.bill_number}</td>
+                      <td className="p-3 text-sm text-foreground">{b.supplier_name}</td>
+                      <td className="p-3 text-sm text-muted-foreground">{b.bill_date?.slice(0, 10)}</td>
+                      <td className="numeric-data p-3 text-right text-foreground">
                         {CURRENCY} {Number(b.total_amount).toLocaleString()}
                       </td>
-                      <td className="p-3 text-right text-muted-foreground">
+                      <td className="numeric-data p-3 text-right text-muted-foreground">
                         {CURRENCY} {Number(b.paid_amount).toLocaleString()}
                       </td>
-                      <td className="p-3 text-right font-medium text-foreground">
+                      <td className="numeric-data p-3 text-right text-foreground">
                         {CURRENCY} {balanceDue.toLocaleString()}
                       </td>
                       <td className="p-3">

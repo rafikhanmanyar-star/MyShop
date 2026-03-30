@@ -10,9 +10,31 @@
     --pos-bg: #f7f9fc;
     --pos-card-bg: #ffffff;
     --pos-border: #e2e8f0;
+    --pos-text: #0f172a;
+    --pos-text-secondary: #64748b;
+    --pos-text-muted: #94a3b8;
+    --pos-muted-bg: #f1f5f9;
     --pos-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
     --pos-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
     --pos-font: 'Inter', sans-serif;
+}
+
+.dark {
+    --pos-primary: #3b82f6;
+    --pos-primary-dark: #2563eb;
+    --pos-secondary: #e2e8f0;
+    --pos-accent: #34d399;
+    --pos-danger: #f87171;
+    --pos-warning: #fbbf24;
+    --pos-bg: #020617;
+    --pos-card-bg: #0f172a;
+    --pos-border: #1e293b;
+    --pos-text: #e2e8f0;
+    --pos-text-secondary: #94a3b8;
+    --pos-text-muted: #64748b;
+    --pos-muted-bg: #1e293b;
+    --pos-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    --pos-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
 }
 
 .pos-font {
@@ -24,6 +46,11 @@
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+:where(.dark) .pos-glass {
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .pos-glass-dark {
@@ -131,6 +158,14 @@
     background: rgba(99, 102, 241, 0.4);
 }
 
+:where(.dark) .pos-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+:where(.dark) .pos-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(129, 140, 248, 0.5);
+}
+
 /* Product Card Hover Effect */
 .product-card-hover {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -139,6 +174,10 @@
 .product-card-hover:hover {
     transform: translateY(-6px);
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+}
+
+:where(.dark) .product-card-hover:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
 }
 
 /* Keyboard Shortcut Tag */
@@ -153,6 +192,12 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+:where(.dark) .kbd-tag {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #94a3b8;
+}
+
 .pos-button-press {
     transition: transform 0.1s active;
 }
@@ -163,6 +208,10 @@
 
 .shadow-premium {
     box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
+}
+
+:where(.dark) .shadow-premium {
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4);
 }
 
 .no-scrollbar::-webkit-scrollbar {

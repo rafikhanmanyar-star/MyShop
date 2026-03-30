@@ -33,9 +33,9 @@ export default function PaymentSelector({
   disabled,
 }: PaymentSelectorProps) {
   return (
-    <div className="space-y-4">
-      <label className="text-sm font-medium text-muted-foreground">Payment</label>
-      <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-card p-1">
+    <div className="space-y-2">
+      <label className="label">Payment</label>
+      <div className="flex flex-wrap gap-0.5 rounded-lg border border-border bg-card p-0.5">
         {segments.map((s) => {
           const active = value === s.id;
           return (
@@ -44,7 +44,7 @@ export default function PaymentSelector({
               type="button"
               disabled={disabled}
               onClick={() => onChange(s.id)}
-              className={`min-w-[5rem] flex-1 rounded-lg px-3 py-2 text-center text-sm font-semibold transition-all duration-200 active:scale-[0.98] ${
+              className={`button-text min-w-[4.5rem] flex-1 rounded-md px-2 py-1.5 text-center font-semibold transition-all duration-200 active:scale-[0.98] ${
                 active
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:bg-accent hover:text-primary'
@@ -57,10 +57,10 @@ export default function PaymentSelector({
       </div>
 
       {(value === 'Paid' || value === 'Partial') && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {value === 'Partial' && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-muted-foreground">Amount paid</label>
+              <label className="label mb-0.5 block">Amount paid</label>
               <input
                 type="number"
                 step="0.01"
@@ -68,24 +68,24 @@ export default function PaymentSelector({
                 value={paidAmount || ''}
                 onChange={(e) => onPaidAmountChange(parseFloat(e.target.value) || 0)}
                 aria-label="Amount paid"
-                className="input"
+                className="input input-text tabular-nums"
               />
             </div>
           )}
           {value === 'Paid' && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-muted-foreground">Amount paid</label>
+              <label className="label mb-0.5 block">Amount paid</label>
               <input
                 type="text"
                 readOnly
                 value={`${totalAmount.toLocaleString()}`}
                 aria-label="Amount paid in full"
-                className="input cursor-default bg-muted font-semibold"
+                className="input input-text numeric-data cursor-default bg-muted"
               />
             </div>
           )}
           <div className={value === 'Partial' ? '' : 'md:col-span-1'}>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Bank account</label>
+            <label className="label mb-0.5 block">Bank account</label>
             <Select value={bankAccountId} onChange={(e) => onBankAccountChange(e.target.value)} className="w-full">
               <option value="">Cash</option>
               {bankAccounts.map((b) => (

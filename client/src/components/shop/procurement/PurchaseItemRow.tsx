@@ -43,7 +43,7 @@ export default function PurchaseItemRow({
           zebra ? 'bg-table-zebra' : ''
         } hover:bg-table-row-hover`}
       >
-        <td className="px-4 py-3 text-sm font-medium text-foreground">{productName}</td>
+        <td className="body-text px-4 py-3 font-medium">{productName}</td>
         <td className="px-4 py-3">
           {stock != null ? (
             <span
@@ -52,7 +52,7 @@ export default function PurchaseItemRow({
               }`}
             >
               {low ? 'Low ' : ''}
-              {Number(stock).toLocaleString()}
+              <span className="tabular-nums">{Number(stock).toLocaleString()}</span>
             </span>
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
@@ -74,7 +74,7 @@ export default function PurchaseItemRow({
               step={1}
               value={qty}
               onChange={(e) => onQuantityChange(Math.max(1, Math.floor(parseFloat(e.target.value) || 0)))}
-              className="w-14 border-x border-border bg-transparent py-1.5 text-center text-sm font-medium text-foreground [appearance:textfield] focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              className="input-text w-14 border-x border-border bg-transparent py-1.5 text-center font-medium tabular-nums text-foreground [appearance:textfield] focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
             <button
               type="button"
@@ -93,10 +93,10 @@ export default function PurchaseItemRow({
             step={0.01}
             value={line.unitCost}
             onChange={(e) => onUnitCostChange(parseFloat(e.target.value) || 0)}
-            className="input w-28 rounded-lg px-2 py-1.5 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="input input-text w-28 rounded-lg px-2 py-1.5 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
         </td>
-        <td className="px-4 py-3 text-right text-sm font-semibold text-foreground">
+        <td className="numeric-data px-4 py-3 text-right text-sm font-semibold">
           {currencyLabel} {line.subtotal.toLocaleString()}
         </td>
         <td className="px-4 py-3 text-right">
@@ -118,14 +118,14 @@ export default function PurchaseItemRow({
           >
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-semibold text-foreground">{productName}</p>
+                <p className="body-text font-semibold">{productName}</p>
                 {stock != null && (
                   <span
                     className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${
                       good ? 'bg-emerald-500/15 text-success' : 'bg-slate-500/15 text-muted-foreground'
                     }`}
                   >
-                    Stock {Number(stock).toLocaleString()}
+                    Stock <span className="tabular-nums">{Number(stock).toLocaleString()}</span>
                   </span>
                 )}
               </div>
@@ -173,11 +173,11 @@ export default function PurchaseItemRow({
                   step={0.01}
                   value={line.unitCost}
                   onChange={(e) => onUnitCostChange(parseFloat(e.target.value) || 0)}
-                  className="input mt-1 w-full rounded-lg px-2 py-1.5 text-sm"
+                  className="input input-text mt-1 w-full rounded-lg px-2 py-1.5 tabular-nums"
                 />
               </div>
             </div>
-            <p className="mt-3 text-right text-sm font-bold text-foreground">
+            <p className="numeric-data mt-3 text-right text-sm font-bold">
               Subtotal {currencyLabel} {line.subtotal.toLocaleString()}
             </p>
           </div>

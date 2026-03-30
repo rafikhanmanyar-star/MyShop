@@ -100,14 +100,14 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             to={item.path}
             end={item.path === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm transition-all duration-300 group
+              `flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-300 group tracking-wide
               ${isActive
-                ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-lg shadow-indigo-500/25 font-semibold'
-                : 'text-slate-400 hover:bg-slate-800/50 hover:text-white font-medium'}`
+                ? 'bg-indigo-500/15 border border-indigo-500/30 text-primary font-semibold text-sm shadow-sm'
+                : 'text-sm font-medium text-slate-400 hover:bg-slate-800/50 hover:text-white'}`
             }
           >
             <item.icon className={`w-5 h-5 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${collapsed ? 'mx-auto' : ''}`} />
-            {!collapsed && <span className="tracking-wide">{item.label}</span>}
+            {!collapsed && <span>{item.label}</span>}
             {!collapsed && (
               <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />

@@ -50,18 +50,18 @@ const ProcurementPage: React.FC = () => {
       <header className="sticky top-0 z-20 border-b border-border bg-card px-4 py-5 shadow-erp sm:px-8 lg:px-10">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
-            <h1 className="text-2xl font-black tracking-tight text-foreground">Procurement</h1>
-            <p className="mt-1 text-sm font-medium text-muted-foreground">Manage purchase bills, suppliers, and inventory intake</p>
+            <h1 className="page-title">Procurement</h1>
+            <p className="secondary-text mt-1">Manage purchase bills, suppliers, and inventory intake</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('reports')}
-              className="btn-secondary rounded-xl px-4 py-2.5 text-sm active:scale-[0.98]"
+              className="btn-secondary button-text rounded-xl px-4 py-2.5 active:scale-[0.98]"
             >
               View Reports
             </button>
-            <button type="button" onClick={handleNewBill} className="btn-primary rounded-xl">
+            <button type="button" onClick={handleNewBill} className="btn-primary button-text rounded-xl">
               New Bill
             </button>
           </div>
@@ -76,7 +76,7 @@ const ProcurementPage: React.FC = () => {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold transition-all duration-200 active:scale-[0.98] ${
+                className={`button-text inline-flex items-center gap-2 rounded-full px-4 py-2.5 font-semibold transition-all duration-200 active:scale-[0.98] ${
                   active
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:bg-accent hover:text-primary'

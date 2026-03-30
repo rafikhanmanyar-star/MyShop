@@ -13,7 +13,7 @@ const Select: React.FC<SelectProps> = ({ label, id, name, children, hideIcon = f
     <select
       id={selectId}
       name={name || selectId}
-      className={`input block w-full appearance-none rounded-xl px-3 py-3 text-base transition-all duration-200 focus:ring-2 focus:ring-ring/40 sm:py-2 sm:text-sm ${className}`}
+      className={`input input-text block w-full appearance-none rounded-xl px-3 py-3 transition-all duration-200 focus:ring-2 focus:ring-ring/40 sm:py-2 ${className}`}
       style={
         hideIcon
           ? undefined
@@ -38,7 +38,7 @@ const Select: React.FC<SelectProps> = ({ label, id, name, children, hideIcon = f
 
   return (
     <div>
-      <label htmlFor={selectId} className="mb-1.5 block text-sm font-medium text-foreground">
+      <label htmlFor={selectId} className="label mb-1.5 block">
         {label}
       </label>
       {selectElement}

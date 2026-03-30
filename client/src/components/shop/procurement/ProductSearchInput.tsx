@@ -53,10 +53,10 @@ export default function ProductSearchInput({
   const enterTarget = exactBarcode ?? singleMatch;
 
   return (
-    <div ref={wrapRef} className="relative space-y-1.5">
-      <label className="text-sm font-medium text-muted-foreground">Add products</label>
+    <div ref={wrapRef} className="relative space-y-1">
+      <label className="label">Add products</label>
       <div className="relative">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
           value={productSearch}
@@ -77,10 +77,10 @@ export default function ProductSearchInput({
             onOpenChange(false);
           }}
           placeholder="Search product, SKU, or scan barcode..."
-          className="input py-3 pl-11 pr-3 transition-all duration-200"
+          className="input input-text py-2 pl-9 pr-3 transition-all duration-200 placeholder:text-muted-foreground"
         />
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="secondary-text leading-snug">
         Same catalog as Stock Master. Press Enter to add when one product matches or barcode scans.
       </p>
       {!loadingData && products.length === 0 && (
@@ -113,7 +113,7 @@ export default function ProductSearchInput({
                         <span className="ml-2 font-mono text-xs text-muted-foreground/80">Barcode: {p.barcode}</span>
                       )}
                     </span>
-                    <span className="shrink-0 text-sm font-semibold text-primary">
+                    <span className="numeric-data shrink-0 text-sm font-semibold text-primary">
                       {currencyLabel} {cost.toLocaleString()}
                     </span>
                   </button>

@@ -200,10 +200,10 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
       <div className="card p-6">
-        <h2 className="mb-4 text-lg font-bold text-foreground">Record supplier payment</h2>
+        <h2 className="section-title mb-4">Record supplier payment</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Supplier</label>
+            <label className="label mb-1 block">Supplier</label>
             <Select
               value={form.supplierId}
               onChange={(e) => setForm((f) => ({ ...f, supplierId: e.target.value }))}
@@ -224,8 +224,10 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                 const alloc = form.allocations.find((a) => a.purchaseBillId === billId);
                 return (
                   <div key={billId} className="flex flex-wrap items-center gap-2 py-2 border-b border-amber-100 last:border-0">
-                    <span className="text-sm font-medium">{b.bill_number}</span>
-                    <span className="text-slate-500 text-xs">Balance: {CURRENCY} {Number(b.balance_due).toLocaleString()}</span>
+                    <span className="body-text font-medium">{b.bill_number}</span>
+                    <span className="secondary-text text-slate-500 dark:text-slate-400">
+                      Balance: <span className="numeric-data">{CURRENCY} {Number(b.balance_due).toLocaleString()}</span>
+                    </span>
                     <input
                       type="number"
                       step="0.01"
@@ -240,7 +242,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                           handleAllocate(billId, parseFloat(inputVal) || 0);
                         }
                       }}
-                      className="input w-24 rounded-lg px-2 py-1.5 text-sm"
+                      className="input input-text w-24 rounded-lg px-2 py-1.5 tabular-nums"
                     />
                     <button
                       type="button"
@@ -276,8 +278,11 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                 );
               })}
               {form.allocations.length > 0 && (
-                <p className="text-xs font-bold text-slate-600 mt-2">
-                  Total allocated: {CURRENCY} {totalAllocated.toLocaleString()}
+                <p className="secondary-text mt-2 font-semibold text-slate-600 dark:text-slate-300">
+                  Total allocated:{' '}
+                  <span className="numeric-data">
+                    {CURRENCY} {totalAllocated.toLocaleString()}
+                  </span>
                   {form.amount > 0 && (
                     <span className={totalAllocated > form.amount ? ' text-rose-600' : totalAllocated < form.amount ? ' text-amber-600' : ' text-emerald-600'}>
                       {totalAllocated > form.amount ? ' (over)' : totalAllocated < form.amount ? ' (remaining ' + (form.amount - totalAllocated).toLocaleString() + ')' : ' (ok)'}
@@ -288,7 +293,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
             </div>
           )}
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">Payment amount</label>
+            <label className="label mb-1 block">Payment amount</label>
             <input
               type="number"
               step="0.01"
@@ -296,11 +301,11 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
               required
               value={form.amount || ''}
               onChange={(e) => setForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
-              className="input"
+              className="input input-text tabular-nums"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">Payment method</label>
+            <label className="label mb-1 block">Payment method</label>
             <Select
               value={form.paymentMethod}
               onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value as any }))}
@@ -312,7 +317,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
           </div>
           {form.paymentMethod === 'Bank' && (
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Bank account</label>
+              <label className="label mb-1 block">Bank account</label>
               <Select
                 value={form.bankAccountId}
                 onChange={(e) => setForm((f) => ({ ...f, bankAccountId: e.target.value }))}
@@ -325,21 +330,21 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
             </div>
           )}
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">Payment date</label>
+            <label className="label mb-1 block">Payment date</label>
             <input
               type="date"
               value={form.paymentDate}
               onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))}
-              className="input"
+              className="input input-text"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">Reference (optional)</label>
+            <label className="label mb-1 block">Reference (optional)</label>
             <input
               type="text"
               value={form.reference}
               onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
-              className="input"
+              className="input input-text placeholder:text-muted-foreground"
               placeholder="Chq no, transfer ref..."
             />
           </div>
@@ -349,25 +354,27 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
         </form>
       </div>
       <div className="card p-6">
-        <h2 className="mb-4 text-lg font-bold text-foreground">Recent supplier payments</h2>
+        <h2 className="section-title mb-4">Recent supplier payments</h2>
         <div className="overflow-x-auto">
-          <table className="table-modern w-full text-sm">
+          <table className="table-modern w-full">
             <thead>
               <tr>
-                <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Supplier</th>
-                <th className="py-3 px-4 text-right">Amount</th>
-                <th className="py-3 px-4">Method</th>
-                <th className="w-24 py-3 px-4 text-right">Actions</th>
+                <th className="table-header py-3 px-4">Date</th>
+                <th className="table-header py-3 px-4">Supplier</th>
+                <th className="table-header py-3 px-4 text-right">Amount</th>
+                <th className="table-header py-3 px-4">Method</th>
+                <th className="table-header w-24 py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {payments.slice(0, 20).map((p) => (
                 <tr key={p.id}>
-                  <td className="py-3 px-4">{p.payment_date?.slice(0, 10)}</td>
-                  <td className="py-3 px-4">{p.supplier_name}</td>
-                  <td className="py-3 px-4 text-right font-medium">{CURRENCY} {Number(p.amount).toLocaleString()}</td>
-                  <td className="py-3 px-4">{p.payment_method}</td>
+                  <td className="py-3 px-4 text-sm">{p.payment_date?.slice(0, 10)}</td>
+                  <td className="py-3 px-4 text-sm">{p.supplier_name}</td>
+                  <td className="numeric-data py-3 px-4 text-right">
+                    {CURRENCY} {Number(p.amount).toLocaleString()}
+                  </td>
+                  <td className="py-3 px-4 text-sm">{p.payment_method}</td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
@@ -420,10 +427,10 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
       {editPaymentId && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8" onClick={() => !updatingPayment && setEditPaymentId(null)}>
           <div className="card my-auto w-full max-w-lg p-6 shadow-erp-md" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-4 text-lg font-bold text-foreground">Edit supplier payment</h3>
+            <h3 className="section-title mb-4">Edit supplier payment</h3>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Supplier</label>
+                <label className="label mb-1 block">Supplier</label>
                 <Select value={editForm.supplierId} onChange={(e) => setEditForm((f) => f ? { ...f, supplierId: e.target.value } : f)} required>
                   <option value="">Select supplier...</option>
                   {vendors.map((v) => (
@@ -448,7 +455,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                           min="0"
                           value={inputVal}
                           onChange={(e) => setEditAllocateInputs((prev) => ({ ...prev, [billId]: e.target.value }))}
-                          className="w-20 border border-slate-200 rounded px-2 py-1 text-sm"
+                          className="input input-text w-20 rounded px-2 py-1 tabular-nums"
                         />
                         <button
                           type="button"
@@ -481,18 +488,18 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Amount</label>
+                <label className="label mb-1 block">Amount</label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
                   value={editForm.amount || ''}
                   onChange={(e) => setEditForm((f) => f ? { ...f, amount: parseFloat(e.target.value) || 0 } : f)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                  className="input input-text w-full tabular-nums"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Payment method</label>
+                <label className="label mb-1 block">Payment method</label>
                 <Select value={editForm.paymentMethod} onChange={(e) => setEditForm((f) => f ? { ...f, paymentMethod: e.target.value as any } : f)}>
                   <option value="Cash">Cash</option>
                   <option value="Bank">Bank</option>
@@ -501,7 +508,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
               </div>
               {editForm.paymentMethod === 'Bank' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Bank account</label>
+                  <label className="label mb-1 block">Bank account</label>
                   <Select value={editForm.bankAccountId} onChange={(e) => setEditForm((f) => f ? { ...f, bankAccountId: e.target.value } : f)}>
                     <option value="">Select...</option>
                     {bankAccounts.map((b) => (
@@ -511,30 +518,30 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Payment date</label>
+                <label className="label mb-1 block">Payment date</label>
                 <input
                   type="date"
                   value={editForm.paymentDate}
                   onChange={(e) => setEditForm((f) => f ? { ...f, paymentDate: e.target.value } : f)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                  className="input input-text w-full"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Reference</label>
+                <label className="label mb-1 block">Reference</label>
                 <input
                   type="text"
                   value={editForm.reference}
                   onChange={(e) => setEditForm((f) => f ? { ...f, reference: e.target.value } : f)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                  className="input input-text w-full placeholder:text-muted-foreground"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                <label className="label mb-1 block">Notes</label>
                 <input
                   type="text"
                   value={editForm.notes}
                   onChange={(e) => setEditForm((f) => f ? { ...f, notes: e.target.value } : f)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2"
+                  className="input input-text w-full placeholder:text-muted-foreground"
                 />
               </div>
             </div>

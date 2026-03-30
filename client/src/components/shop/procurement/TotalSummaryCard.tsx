@@ -24,21 +24,21 @@ export default function TotalSummaryCard({
       }`}
     >
       <div className="ml-auto max-w-xs space-y-2 text-right">
-        <div className="flex justify-between gap-8 text-sm text-muted-foreground">
+        <div className="body-text flex justify-between gap-8 text-muted-foreground">
           <span>Subtotal</span>
-          <span className="font-medium text-foreground">
+          <span className="numeric-data text-foreground">
             {currencyLabel} {subtotal.toLocaleString()}
           </span>
         </div>
-        <div className="flex justify-between gap-8 text-sm text-muted-foreground">
+        <div className="body-text flex justify-between gap-8 text-muted-foreground">
           <span>Tax</span>
-          <span className="font-medium text-foreground">
+          <span className="numeric-data text-foreground">
             {currencyLabel} {tax.toLocaleString()}
           </span>
         </div>
         <div className="flex justify-between gap-8 border-t border-border pt-2 text-lg font-bold text-foreground">
           <span>Total</span>
-          <span>
+          <span className="numeric-data">
             {currencyLabel} {total.toLocaleString()}
           </span>
         </div>

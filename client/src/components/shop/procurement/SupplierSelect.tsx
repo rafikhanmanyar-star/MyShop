@@ -54,9 +54,9 @@ export default function SupplierSelect({
   const inputValue = vendorDropdownOpen ? vendorSearch : vendorDisplayName || vendorSearch;
 
   return (
-    <div ref={containerRef} className="relative space-y-1.5">
+    <div ref={containerRef} className="relative space-y-1">
       <div className="flex items-end justify-between gap-2">
-        <label className="text-sm font-medium text-muted-foreground">Supplier / Vendor *</label>
+        <label className="label">Supplier / Vendor *</label>
         <button
           type="button"
           onClick={() => {
@@ -88,7 +88,7 @@ export default function SupplierSelect({
         }}
         placeholder="Search supplier by name or company..."
         readOnly={disabled}
-        className={`input transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-80 ${
+        className={`input input-text py-2 transition-all duration-200 placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-80 ${
           disabled ? '' : ''
         }`}
       />
