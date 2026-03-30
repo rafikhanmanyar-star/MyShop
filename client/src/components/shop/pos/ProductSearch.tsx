@@ -13,6 +13,54 @@ import Fuse from 'fuse.js';
 import { debounce } from 'lodash-es';
 import AddOrEditSkuModal from './AddOrEditSkuModal';
 
+const POS_CATEGORY_TREE_VISIBLE_KEY = 'pos-category-tree-visible';
+
+type CategoryTreeNode = { id: string; name: string; children: CategoryTreeNode[] };
+
+function buildCategoryTree(categories: ShopProductCategory[]): CategoryTreeNode[] {
+    const byParent = new Map<string | null, ShopProductCategory[]>();
+    for (const c of categories) {
+        const p = c.parent_id ?? null;
+        if (!byParent.has(p)) byParent.set(p, []);
+        byParent.get(p)!.push(c);
+    }
+    const sortFn = (a: ShopProductCategory, b: ShopProductCategory) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    function walk(parentId: string | null): CategoryTreeNode[] {
+        const list = (byParent.get(parentId) || []).sort(sortFn);
+        return list.map((c) => ({
+            id: c.id,
+            name: c.name,
+            children: walk(c.id)
+        }));
+    }
+    return walk(null);
+}
+
+/** Selected id plus all descendant category ids (for tree filtering). */
+function getDescendantCategoryIds(categories: ShopProductCategory[], selectedId: string): Set<string> {
+    const childrenByParent = new Map<string, string[]>();
+    for (const c of categories) {
+        if (!c.parent_id) continue;
+        if (!childrenByParent.has(c.parent_id)) childrenByParent.set(c.parent_id, []);
+        childrenByParent.get(c.parent_id)!.push(c.id);
+    }
+    const out = new Set<string>([selectedId]);
+    const stack = [selectedId];
+    while (stack.length) {
+        const id = stack.pop()!;
+        const kids = childrenByParent.get(id);
+        if (!kids) continue;
+        for (const k of kids) {
+            if (!out.has(k)) {
+                out.add(k);
+                stack.push(k);
+            }
+        }
+    }
+    return out;
+}
+
 function mapApiProductToPOS(p: any): POSProduct {
     return {
         id: p.id,
@@ -22,6 +70,7 @@ function mapApiProductToPOS(p: any): POSProduct {
         price: Number(p.retail_price) || Number(p.price) || 0,
         cost: Number(p.cost_price) || 0,
         categoryId: p.category_id || 'others',
+        subcategoryId: p.subcategory_id || undefined,
         taxRate: Number(p.tax_rate) || 0,
         isTaxInclusive: true,
         unit: p.unit || 'pcs',
@@ -49,6 +98,64 @@ function mapInventoryItemToPOS(item: InventoryItem): POSProduct {
     };
 }
 
+const CategoryTreeBranch: React.FC<{
+    nodes: CategoryTreeNode[];
+    depth: number;
+    selectedCategory: string;
+    expandedIds: Set<string>;
+    onToggleExpand: (id: string) => void;
+    onSelect: (id: string) => void;
+}> = ({ nodes, depth, selectedCategory, expandedIds, onToggleExpand, onSelect }) => (
+    <>
+        {nodes.map((node) => {
+            const hasChildren = node.children.length > 0;
+            const expanded = expandedIds.has(node.id);
+            const isSelected = selectedCategory === node.id;
+            return (
+                <div key={node.id}>
+                    <div className="flex items-stretch min-h-0" style={{ paddingLeft: depth * 8 }}>
+                        {hasChildren ? (
+                            <button
+                                type="button"
+                                className="w-7 shrink-0 flex items-center justify-center text-slate-400 hover:text-blue-600 rounded-lg"
+                                onClick={() => onToggleExpand(node.id)}
+                                aria-expanded={expanded ? 'true' : 'false'}
+                            >
+                                {React.cloneElement(
+                                    (expanded ? ICONS.chevronDown : ICONS.chevronRight) as any,
+                                    { size: 14 }
+                                )}
+                            </button>
+                        ) : (
+                            <span className="w-7 shrink-0 inline-block" aria-hidden />
+                        )}
+                        <button
+                            type="button"
+                            className={`flex-1 min-w-0 text-left py-1.5 px-2 rounded-lg text-[11px] font-semibold truncate transition-colors ${isSelected
+                                ? 'bg-blue-600 text-white shadow-sm'
+                                : 'text-slate-700 hover:bg-white/80'
+                                }`}
+                            onClick={() => onSelect(node.id)}
+                        >
+                            {node.name}
+                        </button>
+                    </div>
+                    {hasChildren && expanded && (
+                        <CategoryTreeBranch
+                            nodes={node.children}
+                            depth={depth + 1}
+                            selectedCategory={selectedCategory}
+                            expandedIds={expandedIds}
+                            onToggleExpand={onToggleExpand}
+                            onSelect={onSelect}
+                        />
+                    )}
+                </div>
+            );
+        })}
+    </>
+);
+
 const ProductSearch: React.FC = () => {
     const {
         addToCart,
@@ -71,18 +178,30 @@ const ProductSearch: React.FC = () => {
     const [showFilters, setShowFilters] = useState(false);
     const [isAddSkuModalOpen, setIsAddSkuModalOpen] = useState(false);
 
+    const [categoryTreeVisible, setCategoryTreeVisible] = useState(() => {
+        try {
+            const v = localStorage.getItem(POS_CATEGORY_TREE_VISIBLE_KEY);
+            if (v === null) return true;
+            return v === 'true';
+        } catch {
+            return true;
+        }
+    });
+    const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set());
+
+    const persistCategoryTreeVisible = useCallback((visible: boolean) => {
+        setCategoryTreeVisible(visible);
+        try {
+            localStorage.setItem(POS_CATEGORY_TREE_VISIBLE_KEY, String(visible));
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
     // Internal search state for debouncing
     const [localQuery, setLocalQuery] = useState(searchQuery);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<FixedSizeList>(null);
-    const categoryContainerRef = useRef<HTMLDivElement>(null);
-
-    const scrollCategories = (direction: 'left' | 'right') => {
-        if (categoryContainerRef.current) {
-            const scrollAmount = 250;
-            categoryContainerRef.current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
-        }
-    };
 
     const loadShopCategories = useCallback(async () => {
         try {
@@ -134,6 +253,34 @@ const ProductSearch: React.FC = () => {
         loadPopularProducts();
     }, [loadProducts, loadShopCategories, loadPopularProducts]);
 
+    const categoryTree = useMemo(() => buildCategoryTree(shopCategories), [shopCategories]);
+
+    const parentIdsWithChildren = useMemo(() => {
+        const s = new Set<string>();
+        for (const c of shopCategories) {
+            if (c.parent_id) s.add(c.parent_id);
+        }
+        return s;
+    }, [shopCategories]);
+
+    useEffect(() => {
+        setExpandedCategoryIds(new Set(parentIdsWithChildren));
+    }, [parentIdsWithChildren]);
+
+    const toggleCategoryExpand = useCallback((id: string) => {
+        setExpandedCategoryIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    }, []);
+
+    const selectedCategoryIdSet = useMemo(() => {
+        if (selectedCategory === 'all') return null;
+        return getDescendantCategoryIds(shopCategories, selectedCategory);
+    }, [selectedCategory, shopCategories]);
+
     // Merge inventory stock into products so POS shows correct stock (branch-specific when branch selected)
     const productsWithStock = useMemo(() => {
         if (!inventoryItems?.length) return products;
@@ -151,6 +298,24 @@ const ProductSearch: React.FC = () => {
             };
         });
     }, [products, inventoryItems, selectedBranchId]);
+
+    /** Same stock merge as main grid — popular list API can lag or omit branch qty; without this, fast-moving tiles stay disabled. */
+    const popularProductsWithStock = useMemo(() => {
+        if (!popularProducts.length) return [];
+        return popularProducts.map((p) => {
+            const inv = inventoryItems?.find((i) => i.id === p.id);
+            const branchStock =
+                selectedBranchId && inv?.warehouseStock
+                    ? (inv.warehouseStock[selectedBranchId] ?? 0)
+                    : (inv?.onHand ?? p.stockLevel);
+            const stockLevel = inv ? branchStock : p.stockLevel;
+            return {
+                ...p,
+                stockLevel: Number(stockLevel) || 0,
+                reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
+            };
+        });
+    }, [popularProducts, inventoryItems, selectedBranchId]);
 
     // Update local query when external search query changes (e.g. from barcode scanner)
     useEffect(() => {
@@ -184,7 +349,7 @@ const ProductSearch: React.FC = () => {
 
     const fuse = useMemo(() => {
         return new Fuse(productsWithStock, {
-            keys: ['name', 'sku', 'barcode', 'categoryId'],
+            keys: ['name', 'sku', 'barcode', 'categoryId', 'subcategoryId'],
             threshold: 0.3,
             distance: 100,
             ignoreLocation: true,
@@ -194,11 +359,12 @@ const ProductSearch: React.FC = () => {
     const filteredProducts = useMemo(() => {
         let result = productsWithStock;
 
-        // Category Filter
-        if (selectedCategory !== 'all') {
-            result = result.filter(p => {
-                if (p.categoryId === selectedCategory) return true;
-                const cat = shopCategories.find(c => c.id === selectedCategory);
+        // Category Filter (tree node = node + descendants; matches categoryId / subcategoryId)
+        if (selectedCategory !== 'all' && selectedCategoryIdSet) {
+            result = result.filter((p) => {
+                if (selectedCategoryIdSet.has(p.categoryId)) return true;
+                if (p.subcategoryId && selectedCategoryIdSet.has(p.subcategoryId)) return true;
+                const cat = shopCategories.find((c) => c.id === selectedCategory);
                 return cat ? p.categoryId === cat.name : false;
             });
         }
@@ -216,7 +382,7 @@ const ProductSearch: React.FC = () => {
         }
 
         return result;
-    }, [productsWithStock, selectedCategory, localQuery, fuse, shopCategories]);
+    }, [productsWithStock, selectedCategory, selectedCategoryIdSet, localQuery, fuse, shopCategories]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -391,79 +557,95 @@ const ProductSearch: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full min-h-0 bg-white relative overflow-hidden">
-            {/* Search Bar - Premium Fixed Header */}
-            <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100 p-4">
-                <div className="relative group">
-                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600 transition-colors">
-                        {React.cloneElement(ICONS.search as any, { size: 18 })}
-                    </div>
-                    <input
-                        ref={searchInputRef}
-                        id="pos-product-search"
-                        type="text"
-                        className="w-full pl-11 pr-24 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 transition-all select-text"
-                        placeholder="Search Products (Ctrl+F)"
-                        value={localQuery}
-                        onChange={(e) => handleSearchChange(e.target.value)}
-                    />
-                    <div className="absolute inset-y-0 right-4 flex items-center gap-2">
-                        {localQuery && (
-                            <button onClick={() => handleSearchChange('')} className="p-1 hover:bg-slate-200 rounded-full text-slate-400">
-                                {React.cloneElement(ICONS.x as any, { size: 14 })}
-                            </button>
-                        )}
-                        <span className="kbd-tag bg-white shadow-sm border-slate-200">F4</span>
-                    </div>
-                </div>
-
-                {/* Categories - Scalable Redesign */}
-                <div className="mt-4 flex items-center gap-2 relative">
-                    <button
-                        onClick={() => scrollCategories('left')}
-                        className="flex-shrink-0 p-2 rounded-xl border bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm z-10"
-                    >
-                        {React.cloneElement(ICONS.chevronLeft as any, { size: 16 })}
-                    </button>
-
-                    <div ref={categoryContainerRef} className="flex-1 flex gap-2 overflow-x-auto pos-scrollbar pb-2 pt-1 px-1 scroll-smooth">
+        <div className="flex flex-row h-full min-h-0 bg-white relative overflow-hidden">
+            {categoryTreeVisible ? (
+                <aside className="w-[220px] xl:w-[240px] shrink-0 flex flex-col border-r border-slate-200 bg-slate-50 min-h-0">
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-100 bg-white/90 shrink-0">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Categories</span>
                         <button
+                            type="button"
+                            className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-colors"
+                            onClick={() => persistCategoryTreeVisible(false)}
+                            title="Hide categories"
+                            aria-label="Hide category tree"
+                        >
+                            {React.cloneElement(ICONS.chevronLeft as any, { size: 16 })}
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto pos-scrollbar p-2 min-h-0">
+                        <button
+                            type="button"
                             onClick={() => setSelectedCategory('all')}
-                            className={`whitespace-nowrap px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${selectedCategory === 'all' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            className={`w-full text-left px-3 py-2 rounded-xl text-[11px] font-bold transition-all mb-1 ${selectedCategory === 'all'
+                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                                : 'bg-white text-slate-700 border border-slate-100 hover:border-slate-200'
                                 }`}
                         >
-                            All Products
+                            All products
                         </button>
-                        {shopCategories.map(cat => (
-                            <button
-                                key={cat.id}
-                                onClick={() => setSelectedCategory(cat.id)}
-                                className={`whitespace-nowrap px-4 py-2 rounded-xl text-[11px] font-bold transition-all ${selectedCategory === cat.id ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                    }`}
-                            >
-                                {cat.name}
-                            </button>
-                        ))}
+                        {categoryTree.length > 0 ? (
+                            <CategoryTreeBranch
+                                nodes={categoryTree}
+                                depth={0}
+                                selectedCategory={selectedCategory}
+                                expandedIds={expandedCategoryIds}
+                                onToggleExpand={toggleCategoryExpand}
+                                onSelect={setSelectedCategory}
+                            />
+                        ) : (
+                            <p className="text-[10px] text-slate-400 px-2 py-3">No categories yet. Add categories in inventory settings.</p>
+                        )}
                     </div>
+                </aside>
+            ) : (
+                <button
+                    type="button"
+                    className="w-9 shrink-0 flex flex-col items-center justify-center gap-1 border-r border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition-colors"
+                    onClick={() => persistCategoryTreeVisible(true)}
+                    title="Show categories"
+                    aria-label="Show category tree"
+                >
+                    {React.cloneElement(ICONS.chevronRight as any, { size: 16 })}
+                    {React.cloneElement(ICONS.layers as any, { size: 12 })}
+                </button>
+            )}
 
-                    <button
-                        onClick={() => scrollCategories('right')}
-                        className="flex-shrink-0 p-2 rounded-xl border bg-white border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-all shadow-sm z-10"
-                    >
-                        {React.cloneElement(ICONS.chevronRight as any, { size: 16 })}
-                    </button>
+            <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+                {/* Search Bar - Premium Fixed Header */}
+                <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-100 p-4">
+                    <div className="relative group">
+                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600 transition-colors">
+                            {React.cloneElement(ICONS.search as any, { size: 18 })}
+                        </div>
+                        <input
+                            ref={searchInputRef}
+                            id="pos-product-search"
+                            type="text"
+                            className="w-full pl-11 pr-24 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 transition-all select-text"
+                            placeholder="Search Products (Ctrl+F)"
+                            value={localQuery}
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                        />
+                        <div className="absolute inset-y-0 right-4 flex items-center gap-2">
+                            {localQuery && (
+                                <button onClick={() => handleSearchChange('')} className="p-1 hover:bg-slate-200 rounded-full text-slate-400">
+                                    {React.cloneElement(ICONS.x as any, { size: 14 })}
+                                </button>
+                            )}
+                            <span className="kbd-tag bg-white shadow-sm border-slate-200">F4</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
             {/* Popular / Frequent Items Section */}
-            {!localQuery && selectedCategory === 'all' && popularProducts.length > 0 && (
+            {!localQuery && selectedCategory === 'all' && popularProductsWithStock.length > 0 && (
                 <div className="px-4 py-3 bg-indigo-50/50 border-b border-indigo-100/50">
                     <div className="flex items-center gap-2 mb-3 px-1">
                         <div className="w-1 h-4 bg-indigo-500 rounded-full"></div>
                         <h3 className="text-[11px] font-black text-indigo-900 uppercase tracking-wider">Fast Moving Items</h3>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                        {popularProducts.map(p => (
+                        {popularProductsWithStock.map(p => (
                             <button
                                 key={p.id}
                                 onClick={() => p.stockLevel > 0 && addToCart(p)}
@@ -536,12 +718,13 @@ const ProductSearch: React.FC = () => {
                 )}
             </div>
 
-            {/* Bottom Status / Mode Toggle */}
-            <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-bold text-slate-500">Items: <span className="text-slate-900">{filteredProducts.length}</span></span>
+                {/* Bottom Status / Mode Toggle */}
+                <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-bold text-slate-500">Items: <span className="text-slate-900">{filteredProducts.length}</span></span>
+                    </div>
+                    {/* Dense Mode Toggle is handled by ShortcutBar, but we can add minor UI here if needed */}
                 </div>
-                {/* Dense Mode Toggle is handled by ShortcutBar, but we can add minor UI here if needed */}
             </div>
 
             <AddOrEditSkuModal

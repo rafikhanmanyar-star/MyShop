@@ -152,11 +152,17 @@ const DailyReportDashboard: React.FC = () => {
   return (
     <ReportShell title="Daily Report">
       <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex flex-wrap items-end gap-4">
-          <Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
-          <div className="w-56">
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Branch</label>
-            <Select value={branchId || 'all'} onChange={(e) => setBranchFilter(e.target.value)}>
+        <div
+          className="flex flex-wrap items-end gap-4
+            [&_input]:!h-10 [&_input]:!min-h-0 [&_input]:!py-2 [&_input]:!text-sm
+            [&_select]:!h-10 [&_select]:!min-h-0 [&_select]:!py-2 [&_select]:!text-sm
+            [&_button]:!h-10 [&_button]:!min-h-0 [&_button]:!py-2 [&_button]:shrink-0"
+        >
+          <div className="w-44 shrink-0">
+            <Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <div className="w-56 shrink-0">
+            <Select label="Branch" value={branchId || 'all'} onChange={(e) => setBranchFilter(e.target.value)}>
               <option value="all">All locations</option>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -165,10 +171,15 @@ const DailyReportDashboard: React.FC = () => {
               ))}
             </Select>
           </div>
-          <Button variant="secondary" onClick={() => load()} disabled={loading} className="flex items-center gap-2">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
+          <div className="shrink-0 flex flex-col">
+            <span className="block text-sm font-medium text-gray-700 mb-1.5 invisible select-none" aria-hidden="true">
+              Action
+            </span>
+            <Button variant="secondary" onClick={() => load()} disabled={loading} className="flex items-center gap-2">
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {error && (

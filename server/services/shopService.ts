@@ -930,7 +930,7 @@ export class ShopService {
   // --- Category Methods ---
   async getShopCategories(tenantId: string) {
     return this.db.query(
-      `SELECT id, name, type, created_at FROM categories
+      `SELECT id, name, type, parent_id, created_at FROM categories
        WHERE tenant_id = $1 AND type = 'product' AND deleted_at IS NULL ORDER BY name`,
       [tenantId]
     );

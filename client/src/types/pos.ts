@@ -9,6 +9,8 @@ export interface POSProduct {
     price: number;
     cost: number;
     categoryId: string;
+    /** Secondary category tag from catalog (subcategory row id), when set */
+    subcategoryId?: string;
     imageUrl?: string;
     taxRate: number;
     isTaxInclusive: boolean;

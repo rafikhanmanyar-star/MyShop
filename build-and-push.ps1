@@ -2,8 +2,8 @@
 # MyShop - Build, Version Increment & Push Script
 # ============================================================
 # This script:
-#   1. Auto-increments the patch version (e.g. 1.0.0 -> 1.0.1)
-#   2. Builds the installable Windows desktop app (client-only; API & mobile run on Render)
+#   1. Builds the installable Windows desktop app for the *next* semver (client-only; API & mobile on Render)
+#   2. Only after a successful build: writes the new version to all package.json files
 #   3. Commits all changes and pushes to GitHub
 #   4. Creates a GitHub Release and UPLOADS the .exe (so Settings -> App -> Check for updates works)
 #      Requires: GitHub CLI installed + gh auth login
@@ -69,56 +69,67 @@ Write-Host "=============================================" -ForegroundColor Mage
 Write-Host ""
 
 # -----------------------------------------------------------
-# Step 1: Read current version & bump
+# Step 1: Resolve next version (files stay unchanged until build succeeds)
 # -----------------------------------------------------------
-Write-Host "[1/5] Incrementing version ($BumpType)..." -ForegroundColor Yellow
+Write-Host "[1/5] Next release version ($BumpType)..." -ForegroundColor Yellow
 
 $rootPkg = Get-Content "$ProjectRoot\package.json" -Raw | ConvertFrom-Json
 $currentVersion = $rootPkg.version
 $newVersion = Bump-Version -Version $currentVersion -Type $BumpType
 
-Write-Host "  Current version: v$currentVersion" -ForegroundColor DarkGray
-Write-Host "  New version:     v$newVersion" -ForegroundColor Green
-
-# Update all package.json files
-Update-PackageVersion -FilePath "$ProjectRoot\package.json" -NewVersion $newVersion
-Update-PackageVersion -FilePath "$ProjectRoot\client\package.json" -NewVersion $newVersion
-Update-PackageVersion -FilePath "$ProjectRoot\server\package.json" -NewVersion $newVersion
+Write-Host "  Current package.json: v$currentVersion" -ForegroundColor DarkGray
+Write-Host "  Will release as:      v$newVersion (written to disk only after a successful build)" -ForegroundColor Green
 
 Write-Host ""
 
 # -----------------------------------------------------------
-# Step 2: Build the installable Windows app (client-only; API on Render)
+# Step 2: Build installer for $newVersion (no package.json writes yet — failed builds leave versions unchanged)
 # -----------------------------------------------------------
 Write-Host "[2/5] Building installable Windows app (client only, API on Render)..." -ForegroundColor Yellow
 
 Push-Location $ProjectRoot
 try {
+    # Align UI (__APP_VERSION__) and electron-builder artifact with $newVersion without bumping package.json first
+    $env:RELEASE_APP_VERSION = $newVersion
+
     # Build client for cloud (set VITE_API_URL in client/.env or .env.cloud for your Render API URL)
     Write-Host "  Building client (cloud mode)..." -ForegroundColor Cyan
     Push-Location "$ProjectRoot\client"
-    npm run build:cloud
-    if ($LASTEXITCODE -ne 0) { throw "Client build failed!" }
-    Pop-Location
+    try {
+        npm run build:cloud
+        if ($LASTEXITCODE -ne 0) { throw "Client build failed!" }
+    }
+    finally {
+        Pop-Location
+    }
 
     # Package with electron-builder (client-only config; no embedded server)
     # Disable code signing so winCodeSign is not used (avoids Windows symlink errors when not in Developer Mode / Admin)
     $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
     Write-Host "  Packaging with electron-builder..." -ForegroundColor Cyan
-    npx electron-builder --win -c electron-builder.cloud.json
+    npx electron-builder --win -c electron-builder.cloud.json "-c.extraMetadata.version=$newVersion"
     if ($LASTEXITCODE -ne 0) { throw "Electron build failed!" }
 
     Write-Host "  Build complete! Installer is in ./release/" -ForegroundColor Green
 }
 catch {
     Write-Host "  BUILD FAILED: $_" -ForegroundColor Red
-    Pop-Location
     exit 1
 }
 finally {
+    Remove-Item Env:RELEASE_APP_VERSION -ErrorAction SilentlyContinue
     Pop-Location
 }
 
+Write-Host ""
+
+# -----------------------------------------------------------
+# Step 2b: Persist version only after a successful build
+# -----------------------------------------------------------
+Write-Host "  Writing v$newVersion to package.json files..." -ForegroundColor Cyan
+Update-PackageVersion -FilePath "$ProjectRoot\package.json" -NewVersion $newVersion
+Update-PackageVersion -FilePath "$ProjectRoot\client\package.json" -NewVersion $newVersion
+Update-PackageVersion -FilePath "$ProjectRoot\server\package.json" -NewVersion $newVersion
 Write-Host ""
 
 # -----------------------------------------------------------

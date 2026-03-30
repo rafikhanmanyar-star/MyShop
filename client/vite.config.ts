@@ -7,6 +7,8 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'));
+/** Set by release script so the UI matches the installer before package.json is bumped. */
+const appVersion = process.env.RELEASE_APP_VERSION || pkg.version || '0.0.0';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -15,7 +17,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     define: {
-      __APP_VERSION__: JSON.stringify(pkg.version || '0.0.0'),
+      __APP_VERSION__: JSON.stringify(appVersion),
     },
     optimizeDeps: {
       exclude: ['react-window'],

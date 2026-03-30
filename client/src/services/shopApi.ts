@@ -23,6 +23,8 @@ export interface ShopProductCategory {
   id: string;
   name: string;
   type: string;
+  /** Parent category id when this row is a subcategory */
+  parent_id?: string | null;
   created_at?: string;
 }
 
