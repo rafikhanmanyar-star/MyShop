@@ -168,7 +168,7 @@ function MobileOrdersPageContent() {
                         <Smartphone className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Mobile Orders</h1>
+                        <h1 className="text-2xl font-bold text-foreground">Mobile Orders</h1>
                         <div className="flex items-center gap-3 mt-0.5">
                             <span className="flex items-center gap-1.5 text-xs font-medium">
                                 {sseConnected ? (
@@ -189,10 +189,10 @@ function MobileOrdersPageContent() {
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => loadOrders(statusFilter === 'All' ? undefined : statusFilter)}
-                        className="p-2.5 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                        className="p-2.5 bg-card border border-border rounded-xl hover:bg-muted transition-colors"
                         title="Refresh"
                     >
-                        <RefreshCw className={`w-4 h-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
                     </button>
                 </div>
             </div>
@@ -213,11 +213,11 @@ function MobileOrdersPageContent() {
                             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all border
                 ${statusFilter === s
                                     ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20'
-                                    : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+                                    : 'bg-card text-muted-foreground border-border hover:border-indigo-300'
                                 }`}
                         >
                             {s === 'All' ? 'All' : cfg?.label || s}
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${statusFilter === s ? 'bg-white/20' : 'bg-gray-100'}`}>
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${statusFilter === s ? 'bg-card/20' : 'bg-muted'}`}>
                                 {count}
                             </span>
                         </button>
@@ -234,9 +234,9 @@ function MobileOrdersPageContent() {
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
                         </div>
                     ) : orders.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
                             <ShoppingBag className="w-16 h-16 mb-4 opacity-30" />
-                            <p className="text-lg font-semibold text-gray-500">No orders found</p>
+                            <p className="text-lg font-semibold text-muted-foreground">No orders found</p>
                             <p className="text-sm">Orders from mobile customers will appear here</p>
                         </div>
                     ) : (
@@ -249,24 +249,24 @@ function MobileOrdersPageContent() {
                                 <div
                                     key={order.id}
                                     onClick={() => handleViewDetail(order)}
-                                    className={`bg-white rounded-2xl border p-4 cursor-pointer transition-all hover:shadow-md hover:border-indigo-200 ${detailOrder?.id === order.id ? 'ring-2 ring-indigo-500 border-indigo-300' : 'border-gray-100'
+                                    className={`bg-card rounded-2xl border p-4 cursor-pointer transition-all hover:shadow-md hover:border-indigo-200 ${detailOrder?.id === order.id ? 'ring-2 ring-indigo-500 border-indigo-300' : 'border-border'
                                         }`}
                                 >
                                     <div className="flex items-start justify-between mb-3">
                                         <div>
                                             <div className="flex items-center gap-2">
-                                                <span className="font-bold text-gray-900">{order.order_number}</span>
+                                                <span className="font-bold text-foreground">{order.order_number}</span>
                                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border ${cfg.bg} ${cfg.color}`}>
                                                     <StatusIcon className="w-3 h-3" />
                                                     {cfg.label}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-gray-400 mt-1">{formatDate(order.created_at)}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">{formatDate(order.created_at)}</p>
                                         </div>
                                         <span className="text-lg font-bold text-indigo-600">{formatPrice(order.grand_total)}</span>
                                     </div>
 
-                                    <div className="flex items-center gap-4 text-xs text-gray-500">
+                                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
                                         {order.customer_name && (
                                             <span className="flex items-center gap-1">
                                                 <User className="w-3 h-3" />{order.customer_name}
@@ -282,7 +282,7 @@ function MobileOrdersPageContent() {
 
                                     {/* Quick action buttons */}
                                     {nextStatus && (
-                                        <div className="flex gap-2 mt-3 pt-3 border-t border-gray-50">
+                                        <div className="flex gap-2 mt-3 pt-3 border-t border-border/60">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, nextStatus); }}
                                                 disabled={actionLoading === order.id}
@@ -310,7 +310,7 @@ function MobileOrdersPageContent() {
                                     )}
                                     {/* Collect Payment button for Delivered + Unpaid */}
                                     {order.status === 'Delivered' && order.payment_status !== 'Paid' && (
-                                        <div className="mt-3 pt-3 border-t border-gray-50">
+                                        <div className="mt-3 pt-3 border-t border-border/60">
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
@@ -333,7 +333,7 @@ function MobileOrdersPageContent() {
                 {/* Order Detail Panel */}
                 <div className="w-[400px] flex-shrink-0">
                     {detailLoading ? (
-                        <div className="bg-white rounded-2xl border border-gray-100 p-8 flex items-center justify-center h-96">
+                        <div className="bg-card rounded-2xl border border-border p-8 flex items-center justify-center h-96">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
                         </div>
                     ) : detailOrder ? (
@@ -349,9 +349,9 @@ function MobileOrdersPageContent() {
                             formatDate={formatFullDate}
                         />
                     ) : (
-                        <div className="bg-white rounded-2xl border border-gray-100 p-8 flex flex-col items-center justify-center h-96 text-gray-400">
+                        <div className="bg-card rounded-2xl border border-border p-8 flex flex-col items-center justify-center h-96 text-muted-foreground">
                             <Eye className="w-12 h-12 mb-3 opacity-30" />
-                            <p className="font-semibold text-gray-500">Select an order</p>
+                            <p className="font-semibold text-muted-foreground">Select an order</p>
                             <p className="text-sm">Click on an order to view details</p>
                         </div>
                     )}
@@ -361,26 +361,26 @@ function MobileOrdersPageContent() {
             {/* Payment Collection Modal */}
             {paymentModal && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setPaymentModal(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
+                    <div className="bg-card rounded-2xl shadow-2xl w-[420px] overflow-hidden" onClick={e => e.stopPropagation()}>
                         <div className="p-6 bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
                                     <Banknote className="w-5 h-5 text-orange-600" />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-gray-900">Collect Payment</h3>
-                                    <p className="text-xs text-gray-500">{paymentModal.orderNumber}</p>
+                                    <h3 className="font-bold text-foreground">Collect Payment</h3>
+                                    <p className="text-xs text-muted-foreground">{paymentModal.orderNumber}</p>
                                 </div>
                             </div>
                         </div>
                         <div className="p-6 space-y-5">
-                            <div className="p-4 bg-gray-50 rounded-xl flex justify-between items-center">
-                                <span className="text-sm text-gray-600 font-medium">Amount Due</span>
-                                <span className="text-xl font-black text-gray-900">{formatPrice(paymentModal.grandTotal)}</span>
+                            <div className="p-4 bg-muted rounded-xl flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground font-medium">Amount Due</span>
+                                <span className="text-xl font-black text-foreground">{formatPrice(paymentModal.grandTotal)}</span>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Deposit To Account</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Deposit To Account</label>
                                 {bankAccounts.length === 0 ? (
                                     <p className="text-sm text-red-500">No bank accounts found. Create one in Settings first.</p>
                                 ) : (
@@ -391,7 +391,7 @@ function MobileOrdersPageContent() {
                                                 className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
                                                     selectedBankAccount === acc.id
                                                         ? 'border-orange-400 bg-orange-50'
-                                                        : 'border-gray-100 hover:border-orange-200'
+                                                        : 'border-border hover:border-orange-200'
                                                 }`}
                                             >
                                                 <input
@@ -403,15 +403,15 @@ function MobileOrdersPageContent() {
                                                     className="sr-only"
                                                 />
                                                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                                                    selectedBankAccount === acc.id ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-400'
+                                                    selectedBankAccount === acc.id ? 'bg-orange-100 text-orange-600' : 'bg-muted text-muted-foreground'
                                                 }`}>
                                                     {acc.account_type === 'Cash' ? <Wallet className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-bold text-gray-800 truncate">{acc.name}</p>
-                                                    <p className="text-[10px] text-gray-400 uppercase">{acc.account_type} {acc.chart_code ? `• ${acc.chart_code}` : acc.code ? `• ${acc.code}` : ''}</p>
+                                                    <p className="text-sm font-bold text-foreground truncate">{acc.name}</p>
+                                                    <p className="text-[10px] text-muted-foreground uppercase">{acc.account_type} {acc.chart_code ? `• ${acc.chart_code}` : acc.code ? `• ${acc.code}` : ''}</p>
                                                 </div>
-                                                <span className="text-xs font-mono font-bold text-gray-600">
+                                                <span className="text-xs font-mono font-bold text-muted-foreground">
                                                     PKR {(parseFloat(acc.balance) || 0).toLocaleString()}
                                                 </span>
                                             </label>
@@ -420,10 +420,10 @@ function MobileOrdersPageContent() {
                                 )}
                             </div>
                         </div>
-                        <div className="p-4 border-t border-gray-100 flex gap-3">
+                        <div className="p-4 border-t border-border flex gap-3">
                             <button
                                 onClick={() => setPaymentModal(null)}
-                                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors"
+                                className="flex-1 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
                             >
                                 Cancel
                             </button>
@@ -478,11 +478,11 @@ function OrderDetailPanel({
     const isUnpaid = order.status === 'Delivered' && order.payment_status !== 'Paid';
 
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm relative">
+        <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm relative">
             {/* Header */}
             <div className="p-5 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
                 <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-lg text-gray-900">{order.order_number}</span>
+                    <span className="font-bold text-lg text-foreground">{order.order_number}</span>
                     <div className="flex items-center gap-2">
                         {isUnpaid && (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border bg-orange-50 border-orange-200 text-orange-700">
@@ -496,21 +496,21 @@ function OrderDetailPanel({
                         </span>
                     </div>
                 </div>
-                <p className="text-xs text-gray-500">{formatDate(order.created_at)}</p>
+                <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
             </div>
 
             <div className="p-5 space-y-5 max-h-[60vh] overflow-y-auto">
                 {/* Customer */}
                 <div>
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Customer</h4>
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Customer</h4>
                     <div className="space-y-1.5 text-sm">
                         {order.customer_name && (
-                            <div className="flex items-center gap-2 text-gray-700">
-                                <User className="w-4 h-4 text-gray-400" />{order.customer_name}
+                            <div className="flex items-center gap-2 text-foreground">
+                                <User className="w-4 h-4 text-muted-foreground" />{order.customer_name}
                             </div>
                         )}
-                        <div className="flex items-center gap-2 text-gray-700">
-                            <Phone className="w-4 h-4 text-gray-400" />{order.customer_phone}
+                        <div className="flex items-center gap-2 text-foreground">
+                            <Phone className="w-4 h-4 text-muted-foreground" />{order.customer_phone}
                         </div>
                         {order.customer_id && (
                             <button
@@ -531,9 +531,9 @@ function OrderDetailPanel({
 
                 {/* Payment Status */}
                 <div>
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Payment</h4>
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Payment</h4>
                     <div className="flex items-center gap-2 text-sm">
-                        <span className="text-gray-700">{formatMobilePaymentMethod(order.payment_method)}</span>
+                        <span className="text-foreground">{formatMobilePaymentMethod(order.payment_method)}</span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${order.payment_status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                             {order.payment_status || 'Unpaid'}
                         </span>
@@ -543,12 +543,12 @@ function OrderDetailPanel({
                 {/* Delivery */}
                 {order.delivery_address && (
                     <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Delivery</h4>
-                        <div className="flex items-start gap-2 text-sm text-gray-700">
-                            <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Delivery</h4>
+                        <div className="flex items-start gap-2 text-sm text-foreground">
+                            <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                             <div>
                                 <p>{order.delivery_address}</p>
-                                {order.delivery_notes && <p className="text-xs text-gray-500 mt-1">Note: {order.delivery_notes}</p>}
+                                {order.delivery_notes && <p className="text-xs text-muted-foreground mt-1">Note: {order.delivery_notes}</p>}
                             </div>
                         </div>
                     </div>
@@ -556,38 +556,38 @@ function OrderDetailPanel({
 
                 {/* Items */}
                 <div>
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
                         Items ({order.items?.length || 0})
                     </h4>
                     <div className="space-y-2">
                         {order.items?.map(item => (
-                            <div key={item.id} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+                            <div key={item.id} className="flex justify-between items-center py-2 border-b border-border/60 last:border-0">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-800">{item.product_name}</p>
-                                    <p className="text-xs text-gray-400">{item.product_sku} × {item.quantity}</p>
+                                    <p className="text-sm font-medium text-foreground">{item.product_name}</p>
+                                    <p className="text-xs text-muted-foreground">{item.product_sku} × {item.quantity}</p>
                                 </div>
-                                <span className="text-sm font-bold text-gray-700">{formatPrice(item.subtotal)}</span>
+                                <span className="text-sm font-bold text-foreground">{formatPrice(item.subtotal)}</span>
                             </div>
                         ))}
                     </div>
                 </div>
 
                 {/* Totals */}
-                <div className="bg-gray-50 -mx-5 px-5 py-3 space-y-1.5 text-sm">
-                    <div className="flex justify-between text-gray-600">
+                <div className="bg-muted -mx-5 px-5 py-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between text-muted-foreground">
                         <span>Subtotal</span><span>{formatPrice(order.subtotal)}</span>
                     </div>
                     {parseFloat(String(order.tax_total)) > 0 && (
-                        <div className="flex justify-between text-gray-600">
+                        <div className="flex justify-between text-muted-foreground">
                             <span>Tax</span><span>{formatPrice(order.tax_total)}</span>
                         </div>
                     )}
                     {parseFloat(String(order.delivery_fee)) > 0 && (
-                        <div className="flex justify-between text-gray-600">
+                        <div className="flex justify-between text-muted-foreground">
                             <span>Delivery</span><span>{formatPrice(order.delivery_fee)}</span>
                         </div>
                     )}
-                    <div className="flex justify-between font-bold text-gray-900 text-base pt-1.5 border-t border-gray-200">
+                    <div className="flex justify-between font-bold text-foreground text-base pt-1.5 border-t border-border">
                         <span>Total</span><span>{formatPrice(order.grand_total)}</span>
                     </div>
                 </div>
@@ -595,15 +595,15 @@ function OrderDetailPanel({
                 {/* Status History */}
                 {order.status_history && order.status_history.length > 0 && (
                     <div>
-                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">History</h4>
+                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">History</h4>
                         <div className="space-y-2">
                             {order.status_history.map(h => (
-                                <div key={h.id} className="flex items-center gap-2 text-xs text-gray-500">
+                                <div key={h.id} className="flex items-center gap-2 text-xs text-muted-foreground">
                                     <div className="w-2 h-2 rounded-full bg-indigo-400" />
-                                    <span className="font-medium text-gray-700">{h.to_status}</span>
+                                    <span className="font-medium text-foreground">{h.to_status}</span>
                                     <span>•</span>
                                     <span>{formatDate(h.created_at)}</span>
-                                    {h.note && <span className="text-gray-400">— {h.note}</span>}
+                                    {h.note && <span className="text-muted-foreground">— {h.note}</span>}
                                 </div>
                             ))}
                         </div>
@@ -613,7 +613,7 @@ function OrderDetailPanel({
 
             {/* Actions */}
             {nextStatus && (
-                <div className="p-4 border-t border-gray-100 flex gap-2">
+                <div className="p-4 border-t border-border flex gap-2">
                     <button
                         onClick={() => onStatusUpdate(order.id, nextStatus)}
                         disabled={actionLoading === order.id}
@@ -640,7 +640,7 @@ function OrderDetailPanel({
                 </div>
             )}
             {isUnpaid && (
-                <div className="p-4 border-t border-gray-100">
+                <div className="p-4 border-t border-border">
                     <button
                         onClick={() => onCollectPayment(order)}
                         className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors"
@@ -657,7 +657,7 @@ function OrderDetailPanel({
                     onClick={() => !pwResetLoading && setPwResetOpen(false)}
                 >
                     <div
-                        className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden"
+                        className="bg-card rounded-2xl shadow-2xl w-[400px] overflow-hidden"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="p-5 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-indigo-100">
@@ -666,43 +666,43 @@ function OrderDetailPanel({
                                     <KeyRound className="w-5 h-5 text-indigo-600" />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-gray-900">Reset mobile app password</h3>
-                                    <p className="text-xs text-gray-500">{order.customer_phone}</p>
+                                    <h3 className="font-bold text-foreground">Reset mobile app password</h3>
+                                    <p className="text-xs text-muted-foreground">{order.customer_phone}</p>
                                 </div>
                             </div>
                         </div>
                         <div className="p-5 space-y-4">
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm text-muted-foreground">
                                 Set a new password for this customer. They will use it to sign in to the mobile ordering app for your shop.
                             </p>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">New password</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">New password</label>
                                 <input
                                     type="password"
                                     autoComplete="new-password"
                                     value={newPw}
                                     onChange={e => setNewPw(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                    className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                                     placeholder="At least 6 characters"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Confirm password</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Confirm password</label>
                                 <input
                                     type="password"
                                     autoComplete="new-password"
                                     value={confirmPw}
                                     onChange={e => setConfirmPw(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                    className="w-full px-3 py-2 rounded-xl border border-border text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                                 />
                             </div>
                         </div>
-                        <div className="p-4 border-t border-gray-100 flex gap-3">
+                        <div className="p-4 border-t border-border flex gap-3">
                             <button
                                 type="button"
                                 onClick={() => setPwResetOpen(false)}
                                 disabled={pwResetLoading}
-                                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors disabled:opacity-50"
+                                className="flex-1 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors disabled:opacity-50"
                             >
                                 Cancel
                             </button>
@@ -916,32 +916,32 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
             {/* Header */}
             <div className="flex items-center gap-3">
                 {onBack && (
-                    <button onClick={onBack} className="p-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">
-                        <ChevronRight className="w-5 h-5 text-gray-600 rotate-180" />
+                    <button onClick={onBack} className="p-2 bg-card border border-border rounded-xl hover:bg-muted transition-colors">
+                        <ChevronRight className="w-5 h-5 text-muted-foreground rotate-180" />
                     </button>
                 )}
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Mobile branding</h1>
-                    <p className="text-sm text-gray-500">Configure your mobile ordering experience</p>
+                    <h1 className="text-2xl font-bold text-foreground">Mobile branding</h1>
+                    <p className="text-sm text-muted-foreground">Configure your mobile ordering experience</p>
                 </div>
             </div>
 
             <div className="grid grid-cols-2 gap-6">
                 {/* QR Code Card */}
-                <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+                <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
                         <QrCode className="w-5 h-5 text-indigo-600" />
-                        <h2 className="text-lg font-bold text-gray-900">Shop QR Code</h2>
+                        <h2 className="text-lg font-bold text-foreground">Shop QR Code</h2>
                     </div>
 
-                    <p className="text-xs text-gray-500 mb-4">
+                    <p className="text-xs text-muted-foreground mb-4">
                         Print this QR code on stickers and place them in your shop. Customers scan it with their phone camera to open your mobile ordering page.
                     </p>
 
                     {qrData ? (
                         <div className="text-center">
                             {/* Real scannable QR code */}
-                            <div ref={qrRef} className="inline-block bg-white p-4 rounded-2xl border-2 border-gray-100 mx-auto mb-4">
+                            <div ref={qrRef} className="inline-block bg-white p-4 rounded-2xl border-2 border-border mx-auto mb-4 dark:bg-white">
                                 <QRCodeSVG
                                     value={qrData.url}
                                     size={200}
@@ -952,9 +952,9 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                 />
                             </div>
 
-                            <p className="text-sm font-bold text-gray-900 mb-0.5">{qrData.url}</p>
-                            <p className="text-xs text-gray-400 mb-5">
-                                Slug: <code className="bg-gray-100 px-2 py-0.5 rounded font-mono text-indigo-600">{qrData.slug}</code>
+                            <p className="text-sm font-bold text-foreground mb-0.5">{qrData.url}</p>
+                            <p className="text-xs text-muted-foreground mb-5">
+                                Slug: <code className="bg-muted px-2 py-0.5 rounded font-mono text-indigo-600">{qrData.slug}</code>
                             </p>
 
                             {/* Action buttons */}
@@ -969,14 +969,14 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                 <div className="flex gap-2">
                                     <button
                                         onClick={handleDownloadQR}
-                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors"
+                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
                                     >
                                         <Download className="w-3.5 h-3.5" />
                                         Download PNG
                                     </button>
                                     <button
                                         onClick={handleCopyUrl}
-                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors"
+                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors"
                                     >
                                         {copied ? <CheckCircle className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
                                         {copied ? 'Copied!' : 'Copy URL'}
@@ -987,18 +987,18 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                     ) : (
                         <div className="text-center py-8">
                             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto mb-3" />
-                            <p className="text-sm text-gray-500">Generating QR code...</p>
-                            <p className="text-xs text-gray-400 mt-1">Make sure you have set a shop slug in the Branding section</p>
+                            <p className="text-sm text-muted-foreground">Generating QR code...</p>
+                            <p className="text-xs text-muted-foreground mt-1">Make sure you have set a shop slug in the Branding section</p>
                         </div>
                     )}
                 </div>
 
                 {/* Branding Card */}
-                <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-card rounded-2xl border border-border p-6 shadow-sm overflow-hidden flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                             <Palette className="w-5 h-5 text-indigo-600" />
-                            <h2 className="text-lg font-bold text-gray-900">App Branding</h2>
+                            <h2 className="text-lg font-bold text-foreground">App Branding</h2>
                         </div>
                         <button
                             onClick={handleSaveBranding}
@@ -1013,18 +1013,18 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                         <div className="space-y-6 overflow-y-auto pr-2 max-h-[70vh]">
                             {/* Branch selector: link URL slug to branch for QR at door */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Branch (for QR & orders)</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Branch (for QR & orders)</label>
                                 <select
                                     value={selectedBranchId}
                                     onChange={e => setSelectedBranchId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-card"
                                 >
                                     <option value="">Default (first branch)</option>
                                     {branches.map(b => (
                                         <option key={b.id} value={b.id}>{b.name} {b.code ? `(${b.code})` : ''}</option>
                                     ))}
                                 </select>
-                                <p className="text-[10px] text-gray-400 mt-1">
+                                <p className="text-[10px] text-muted-foreground mt-1">
                                     Select the branch whose door QR and URL you are configuring. Orders from that URL will go to this branch&apos;s POS.
                                 </p>
                                 {(localBranding.branch_name || localBranding.branch_location) && (
@@ -1036,70 +1036,70 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
 
                             {/* Slug Input */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Shop URL Slug</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Shop URL Slug</label>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
                                         value={localBranding.slug || ''}
                                         onChange={e => setLocalBranding({ ...localBranding, slug: e.target.value })}
                                         placeholder="my-shop"
-                                        className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-indigo-600"
+                                        className="flex-1 px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-indigo-600"
                                     />
                                 </div>
-                                <p className="text-[10px] text-gray-400 mt-1">This determines your shop address: {qrData?.url}</p>
+                                <p className="text-[10px] text-muted-foreground mt-1">This determines your shop address: {qrData?.url}</p>
                             </div>
 
                             {/* Shop Address & Coordinates */}
-                            <div className="space-y-4 pt-2 border-t border-gray-50">
+                            <div className="space-y-4 pt-2 border-t border-border/60">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Shop Address</label>
+                                    <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Shop Address</label>
                                     <textarea
                                         value={localBranding.address || ''}
                                         onChange={e => setLocalBranding({ ...localBranding, address: e.target.value })}
                                         placeholder="Enter full shop address"
                                         rows={2}
-                                        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                     />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Latitude</label>
+                                        <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Latitude</label>
                                         <input
                                             type="number"
                                             step="any"
                                             value={localBranding.lat || ''}
                                             onChange={e => setLocalBranding({ ...localBranding, lat: e.target.value ? parseFloat(e.target.value) : null })}
                                             placeholder="e.g. 24.8607"
-                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                                            className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Longitude</label>
+                                        <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Longitude</label>
                                         <input
                                             type="number"
                                             step="any"
                                             value={localBranding.lng || ''}
                                             onChange={e => setLocalBranding({ ...localBranding, lng: e.target.value ? parseFloat(e.target.value) : null })}
                                             placeholder="e.g. 67.0011"
-                                            className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
+                                            className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono"
                                         />
                                     </div>
                                 </div>
-                                <p className="text-[10px] text-gray-400">These coordinates will help the mobile app find your nearest branch automatically.</p>
+                                <p className="text-[10px] text-muted-foreground">These coordinates will help the mobile app find your nearest branch automatically.</p>
                             </div>
 
                             {/* Logo Upload */}
-                            <div className="p-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                            <div className="p-4 bg-muted rounded-2xl border-2 border-dashed border-border">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden flex items-center justify-center flex-shrink-0">
+                                    <div className="w-16 h-16 rounded-xl bg-card shadow-sm border border-border overflow-hidden flex items-center justify-center flex-shrink-0">
                                         {localBranding.logo_url ? (
                                             <img src={getFullImageUrl(localBranding.logo_url)} alt="Logo" className="w-full h-full object-cover" />
                                         ) : (
-                                            <Store className="w-8 h-8 text-gray-300" />
+                                            <Store className="w-8 h-8 text-muted-foreground" />
                                         )}
                                     </div>
                                     <div className="flex-1 space-y-2">
-                                        <p className="text-xs font-bold text-gray-700">App Logo</p>
+                                        <p className="text-xs font-bold text-foreground">App Logo</p>
                                         <input
                                             type="file"
                                             ref={fileInputRef}
@@ -1110,7 +1110,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         <button
                                             onClick={() => fileInputRef.current?.click()}
                                             disabled={uploading}
-                                            className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                            className="px-3 py-1.5 bg-card border border-border rounded-lg text-xs font-bold text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                                         >
                                             {uploading ? 'Uploading...' : 'Upload New'}
                                         </button>
@@ -1121,7 +1121,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                             {/* Colors */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Primary Color</label>
+                                    <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Primary Color</label>
                                     <div className="flex items-center gap-2">
                                         <input
                                             type="color"
@@ -1133,12 +1133,12 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             type="text"
                                             value={localBranding.primary_color || localBranding.brand_color || '#4F46E5'}
                                             onChange={e => setLocalBranding({ ...localBranding, primary_color: e.target.value, brand_color: e.target.value })}
-                                            className="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg text-xs font-mono"
+                                            className="flex-1 px-2 py-1.5 border border-border rounded-lg text-xs font-mono"
                                         />
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Accent Color</label>
+                                    <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Accent Color</label>
                                     <div className="flex items-center gap-2">
                                         <input
                                             type="color"
@@ -1150,7 +1150,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             type="text"
                                             value={localBranding.accent_color || '#f59e0b'}
                                             onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
-                                            className="flex-1 px-2 py-1.5 border border-gray-200 rounded-lg text-xs font-mono"
+                                            className="flex-1 px-2 py-1.5 border border-border rounded-lg text-xs font-mono"
                                         />
                                     </div>
                                 </div>
@@ -1158,7 +1158,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
 
                             {/* Theme Mode */}
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">App Theme</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">App Theme</label>
                                 <div className="grid grid-cols-3 gap-2">
                                     {['light', 'dark', 'auto'].map(mode => (
                                         <button
@@ -1166,7 +1166,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             onClick={() => setLocalBranding({ ...localBranding, theme_mode: mode })}
                                             className={`px-3 py-2 rounded-xl text-xs font-bold capitalize border transition-all ${localBranding.theme_mode === mode
                                                 ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                                                : 'bg-white border-gray-100 text-gray-500 hover:border-gray-200'
+                                                : 'bg-card border-border text-muted-foreground hover:border-border'
                                                 }`}
                                         >
                                             {mode}
@@ -1176,13 +1176,13 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                             </div>
 
                             {/* Live Preview (Mini) */}
-                            <div className="pt-4 border-t border-gray-50">
-                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Mobile Preview</label>
-                                <div className="w-full aspect-[9/16] max-w-[200px] mx-auto border-4 border-gray-800 rounded-[2rem] overflow-hidden bg-white shadow-lg flex flex-col"
+                            <div className="pt-4 border-t border-border/60">
+                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Mobile Preview</label>
+                                <div className="w-full aspect-[9/16] max-w-[200px] mx-auto border-4 border-gray-800 rounded-[2rem] overflow-hidden bg-card shadow-lg flex flex-col"
                                     style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#1e293b' : 'white' }}>
-                                    <div className="h-8 flex items-center px-4 justify-between border-b border-gray-50"
+                                    <div className="h-8 flex items-center px-4 justify-between border-b border-border/60"
                                         style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#0f172a' : 'white', borderColor: localBranding.theme_mode === 'dark' ? '#1e293b' : '#f1f5f9' }}>
-                                        <div className="w-4 h-4 rounded bg-gray-100 flex items-center justify-center">
+                                        <div className="w-4 h-4 rounded bg-muted flex items-center justify-center">
                                             {localBranding.logo_url ? (
                                                 <img src={getFullImageUrl(localBranding.logo_url)} className="w-full h-full object-cover rounded" />
                                             ) : (
@@ -1194,14 +1194,14 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     <div className="flex-1 p-3 space-y-3">
                                         <div className="h-10 rounded-lg" style={{ background: `linear-gradient(135deg, ${localBranding.primary_color || localBranding.brand_color || '#4338ca'}, ${localBranding.secondary_color || '#10b981'})` }} />
                                         <div className="space-y-1.5">
-                                            <div className="h-2 w-12 rounded bg-gray-100" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
+                                            <div className="h-2 w-12 rounded bg-muted" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
                                             <div className="flex gap-1.5">
                                                 <div className="h-4 w-8 rounded-full bg-indigo-500" style={{ backgroundColor: localBranding.primary_color || localBranding.brand_color }} />
-                                                <div className="h-4 w-8 rounded-full bg-gray-100" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
+                                                <div className="h-4 w-8 rounded-full bg-muted" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
                                             </div>
                                         </div>
-                                        <div className="p-2 rounded-lg border border-gray-50 space-y-1.5" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#0f172a' : 'white', borderColor: localBranding.theme_mode === 'dark' ? '#1e293b' : '#f1f5f9' }}>
-                                            <div className="h-2 w-16 rounded bg-gray-100" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
+                                        <div className="p-2 rounded-lg border border-border/60 space-y-1.5" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#0f172a' : 'white', borderColor: localBranding.theme_mode === 'dark' ? '#1e293b' : '#f1f5f9' }}>
+                                            <div className="h-2 w-16 rounded bg-muted" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
                                             <div className="flex justify-end"><div className="w-3 h-3 rounded-full bg-amber-500" style={{ backgroundColor: localBranding.accent_color || '#f59e0b' }} /></div>
                                         </div>
                                     </div>
@@ -1211,16 +1211,16 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                     ) : (
                         <div className="flex flex-col items-center justify-center py-12">
                             <RefreshCw className="w-8 h-8 text-indigo-100 animate-spin mb-4" />
-                            <p className="text-sm text-gray-400">Loading branding...</p>
+                            <p className="text-sm text-muted-foreground">Loading branding...</p>
                         </div>
                     )}
                 </div>
 
                 {/* Ordering Settings */}
-                <div className="col-span-2 bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+                <div className="col-span-2 bg-card rounded-2xl border border-border p-6 shadow-sm">
                     <div className="flex items-center gap-2 mb-4">
                         <SettingsIcon className="w-5 h-5 text-indigo-600" />
-                        <h2 className="text-lg font-bold text-gray-900">Ordering Settings</h2>
+                        <h2 className="text-lg font-bold text-foreground">Ordering Settings</h2>
                     </div>
 
                     {localSettings && (
@@ -1231,70 +1231,70 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     onClick={() => setLocalSettings({ ...localSettings, is_enabled: !localSettings.is_enabled })}
                                 >
                                     <div className={`w-12 h-7 rounded-full transition-colors relative ${localSettings.is_enabled ? 'bg-indigo-600' : 'bg-gray-300'}`}>
-                                        <div className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${localSettings.is_enabled ? 'left-5' : 'left-0.5'}`} />
+                                        <div className={`absolute top-0.5 w-6 h-6 bg-white dark:bg-slate-200 rounded-full shadow transition-transform ${localSettings.is_enabled ? 'left-5' : 'left-0.5'}`} />
                                     </div>
-                                    <span className="font-bold text-gray-900">Mobile Ordering Enabled</span>
+                                    <span className="font-bold text-foreground">Mobile Ordering Enabled</span>
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Min Order Amount (PKR)</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Min Order Amount (PKR)</label>
                                 <input
                                     type="number"
                                     value={localSettings.minimum_order_amount || 0}
                                     onChange={e => setLocalSettings({ ...localSettings, minimum_order_amount: parseFloat(e.target.value) })}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Delivery Fee (PKR)</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Delivery Fee (PKR)</label>
                                 <input
                                     type="number"
                                     value={localSettings.delivery_fee || 0}
                                     onChange={e => setLocalSettings({ ...localSettings, delivery_fee: parseFloat(e.target.value) })}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Free Delivery Above (PKR)</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Free Delivery Above (PKR)</label>
                                 <input
                                     type="number"
                                     value={localSettings.free_delivery_above || ''}
                                     onChange={e => setLocalSettings({ ...localSettings, free_delivery_above: e.target.value ? parseFloat(e.target.value) : null })}
                                     placeholder="No free delivery"
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Est. Delivery (mins)</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Est. Delivery (mins)</label>
                                 <input
                                     type="number"
                                     value={localSettings.estimated_delivery_minutes || 60}
                                     onChange={e => setLocalSettings({ ...localSettings, estimated_delivery_minutes: parseInt(e.target.value) })}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Accept Orders From</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Accept Orders From</label>
                                 <input
                                     type="time"
                                     value={localSettings.order_acceptance_start || '09:00'}
                                     onChange={e => setLocalSettings({ ...localSettings, order_acceptance_start: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Accept Orders Until</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Accept Orders Until</label>
                                 <input
                                     type="time"
                                     value={localSettings.order_acceptance_end || '21:00'}
                                     onChange={e => setLocalSettings({ ...localSettings, order_acceptance_end: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    className="w-full px-3 py-2 border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                 />
                             </div>
 
@@ -1306,7 +1306,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         onChange={e => setLocalSettings({ ...localSettings, auto_confirm_orders: e.target.checked })}
                                         className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                                     />
-                                    <span className="text-sm font-medium text-gray-700">Auto-confirm incoming orders (skip manual approval)</span>
+                                    <span className="text-sm font-medium text-foreground">Auto-confirm incoming orders (skip manual approval)</span>
                                 </label>
                             </div>
 

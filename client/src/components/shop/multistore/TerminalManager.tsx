@@ -72,8 +72,8 @@ const TerminalManager: React.FC = () => {
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
             <div className="flex justify-between items-center mb-4">
                 <div>
-                    <h3 className="text-xl font-black text-slate-800 tracking-tight">Active Hardware Network</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Real-time terminal health and synchronization status.</p>
+                    <h3 className="text-xl font-black text-foreground tracking-tight">Active Hardware Network</h3>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">Real-time terminal health and synchronization status.</p>
                 </div>
                 <div className="flex gap-2">
                     <button
@@ -92,9 +92,9 @@ const TerminalManager: React.FC = () => {
                     const isLocked = terminal.status === 'Locked';
 
                     return (
-                        <Card key={terminal.id} className="p-6 border-none shadow-sm relative overflow-hidden bg-white group hover:shadow-2xl transition-all duration-300 rounded-[2rem]">
+                        <Card key={terminal.id} className="p-6 border-none shadow-sm relative overflow-hidden bg-card group hover:shadow-2xl transition-all duration-300 rounded-[2rem]">
                             {/* Health Bar at the top */}
-                            <div className="absolute top-0 left-0 right-0 h-1.5 bg-slate-50">
+                            <div className="absolute top-0 left-0 right-0 h-1.5 bg-muted/80">
                                 <div
                                     className={`h-full transition-all duration-1000 ${terminal.healthScore > 90 ? 'bg-emerald-500' :
                                         terminal.healthScore > 70 ? 'bg-amber-400' : 'bg-rose-500'
@@ -105,7 +105,7 @@ const TerminalManager: React.FC = () => {
 
                             <div className="flex justify-between items-start mb-6">
                                 <div className={`relative p-5 rounded-3xl ${terminal.status === 'Online' ? 'bg-emerald-50 text-emerald-600' :
-                                    isLocked ? 'bg-rose-50 text-rose-600' : 'bg-slate-50 text-slate-400'
+                                    isLocked ? 'bg-rose-50 text-rose-600' : 'bg-muted/80 text-muted-foreground'
                                     }`}>
                                     {terminal.status === 'Online' && (
                                         <span className="absolute top-3 right-3 flex h-3 w-3">
@@ -117,18 +117,18 @@ const TerminalManager: React.FC = () => {
                                 </div>
                                 <div className="text-right">
                                     <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm ${terminal.status === 'Online' ? 'bg-emerald-600 text-white' :
-                                        isLocked ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-500'
+                                        isLocked ? 'bg-rose-600 text-white' : 'bg-slate-200 text-muted-foreground'
                                         }`}>
                                         {terminal.status}
                                     </span>
-                                    <p className="text-[10px] font-bold text-slate-400 mt-2 tracking-tight">{terminal.ipAddress || 'No IP Assigned'}</p>
+                                    <p className="text-[10px] font-bold text-muted-foreground mt-2 tracking-tight">{terminal.ipAddress || 'No IP Assigned'}</p>
                                 </div>
                             </div>
 
                             <div className="space-y-5">
                                 <div className="relative">
                                     <div className="flex items-center justify-between">
-                                        <h4 className="text-xl font-black text-slate-800 tracking-tight leading-tight group-hover:text-indigo-600 transition-colors">{terminal.name}</h4>
+                                        <h4 className="text-xl font-black text-foreground tracking-tight leading-tight group-hover:text-indigo-600 transition-colors">{terminal.name}</h4>
                                         <p className="text-[10px] font-mono font-black text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">#{terminal.code}</p>
                                     </div>
                                     <p className="text-[11px] font-black text-indigo-600 uppercase italic tracking-wide mt-1">
@@ -138,12 +138,12 @@ const TerminalManager: React.FC = () => {
 
                                 <div className="grid grid-cols-2 gap-4 py-4 border-y border-slate-50">
                                     <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Version</p>
-                                        <p className="text-sm font-bold text-slate-700">v{terminal.version}</p>
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Version</p>
+                                        <p className="text-sm font-bold text-foreground">v{terminal.version}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Last Sync</p>
-                                        <p className="text-sm font-bold text-slate-700">
+                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Last Sync</p>
+                                        <p className="text-sm font-bold text-foreground">
                                             {terminal.lastSync ? new Date(terminal.lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Never'}
                                         </p>
                                     </div>
@@ -153,7 +153,7 @@ const TerminalManager: React.FC = () => {
                                     <button
                                         onClick={() => runDiagnostic(terminal.id)}
                                         disabled={isDiagnosing}
-                                        className={`flex-1 py-3 px-6 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3 ${isDiagnosing ? 'bg-indigo-50 text-indigo-400 cursor-not-allowed' : 'bg-slate-50 text-slate-600 hover:bg-slate-100/80 active:scale-95'
+                                        className={`flex-1 py-3 px-6 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3 ${isDiagnosing ? 'bg-indigo-50 text-indigo-400 cursor-not-allowed' : 'bg-muted/80 text-muted-foreground hover:bg-muted/80 active:scale-95'
                                             }`}
                                     >
                                         {isDiagnosing && <span className="animate-spin">{ICONS.settings}</span>}
@@ -166,7 +166,7 @@ const TerminalManager: React.FC = () => {
                                                 setEditingTerminal(terminal);
                                                 setIsEditModalOpen(true);
                                             }}
-                                            className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                            className="p-2.5 text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
                                             title="Edit Terminal"
                                         >
                                             {ICONS.edit}
@@ -198,13 +198,13 @@ const TerminalManager: React.FC = () => {
                 {/* Register New Terminal Button as a Card */}
                 <div
                     onClick={() => setIsRegisterModalOpen(true)}
-                    className="h-full border-4 border-dashed border-slate-200 rounded-[2rem] flex flex-col items-center justify-center p-8 text-center gap-4 bg-slate-50/20 group hover:border-indigo-400/50 hover:bg-indigo-50/10 transition-all cursor-pointer min-h-[300px]"
+                    className="h-full border-4 border-dashed border-border rounded-[2rem] flex flex-col items-center justify-center p-8 text-center gap-4 bg-muted/80/20 group hover:border-indigo-400/50 hover:bg-indigo-50/10 transition-all cursor-pointer min-h-[300px]"
                 >
-                    <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center text-slate-300 group-hover:text-indigo-600 group-hover:scale-110 transition-all shadow-lg">
+                    <div className="w-20 h-20 bg-card rounded-full flex items-center justify-center text-slate-300 group-hover:text-indigo-600 group-hover:scale-110 transition-all shadow-lg">
                         {ICONS.plus}
                     </div>
                     <div>
-                        <p className="text-sm font-black uppercase text-slate-400 tracking-widest">Register Hardware</p>
+                        <p className="text-sm font-black uppercase text-muted-foreground tracking-widest">Register Hardware</p>
                         <p className="text-xs text-slate-300 font-medium italic mt-2">Add a new POS station to your network.</p>
                     </div>
                 </div>
@@ -257,7 +257,7 @@ const TerminalManager: React.FC = () => {
                         />
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                    <div className="flex justify-end gap-3 pt-6 border-t border-border">
                         <Button variant="secondary" onClick={() => setIsRegisterModalOpen(false)}>Cancel</Button>
                         <Button
                             onClick={handleRegisterTerminal}
@@ -304,7 +304,7 @@ const TerminalManager: React.FC = () => {
                             />
                         </div>
 
-                        <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                        <div className="flex justify-end gap-3 pt-6 border-t border-border">
                             <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
                             <Button
                                 onClick={handleUpdateTerminal}

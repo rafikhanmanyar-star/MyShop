@@ -48,7 +48,7 @@ export default function ShiftsAdminPage() {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-slate-800">Shifts</h1>
+        <h1 className="text-2xl font-bold text-foreground">Shifts</h1>
         <div className="flex items-center gap-2">
           <select
             value={filter}
@@ -62,7 +62,7 @@ export default function ShiftsAdminPage() {
           <button
             type="button"
             onClick={() => load()}
-            className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+            className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted/50"
             title="Refresh"
           >
             <RefreshCw className="w-5 h-5" />
@@ -72,32 +72,32 @@ export default function ShiftsAdminPage() {
 
       {summary && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">Open shifts</p>
-            <p className="text-2xl font-bold text-slate-800">{summary.openShifts ?? 0}</p>
+          <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
+            <p className="text-sm font-medium text-muted-foreground">Open shifts</p>
+            <p className="text-2xl font-bold text-foreground">{summary.openShifts ?? 0}</p>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">Closed shifts</p>
-            <p className="text-2xl font-bold text-slate-800">{summary.closedShifts ?? 0}</p>
+          <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
+            <p className="text-sm font-medium text-muted-foreground">Closed shifts</p>
+            <p className="text-2xl font-bold text-foreground">{summary.closedShifts ?? 0}</p>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">Total shortage</p>
+          <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
+            <p className="text-sm font-medium text-muted-foreground">Total shortage</p>
             <p className="text-2xl font-bold text-rose-600">{CURRENCY} {Number(summary.totalVarianceShortage || 0).toFixed(2)}</p>
           </div>
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">Total overage</p>
+          <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
+            <p className="text-sm font-medium text-muted-foreground">Total overage</p>
             <p className="text-2xl font-bold text-emerald-600">{CURRENCY} {Number(summary.totalVarianceOverage || 0).toFixed(2)}</p>
           </div>
         </div>
       )}
 
       {summary?.byCashier?.length > 0 && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <h3 className="font-semibold text-slate-800 mb-4">Cashier performance (closed shifts)</h3>
+        <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
+          <h3 className="font-semibold text-foreground mb-4">Cashier performance (closed shifts)</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-500">
+                <tr className="border-b border-border text-left text-muted-foreground">
                   <th className="pb-2 pr-4">Cashier</th>
                   <th className="pb-2 pr-4">Total sales</th>
                   <th className="pb-2 pr-4">Transactions</th>
@@ -106,7 +106,7 @@ export default function ShiftsAdminPage() {
               </thead>
               <tbody>
                 {summary.byCashier.map((c: any) => (
-                  <tr key={c.cashierId} className="border-b border-slate-100">
+                  <tr key={c.cashierId} className="border-b border-border">
                     <td className="py-2 pr-4 font-medium">{c.cashierName}</td>
                     <td className="py-2 pr-4">{CURRENCY} {Number(c.totalSales || 0).toFixed(2)}</td>
                     <td className="py-2 pr-4">{c.transactionCount ?? 0}</td>
@@ -121,17 +121,17 @@ export default function ShiftsAdminPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <h3 className="font-semibold text-slate-800 p-4 border-b border-slate-200">Shift list</h3>
+      <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+        <h3 className="font-semibold text-foreground p-4 border-b border-border">Shift list</h3>
         {loading ? (
-          <div className="p-8 text-center text-slate-500">Loading…</div>
+          <div className="p-8 text-center text-muted-foreground">Loading…</div>
         ) : shifts.length === 0 ? (
-          <div className="p-8 text-center text-slate-500">No shifts found</div>
+          <div className="p-8 text-center text-muted-foreground">No shifts found</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-left text-slate-600">
+                <tr className="bg-muted/80 border-b border-border text-left text-muted-foreground">
                   <th className="p-3">Cashier</th>
                   <th className="p-3">Terminal</th>
                   <th className="p-3">Branch</th>
@@ -144,14 +144,14 @@ export default function ShiftsAdminPage() {
               </thead>
               <tbody>
                 {shifts.map((s) => (
-                  <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                  <tr key={s.id} className="border-b border-border hover:bg-muted/50/50">
                     <td className="p-3 font-medium">{s.cashier_name ?? s.cashier_id}</td>
                     <td className="p-3">{s.terminal_name ?? s.terminal_code ?? s.terminal_id}</td>
                     <td className="p-3">{s.branch_name ?? '—'}</td>
-                    <td className="p-3 text-slate-600">{s.opening_time ? new Date(s.opening_time).toLocaleString() : '—'}</td>
-                    <td className="p-3 text-slate-600">{s.closing_time ? new Date(s.closing_time).toLocaleString() : '—'}</td>
+                    <td className="p-3 text-muted-foreground">{s.opening_time ? new Date(s.opening_time).toLocaleString() : '—'}</td>
+                    <td className="p-3 text-muted-foreground">{s.closing_time ? new Date(s.closing_time).toLocaleString() : '—'}</td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.status === 'open' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.status === 'open' ? 'bg-emerald-100 text-emerald-700' : 'bg-muted text-muted-foreground'}`}>
                         {s.status}
                       </span>
                     </td>

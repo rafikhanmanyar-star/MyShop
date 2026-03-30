@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { UserPlus } from 'lucide-react';
+import { useClickOutside } from '../../../hooks/useClickOutside';
 
 export type VendorOption = {
   id: string;
@@ -44,6 +45,8 @@ export default function SupplierSelect({
   onAddSupplier,
 }: SupplierSelectProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  useClickOutside(containerRef, () => onOpenChange(false), vendorDropdownOpen && !disabled);
+
   const filtered = vendors.filter(
     (v) =>
       !vendorSearch ||

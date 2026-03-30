@@ -59,7 +59,7 @@ export default function MobileAppBranding() {
     };
 
     if (loading) {
-        return <div className="p-8 text-slate-500">Loading branding settings...</div>;
+        return <div className="p-8 text-muted-foreground">Loading branding settings...</div>;
     }
 
     if (!branding) {
@@ -69,7 +69,7 @@ export default function MobileAppBranding() {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <p className="text-slate-600 text-sm">Configure how your shop looks on the mobile app.</p>
+                <p className="text-muted-foreground text-sm">Configure how your shop looks on the mobile app.</p>
                 <Button onClick={handleSave} disabled={saving} className="w-32">
                     {saving ? 'Saving...' : 'Save Changes'}
                 </Button>
@@ -80,10 +80,10 @@ export default function MobileAppBranding() {
                 <div className="space-y-6">
                     {/* General Settings */}
                     <Card className="p-6">
-                        <h3 className="text-lg font-bold text-slate-800 mb-4 tracking-tight">App Details</h3>
+                        <h3 className="text-lg font-bold text-foreground mb-4 tracking-tight">App Details</h3>
                         <div className="space-y-4">
-                            <div className="flex items-center gap-6 p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                                <div className="w-20 h-20 rounded-2xl bg-white shadow-sm border border-slate-100 overflow-hidden flex items-center justify-center">
+                            <div className="flex items-center gap-6 p-4 bg-muted/80 rounded-2xl border-2 border-dashed border-border">
+                                <div className="w-20 h-20 rounded-2xl bg-card shadow-sm border border-border overflow-hidden flex items-center justify-center">
                                     {branding.logo_url ? (
                                         <img src={getFullImageUrl(branding.logo_url)} alt="Logo Preview" className="w-full h-full object-cover" />
                                     ) : (
@@ -91,8 +91,8 @@ export default function MobileAppBranding() {
                                     )}
                                 </div>
                                 <div className="flex-1 space-y-2">
-                                    <p className="text-sm font-bold text-slate-700">Shop Logo</p>
-                                    <p className="text-xs text-slate-400">Upload a square image (PNG/JPG, max 2MB).</p>
+                                    <p className="text-sm font-bold text-foreground">Shop Logo</p>
+                                    <p className="text-xs text-muted-foreground">Upload a square image (PNG/JPG, max 2MB).</p>
                                     <input
                                         type="file"
                                         ref={fileInputRef}
@@ -117,16 +117,16 @@ export default function MobileAppBranding() {
                                 value={branding.logo_url || ''}
                                 onChange={e => setBranding({ ...branding, logo_url: e.target.value })}
                             />
-                            <p className="text-xs text-slate-400">You can either upload a logo or provide a direct URL.</p>
+                            <p className="text-xs text-muted-foreground">You can either upload a logo or provide a direct URL.</p>
                         </div>
                     </Card>
 
                     {/* Color Theme */}
                     <Card className="p-6">
-                        <h3 className="text-lg font-bold text-slate-800 mb-4 tracking-tight">Color Theme</h3>
+                        <h3 className="text-lg font-bold text-foreground mb-4 tracking-tight">Color Theme</h3>
                         <div className="grid grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Primary Color</label>
+                                <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Primary Color</label>
                                 <div className="flex items-center gap-3">
                                     <input
                                         type="color"
@@ -142,7 +142,7 @@ export default function MobileAppBranding() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Secondary Color</label>
+                                <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Secondary Color</label>
                                 <div className="flex items-center gap-3">
                                     <input
                                         type="color"
@@ -158,7 +158,7 @@ export default function MobileAppBranding() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Accent Color</label>
+                                <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Accent Color</label>
                                 <div className="flex items-center gap-3">
                                     <input
                                         type="color"
@@ -174,9 +174,9 @@ export default function MobileAppBranding() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Theme Mode</label>
+                                <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Theme Mode</label>
                                 <select
-                                    className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all appearance-none"
+                                    className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground outline-none focus:border-indigo-500 transition-all appearance-none"
                                     value={branding.theme_mode}
                                     onChange={e => setBranding({ ...branding, theme_mode: e.target.value })}
                                 >
@@ -191,10 +191,10 @@ export default function MobileAppBranding() {
 
                 {/* Preview Panel */}
                 <div>
-                    <Card className="p-6 bg-slate-100 sticky top-6">
-                        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-6">Live App Preview</h3>
+                    <Card className="p-6 bg-muted sticky top-6">
+                        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-6">Live App Preview</h3>
 
-                        <div className="w-[320px] h-[640px] border-8 border-slate-800 rounded-[2.5rem] overflow-hidden mx-auto bg-white shadow-2xl relative flex flex-col"
+                        <div className="w-[320px] h-[640px] border-8 border-slate-800 rounded-[2.5rem] overflow-hidden mx-auto bg-card shadow-2xl relative flex flex-col"
                             style={{ backgroundColor: branding.theme_mode === 'dark' ? '#1e293b' : '#f8fafc' }}
                         >
                             {/* App Header */}
@@ -234,7 +234,7 @@ export default function MobileAppBranding() {
                                     <h3 className="font-bold text-sm" style={{ color: branding.theme_mode === 'dark' ? 'white' : '#475569' }}>Categories</h3>
                                     <div className="flex gap-3 overflow-x-hidden">
                                         {['Groceries', 'Snacks', 'Drinks'].map((cat, i) => (
-                                            <div key={i} className="px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shadow-sm border border-slate-100"
+                                            <div key={i} className="px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap shadow-sm border border-border"
                                                 style={{
                                                     backgroundColor: i === 0 ? branding.primary_color : (branding.theme_mode === 'dark' ? '#334155' : 'white'),
                                                     color: i === 0 ? 'white' : (branding.theme_mode === 'dark' ? 'white' : '#475569'),
@@ -250,7 +250,7 @@ export default function MobileAppBranding() {
                                 <div className="space-y-4">
                                     <h3 className="font-bold text-sm" style={{ color: branding.theme_mode === 'dark' ? 'white' : '#475569' }}>Popular Items</h3>
                                     {[1, 2].map(i => (
-                                        <div key={i} className="flex gap-4 p-3 rounded-xl shadow-sm border border-slate-100 items-center"
+                                        <div key={i} className="flex gap-4 p-3 rounded-xl shadow-sm border border-border items-center"
                                             style={{
                                                 backgroundColor: branding.theme_mode === 'dark' ? '#1e293b' : 'white',
                                                 borderColor: branding.theme_mode === 'dark' ? '#334155' : '#f1f5f9'
@@ -270,7 +270,7 @@ export default function MobileAppBranding() {
                             </div>
 
                             {/* Bottom Nav */}
-                            <div className="h-16 flex justify-around items-center border-t border-slate-100"
+                            <div className="h-16 flex justify-around items-center border-t border-border"
                                 style={{
                                     backgroundColor: branding.theme_mode === 'dark' ? '#0f172a' : 'white',
                                     borderColor: branding.theme_mode === 'dark' ? '#1e293b' : '#f1f5f9'

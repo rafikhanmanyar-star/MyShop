@@ -167,8 +167,8 @@ const InventoryDashboard: React.FC = () => {
                             {React.cloneElement(stat.icon as React.ReactElement<any>, { width: 28, height: 28 })}
                         </div>
                         <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-slate-400">{stat.label}</p>
-                            <p className="text-2xl font-black text-slate-800 tracking-tight">{stat.value}</p>
+                            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                            <p className="text-2xl font-black text-foreground tracking-tight">{stat.value}</p>
                         </div>
                     </Card>
                 ))}
@@ -177,17 +177,17 @@ const InventoryDashboard: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0 overflow-hidden">
                 {/* Low Stock Table */}
                 <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden flex flex-col min-h-0">
-                    <div className="p-6 border-b border-slate-100 flex flex-wrap justify-between items-center gap-4 flex-shrink-0">
-                        <h3 className="font-bold text-slate-800">Critical Stock Alerts</h3>
+                    <div className="p-6 border-b border-border flex flex-wrap justify-between items-center gap-4 flex-shrink-0">
+                        <h3 className="font-bold text-foreground">Critical Stock Alerts</h3>
                         <div className="flex items-center gap-3">
-                            <label htmlFor="critical-alerts-category" className="text-xs font-bold text-slate-600 whitespace-nowrap">
+                            <label htmlFor="critical-alerts-category" className="text-xs font-bold text-muted-foreground whitespace-nowrap">
                                 Category:
                             </label>
                             <select
                                 id="critical-alerts-category"
                                 value={selectedCategoryId}
                                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                                className="block rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[160px]"
+                                className="block rounded-lg border border-border bg-card py-2 pl-3 pr-8 text-sm font-medium text-foreground shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[160px]"
                             >
                                 <option value="">All categories</option>
                                 <option value="General">General</option>
@@ -200,16 +200,16 @@ const InventoryDashboard: React.FC = () => {
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
                         <table className="w-full table-fixed text-left">
-                            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
+                            <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground sticky top-0 z-10">
                                 <tr>
                                     <th
                                         style={{ width: colWidths.item, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-slate-50 group align-bottom"
+                                        className="relative px-6 py-4 bg-muted/80 group align-bottom"
                                         {...(sortKey === 'name' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
                                             onClick={() => toggleSort('name')}
                                         >
                                             Item Name / SKU
@@ -225,12 +225,12 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                     <th
                                         style={{ width: colWidths.category, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-slate-50 group align-bottom"
+                                        className="relative px-6 py-4 bg-muted/80 group align-bottom"
                                         {...(sortKey === 'category' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
                                             onClick={() => toggleSort('category')}
                                         >
                                             Category
@@ -246,12 +246,12 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                     <th
                                         style={{ width: colWidths.onHand, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-slate-50 group align-bottom"
+                                        className="relative px-6 py-4 bg-muted/80 group align-bottom"
                                         {...(sortKey === 'onHand' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
                                             onClick={() => toggleSort('onHand')}
                                         >
                                             On Hand
@@ -267,12 +267,12 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                     <th
                                         style={{ width: colWidths.reorder, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-slate-50 group align-bottom"
+                                        className="relative px-6 py-4 bg-muted/80 group align-bottom"
                                         {...(sortKey === 'reorderPoint' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
                                             onClick={() => toggleSort('reorderPoint')}
                                         >
                                             Reorder Point
@@ -288,12 +288,12 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                     <th
                                         style={{ width: colWidths.status, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-slate-50 align-bottom"
+                                        className="relative px-6 py-4 bg-muted/80 align-bottom"
                                         {...(sortKey === 'status' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-slate-600"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
                                             onClick={() => toggleSort('status')}
                                         >
                                             Status
@@ -304,16 +304,16 @@ const InventoryDashboard: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {filteredLowStockItems.length > 0 ? sortedLowStockItems.map(item => (
-                                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                    <tr key={item.id} className="hover:bg-muted/50 transition-colors">
                                         <td className="min-w-0 px-6 py-4">
-                                            <div className="truncate font-bold text-slate-800 text-sm" title={item.name}>{item.name}</div>
-                                            <div className="truncate text-[10px] text-slate-400 font-mono italic" title={item.sku}>{item.sku}</div>
+                                            <div className="truncate font-bold text-foreground text-sm" title={item.name}>{item.name}</div>
+                                            <div className="truncate text-[10px] text-muted-foreground font-mono italic" title={item.sku}>{item.sku}</div>
                                         </td>
                                         <td className="min-w-0 px-6 py-4">
-                                            <span className="text-sm font-medium text-slate-600">{getCategoryDisplayName(item.category)}</span>
+                                            <span className="text-sm font-medium text-muted-foreground">{getCategoryDisplayName(item.category)}</span>
                                         </td>
                                         <td className="min-w-0 px-6 py-4 text-sm font-black font-mono">{item.onHand} {item.unit}</td>
-                                        <td className="min-w-0 px-6 py-4 text-sm font-medium text-slate-500 font-mono">{item.reorderPoint}</td>
+                                        <td className="min-w-0 px-6 py-4 text-sm font-medium text-muted-foreground font-mono">{item.reorderPoint}</td>
                                         <td className="min-w-0 px-6 py-4">
                                             <span className={`px-2 py-1 rounded text-[10px] font-bold ${item.onHand <= 0 ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
                                                 }`}>
@@ -323,7 +323,7 @@ const InventoryDashboard: React.FC = () => {
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic text-sm">
+                                        <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic text-sm">
                                             {lowStockItems.length > 0 ? 'No critical stock in this category.' : 'No critical stock levels detected.'}
                                         </td>
                                     </tr>
@@ -335,15 +335,15 @@ const InventoryDashboard: React.FC = () => {
 
                 {/* Warehouse Snapshot */}
                 <Card className="border-none shadow-sm p-6 space-y-6 flex-shrink-0 lg:flex-shrink">
-                    <h3 className="font-bold text-slate-800">Warehouse Utilization</h3>
+                    <h3 className="font-bold text-foreground">Warehouse Utilization</h3>
                     <div className="space-y-6">
                         {warehouseUtilization.length > 0 ? warehouseUtilization.map((wh) => (
                             <div key={wh.id} className="space-y-2">
                                 <div className="flex justify-between text-xs font-bold">
-                                    <span className="text-slate-600">{wh.name}</span>
-                                    <span className="text-slate-400">{wh.pct}% of stock</span>
+                                    <span className="text-muted-foreground">{wh.name}</span>
+                                    <span className="text-muted-foreground">{wh.pct}% of stock</span>
                                 </div>
-                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-2 bg-muted rounded-full overflow-hidden">
                                     <div
                                         className={`h-full rounded-full transition-all duration-1000 ${wh.color}`}
                                         style={{ width: `${Math.min(100, wh.pct)}%` }}
@@ -351,15 +351,15 @@ const InventoryDashboard: React.FC = () => {
                                 </div>
                             </div>
                         )) : (
-                            <p className="text-sm text-slate-400 italic">No warehouses. Add branches to see inventory by location.</p>
+                            <p className="text-sm text-muted-foreground italic">No warehouses. Add branches to see inventory by location.</p>
                         )}
                     </div>
 
-                    <div className="pt-6 border-t border-slate-100">
+                    <div className="pt-6 border-t border-border">
                         <button
                             type="button"
                             onClick={() => setHeatmapOpen(true)}
-                            className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50 hover:border-indigo-200 hover:text-indigo-700 transition-all flex items-center justify-center gap-2"
+                            className="w-full py-3 bg-card border border-border text-muted-foreground rounded-xl text-xs font-bold hover:bg-muted/50 hover:border-indigo-200 hover:text-indigo-700 transition-all flex items-center justify-center gap-2"
                         >
                             {ICONS.trendingUp} View Detailed Heatmap
                         </button>

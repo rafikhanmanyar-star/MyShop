@@ -81,8 +81,8 @@ export default function BackupRestoreSection() {
   return (
     <>
       <Card className="border-none shadow-sm p-6">
-        <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-2">Backup and restore</h3>
-        <p className="text-slate-600 text-sm mb-4">
+        <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-2">Backup and restore</h3>
+        <p className="text-muted-foreground text-sm mb-4">
           Create a full database backup. Restore overwrites all current data with the selected backup—no merging.
         </p>
         {error && (
@@ -101,17 +101,17 @@ export default function BackupRestoreSection() {
             {creating ? 'Creating backup…' : 'Create backup'}
           </Button>
         </div>
-        <div className="border border-slate-200 rounded-xl overflow-hidden">
+        <div className="border border-border rounded-xl overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center text-slate-500 text-sm">Loading backups…</div>
+            <div className="p-8 text-center text-muted-foreground text-sm">Loading backups…</div>
           ) : backups.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm flex flex-col items-center gap-2">
+            <div className="p-8 text-center text-muted-foreground text-sm flex flex-col items-center gap-2">
               <Database className="w-10 h-10 text-slate-300" />
               No backups yet. Create one to restore later.
             </div>
           ) : (
             <table className="w-full text-left">
-              <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+              <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Size</th>
@@ -120,11 +120,11 @@ export default function BackupRestoreSection() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {backups.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-800">
+                  <tr key={entry.id} className="hover:bg-muted/50">
+                    <td className="px-4 py-3 font-medium text-foreground">
                       {formatDate(entry.createdAt)}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{formatSize(entry.sizeInBytes)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{formatSize(entry.sizeInBytes)}</td>
                     <td className="px-4 py-3 text-right">
                       <Button
                         variant="secondary"
@@ -163,8 +163,8 @@ export default function BackupRestoreSection() {
                 </p>
               </div>
             </div>
-            <p className="text-slate-600 text-sm">
-              Backup: <span className="font-mono text-slate-800">{restoreConfirm.filename}</span>
+            <p className="text-muted-foreground text-sm">
+              Backup: <span className="font-mono text-foreground">{restoreConfirm.filename}</span>
             </p>
             <div className="flex justify-end gap-3 pt-2">
               <Button variant="secondary" onClick={() => setRestoreConfirm(null)} disabled={!!restoring}>

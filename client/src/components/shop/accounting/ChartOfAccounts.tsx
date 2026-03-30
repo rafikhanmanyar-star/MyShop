@@ -131,14 +131,14 @@ const ChartOfAccounts: React.FC = () => {
     return (
         <div className="space-y-6 animate-fade-in shadow-inner h-full flex flex-col">
             <div className="flex justify-between items-center mb-4">
-                <div className="flex gap-2 p-1 bg-white border border-slate-200 rounded-xl">
+                <div className="flex gap-2 p-1 bg-card border border-border rounded-xl">
                     {categories.map(cat => (
                         <button
                             key={cat}
                             onClick={() => setFilter(cat)}
                             className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${filter === cat
                                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-100'
-                                : 'text-slate-400 hover:text-slate-600'
+                                : 'text-muted-foreground hover:text-muted-foreground'
                                 }`}
                         >
                             {cat}s
@@ -157,7 +157,7 @@ const ChartOfAccounts: React.FC = () => {
             <Card className="border-none shadow-sm overflow-hidden flex-1 flex flex-col">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
                             <tr>
                                 <th className="px-6 py-4">Account Code</th>
                                 <th className="px-6 py-4">Account Name</th>
@@ -169,12 +169,12 @@ const ChartOfAccounts: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {filteredAccounts.map(acc => (
-                                <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
+                                <tr key={acc.id} className="hover:bg-muted/50 transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="font-mono font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded text-xs">{acc.code}</span>
+                                        <span className="font-mono font-bold text-muted-foreground bg-muted px-2 py-1 rounded text-xs">{acc.code}</span>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="font-bold text-slate-800 text-sm">{acc.name}</div>
+                                        <div className="font-bold text-foreground text-sm">{acc.name}</div>
                                         {acc.isControlAccount && (
                                             <div className="text-[10px] text-indigo-500 font-black uppercase tracking-tighter">Control Account</div>
                                         )}
@@ -183,13 +183,13 @@ const ChartOfAccounts: React.FC = () => {
                                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${acc.type === 'Asset' ? 'bg-emerald-100 text-emerald-600' :
                                             acc.type === 'Liability' ? 'bg-rose-100 text-rose-600' :
                                                 acc.type === 'Income' ? 'bg-indigo-100 text-indigo-600' :
-                                                    'bg-slate-100 text-slate-600'
+                                                    'bg-muted text-muted-foreground'
                                             }`}>
                                             {acc.type}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <span className="text-sm font-black text-slate-800 font-mono">
+                                        <span className="text-sm font-black text-foreground font-mono">
                                             {acc.balance.toLocaleString()}
                                         </span>
                                     </td>
@@ -203,7 +203,7 @@ const ChartOfAccounts: React.FC = () => {
                                         <button
                                             type="button"
                                             onClick={() => openEditModal(acc)}
-                                            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+                                            className="min-w-[44px] min-h-[44px] flex items-center justify-center p-2 rounded-lg text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
                                             aria-label={`Edit ${acc.name}`}
                                         >
                                             {ICONS.edit}
@@ -262,7 +262,7 @@ const ChartOfAccounts: React.FC = () => {
                             onChange={(e) => setNewAccount({ ...newAccount, isControlAccount: e.target.checked })}
                             className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                         />
-                        <label htmlFor="isControl" className="text-sm text-slate-600 font-medium">Control Account (System use)</label>
+                        <label htmlFor="isControl" className="text-sm text-muted-foreground font-medium">Control Account (System use)</label>
                     </div>
 
                     {formError && (

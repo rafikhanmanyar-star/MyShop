@@ -181,13 +181,13 @@ const InventoryContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex flex-col h-full min-h-0 flex-1 bg-slate-50 -m-4 md:-m-8">
+        <div className="flex flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
             {/* Header / Tab Navigation */}
-            <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10">
+            <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">Inventory Management</h1>
-                        <p className="text-slate-500 text-sm font-medium">Enterprise-level stock control and logistics.</p>
+                        <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Inventory Management</h1>
+                        <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">Enterprise-level stock control and logistics.</p>
                     </div>
                     <div className="flex gap-3">
                         <button
@@ -206,7 +206,7 @@ const InventoryContent: React.FC = () => {
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
                                 ? 'text-indigo-600'
-                                : 'text-slate-400 hover:text-slate-600'
+                                : 'text-muted-foreground dark:text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
@@ -252,15 +252,15 @@ const InventoryContent: React.FC = () => {
                                 onChange={(e) => setNewItemData({ ...newItemData, barcode: e.target.value })}
                             />
                             {barcodeConflictItems.length > 0 && (
-                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
-                                    <div className="flex items-center gap-1.5 font-semibold text-amber-800 mb-1">
+                            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-2.5 text-sm">
+                                <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-200 mb-1">
                                         {React.cloneElement(ICONS.alertTriangle as React.ReactElement<{ size?: number }>, { size: 14 })}
                                         <span>Barcode already in use</span>
                                     </div>
                                     <ul className="space-y-1 max-h-24 overflow-y-auto">
                                         {barcodeConflictItems.map((item) => (
-                                            <li key={item.id} className="flex items-center gap-2 text-amber-800">
-                                                <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                            <li key={item.id} className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                                                <div className="w-6 h-6 rounded bg-muted dark:bg-slate-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
                                                     {item.imageUrl ? (
                                                         <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
                                                     ) : (
@@ -268,7 +268,7 @@ const InventoryContent: React.FC = () => {
                                                     )}
                                                 </div>
                                                 <span className="font-medium truncate">{item.name}</span>
-                                                <span className="text-amber-600 text-xs flex-shrink-0">SKU: {item.sku}</span>
+                                                <span className="text-amber-600 dark:text-amber-400 text-xs flex-shrink-0">SKU: {item.sku}</span>
                                             </li>
                                         ))}
                                     </ul>
@@ -284,15 +284,15 @@ const InventoryContent: React.FC = () => {
                             onChange={(e) => setNewItemData({ ...newItemData, name: e.target.value })}
                         />
                         {nameConflictItems.length > 0 && (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
-                                <div className="flex items-center gap-1.5 font-semibold text-amber-800 mb-1">
+                            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-2.5 text-sm">
+                                <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-200 mb-1">
                                     {React.cloneElement(ICONS.alertTriangle as React.ReactElement<{ size?: number }>, { size: 14 })}
                                     <span>Product name already in use</span>
                                 </div>
                                 <ul className="space-y-1 max-h-24 overflow-y-auto">
                                     {nameConflictItems.map((item) => (
-                                        <li key={item.id} className="flex items-center gap-2 text-amber-800">
-                                            <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                        <li key={item.id} className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                                            <div className="w-6 h-6 rounded bg-muted dark:bg-slate-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
                                                 {item.imageUrl ? (
                                                     <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
                                                 ) : (
@@ -300,9 +300,9 @@ const InventoryContent: React.FC = () => {
                                                 )}
                                             </div>
                                             <span className="font-medium truncate">{item.name}</span>
-                                            <span className="text-amber-600 text-xs flex-shrink-0">SKU: {item.sku}</span>
+                                            <span className="text-amber-600 dark:text-amber-400 text-xs flex-shrink-0">SKU: {item.sku}</span>
                                             {item.barcode && (
-                                                <span className="text-amber-600 text-xs flex-shrink-0">· {item.barcode}</span>
+                                                <span className="text-amber-600 dark:text-amber-400 text-xs flex-shrink-0">· {item.barcode}</span>
                                             )}
                                         </li>
                                     ))}
@@ -312,10 +312,10 @@ const InventoryContent: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-3 gap-4">
                         <div ref={categoryInputRef} className="relative">
-                            <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                            <label className="block text-sm font-medium text-foreground dark:text-slate-300 mb-1">Category</label>
                             <input
                                 type="text"
-                                className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                className="block w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-card dark:bg-slate-800 dark:text-slate-100 py-2 px-3 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                                 placeholder="Search or add category..."
                                 value={categoryDropdownOpen ? categorySearchQuery : newItemData.category}
                                 onChange={(e) => {
@@ -328,15 +328,15 @@ const InventoryContent: React.FC = () => {
                                 }}
                             />
                             {categoryDropdownOpen && (
-                                <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-200 bg-white py-1 shadow-lg max-h-48 overflow-y-auto">
+                                <div className="absolute z-20 mt-1 w-full rounded-lg border border-border dark:border-slate-700 bg-card dark:bg-slate-800 py-1 shadow-lg max-h-48 overflow-y-auto">
                                     {filteredCategories.length === 0 && !showAddOption && (
-                                        <div className="px-3 py-2 text-sm text-slate-500">No categories match.</div>
+                                        <div className="px-3 py-2 text-sm text-muted-foreground dark:text-muted-foreground">No categories match.</div>
                                     )}
                                     {filteredCategories.map((name) => (
                                         <button
                                             key={name}
                                             type="button"
-                                            className="block w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 text-slate-800"
+                                            className="block w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-foreground dark:text-slate-200"
                                             onClick={() => handleSelectCategory(name)}
                                         >
                                             {name}
@@ -345,7 +345,7 @@ const InventoryContent: React.FC = () => {
                                     {showAddOption && (
                                         <button
                                             type="button"
-                                            className="block w-full text-left px-3 py-2 text-sm bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium border-t border-slate-100"
+                                            className="block w-full text-left px-3 py-2 text-sm bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-medium border-t border-border dark:border-slate-700"
                                             onClick={handleAddCategoryOnTheFly}
                                             disabled={addingCategory}
                                         >
@@ -384,9 +384,9 @@ const InventoryContent: React.FC = () => {
                     </div>
 
                     <div className="space-y-2">
-                        <label className="block text-sm font-medium text-slate-700">Product Image</label>
+                        <label className="block text-sm font-medium text-foreground dark:text-slate-300">Product Image</label>
                         <div className="flex items-center gap-4">
-                            <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden text-slate-300">
+                            <div className="w-24 h-24 rounded-2xl bg-muted dark:bg-slate-700 border-2 border-dashed border-border dark:border-slate-600 flex items-center justify-center overflow-hidden text-slate-300 dark:text-muted-foreground">
                                 {imagePreview ? (
                                     <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                                 ) : (
@@ -409,11 +409,11 @@ const InventoryContent: React.FC = () => {
                                 />
                                 <label
                                     htmlFor="sku-image-upload"
-                                    className="inline-flex items-center px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                                    className="inline-flex items-center px-4 py-2 bg-card dark:bg-slate-800 border border-border dark:border-slate-700 rounded-lg text-sm font-bold text-foreground dark:text-slate-300 hover:bg-muted/50 dark:hover:bg-slate-700 cursor-pointer transition-colors"
                                 >
                                     {imagePreview ? 'Change Image' : 'Upload Image'}
                                 </label>
-                                <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
+                                <p className="text-[10px] text-muted-foreground dark:text-muted-foreground mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
                             </div>
                         </div>
                     </div>

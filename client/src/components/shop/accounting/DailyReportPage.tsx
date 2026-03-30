@@ -79,10 +79,10 @@ function formatQty(n: number) {
 }
 
 const ReportShell: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
-    <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10">
-      <h1 className="text-2xl font-black text-slate-800 tracking-tight">{title}</h1>
-      <p className="text-slate-500 text-sm font-medium mt-1">Single source of truth — POS, mobile, inventory, expenses.</p>
+  <div className="flex flex-col h-full bg-muted/50 -m-4 md:-m-8">
+    <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
+      <h1 className="text-2xl font-black text-foreground tracking-tight">{title}</h1>
+      <p className="text-muted-foreground text-sm font-medium mt-1">Single source of truth — POS, mobile, inventory, expenses.</p>
     </div>
     <div className="flex-1 overflow-y-auto p-8">{children}</div>
   </div>
@@ -147,7 +147,7 @@ const DailyReportDashboard: React.FC = () => {
   }, [date, branchId]);
 
   const cardClass =
-    'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-indigo-200 hover:shadow-md cursor-pointer text-left';
+    'rounded-2xl border border-border bg-card p-5 shadow-sm transition hover:border-indigo-500/40 dark:hover:border-indigo-400/30 hover:shadow-md cursor-pointer text-left';
 
   return (
     <ReportShell title="Daily Report">
@@ -172,7 +172,7 @@ const DailyReportDashboard: React.FC = () => {
             </Select>
           </div>
           <div className="shrink-0 flex flex-col">
-            <span className="block text-sm font-medium text-gray-700 mb-1.5 invisible select-none" aria-hidden="true">
+            <span className="block text-sm font-medium text-foreground mb-1.5 invisible select-none" aria-hidden="true">
               Action
             </span>
             <Button variant="secondary" onClick={() => load()} disabled={loading} className="flex items-center gap-2">
@@ -191,20 +191,20 @@ const DailyReportDashboard: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <button type="button" className={cardClass} onClick={() => {}} aria-label="POS sales">
             <div className="text-2xl mb-1">🧾</div>
-            <div className="text-xs font-bold uppercase text-slate-400 tracking-wider">POS sales</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">
+            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">POS sales</div>
+            <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.posSales ?? 0)}`}
             </div>
-            <div className="text-[11px] text-slate-500 mt-2">shop_sales (branch POS)</div>
+            <div className="text-[11px] text-muted-foreground mt-2">shop_sales (branch POS)</div>
           </button>
 
           <button type="button" className={cardClass} onClick={() => {}} aria-label="Mobile sales">
             <div className="text-2xl mb-1">📱</div>
-            <div className="text-xs font-bold uppercase text-slate-400 tracking-wider">Mobile sales</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">
+            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Mobile sales</div>
+            <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.mobileSales ?? 0)}`}
             </div>
-            <div className="text-[11px] text-slate-500 mt-2">mobile_orders (non-cancelled)</div>
+            <div className="text-[11px] text-muted-foreground mt-2">mobile_orders (non-cancelled)</div>
           </button>
 
           <button
@@ -214,8 +214,8 @@ const DailyReportDashboard: React.FC = () => {
             aria-label="Inventory out"
           >
             <div className="text-2xl mb-1">📦</div>
-            <div className="text-xs font-bold uppercase text-slate-400 tracking-wider">Inventory out</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">
+            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Inventory out</div>
+            <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : formatQty(summary?.inventoryOutQty ?? 0)}
             </div>
             <div className="text-[11px] text-indigo-600 mt-2 font-semibold">Click for detail →</div>
@@ -228,8 +228,8 @@ const DailyReportDashboard: React.FC = () => {
             aria-label="Inventory in"
           >
             <div className="text-2xl mb-1">📥</div>
-            <div className="text-xs font-bold uppercase text-slate-400 tracking-wider">Inventory in (procurement)</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">
+            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Inventory in (procurement)</div>
+            <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : formatQty(summary?.inventoryInQty ?? 0)}
             </div>
             <div className="text-[11px] text-indigo-600 mt-2 font-semibold">Click for detail →</div>
@@ -242,8 +242,8 @@ const DailyReportDashboard: React.FC = () => {
             aria-label="Expenses"
           >
             <div className="text-2xl mb-1">💸</div>
-            <div className="text-xs font-bold uppercase text-slate-400 tracking-wider">Total expenses</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">
+            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Total expenses</div>
+            <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.totalExpenses ?? 0)}`}
             </div>
             <div className="text-[11px] text-indigo-600 mt-2 font-semibold">Click for detail →</div>
@@ -256,8 +256,8 @@ const DailyReportDashboard: React.FC = () => {
             aria-label="New products"
           >
             <div className="text-2xl mb-1">🏷️</div>
-            <div className="text-xs font-bold uppercase text-slate-400 tracking-wider">New products</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">
+            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">New products</div>
+            <div className="text-2xl font-black text-foreground mt-1">
               {loading ? '—' : summary?.newProductsCount ?? 0}
             </div>
             <div className="text-[11px] text-indigo-600 mt-2 font-semibold">Click for detail →</div>
@@ -315,7 +315,7 @@ const InventoryOutDrill: React.FC = () => {
           <ArrowLeft className="w-4 h-4" />
           Back to daily report
         </button>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted-foreground">
           Date <span className="font-mono font-semibold">{date}</span>
           {branchId ? (
             <>
@@ -324,9 +324,9 @@ const InventoryOutDrill: React.FC = () => {
             </>
           ) : null}
         </p>
-        <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+        <div className="rounded-xl border border-border overflow-hidden bg-card">
           <table className="w-full text-sm">
-            <thead className="bg-slate-100 text-[10px] uppercase font-black text-slate-500">
+            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Item</th>
                 <th className="text-left px-4 py-3">SKU</th>
@@ -337,23 +337,23 @@ const InventoryOutDrill: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
                     No stock movements out for this day.
                   </td>
                 </tr>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.item_id} className="hover:bg-slate-50">
-                    <td className="px-4 py-2 font-medium text-slate-800">{r.item_name}</td>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-600">{r.sku}</td>
+                  <tr key={r.item_id} className="hover:bg-muted/50">
+                    <td className="px-4 py-2 font-medium text-foreground">{r.item_name}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.sku}</td>
                     <td className="px-4 py-2 text-right font-mono">{formatQty(Number(r.total_qty_out))}</td>
-                    <td className="px-4 py-2 text-slate-600">{r.unit}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{r.unit}</td>
                   </tr>
                 ))
               )}
@@ -404,9 +404,9 @@ const InventoryInDrill: React.FC = () => {
           <ArrowLeft className="w-4 h-4" />
           Back to daily report
         </button>
-        <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+        <div className="rounded-xl border border-border overflow-hidden bg-card">
           <table className="w-full text-sm">
-            <thead className="bg-slate-100 text-[10px] uppercase font-black text-slate-500">
+            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Item</th>
                 <th className="text-left px-4 py-3">SKU</th>
@@ -418,24 +418,24 @@ const InventoryInDrill: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     No purchase receipts for this day.
                   </td>
                 </tr>
               ) : (
                 rows.map((r) => (
-                  <tr key={r.item_id} className="hover:bg-slate-50">
-                    <td className="px-4 py-2 font-medium text-slate-800">{r.item_name}</td>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-600">{r.sku}</td>
+                  <tr key={r.item_id} className="hover:bg-muted/50">
+                    <td className="px-4 py-2 font-medium text-foreground">{r.item_name}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.sku}</td>
                     <td className="px-4 py-2 text-right font-mono">{formatQty(Number(r.total_qty_in))}</td>
-                    <td className="px-4 py-2 text-slate-600">{r.unit}</td>
-                    <td className="px-4 py-2 text-slate-600">{r.supplier || '—'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{r.unit}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{r.supplier || '—'}</td>
                   </tr>
                 ))
               )}
@@ -486,9 +486,9 @@ const ExpensesDrill: React.FC = () => {
           <ArrowLeft className="w-4 h-4" />
           Back to daily report
         </button>
-        <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+        <div className="rounded-xl border border-border overflow-hidden bg-card">
           <table className="w-full text-sm">
-            <thead className="bg-slate-100 text-[10px] uppercase font-black text-slate-500">
+            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Date</th>
                 <th className="text-left px-4 py-3">Category</th>
@@ -500,28 +500,28 @@ const ExpensesDrill: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     No expenses for this day.
                   </td>
                 </tr>
               ) : (
                 rows.map((r, i) => (
-                  <tr key={i} className="hover:bg-slate-50">
+                  <tr key={i} className="hover:bg-muted/50">
                     <td className="px-4 py-2 font-mono text-xs">{r.date}</td>
                     <td className="px-4 py-2">{r.expense_category}</td>
                     <td className="px-4 py-2 text-right font-mono">
                       {CURRENCY} {formatMoney(Number(r.amount))}
                     </td>
-                    <td className="px-4 py-2 text-slate-600 max-w-xs truncate" title={r.notes}>
+                    <td className="px-4 py-2 text-muted-foreground max-w-xs truncate" title={r.notes}>
                       {r.notes || '—'}
                     </td>
-                    <td className="px-4 py-2 text-slate-600">{r.paid_from_account || '—'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{r.paid_from_account || '—'}</td>
                   </tr>
                 ))
               )}
@@ -568,9 +568,9 @@ const ProductsCreatedDrill: React.FC = () => {
           <ArrowLeft className="w-4 h-4" />
           Back to daily report
         </button>
-        <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+        <div className="rounded-xl border border-border overflow-hidden bg-card">
           <table className="w-full text-sm">
-            <thead className="bg-slate-100 text-[10px] uppercase font-black text-slate-500">
+            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">SKU</th>
                 <th className="text-left px-4 py-3">Product</th>
@@ -582,24 +582,24 @@ const ProductsCreatedDrill: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     No new SKUs for this day.
                   </td>
                 </tr>
               ) : (
                 rows.map((r, i) => (
-                  <tr key={`${r.sku}-${i}`} className="hover:bg-slate-50">
+                  <tr key={`${r.sku}-${i}`} className="hover:bg-muted/50">
                     <td className="px-4 py-2 font-mono text-xs">{r.sku}</td>
                     <td className="px-4 py-2 font-medium">{r.product_name}</td>
-                    <td className="px-4 py-2 text-slate-600">{r.category || '—'}</td>
-                    <td className="px-4 py-2 text-slate-600">{r.created_by || '—'}</td>
-                    <td className="px-4 py-2 font-mono text-xs text-slate-500">{r.created_at}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{r.category || '—'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{r.created_by || '—'}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{r.created_at}</td>
                   </tr>
                 ))
               )}

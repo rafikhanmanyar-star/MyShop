@@ -61,10 +61,10 @@ export default function TerminalCloseModal({ shiftId, stats, onClose, onSuccess 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-slate-200">
-          <h2 className="text-xl font-bold text-slate-800">Close Terminal</h2>
-          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
+      <div className="bg-card rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-xl font-bold text-foreground">Close Terminal</h2>
+          <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-muted text-muted-foreground">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -78,21 +78,21 @@ export default function TerminalCloseModal({ shiftId, stats, onClose, onSuccess 
           )}
 
           <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-slate-500 font-medium">Opening Cash</p>
-              <p className="text-lg font-bold text-slate-800">{Number(stats.opening_cash).toFixed(2)}</p>
+            <div className="bg-muted/80 rounded-xl p-4">
+              <p className="text-muted-foreground font-medium">Opening Cash</p>
+              <p className="text-lg font-bold text-foreground">{Number(stats.opening_cash).toFixed(2)}</p>
             </div>
-            <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-slate-500 font-medium">Cash Sales</p>
-              <p className="text-lg font-bold text-slate-800">{Number(stats.cashCollected).toFixed(2)}</p>
+            <div className="bg-muted/80 rounded-xl p-4">
+              <p className="text-muted-foreground font-medium">Cash Sales</p>
+              <p className="text-lg font-bold text-foreground">{Number(stats.cashCollected).toFixed(2)}</p>
             </div>
-            <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-slate-500 font-medium">Refunds</p>
-              <p className="text-lg font-bold text-slate-800">-{Number(stats.totalRefundAmount).toFixed(2)}</p>
+            <div className="bg-muted/80 rounded-xl p-4">
+              <p className="text-muted-foreground font-medium">Refunds</p>
+              <p className="text-lg font-bold text-foreground">-{Number(stats.totalRefundAmount).toFixed(2)}</p>
             </div>
-            <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-slate-500 font-medium">Expenses</p>
-              <p className="text-lg font-bold text-slate-800">-{Number(stats.pettyCashUsed).toFixed(2)}</p>
+            <div className="bg-muted/80 rounded-xl p-4">
+              <p className="text-muted-foreground font-medium">Expenses</p>
+              <p className="text-lg font-bold text-foreground">-{Number(stats.pettyCashUsed).toFixed(2)}</p>
             </div>
           </div>
 
@@ -102,7 +102,7 @@ export default function TerminalCloseModal({ shiftId, stats, onClose, onSuccess 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Actual Cash Counted *</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Actual Cash Counted *</label>
             <input
               type="number"
               step="0.01"
@@ -114,14 +114,14 @@ export default function TerminalCloseModal({ shiftId, stats, onClose, onSuccess 
             />
           </div>
 
-          <div className="rounded-xl p-4 border bg-slate-50">
-            <p className="text-sm font-medium text-slate-600">Variance (Actual − Expected)</p>
-            <p className={`text-xl font-bold ${variance < 0 ? 'text-rose-600' : variance > 0 ? 'text-emerald-600' : 'text-slate-800'}`}>
+          <div className="rounded-xl p-4 border bg-muted/80">
+            <p className="text-sm font-medium text-muted-foreground">Variance (Actual − Expected)</p>
+            <p className={`text-xl font-bold ${variance < 0 ? 'text-rose-600' : variance > 0 ? 'text-emerald-600' : 'text-foreground'}`}>
               {variance.toFixed(2)} {variance < 0 ? '(Shortage)' : variance > 0 ? '(Excess)' : ''}
             </p>
             {hasVariance && (
               <div className="mt-3">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Reason for variance *</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Reason for variance *</label>
                 <textarea
                   value={varianceReason}
                   onChange={(e) => setVarianceReason(e.target.value)}
@@ -134,7 +134,7 @@ export default function TerminalCloseModal({ shiftId, stats, onClose, onSuccess 
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Hand over to</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Hand over to</label>
             <select
               value={handoverToUserId}
               onChange={(e) => setHandoverToUserId(e.target.value)}
@@ -151,7 +151,7 @@ export default function TerminalCloseModal({ shiftId, stats, onClose, onSuccess 
 
           {handoverToUserId && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Handover amount (optional)</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Handover amount (optional)</label>
               <input
                 type="number"
                 step="0.01"
@@ -168,7 +168,7 @@ export default function TerminalCloseModal({ shiftId, stats, onClose, onSuccess 
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-700 font-medium hover:bg-slate-50"
+              className="flex-1 py-3 rounded-xl border border-slate-300 text-foreground font-medium hover:bg-muted/50"
             >
               Cancel
             </button>

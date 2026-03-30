@@ -75,12 +75,12 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettin
     const html = generateReceiptHTML(saleData, settingsWithQr);
 
     return (
-        <Card className="border-none shadow-sm p-6 bg-slate-100 flex flex-col items-center overflow-hidden">
-            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 self-start">Live Preview</h3>
-            <div className="bg-white shadow-xl border border-slate-200 transition-all overflow-hidden relative" style={{ width: containerWidth }}>
+        <Card className="border-none shadow-sm p-6 bg-muted flex flex-col items-center overflow-hidden">
+            <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4 self-start">Live Preview</h3>
+            <div className="bg-card shadow-xl border border-border transition-all overflow-hidden relative" style={{ width: containerWidth }}>
                 <iframe srcDoc={html} style={{ width: '100%', height: '500px', border: 'none', backgroundColor: '#fff' }} title="Receipt Preview" />
             </div>
-            <p className="text-xs text-slate-400 mt-4 text-center">This is an approximate software rendering.<br />Actual thermal paper may look slightly different.</p>
+            <p className="text-xs text-muted-foreground mt-4 text-center">This is an approximate software rendering.<br />Actual thermal paper may look slightly different.</p>
         </Card>
     );
 };
@@ -380,11 +380,11 @@ const SettingsContent: React.FC = () => {
     const tabs = isCashier ? allTabs.filter(t => t.id === 'app') : allTabs;
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
-            <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10">
+        <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
+            <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
                 <div className="mb-6">
-                    <h1 className="text-2xl font-black text-slate-800 tracking-tight">Settings</h1>
-                    <p className="text-slate-500 text-sm font-medium">
+                    <h1 className="text-2xl font-black text-foreground tracking-tight">Settings</h1>
+                    <p className="text-muted-foreground text-sm font-medium">
                         {isCashier ? 'Check for app updates and install new versions.' : 'Chart of accounts, vendor management, and team roles.'}
                     </p>
                 </div>
@@ -395,7 +395,7 @@ const SettingsContent: React.FC = () => {
                             onClick={() => setActiveTab(tab.id)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
                                 ? 'text-indigo-600'
-                                : 'text-slate-400 hover:text-slate-600'
+                                : 'text-muted-foreground hover:text-muted-foreground'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<{ width?: number; height?: number }>, { width: 18, height: 18 })}
@@ -419,8 +419,8 @@ const SettingsContent: React.FC = () => {
                         <DataExportImportSection />
                         <BackupRestoreSection />
                         <Card className="border-none shadow-sm p-6">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Clear all transactions</h3>
-                            <p className="text-slate-600 text-sm mb-4">
+                            <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4">Clear all transactions</h3>
+                            <p className="text-muted-foreground text-sm mb-4">
                                 Remove all sales transactions, orders, journal entries, transaction history, purchase bills, and bill payments. Settings, chart of accounts, bank accounts, users, vendors, products, and inventories (stock levels and movement history) are kept.
                             </p>
                             <Button
@@ -438,9 +438,9 @@ const SettingsContent: React.FC = () => {
                 {activeTab === 'app' && (
                     <div className="space-y-6 max-w-xl">
                         <Card className="border-none shadow-sm p-6">
-                            <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Desktop app</h3>
+                            <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4">Desktop app</h3>
                             {appVersion != null && (
-                                <p className="text-slate-600 text-sm mb-4">Current version: <span className="font-bold text-slate-800">{appVersion}</span></p>
+                                <p className="text-muted-foreground text-sm mb-4">Current version: <span className="font-bold text-foreground">{appVersion}</span></p>
                             )}
                             {isElectron ? (
                                 <div className="space-y-3">
@@ -467,14 +467,14 @@ const SettingsContent: React.FC = () => {
                                         const percent = updateStatus.percent != null ? Math.min(100, Math.max(0, updateStatus.percent)) : 0;
                                         return (
                                             <div className="space-y-2 pt-2">
-                                                <p className="text-slate-600 text-sm font-medium">Downloading update…</p>
+                                                <p className="text-muted-foreground text-sm font-medium">Downloading update…</p>
                                                 <progress
                                                     value={percent}
                                                     max={100}
                                                     className="h-2.5 w-full rounded-full [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-slate-200 [&::-webkit-progress-value]:rounded-full [&::-webkit-progress-value]:bg-emerald-500 [&::-moz-progress-bar]:rounded-full [&::-moz-progress-bar]:bg-emerald-500"
                                                     aria-label="Update download progress"
                                                 />
-                                                <p className="text-slate-500 text-xs tabular-nums">{Math.round(percent)}%</p>
+                                                <p className="text-muted-foreground text-xs tabular-nums">{Math.round(percent)}%</p>
                                             </div>
                                         );
                                     })()}
@@ -485,14 +485,14 @@ const SettingsContent: React.FC = () => {
                                         </div>
                                     )}
                                     {updateStatus?.status === 'not-available' && (
-                                        <p className="text-slate-500 text-sm pt-2">You’re on the latest version.</p>
+                                        <p className="text-muted-foreground text-sm pt-2">You’re on the latest version.</p>
                                     )}
                                     {(updateStatus?.status === 'error' || updateStatus?.status === 'unavailable') && updateStatus?.message && (
                                         <p className="text-amber-600 text-sm pt-2">{updateStatus.message}</p>
                                     )}
                                 </div>
                             ) : (
-                                <p className="text-slate-500 text-sm">Update check is available in the installed desktop app only.</p>
+                                <p className="text-muted-foreground text-sm">Update check is available in the installed desktop app only.</p>
                             )}
                         </Card>
                     </div>
@@ -501,18 +501,18 @@ const SettingsContent: React.FC = () => {
                 {!isCashier && activeTab === 'vendors' && (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
-                            <p className="text-slate-600 text-sm">Vendors are used in Procurement when recording stock-in and purchases.</p>
+                            <p className="text-muted-foreground text-sm">Vendors are used in Procurement when recording stock-in and purchases.</p>
                             <Button onClick={openNewVendor} className="flex items-center gap-2">
                                 {ICONS.plus} New Vendor
                             </Button>
                         </div>
                         <Card className="border-none shadow-sm overflow-hidden">
                             {vendorsLoading ? (
-                                <div className="p-12 text-center text-slate-400">Loading...</div>
+                                <div className="p-12 text-center text-muted-foreground">Loading...</div>
                             ) : (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
-                                        <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
                                             <tr>
                                                 <th className="px-6 py-4">Name</th>
                                                 <th className="px-6 py-4">Company</th>
@@ -525,19 +525,19 @@ const SettingsContent: React.FC = () => {
                                         <tbody className="divide-y divide-slate-100">
                                             {vendors.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500 text-sm">
+                                                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground text-sm">
                                                         No vendors yet. Create one to use in Procurement.
                                                     </td>
                                                 </tr>
                                             ) : (
                                                 vendors.map(v => (
-                                                    <tr key={v.id} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="px-6 py-4 font-bold text-slate-800">{v.name}</td>
-                                                        <td className="px-6 py-4 text-slate-600">{v.company_name || '—'}</td>
-                                                        <td className="px-6 py-4 text-slate-600">{v.contact_no || '—'}</td>
-                                                        <td className="px-6 py-4 text-slate-600">{v.email || '—'}</td>
+                                                    <tr key={v.id} className="hover:bg-muted/50 transition-colors">
+                                                        <td className="px-6 py-4 font-bold text-foreground">{v.name}</td>
+                                                        <td className="px-6 py-4 text-muted-foreground">{v.company_name || '—'}</td>
+                                                        <td className="px-6 py-4 text-muted-foreground">{v.contact_no || '—'}</td>
+                                                        <td className="px-6 py-4 text-muted-foreground">{v.email || '—'}</td>
                                                         <td className="px-6 py-4">
-                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${v.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${v.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
                                                                 {v.is_active ? 'Active' : 'Inactive'}
                                                             </span>
                                                         </td>
@@ -578,18 +578,18 @@ const SettingsContent: React.FC = () => {
                 {!isCashier && activeTab === 'users' && (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
-                            <p className="text-slate-600 text-sm">Manage team members and their access roles (Admin, Accountant, POS Cashier).</p>
+                            <p className="text-muted-foreground text-sm">Manage team members and their access roles (Admin, Accountant, POS Cashier).</p>
                             <Button onClick={openNewUser} className="flex items-center gap-2">
                                 {ICONS.plus} New User
                             </Button>
                         </div>
                         <Card className="border-none shadow-sm overflow-hidden">
                             {usersLoading ? (
-                                <div className="p-12 text-center text-slate-400">Loading users...</div>
+                                <div className="p-12 text-center text-muted-foreground">Loading users...</div>
                             ) : (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
-                                        <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
                                             <tr>
                                                 <th className="px-6 py-4">Name / Username</th>
                                                 <th className="px-6 py-4">Role</th>
@@ -601,28 +601,28 @@ const SettingsContent: React.FC = () => {
                                         <tbody className="divide-y divide-slate-100">
                                             {users.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-500 text-sm">
+                                                    <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground text-sm">
                                                         No users found.
                                                     </td>
                                                 </tr>
                                             ) : (
                                                 users.map(u => (
-                                                    <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                                                    <tr key={u.id} className="hover:bg-muted/50 transition-colors">
                                                         <td className="px-6 py-4">
-                                                            <div className="font-bold text-slate-800">{u.name}</div>
-                                                            <div className="text-[10px] text-slate-400 font-mono">@{u.username}</div>
+                                                            <div className="font-bold text-foreground">{u.name}</div>
+                                                            <div className="text-[10px] text-muted-foreground font-mono">@{u.username}</div>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded shadow-sm ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' :
                                                                 u.role === 'accountant' ? 'bg-amber-100 text-amber-700' :
-                                                                    'bg-slate-100 text-slate-700'
+                                                                    'bg-muted text-foreground'
                                                                 }`}>
                                                                 {u.role.replace('_', ' ')}
                                                             </span>
                                                         </td>
-                                                        <td className="px-6 py-4 text-slate-600">{u.email || '—'}</td>
+                                                        <td className="px-6 py-4 text-muted-foreground">{u.email || '—'}</td>
                                                         <td className="px-6 py-4">
-                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${u.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${u.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
                                                                 {u.is_active ? 'Active' : 'Inactive'}
                                                             </span>
                                                         </td>
@@ -659,9 +659,9 @@ const SettingsContent: React.FC = () => {
                     <div className="flex flex-col lg:flex-row gap-8 max-w-6xl w-full">
                         <div className="space-y-6 flex-1 max-w-xl">
                             <Card className="border-none shadow-sm p-6">
-                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Print Settings</h3>
+                                <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4">Print Settings</h3>
                                 {posSettingsLoading ? (
-                                    <p className="text-slate-500 text-sm">Loading...</p>
+                                    <p className="text-muted-foreground text-sm">Loading...</p>
                                 ) : (
                                     <div className="space-y-4">
                                         <label className="flex items-center gap-3 cursor-pointer">
@@ -673,11 +673,11 @@ const SettingsContent: React.FC = () => {
                                                     onChange={e => setPosSettings({ ...posSettings, auto_print_receipt: e.target.checked })}
                                                 />
                                                 <div className={`block w-10 h-6 rounded-full transition-colors ${posSettings.auto_print_receipt ? 'bg-indigo-600' : 'bg-slate-300'}`}></div>
-                                                <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${posSettings.auto_print_receipt ? 'transform translate-x-4' : ''}`}></div>
+                                                <div className={`dot absolute left-1 top-1 bg-card w-4 h-4 rounded-full transition-transform ${posSettings.auto_print_receipt ? 'transform translate-x-4' : ''}`}></div>
                                             </div>
                                             <div>
-                                                <p className="font-bold text-slate-700">Auto-Print Receipt</p>
-                                                <p className="text-xs text-slate-500">Automatically print the receipt after a sale.</p>
+                                                <p className="font-bold text-foreground">Auto-Print Receipt</p>
+                                                <p className="text-xs text-muted-foreground">Automatically print the receipt after a sale.</p>
                                             </div>
                                         </label>
                                         <Input
@@ -702,14 +702,14 @@ const SettingsContent: React.FC = () => {
                                 )}
                             </Card>
                             <Card className="border-none shadow-sm p-6">
-                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">Receipt Template</h3>
+                                <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4">Receipt Template</h3>
                                 {receiptSettingsLoading ? (
-                                    <p className="text-slate-500 text-sm">Loading...</p>
+                                    <p className="text-muted-foreground text-sm">Loading...</p>
                                 ) : (
                                     <div className="space-y-4">
-                                        <div className="pb-4 border-b border-slate-100">
-                                            <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">Shop information (on receipt)</h4>
-                                            <p className="text-slate-500 text-xs mb-3">This appears at the top of every printed receipt.</p>
+                                        <div className="pb-4 border-b border-border">
+                                            <h4 className="text-xs font-black text-muted-foreground uppercase tracking-wider mb-3">Shop information (on receipt)</h4>
+                                            <p className="text-muted-foreground text-xs mb-3">This appears at the top of every printed receipt.</p>
                                             <div className="grid gap-3">
                                                 <Input label="Shop name" placeholder="e.g. My Store" value={receiptSettings.shop_name || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_name: e.target.value })} />
                                                 <Input label="Address" placeholder="Street, city" value={receiptSettings.shop_address || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_address: e.target.value })} />
@@ -718,61 +718,61 @@ const SettingsContent: React.FC = () => {
                                                 <Input label="Logo URL (optional)" placeholder="https://..." value={receiptSettings.logo_url || ''} onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })} />
                                                 <label className="flex items-center gap-3 cursor-pointer mt-1">
                                                     <input type="checkbox" checked={!!receiptSettings.show_logo} onChange={e => setReceiptSettings({ ...receiptSettings, show_logo: e.target.checked })} className="rounded border-slate-300" />
-                                                    <span className="font-bold text-slate-700">Show logo on receipt</span>
+                                                    <span className="font-bold text-foreground">Show logo on receipt</span>
                                                 </label>
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Receipt width</label>
-                                            <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.receipt_width || '80mm'} onChange={e => setReceiptSettings({ ...receiptSettings, receipt_width: e.target.value })}>
+                                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-1">Receipt width</label>
+                                            <select className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground" value={receiptSettings.receipt_width || '80mm'} onChange={e => setReceiptSettings({ ...receiptSettings, receipt_width: e.target.value })}>
                                                 <option value="80mm">80mm (standard)</option>
                                                 <option value="58mm">58mm (narrow)</option>
                                             </select>
                                         </div>
                                         <label className="flex items-center gap-3 cursor-pointer">
                                             <input type="checkbox" checked={!!receiptSettings.show_tax_breakdown} onChange={e => setReceiptSettings({ ...receiptSettings, show_tax_breakdown: e.target.checked })} className="rounded border-slate-300" />
-                                            <span className="font-bold text-slate-700">Show tax breakdown</span>
+                                            <span className="font-bold text-foreground">Show tax breakdown</span>
                                         </label>
                                         <label className="flex items-center gap-3 cursor-pointer">
                                             <input type="checkbox" checked={!!receiptSettings.show_barcode} onChange={e => setReceiptSettings({ ...receiptSettings, show_barcode: e.target.checked })} className="rounded border-slate-300" />
-                                            <span className="font-bold text-slate-700">Show barcode on receipt</span>
+                                            <span className="font-bold text-foreground">Show barcode on receipt</span>
                                         </label>
                                         <div>
-                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode type</label>
-                                            <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_type || 'CODE128'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_type: e.target.value })}>
+                                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-1">Barcode type</label>
+                                            <select className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground" value={receiptSettings.barcode_type || 'CODE128'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_type: e.target.value })}>
                                                 <option value="CODE128">CODE128</option>
                                                 <option value="CODE39">CODE39</option>
                                                 <option value="EAN13">EAN13</option>
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode size</label>
-                                            <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_size || 'medium'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_size: e.target.value })}>
+                                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-1">Barcode size</label>
+                                            <select className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground" value={receiptSettings.barcode_size || 'medium'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_size: e.target.value })}>
                                                 <option value="small">Small</option>
                                                 <option value="medium">Medium</option>
                                                 <option value="large">Large</option>
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Barcode position</label>
-                                            <select className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700" value={receiptSettings.barcode_position || 'footer'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_position: e.target.value })}>
+                                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-1">Barcode position</label>
+                                            <select className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground" value={receiptSettings.barcode_position || 'footer'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_position: e.target.value })}>
                                                 <option value="header">Header</option>
                                                 <option value="footer">Footer</option>
                                             </select>
                                         </div>
                                         <label className="flex items-center gap-3 cursor-pointer">
                                             <input type="checkbox" checked={!!receiptSettings.show_cashier_name} onChange={e => setReceiptSettings({ ...receiptSettings, show_cashier_name: e.target.checked })} className="rounded border-slate-300" />
-                                            <span className="font-bold text-slate-700">Show cashier name</span>
+                                            <span className="font-bold text-foreground">Show cashier name</span>
                                         </label>
                                         <label className="flex items-center gap-3 cursor-pointer">
                                             <input type="checkbox" checked={!!receiptSettings.show_shift_number} onChange={e => setReceiptSettings({ ...receiptSettings, show_shift_number: e.target.checked })} className="rounded border-slate-300" />
-                                            <span className="font-bold text-slate-700">Show shift number</span>
+                                            <span className="font-bold text-foreground">Show shift number</span>
                                         </label>
                                         <label className="flex items-center gap-3 cursor-pointer">
                                             <input type="checkbox" checked={!!receiptSettings.show_mobile_url_qr} onChange={e => setReceiptSettings({ ...receiptSettings, show_mobile_url_qr: e.target.checked })} className="rounded border-slate-300" />
-                                            <span className="font-bold text-slate-700">Mobile URL QR code</span>
+                                            <span className="font-bold text-foreground">Mobile URL QR code</span>
                                         </label>
-                                        <p className="text-xs text-slate-500 -mt-2">When checked, the receipt will show a QR code at the end with &quot;Please scan to order from home&quot;</p>
+                                        <p className="text-xs text-muted-foreground -mt-2">When checked, the receipt will show a QR code at the end with &quot;Please scan to order from home&quot;</p>
                                         <Input label="Footer message" placeholder="Thank you for your business!" value={receiptSettings.footer_message || ''} onChange={e => setReceiptSettings({ ...receiptSettings, footer_message: e.target.value })} />
                                         <div className="pt-4">
                                             <Button onClick={handleSaveReceiptSettings}>Save Receipt Template</Button>
@@ -821,9 +821,9 @@ const SettingsContent: React.FC = () => {
                             onChange={e => setUserForm({ ...userForm, email: e.target.value })}
                         />
                         <div>
-                            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Role</label>
+                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Role</label>
                             <select
-                                className="w-full h-11 px-4 bg-slate-50 border-2 border-slate-100 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all appearance-none"
+                                className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground outline-none focus:border-indigo-500 transition-all appearance-none"
                                 value={userForm.role}
                                 onChange={e => setUserForm({ ...userForm, role: e.target.value })}
                             >
@@ -857,7 +857,7 @@ const SettingsContent: React.FC = () => {
                 size="md"
             >
                 <div className="space-y-4">
-                    <p className="text-slate-600 text-sm">
+                    <p className="text-muted-foreground text-sm">
                         This will permanently delete all sales transactions, orders, journal entries, ledger entries, transaction history, purchase bills, and bill payments. Settings, chart of accounts, bank accounts, users, vendors, products, and inventories will be kept.
                     </p>
                     <div className="flex justify-end gap-3">

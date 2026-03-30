@@ -84,13 +84,13 @@ const MultiStoreContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
+        <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
             {/* Header / Tab Navigation */}
-            <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10 transition-all">
+            <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10 transition-all">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">Organization & Scale</h1>
-                        <p className="text-slate-500 text-sm font-medium italic">Multi-branch orchestration and centralized policy engine.</p>
+                        <h1 className="text-2xl font-black text-foreground tracking-tight">Organization & Scale</h1>
+                        <p className="text-muted-foreground text-sm font-medium italic">Multi-branch orchestration and centralized policy engine.</p>
                     </div>
                     <div className="flex gap-3">
                         <button
@@ -101,7 +101,7 @@ const MultiStoreContent: React.FC = () => {
                         </button>
                         <button
                             onClick={() => setIsPoliciesModalOpen(true)}
-                            className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all items-center gap-2 hidden md:flex"
+                            className="px-4 py-2 bg-card border border-border text-muted-foreground rounded-xl text-sm font-bold hover:bg-muted/50 transition-all items-center gap-2 hidden md:flex"
                         >
                             {ICONS.settings} Global Policies
                         </button>
@@ -115,7 +115,7 @@ const MultiStoreContent: React.FC = () => {
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
                                 ? 'text-indigo-600'
-                                : 'text-slate-400 hover:text-slate-600'
+                                : 'text-muted-foreground hover:text-muted-foreground'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
@@ -244,10 +244,10 @@ const MultiStoreContent: React.FC = () => {
                     </div>
 
                     <div className="space-y-4">
-                        <div className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
+                        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl">
                             <div>
-                                <h4 className="text-sm font-bold text-slate-700">Allow Negative Stock</h4>
-                                <p className="text-[10px] text-slate-400">Permit sales even if system inventory is zero.</p>
+                                <h4 className="text-sm font-bold text-foreground">Allow Negative Stock</h4>
+                                <p className="text-[10px] text-muted-foreground">Permit sales even if system inventory is zero.</p>
                             </div>
                             <input
                                 type="checkbox"
@@ -257,10 +257,10 @@ const MultiStoreContent: React.FC = () => {
                             />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
+                        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl">
                             <div>
-                                <h4 className="text-sm font-bold text-slate-700">Universal Pricing</h4>
-                                <p className="text-[10px] text-slate-400">All branches use the core catalog price.</p>
+                                <h4 className="text-sm font-bold text-foreground">Universal Pricing</h4>
+                                <p className="text-[10px] text-muted-foreground">All branches use the core catalog price.</p>
                             </div>
                             <input
                                 type="checkbox"
@@ -270,10 +270,10 @@ const MultiStoreContent: React.FC = () => {
                             />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
+                        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl">
                             <div>
-                                <h4 className="text-sm font-bold text-slate-700">Tax Inclusive Pricing</h4>
-                                <p className="text-[10px] text-slate-400">Prices displayed include all taxes.</p>
+                                <h4 className="text-sm font-bold text-foreground">Tax Inclusive Pricing</h4>
+                                <p className="text-[10px] text-muted-foreground">Prices displayed include all taxes.</p>
                             </div>
                             <input
                                 type="checkbox"
@@ -299,10 +299,10 @@ const MultiStoreContent: React.FC = () => {
                             />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl">
+                        <div className="flex items-center justify-between p-3 bg-card border border-border rounded-xl">
                             <div>
-                                <h4 className="text-sm font-bold text-slate-700">Require Manager Approval</h4>
-                                <p className="text-[10px] text-slate-400">For discounts exceeding 20% or returns.</p>
+                                <h4 className="text-sm font-bold text-foreground">Require Manager Approval</h4>
+                                <p className="text-[10px] text-muted-foreground">For discounts exceeding 20% or returns.</p>
                             </div>
                             <input
                                 type="checkbox"

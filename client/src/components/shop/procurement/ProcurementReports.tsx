@@ -170,9 +170,9 @@ export default function ProcurementReports() {
           <h3 className="section-title border-b border-border p-4">Accounts Payable Aging</h3>
           <div className="p-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="rounded-xl bg-slate-50 p-4">
-                <p className="table-header text-slate-500">Current</p>
-                <p className="numeric-data text-xl font-semibold text-slate-800 dark:text-slate-100">
+              <div className="rounded-xl bg-muted/80 p-4">
+                <p className="table-header text-muted-foreground">Current</p>
+                <p className="numeric-data text-xl font-semibold text-foreground dark:text-slate-100">
                   {CURRENCY} {Number(apAging.summary?.current || 0).toLocaleString()}
                 </p>
               </div>
@@ -195,7 +195,7 @@ export default function ProcurementReports() {
                 </p>
               </div>
             </div>
-            <p className="section-title mb-4 text-slate-700 dark:text-slate-200">
+            <p className="section-title mb-4 text-foreground dark:text-slate-200">
               Total outstanding:{' '}
               <span className="numeric-data">
                 {CURRENCY} {Number(apAging.totalOutstanding || 0).toLocaleString()}
@@ -233,7 +233,7 @@ export default function ProcurementReports() {
         <div className="card overflow-hidden p-0">
           <h3 className="section-title border-b border-border p-4">Inventory valuation (weighted average cost)</h3>
           <div className="p-6">
-            <p className="section-title mb-4 text-slate-700 dark:text-slate-200">
+            <p className="section-title mb-4 text-foreground dark:text-slate-200">
               Total inventory value:{' '}
               <span className="numeric-data">
                 {CURRENCY} {Number(inventoryVal.totalValue || 0).toLocaleString()}

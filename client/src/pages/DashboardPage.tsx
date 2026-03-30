@@ -168,21 +168,21 @@ export default function DashboardPage() {
       value: stats.totalProducts,
       icon: Package,
       color: 'text-indigo-600',
-      bg: 'bg-indigo-50',
+      bg: 'bg-indigo-50 dark:bg-indigo-900/30',
     },
     {
       label: 'Total Sales',
       value: stats.totalSales,
       icon: ShoppingCart,
       color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
+      bg: 'bg-emerald-50 dark:bg-emerald-900/30',
     },
     {
       label: 'Revenue',
       value: `${CURRENCY} ${stats.totalRevenue.toLocaleString()}`,
       icon: TrendingUp,
       color: 'text-purple-600',
-      bg: 'bg-purple-50',
+      bg: 'bg-purple-50 dark:bg-purple-900/30',
       isString: true,
     },
     {
@@ -190,14 +190,14 @@ export default function DashboardPage() {
       value: stats.totalCustomers,
       icon: Users,
       color: 'text-amber-600',
-      bg: 'bg-amber-50',
+      bg: 'bg-amber-50 dark:bg-amber-900/30',
     },
     {
       label: 'Low Stock',
       value: stats.lowStockItems,
       icon: AlertTriangle,
       color: 'text-rose-600',
-      bg: 'bg-rose-50',
+      bg: 'bg-rose-50 dark:bg-rose-900/30',
     },
   ];
 
@@ -206,8 +206,8 @@ export default function DashboardPage() {
       label: 'Branches',
       value: stats.branchesCount,
       icon: Building2,
-      color: 'text-slate-600',
-      bg: 'bg-slate-100',
+      color: 'text-muted-foreground dark:text-muted-foreground',
+      bg: 'bg-muted dark:bg-slate-700',
       link: '/multi-store',
     },
     {
@@ -215,7 +215,7 @@ export default function DashboardPage() {
       value: stats.terminalsCount,
       icon: Monitor,
       color: 'text-blue-600',
-      bg: 'bg-blue-50',
+      bg: 'bg-blue-50 dark:bg-blue-900/30',
       link: '/multi-store',
     },
     {
@@ -223,21 +223,21 @@ export default function DashboardPage() {
       value: stats.categoriesCount,
       icon: LayoutGrid,
       color: 'text-teal-600',
-      bg: 'bg-teal-50',
+      bg: 'bg-teal-50 dark:bg-teal-900/30',
     },
     {
       label: 'Vendors',
       value: stats.vendorsCount,
       icon: Truck,
       color: 'text-orange-600',
-      bg: 'bg-orange-50',
+      bg: 'bg-orange-50 dark:bg-orange-900/30',
     },
     {
       label: 'Out of Stock',
       value: stats.outOfStockItems,
       icon: AlertTriangle,
       color: 'text-red-600',
-      bg: 'bg-red-50',
+      bg: 'bg-red-50 dark:bg-red-900/30',
       link: '/inventory',
     },
   ];
@@ -252,10 +252,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+      <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
 
       {cachedAt && (
-        <div className="p-3 rounded-lg bg-amber-50 text-amber-800 text-sm border border-amber-200">
+        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 text-sm border border-amber-200 dark:border-amber-700">
           Offline — showing cached data. Last updated: {new Date(cachedAt).toLocaleString()}
         </div>
       )}
@@ -273,10 +273,10 @@ export default function DashboardPage() {
               <card.icon className="w-7 h-7" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {card.label}
               </p>
-              <p className="text-xl font-bold text-gray-900 truncate">
+              <p className="text-xl font-bold text-foreground truncate">
                 {card.isString ? card.value : typeof card.value === 'number' ? card.value.toLocaleString() : card.value}
               </p>
             </div>
@@ -286,47 +286,47 @@ export default function DashboardPage() {
 
       {/* Today's performance + Average order */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-6 border-none shadow-sm bg-gradient-to-br from-indigo-50 to-white">
+        <Card className="p-6 border-none shadow-sm bg-gradient-to-br from-indigo-50 to-card dark:from-indigo-900/20 dark:to-card">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-2xl bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 flex items-center justify-center">
               <Calendar className="w-7 h-7" />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
                 Today&apos;s Sales
               </p>
-              <p className="text-2xl font-bold text-gray-900">{stats.todaySalesCount}</p>
-              <p className="text-sm text-gray-500">
+              <p className="text-2xl font-bold text-foreground">{stats.todaySalesCount}</p>
+              <p className="text-sm text-muted-foreground">
                 {CURRENCY} {stats.todayRevenue.toLocaleString()} revenue
               </p>
             </div>
           </div>
         </Card>
-        <Card className="p-6 border-none shadow-sm bg-gradient-to-br from-emerald-50 to-white">
+        <Card className="p-6 border-none shadow-sm bg-gradient-to-br from-emerald-50 to-card dark:from-emerald-900/20 dark:to-card">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 flex items-center justify-center">
               <DollarSign className="w-7 h-7" />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
                 Avg. Order Value
               </p>
-              <p className="text-2xl font-bold text-gray-900 font-mono">
+              <p className="text-2xl font-bold text-foreground font-mono">
                 {CURRENCY} {Math.round(stats.avgOrderValue).toLocaleString()}
               </p>
             </div>
           </div>
         </Card>
-        <Card className="p-6 border-none shadow-sm bg-gradient-to-br from-amber-50 to-white">
+        <Card className="p-6 border-none shadow-sm bg-gradient-to-br from-amber-50 to-card dark:from-amber-900/20 dark:to-card">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 flex items-center justify-center">
               <Smartphone className="w-7 h-7" />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-amber-600">
                 Mobile Orders Pending
               </p>
-              <p className="text-2xl font-bold text-gray-900">{stats.mobileOrdersPending}</p>
+              <p className="text-2xl font-bold text-foreground">{stats.mobileOrdersPending}</p>
               {stats.mobileOrdersPending > 0 && (
                 <Link
                   to="/mobile-orders"
@@ -342,7 +342,7 @@ export default function DashboardPage() {
 
       {/* Operations & setup row */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Operations & Setup</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4">Operations & Setup</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {operationsCards.map((card) => {
             const content = (
@@ -356,10 +356,10 @@ export default function DashboardPage() {
                   <card.icon className="w-6 h-6" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {card.label}
                   </p>
-                  <p className="text-lg font-bold text-gray-900">{card.value}</p>
+                  <p className="text-lg font-bold text-foreground">{card.value}</p>
                 </div>
               </Card>
             );
@@ -377,11 +377,11 @@ export default function DashboardPage() {
       {/* Quick actions / Getting started */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-6 border-none shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <Store className="w-5 h-5 text-indigo-600" />
             Getting Started
           </h2>
-          <ul className="space-y-3 text-sm text-gray-600">
+          <ul className="space-y-3 text-sm text-muted-foreground">
             <li>1. Set up <strong>Branches</strong> and <strong>Terminals</strong> in Multi-Store.</li>
             <li>2. Add <strong>Products</strong> and manage <strong>Inventory</strong>.</li>
             <li>3. Process sales via <strong>POS</strong> or accept <strong>Mobile Orders</strong>.</li>
@@ -390,29 +390,29 @@ export default function DashboardPage() {
           </ul>
         </Card>
         <Card className="p-6 border-none shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Links</h2>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Quick Links</h2>
           <div className="grid grid-cols-2 gap-3">
             <Link
               to="/pos"
-              className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors text-sm font-medium"
+              className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors text-sm font-medium"
             >
               <ShoppingCart className="w-4 h-4" /> POS
             </Link>
             <Link
               to="/inventory"
-              className="flex items-center gap-2 p-3 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors text-sm font-medium"
+              className="flex items-center gap-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 transition-colors text-sm font-medium"
             >
               <Package className="w-4 h-4" /> Inventory
             </Link>
             <Link
               to="/accounting"
-              className="flex items-center gap-2 p-3 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 transition-colors text-sm font-medium"
+              className="flex items-center gap-2 p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-950/50 transition-colors text-sm font-medium"
             >
               <DollarSign className="w-4 h-4" /> Accounting
             </Link>
             <Link
               to="/analytics"
-              className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors text-sm font-medium"
+              className="flex items-center gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors text-sm font-medium"
             >
               <TrendingUp className="w-4 h-4" /> Analytics
             </Link>

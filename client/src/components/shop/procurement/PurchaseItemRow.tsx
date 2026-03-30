@@ -48,7 +48,7 @@ export default function PurchaseItemRow({
           {stock != null ? (
             <span
               className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                good ? 'bg-emerald-500/15 text-success' : 'bg-slate-500/15 text-muted-foreground'
+                good ? 'bg-emerald-500/15 text-success' : 'bg-muted/800/15 text-muted-foreground'
               }`}
             >
               {low ? 'Low ' : ''}
@@ -122,7 +122,7 @@ export default function PurchaseItemRow({
                 {stock != null && (
                   <span
                     className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${
-                      good ? 'bg-emerald-500/15 text-success' : 'bg-slate-500/15 text-muted-foreground'
+                      good ? 'bg-emerald-500/15 text-success' : 'bg-muted/800/15 text-muted-foreground'
                     }`}
                   >
                     Stock <span className="tabular-nums">{Number(stock).toLocaleString()}</span>

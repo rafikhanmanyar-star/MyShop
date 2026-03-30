@@ -103,7 +103,7 @@ const StockMaster: React.FC = () => {
             case 'Purchase': return 'bg-emerald-100 text-emerald-600';
             case 'Transfer': return 'bg-indigo-100 text-indigo-600';
             case 'Adjustment': return 'bg-amber-100 text-amber-600';
-            default: return 'bg-slate-100 text-slate-600';
+            default: return 'bg-muted text-muted-foreground';
         }
     };
 
@@ -177,26 +177,26 @@ const StockMaster: React.FC = () => {
             <div className={`flex-1 min-w-0 flex flex-col gap-6 transition-[flex] duration-200 flex-shrink min-h-0`}>
                 <div className="flex flex-wrap items-center gap-4 flex-shrink-0">
                     <div className="relative group flex-1 min-w-[200px] max-w-md">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
                             {ICONS.search}
                         </div>
                         <input
                             type="text"
-                            className="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                            className="block w-full pl-10 pr-3 py-3 border border-border rounded-xl leading-5 bg-card placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
                             placeholder="Search SKU, Name or Barcode..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                        <label htmlFor="stock-master-category" className="text-sm font-bold text-slate-600 whitespace-nowrap">
+                        <label htmlFor="stock-master-category" className="text-sm font-bold text-muted-foreground whitespace-nowrap">
                             Category:
                         </label>
                         <select
                             id="stock-master-category"
                             value={selectedCategoryId}
                             onChange={(e) => setSelectedCategoryId(e.target.value)}
-                            className="block rounded-xl border border-slate-200 bg-white py-3 pl-4 pr-10 text-sm font-medium text-slate-800 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[180px]"
+                            className="block rounded-xl border border-border bg-card py-3 pl-4 pr-10 text-sm font-medium text-foreground shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[180px]"
                         >
                             <option value="">All categories</option>
                             <option value="General">General</option>
@@ -210,15 +210,15 @@ const StockMaster: React.FC = () => {
                 <Card className="border-none shadow-sm flex-1 min-h-0 flex flex-col overflow-hidden">
                     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
                         <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-10">
+                            <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground sticky top-0 z-10">
                                 <tr>
-                                    <th className="px-6 py-4 bg-slate-50">Item Details</th>
-                                    <th className="px-6 py-4 bg-slate-50">Barcode</th>
-                                    <th className="px-6 py-4 bg-slate-50">On Hand</th>
-                                    <th className="px-6 py-4 bg-slate-50">Available</th>
-                                    <th className="px-6 py-4 bg-slate-50">In Transit</th>
-                                    <th className="px-6 py-4 bg-slate-50">Value (Retail)</th>
-                                    <th className="px-6 py-4 bg-slate-50"></th>
+                                    <th className="px-6 py-4 bg-muted/80">Item Details</th>
+                                    <th className="px-6 py-4 bg-muted/80">Barcode</th>
+                                    <th className="px-6 py-4 bg-muted/80">On Hand</th>
+                                    <th className="px-6 py-4 bg-muted/80">Available</th>
+                                    <th className="px-6 py-4 bg-muted/80">In Transit</th>
+                                    <th className="px-6 py-4 bg-muted/80">Value (Retail)</th>
+                                    <th className="px-6 py-4 bg-muted/80"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -230,7 +230,7 @@ const StockMaster: React.FC = () => {
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
+                                                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center overflow-hidden border border-border">
                                                     {item.imageUrl ? (
                                                         <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                                                     ) : (
@@ -238,8 +238,8 @@ const StockMaster: React.FC = () => {
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <div className="font-bold text-slate-800 text-sm">{item.name}</div>
-                                                    <div className="text-[10px] text-slate-400 font-mono italic">SKU: {item.sku}</div>
+                                                    <div className="font-bold text-foreground text-sm">{item.name}</div>
+                                                    <div className="text-[10px] text-muted-foreground font-mono italic">SKU: {item.sku}</div>
                                                 </div>
                                             </div>
                                         </td>
@@ -252,14 +252,14 @@ const StockMaster: React.FC = () => {
                                                 <span className="text-slate-300 text-[10px] italic">No Barcode</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-sm font-black font-mono text-slate-700">{item.onHand}</td>
+                                        <td className="px-6 py-4 text-sm font-black font-mono text-foreground">{item.onHand}</td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${item.available > 10 ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
                                                 {item.available} {item.unit}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-sm font-bold text-slate-400 font-mono">{item.inTransit}</td>
-                                        <td className="px-6 py-4 text-sm font-black text-slate-900 font-mono">
+                                        <td className="px-6 py-4 text-sm font-bold text-muted-foreground font-mono">{item.inTransit}</td>
+                                        <td className="px-6 py-4 text-sm font-black text-foreground font-mono">
                                             {(item.onHand * item.retailPrice).toLocaleString()}
                                         </td>
                                         <td className="px-6 py-4 text-right">
@@ -278,10 +278,10 @@ const StockMaster: React.FC = () => {
             {/* Right: Item Drill-down Side Panel - fixed width, no overlap */}
             {selectedItem && (
                 <div className="flex-shrink-0 w-[420px] min-w-[360px] min-h-0 flex flex-col animate-slide-in-right">
-                    <Card className="h-full min-h-0 border-none shadow-xl flex flex-col p-8 gap-8 overflow-y-auto bg-white border-l border-indigo-100 rounded-none rounded-l-3xl">
+                    <Card className="h-full min-h-0 border-none shadow-xl flex flex-col p-8 gap-8 overflow-y-auto bg-card border-l border-indigo-100 rounded-none rounded-l-3xl">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h2 className="text-xl font-black text-slate-800">{selectedItem.name}</h2>
+                                <h2 className="text-xl font-black text-foreground">{selectedItem.name}</h2>
                                 <p className="text-[10px] font-black uppercase text-indigo-500 tracking-widest mt-1">SKU ID: {selectedItem.sku}</p>
                                 {selectedItem.barcode && (
                                     <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest mt-0.5">📊 BARCODE: {selectedItem.barcode}</p>
@@ -289,14 +289,14 @@ const StockMaster: React.FC = () => {
                             </div>
                             <button
                                 onClick={() => setSelectedItem(null)}
-                                className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-400"
+                                className="p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground"
                             >
                                 {ICONS.x}
                             </button>
                         </div>
 
                         {/* Product Image Preview */}
-                        <div className="w-full aspect-video rounded-3xl bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center text-slate-200 shadow-inner">
+                        <div className="w-full aspect-video rounded-3xl bg-muted/80 border border-border overflow-hidden flex items-center justify-center text-slate-200 shadow-inner">
                             {selectedItem.imageUrl ? (
                                 <img src={selectedItem.imageUrl} alt={selectedItem.name} className="w-full h-full object-cover" />
                             ) : (
@@ -306,20 +306,20 @@ const StockMaster: React.FC = () => {
 
                         {/* Stock Distribution Matrix */}
                         <div className="space-y-4">
-                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Inventory Distribution</h3>
+                            <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Inventory Distribution</h3>
                             <div className="grid grid-cols-1 gap-3">
                                 {warehouses.map(wh => (
-                                    <div key={wh.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
+                                    <div key={wh.id} className="flex items-center justify-between p-4 bg-muted/80 rounded-2xl border border-border group hover:border-indigo-200 transition-all">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-indigo-600">
+                                            <div className="w-10 h-10 rounded-xl bg-card flex items-center justify-center text-muted-foreground shadow-sm border border-border group-hover:text-indigo-600">
                                                 {ICONS.building}
                                             </div>
                                             <div>
-                                                <p className="text-sm font-bold text-slate-800">{wh.name}</p>
-                                                <p className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">{wh.code}</p>
+                                                <p className="text-sm font-bold text-foreground">{wh.name}</p>
+                                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">{wh.code}</p>
                                             </div>
                                         </div>
-                                        <div className="text-xl font-black text-slate-900 font-mono">
+                                        <div className="text-xl font-black text-foreground font-mono">
                                             {selectedItem.warehouseStock[wh.id] || 0}
                                         </div>
                                     </div>
@@ -344,13 +344,13 @@ const StockMaster: React.FC = () => {
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => setIsTransferModalOpen(true)}
-                                    className="flex-1 py-4 bg-white border-2 border-slate-100 text-slate-700 rounded-2xl font-black text-xs hover:border-indigo-600 hover:text-indigo-600 transition-all uppercase tracking-widest shadow-sm"
+                                    className="flex-1 py-4 bg-card border-2 border-border text-foreground rounded-2xl font-black text-xs hover:border-indigo-600 hover:text-indigo-600 transition-all uppercase tracking-widest shadow-sm"
                                 >
                                     Transfer
                                 </button>
                                 <button
                                     onClick={() => setIsAdjustModalOpen(true)}
-                                    className="flex-1 py-4 bg-white border-2 border-slate-100 text-slate-700 rounded-2xl font-black text-xs hover:border-indigo-600 hover:text-indigo-600 transition-all uppercase tracking-widest shadow-sm"
+                                    className="flex-1 py-4 bg-card border-2 border-border text-foreground rounded-2xl font-black text-xs hover:border-indigo-600 hover:text-indigo-600 transition-all uppercase tracking-widest shadow-sm"
                                 >
                                     Adjust
                                 </button>
@@ -363,7 +363,7 @@ const StockMaster: React.FC = () => {
                             </button>
                             <button
                                 onClick={() => setIsHistoryModalOpen(true)}
-                                className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-[0.2em] border border-dashed border-slate-200 hover:bg-slate-100 transition-all"
+                                className="w-full py-4 bg-muted/80 text-muted-foreground rounded-2xl font-black text-xs uppercase tracking-[0.2em] border border-dashed border-border hover:bg-muted transition-all"
                             >
                                 View Full Card History
                             </button>
@@ -392,18 +392,18 @@ const StockMaster: React.FC = () => {
                 <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
                     <div className="flex justify-between items-center">
                         <div>
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Bin Card History</p>
-                            <h4 className="text-sm font-bold text-slate-600 mt-1">Audit Trail for {selectedItem?.sku}</h4>
+                            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Bin Card History</p>
+                            <h4 className="text-sm font-bold text-muted-foreground mt-1">Audit Trail for {selectedItem?.sku}</h4>
                         </div>
                         <div className="text-right">
-                            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Current Balance</p>
+                            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Current Balance</p>
                             <p className="text-lg font-black text-indigo-600 font-mono italic">{selectedItem?.onHand} {selectedItem?.unit}</p>
                         </div>
                     </div>
 
-                    <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="border border-border rounded-2xl overflow-hidden shadow-sm">
                         <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                            <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
                                 <tr>
                                     <th className="px-6 py-4">Date</th>
                                     <th className="px-6 py-4">Event</th>
@@ -414,12 +414,12 @@ const StockMaster: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {itemHistory.length > 0 ? itemHistory.map(move => (
-                                    <tr key={move.id} className="hover:bg-slate-50/50 transition-colors">
+                                    <tr key={move.id} className="hover:bg-muted/50/50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-xs font-bold text-slate-700">
+                                            <div className="text-xs font-bold text-foreground">
                                                 {new Date(move.timestamp).toLocaleDateString()}
                                             </div>
-                                            <div className="text-[10px] text-slate-400 font-mono">
+                                            <div className="text-[10px] text-muted-foreground font-mono">
                                                 {new Date(move.timestamp).toLocaleTimeString()}
                                             </div>
                                         </td>
@@ -428,7 +428,7 @@ const StockMaster: React.FC = () => {
                                                 {move.type}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-xs font-bold text-slate-600">
+                                        <td className="px-6 py-4 text-xs font-bold text-muted-foreground">
                                             {warehouses.find(w => w.id === move.warehouseId)?.name || '---'}
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -437,14 +437,14 @@ const StockMaster: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-500 p-1 rounded uppercase">
+                                            <span className="text-[10px] font-mono font-bold bg-muted text-muted-foreground p-1 rounded uppercase">
                                                 {move.referenceId.slice(0, 8)}
                                             </span>
                                         </td>
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center text-slate-400 italic text-sm">
+                                        <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic text-sm">
                                             No historical transactions found for this item.
                                         </td>
                                     </tr>
@@ -617,9 +617,9 @@ const StockMaster: React.FC = () => {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="block text-sm font-medium text-slate-700">Product Image</label>
+                            <label className="block text-sm font-medium text-foreground">Product Image</label>
                             <div className="flex items-center gap-4">
-                                <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden text-slate-300">
+                                <div className="w-24 h-24 rounded-2xl bg-muted border-2 border-dashed border-border flex items-center justify-center overflow-hidden text-slate-300">
                                     {imagePreview ? (
                                         <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
                                     ) : (
@@ -642,11 +642,11 @@ const StockMaster: React.FC = () => {
                                     />
                                     <label
                                         htmlFor="sku-image-edit-upload"
-                                        className="inline-flex items-center px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                                        className="inline-flex items-center px-4 py-2 bg-card border border-border rounded-lg text-sm font-bold text-foreground hover:bg-muted/50 cursor-pointer transition-colors"
                                     >
                                         {imagePreview ? 'Change Image' : 'Upload Image'}
                                     </label>
-                                    <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
+                                    <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
                                 </div>
                             </div>
                         </div>

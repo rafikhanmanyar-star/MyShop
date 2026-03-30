@@ -83,7 +83,7 @@ const StockAdjustments: React.FC = () => {
     return (
         <div className="space-y-6 animate-fade-in shadow-inner">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-black text-slate-800 tracking-tight">Adjustment Approval Queue</h3>
+                <h3 className="text-lg font-black text-foreground tracking-tight">Adjustment Approval Queue</h3>
                 <button
                     onClick={handleOpenModal}
                     className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2"
@@ -111,14 +111,14 @@ const StockAdjustments: React.FC = () => {
                             </div>
 
                             <div className="space-y-1 mb-6">
-                                <h4 className="font-black text-slate-800 tracking-tight">{item?.name || 'Unknown Item'}</h4>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                                <h4 className="font-black text-foreground tracking-tight">{item?.name || 'Unknown Item'}</h4>
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
                                     {warehouse?.name} • Reason: {adj.reasonCode}
                                 </p>
                             </div>
 
-                            <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-100 shadow-sm mb-6">
-                                <span className="text-xs font-bold text-slate-400">Adjustment Qty</span>
+                            <div className="flex items-center justify-between p-4 bg-card rounded-xl border border-border shadow-sm mb-6">
+                                <span className="text-xs font-bold text-muted-foreground">Adjustment Qty</span>
                                 <span className={`text-xl font-black font-mono ${adj.type === 'Increase' ? 'text-emerald-500' : 'text-rose-500'}`}>
                                     {adj.type === 'Increase' ? '+' : '-'}{adj.quantity}
                                 </span>
@@ -132,15 +132,15 @@ const StockAdjustments: React.FC = () => {
                                     Approve & Commit
                                 </button>
                             ) : (
-                                <div className="text-[10px] text-slate-400 font-medium italic text-center">
+                                <div className="text-[10px] text-muted-foreground font-medium italic text-center">
                                     Approved by {adj.approvedBy} on {new Date(adj.timestamp).toLocaleDateString()}
                                 </div>
                             )}
                         </Card>
                     );
                 }) : (
-                    <div className="col-span-full py-20 bg-white border border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-300 gap-4">
-                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
+                    <div className="col-span-full py-20 bg-card border border-dashed border-border rounded-3xl flex flex-col items-center justify-center text-slate-300 gap-4">
+                        <div className="w-16 h-16 bg-muted/80 rounded-full flex items-center justify-center">
                             {React.cloneElement(ICONS.settings as React.ReactElement<any>, { width: 32, height: 32 })}
                         </div>
                         <p className="text-sm font-bold uppercase tracking-widest">No pending adjustments</p>
@@ -159,13 +159,13 @@ const StockAdjustments: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Item Selection */}
                         <div className="md:col-span-2">
-                            <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                            <label className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider">
                                 Select Item *
                             </label>
                             <select
                                 value={selectedItemId}
                                 onChange={(e) => setSelectedItemId(e.target.value)}
-                                className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
                                 required
                             >
                                 <option value="">-- Select an item --</option>
@@ -179,13 +179,13 @@ const StockAdjustments: React.FC = () => {
 
                         {/* Warehouse Selection */}
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                            <label className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider">
                                 Warehouse *
                             </label>
                             <select
                                 value={selectedWarehouseId}
                                 onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                                className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
                                 required
                             >
                                 {warehouses.map(wh => (
@@ -198,13 +198,13 @@ const StockAdjustments: React.FC = () => {
 
                         {/* Adjustment Type */}
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                            <label className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider">
                                 Adjustment Type *
                             </label>
                             <select
                                 value={adjustmentType}
                                 onChange={(e) => setAdjustmentType(e.target.value as 'Increase' | 'Decrease')}
-                                className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
                                 required
                             >
                                 <option value="Increase">Increase (+)</option>
@@ -214,7 +214,7 @@ const StockAdjustments: React.FC = () => {
 
                         {/* Quantity */}
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                            <label className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider">
                                 Quantity *
                             </label>
                             <Input
@@ -225,19 +225,19 @@ const StockAdjustments: React.FC = () => {
                                 min="0.01"
                                 step="0.01"
                                 required
-                                className="border-2 border-slate-200"
+                                className="border-2 border-border"
                             />
                         </div>
 
                         {/* Reason Code */}
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">
+                            <label className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider">
                                 Reason Code *
                             </label>
                             <select
                                 value={reasonCode}
                                 onChange={(e) => setReasonCode(e.target.value)}
-                                className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
+                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm"
                                 required
                             >
                                 <option value="">-- Select reason --</option>
@@ -255,7 +255,7 @@ const StockAdjustments: React.FC = () => {
                                 onChange={(e) => setNotes(e.target.value)}
                                 placeholder="Add any additional details about this adjustment..."
                                 rows={3}
-                                className="!border-2 !border-slate-200"
+                                className="!border-2 !border-border"
                             />
                         </div>
                     </div>
@@ -264,14 +264,14 @@ const StockAdjustments: React.FC = () => {
                     {selectedItemId && quantity && (
                         <div className={`p-4 rounded-xl border-2 ${adjustmentType === 'Increase' ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-bold text-slate-700">
+                                <span className="text-sm font-bold text-foreground">
                                     {items.find(i => i.id === selectedItemId)?.name}
                                 </span>
                                 <span className={`text-xl font-black font-mono ${adjustmentType === 'Increase' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                     {adjustmentType === 'Increase' ? '+' : '-'}{quantity} {items.find(i => i.id === selectedItemId)?.unit}
                                 </span>
                             </div>
-                            <div className="mt-2 text-xs text-slate-600">
+                            <div className="mt-2 text-xs text-muted-foreground">
                                 Current stock: <span className="font-bold">{items.find(i => i.id === selectedItemId)?.onHand || 0}</span> →
                                 New stock: <span className="font-bold">{(items.find(i => i.id === selectedItemId)?.onHand || 0) + (adjustmentType === 'Increase' ? 1 : -1) * parseFloat(quantity || '0')}</span>
                             </div>

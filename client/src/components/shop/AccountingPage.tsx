@@ -96,24 +96,24 @@ const AccountingContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
+        <div className="flex flex-col h-full bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
             {/* Header / Tab Navigation */}
-            <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10">
+            <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">Financial Engine</h1>
-                        <p className="text-slate-500 text-sm font-medium">POS source-of-truth automated accounting.</p>
+                        <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Financial Engine</h1>
+                        <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">POS source-of-truth automated accounting.</p>
                     </div>
                     <div className="flex gap-3 flex-wrap">
                         <Link
                             to="/accounting/reports/daily"
-                            className="px-4 py-2 bg-white border border-slate-200 text-slate-800 rounded-xl text-sm font-bold shadow-sm hover:border-indigo-300 hover:text-indigo-700 transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"
+                            className="px-4 py-2 bg-card dark:bg-slate-800 border border-border dark:border-slate-700 text-foreground dark:text-slate-200 rounded-xl text-sm font-bold shadow-sm hover:border-indigo-300 hover:text-indigo-700 transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"
                         >
                             {ICONS.barChart} Daily Report
                         </Link>
                         <button
                             onClick={() => setIsJournalModalOpen(true)}
-                            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold shadow-lg shadow-slate-200 hover:bg-black transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"
+                            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-slate-200 dark:shadow-slate-900 hover:bg-black dark:hover:bg-indigo-700 transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"
                         >
                             {ICONS.plus} Manual Journal
                         </button>
@@ -127,7 +127,7 @@ const AccountingContent: React.FC = () => {
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
                                 ? 'text-indigo-600'
-                                : 'text-slate-400 hover:text-slate-600'
+                                : 'text-muted-foreground dark:text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
@@ -175,9 +175,9 @@ const AccountingContent: React.FC = () => {
                         />
                     </div>
 
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="bg-muted/80 dark:bg-slate-800 border border-border dark:border-slate-700 rounded-xl overflow-hidden">
                         <table className="w-full text-left">
-                            <thead className="bg-slate-100 text-[10px] uppercase font-black text-slate-500">
+                            <thead className="bg-muted dark:bg-slate-700 text-[10px] uppercase font-black text-muted-foreground dark:text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3 w-[30%]">Account</th>
                                     <th className="px-4 py-3 w-[30%]">Description</th>
@@ -186,7 +186,7 @@ const AccountingContent: React.FC = () => {
                                     <th className="px-4 py-3 w-[5%]"></th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                 {journalData.lines.map((line, idx) => (
                                     <tr key={idx}>
                                         <td className="px-4 py-2">
@@ -206,7 +206,7 @@ const AccountingContent: React.FC = () => {
                                             <input
                                                 type="text"
                                                 placeholder="Line description"
-                                                className="w-full bg-transparent border-none text-xs focus:ring-0 placeholder-slate-300"
+                                                className="w-full bg-transparent border-none text-xs focus:ring-0 placeholder-slate-300 dark:placeholder-slate-600 dark:text-slate-100"
                                                 value={line.description}
                                                 onChange={(e) => handleLineChange(idx, 'description', e.target.value)}
                                             />
@@ -232,7 +232,7 @@ const AccountingContent: React.FC = () => {
                                         <td className="px-4 py-2 text-center">
                                             <button
                                                 onClick={() => handleRemoveLine(idx)}
-                                                className="text-slate-300 hover:text-rose-500 transition-colors"
+                                                className="text-slate-300 dark:text-muted-foreground hover:text-rose-500 transition-colors"
                                                 disabled={journalData.lines.length <= 2}
                                             >
                                                 {ICONS.x}
@@ -241,7 +241,7 @@ const AccountingContent: React.FC = () => {
                                     </tr>
                                 ))}
                             </tbody>
-                            <tfoot className="bg-slate-50 font-bold text-xs border-t border-slate-200">
+                            <tfoot className="bg-muted/80 dark:bg-slate-800 font-bold text-xs border-t border-border dark:border-slate-700">
                                 <tr>
                                     <td colSpan={2} className="px-4 py-3">
                                         <button

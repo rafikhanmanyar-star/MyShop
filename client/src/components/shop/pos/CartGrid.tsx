@@ -9,9 +9,9 @@ const CartGrid: React.FC = () => {
     const gridCols = 'minmax(0,1fr) minmax(70px,100px) minmax(100px,140px) minmax(80px,100px) 48px';
 
     return (
-        <div className="flex flex-col h-full min-h-0 bg-white relative overflow-hidden">
+        <div className="flex flex-col h-full min-h-0 bg-white dark:bg-slate-900 relative overflow-hidden">
             {/* Table Header - Sticky */}
-            <div className="grid gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 bg-slate-50 border-b border-slate-100 text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500 sticky top-0 z-20 items-center flex-shrink-0" style={{ gridTemplateColumns: gridCols }}>
+            <div className="grid gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-700 text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 sticky top-0 z-20 items-center flex-shrink-0" style={{ gridTemplateColumns: gridCols }}>
                 <div className="min-w-0">Item Description</div>
                 <div className="text-center">Rate</div>
                 <div className="text-center">Quantity</div>
@@ -20,58 +20,58 @@ const CartGrid: React.FC = () => {
             </div>
 
             {/* Cart Items List */}
-            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pos-scrollbar bg-white">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pos-scrollbar bg-white dark:bg-slate-900">
                 {cart.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-300 py-20">
-                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                    <div className="h-full flex flex-col items-center justify-center text-slate-300 dark:text-slate-600 py-20">
+                        <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
                             {React.cloneElement(ICONS.shoppingCart as React.ReactElement, { size: 32 })}
                         </div>
-                        <h3 className="text-sm font-semibold text-slate-400">Your cart is empty</h3>
-                        <p className="text-xs text-slate-400 mt-1">Add items to start a sale</p>
+                        <h3 className="text-sm font-semibold text-slate-400 dark:text-slate-500">Your cart is empty</h3>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Add items to start a sale</p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
                         {cart.map((item) => (
                             <div
                                 key={item.id}
-                                className="grid gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 hover:bg-blue-50/30 transition-colors group items-center min-w-0"
+                                className="grid gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 hover:bg-blue-50/30 dark:hover:bg-blue-950/20 transition-colors group items-center min-w-0"
                                 style={{ gridTemplateColumns: gridCols }}
                             >
                                 <div className="min-w-0 flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                    <div className="w-10 h-10 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-center overflow-hidden flex-shrink-0">
                                         {item.imageUrl ? (
                                             <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                                         ) : (
-                                            React.cloneElement(ICONS.package as React.ReactElement, { size: 16, className: "text-slate-300" })
+                                            React.cloneElement(ICONS.package as React.ReactElement, { size: 16, className: "text-slate-300 dark:text-slate-600" })
                                         )}
                                     </div>
                                     <div className="min-w-0 flex flex-col">
-                                        <div className="text-sm font-semibold text-slate-800 truncate uppercase tracking-tight">{item.name}</div>
+                                        <div className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate uppercase tracking-tight">{item.name}</div>
                                         <div className="flex items-center gap-2 mt-0.5">
-                                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">#{item.sku.slice(-6)}</span>
+                                            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">#{item.sku.slice(-6)}</span>
                                             {item.categoryId && (
-                                                <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap overflow-hidden text-ellipsis italic">in {item.categoryId}</span>
+                                                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium whitespace-nowrap overflow-hidden text-ellipsis italic">in {item.categoryId}</span>
                                             )}
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="text-center text-sm font-medium text-slate-600 font-mono">
+                                <div className="text-center text-sm font-medium text-slate-600 dark:text-slate-400 font-mono">
                                     {item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </div>
 
                                 <div className="flex items-center justify-center">
-                                    <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+                                    <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg p-1 shadow-sm">
                                         <button
                                             onClick={() => updateCartItem(item.id, { quantity: Math.max(1, item.quantity - 1) })}
-                                            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all active:scale-90"
+                                            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-all active:scale-90"
                                         >
                                             {React.cloneElement(ICONS.minus as React.ReactElement, { size: 14 })}
                                         </button>
                                         <input
                                             type="text"
                                             inputMode="numeric"
-                                            className="w-10 text-center text-sm font-bold bg-transparent border-none focus:ring-0 text-slate-900 p-0"
+                                            className="w-10 text-center text-sm font-bold bg-transparent border-none focus:ring-0 text-slate-900 dark:text-slate-100 p-0"
                                             value={item.quantity}
                                             onChange={(e) => {
                                                 const raw = e.target.value;
@@ -95,7 +95,7 @@ const CartGrid: React.FC = () => {
                                         />
                                         <button
                                             onClick={() => updateCartItem(item.id, { quantity: item.quantity + 1 })}
-                                            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-all active:scale-90"
+                                            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 dark:text-slate-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all active:scale-90"
                                         >
                                             {React.cloneElement(ICONS.plus as React.ReactElement, { size: 14 })}
                                         </button>
@@ -103,7 +103,7 @@ const CartGrid: React.FC = () => {
                                 </div>
 
                                 <div className="text-right">
-                                    <div className="text-sm font-bold text-slate-900 font-mono">
+                                    <div className="text-sm font-bold text-slate-900 dark:text-slate-100 font-mono">
                                         {((item.unitPrice * item.quantity) - item.discountAmount + item.taxAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </div>
                                 </div>
@@ -111,7 +111,7 @@ const CartGrid: React.FC = () => {
                                 <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                         onClick={() => removeFromCart(item.id)}
-                                        className="text-slate-300 hover:text-rose-500 transition-all p-1.5 hover:bg-rose-50 rounded-lg"
+                                        className="text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-all p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg"
                                     >
                                         {React.cloneElement(ICONS.trash as React.ReactElement, { size: 16 })}
                                     </button>
@@ -124,7 +124,7 @@ const CartGrid: React.FC = () => {
 
             {/* Footer Summary - Stats */}
             {cart.length > 0 && (
-                <div className="px-6 py-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
+                <div className="px-6 py-4 bg-slate-900 dark:bg-slate-800 border-t border-slate-800 dark:border-slate-700 flex items-center justify-between">
                     <div className="flex items-center gap-8">
                         <div>
                             <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Total Items</span>

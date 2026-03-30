@@ -45,13 +45,13 @@ const LoyaltyContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
+        <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
             {/* Header / Tab Navigation */}
-            <div className="bg-white border-b border-slate-200 px-8 pt-6 shadow-sm z-10">
+            <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">Customer Retention Engine</h1>
-                        <p className="text-slate-500 text-sm font-medium">Enterprise Loyalty & Reward Lifecycle Management.</p>
+                        <h1 className="text-2xl font-black text-foreground tracking-tight">Customer Retention Engine</h1>
+                        <p className="text-muted-foreground text-sm font-medium">Enterprise Loyalty & Reward Lifecycle Management.</p>
                     </div>
                     <div className="flex gap-3">
                         <button
@@ -70,7 +70,7 @@ const LoyaltyContent: React.FC = () => {
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
                                 ? 'text-rose-600'
-                                : 'text-slate-400 hover:text-slate-600'
+                                : 'text-muted-foreground hover:text-muted-foreground'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}

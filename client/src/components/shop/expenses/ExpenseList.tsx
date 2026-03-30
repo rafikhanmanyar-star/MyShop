@@ -177,7 +177,7 @@ const ExpenseList: React.FC = () => {
             <option value="Credit">Credit</option>
           </select>
           <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search description..."
@@ -189,7 +189,7 @@ const ExpenseList: React.FC = () => {
           <Button onClick={load} variant="secondary">Apply</Button>
           <button
             onClick={exportCsv}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-foreground hover:bg-muted/50 text-sm font-medium"
           >
             <Download className="w-4 h-4" /> Export CSV
           </button>
@@ -223,7 +223,7 @@ const ExpenseList: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
+                <tr className="bg-muted/80 border-b border-border">
                   {isAdmin && (
                     <th className="text-left p-3">
                       <input
@@ -236,13 +236,13 @@ const ExpenseList: React.FC = () => {
                       />
                     </th>
                   )}
-                  <th className="text-left p-3 font-semibold text-slate-700">Date</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Category</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Payee / Vendor</th>
-                  <th className="text-right p-3 font-semibold text-slate-700">Amount</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Payment</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Status</th>
-                  <th className="text-left p-3 font-semibold text-slate-700">Reference</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Date</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Category</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Payee / Vendor</th>
+                  <th className="text-right p-3 font-semibold text-foreground">Amount</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Payment</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Status</th>
+                  <th className="text-left p-3 font-semibold text-foreground">Reference</th>
                 </tr>
               </thead>
               <tbody>
@@ -263,7 +263,7 @@ const ExpenseList: React.FC = () => {
                 ].map((row) => (
                   <tr
                     key={row.id}
-                    className={`border-b border-slate-100 hover:bg-slate-50/50 ${(row as any)._pending ? 'bg-amber-50/50' : ''}`}
+                    className={`border-b border-border hover:bg-muted/50/50 ${(row as any)._pending ? 'bg-amber-50/50' : ''}`}
                   >
                     {isAdmin && (
                       <td className="p-3">
@@ -278,7 +278,7 @@ const ExpenseList: React.FC = () => {
                         )}
                       </td>
                     )}
-                    <td className="p-3 text-slate-600">{row.expenseDate}</td>
+                    <td className="p-3 text-muted-foreground">{row.expenseDate}</td>
                     <td className="p-3">{(row as any).categoryName ?? '—'}</td>
                     <td className="p-3">{(row.payeeName || (row as any).vendorName) ?? '—'}</td>
                     <td className="p-3 text-right font-medium">{CURRENCY} {Number(row.amount).toLocaleString()}</td>
@@ -296,17 +296,17 @@ const ExpenseList: React.FC = () => {
                         {row.status}
                       </span>
                     </td>
-                    <td className="p-3 text-slate-500">{(row as any).referenceNumber ?? '—'}</td>
+                    <td className="p-3 text-muted-foreground">{(row as any).referenceNumber ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
             {data.rows.length === 0 && pendingItems.length === 0 && (
-              <div className="p-12 text-center text-slate-500">No expenses match the filters.</div>
+              <div className="p-12 text-center text-muted-foreground">No expenses match the filters.</div>
             )}
           </div>
         )}
-        <div className="px-4 py-2 border-t border-slate-100 text-sm text-slate-500">
+        <div className="px-4 py-2 border-t border-border text-sm text-muted-foreground">
           Total: {data.total} expense(s)
           {pendingItems.length > 0 && ` · ${pendingItems.length} pending sync`}
         </div>

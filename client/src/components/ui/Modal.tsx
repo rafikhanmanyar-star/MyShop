@@ -177,19 +177,19 @@ const Modal: React.FC<ModalProps> = ({
     >
       <div
         ref={modalContentRef}
-        className={`bg-white ${modalPositionClasses} shadow-2xl ${sizeClasses} ${maxHeightClass} flex flex-col overflow-hidden mx-auto sm:mx-0 transition-transform duration-300 transform translate-y-0 border border-gray-200 ${className || ''}`}
+        className={`bg-card ${modalPositionClasses} shadow-2xl ${sizeClasses} ${maxHeightClass} flex flex-col overflow-hidden mx-auto sm:mx-0 transition-transform duration-300 transform translate-y-0 border border-border ${className || ''}`}
         style={maxHeightStyle}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
         {!hideHeader && (
-          <div className="flex justify-between items-center p-3 sm:p-4 border-b border-gray-200 flex-shrink-0 bg-white">
-            <div id="modal-title" className="text-base sm:text-lg font-bold text-gray-800 truncate pr-2 sm:pr-4 flex-grow">{title}</div>
+          <div className="flex justify-between items-center p-3 sm:p-4 border-b border-border flex-shrink-0 bg-card">
+            <div id="modal-title" className="text-base sm:text-lg font-bold text-foreground truncate pr-2 sm:pr-4 flex-grow">{title}</div>
             {!hideClose && (
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-800 p-2 rounded-full hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-200 min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
+                className="text-muted-foreground hover:text-foreground p-2 rounded-full hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-ring min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
                 aria-label="Close modal"
               >
                 <span className="text-2xl leading-none">&times;</span>

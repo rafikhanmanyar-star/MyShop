@@ -265,7 +265,7 @@ const POSSalesContent: React.FC = () => {
             <div className="flex flex-1 min-h-0 w-full min-w-0 relative p-4 md:p-6 gap-0 z-10 overflow-hidden">
                 {/* Left: category tree + product grid */}
                 <div
-                    className="flex flex-col bg-white dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-w-0 flex-shrink-0"
+                    className="flex flex-col bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-w-0 flex-shrink-0"
                     style={{ width: leftColWidthPx, minWidth: MIN_LEFT_W, maxWidth: MAX_LEFT_W }}
                 >
                     <ProductSearch />
@@ -277,7 +277,7 @@ const POSSalesContent: React.FC = () => {
                 />
 
                 {/* Center: line items (bill grid) — grows with remaining space */}
-                <div className="flex-1 flex flex-col min-w-[200px] bg-white dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden min-h-0">
+                <div className="flex-1 flex flex-col min-w-[200px] bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden min-h-0">
                     <CartGrid />
                 </div>
 
@@ -288,7 +288,7 @@ const POSSalesContent: React.FC = () => {
 
                 {/* Right: customer, totals, payment */}
                 <div
-                    className="flex flex-col flex-shrink-0 bg-white dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-h-0"
+                    className="flex flex-col flex-shrink-0 bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-h-0"
                     style={{ width: rightColWidthPx, minWidth: MIN_RIGHT_W, maxWidth: MAX_RIGHT_W }}
                 >
                     <CheckoutPanel />

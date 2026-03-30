@@ -100,7 +100,7 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-lg font-bold text-slate-800">Recurring expense definitions</h2>
+        <h2 className="text-lg font-bold text-foreground">Recurring expense definitions</h2>
         <div className="flex gap-2">
           {canManage && (
             <>
@@ -121,26 +121,26 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
             <div className="inline-block w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : list.length === 0 ? (
-          <div className="p-12 text-center text-slate-500">No recurring expenses defined.</div>
+          <div className="p-12 text-center text-muted-foreground">No recurring expenses defined.</div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="text-left p-3 font-semibold text-slate-700">Category</th>
-                <th className="text-right p-3 font-semibold text-slate-700">Amount</th>
-                <th className="text-left p-3 font-semibold text-slate-700">Frequency</th>
-                <th className="text-left p-3 font-semibold text-slate-700">Next run</th>
-                <th className="text-left p-3 font-semibold text-slate-700">Payee</th>
+              <tr className="bg-muted/80 border-b border-border">
+                <th className="text-left p-3 font-semibold text-foreground">Category</th>
+                <th className="text-right p-3 font-semibold text-foreground">Amount</th>
+                <th className="text-left p-3 font-semibold text-foreground">Frequency</th>
+                <th className="text-left p-3 font-semibold text-foreground">Next run</th>
+                <th className="text-left p-3 font-semibold text-foreground">Payee</th>
               </tr>
             </thead>
             <tbody>
               {list.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100">
+                <tr key={r.id} className="border-b border-border">
                   <td className="p-3">{r.categoryName}</td>
                   <td className="p-3 text-right font-medium">{CURRENCY} {Number(r.amount).toLocaleString()}</td>
                   <td className="p-3">{r.frequency}</td>
-                  <td className="p-3 text-slate-600">{r.nextRunDate}</td>
-                  <td className="p-3 text-slate-500">{r.payeeName ?? '—'}</td>
+                  <td className="p-3 text-muted-foreground">{r.nextRunDate}</td>
+                  <td className="p-3 text-muted-foreground">{r.payeeName ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -152,7 +152,7 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
         <form onSubmit={handleCreate} className="space-y-4">
           {error && <div className="p-2 rounded bg-rose-50 text-rose-700 text-sm">{error}</div>}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Category</label>
             <Select value={form.categoryId} onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))} required>
               <option value="">Select</option>
               {categories.map((c) => (
@@ -171,7 +171,7 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
           />
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Frequency</label>
               <Select value={form.frequency} onChange={(e) => setForm((f) => ({ ...f, frequency: e.target.value as any }))}>
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
@@ -188,7 +188,7 @@ const RecurringExpenses: React.FC<RecurringExpensesProps> = ({ onGenerated }) =>
           </div>
           <Input label="Payee name" value={form.payeeName} onChange={(e) => setForm((f) => ({ ...f, payeeName: e.target.value }))} />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Payment account</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Payment account</label>
             <Select value={form.paymentAccountId} onChange={(e) => setForm((f) => ({ ...f, paymentAccountId: e.target.value }))}>
               <option value="">— None —</option>
               {bankAccounts.map((b) => (

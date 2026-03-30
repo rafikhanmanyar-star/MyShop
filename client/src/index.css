@@ -232,4 +232,22 @@ h6 {
   .table-modern tbody td {
     @apply py-3 px-4 text-sm text-foreground;
   }
+
+  /** Surfaces that were historically light-only; use with Tailwind semantic tokens */
+  .panel-surface {
+    @apply rounded-xl border border-border bg-card text-card-foreground shadow-erp;
+  }
+}
+
+/* Native controls: inherit theme when not using .input */
+@layer base {
+  .dark select:not([class*="bg-"]):not([class~="input"]) {
+    background-color: var(--card);
+    color: var(--foreground);
+    border-color: var(--border);
+  }
+  .dark textarea:not([class*="bg-"]):not([class~="input"]) {
+    background-color: var(--card);
+    color: var(--foreground);
+  }
 }

@@ -12,11 +12,11 @@ const ExecutiveOverview: React.FC = () => {
             {/* KPI Executive Row */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {kpis.map((kpi, i) => (
-                    <Card key={i} className="p-6 border-none shadow-sm flex flex-col gap-4 relative overflow-hidden group hover:shadow-xl transition-all bg-white">
+                    <Card key={i} className="p-6 border-none shadow-sm flex flex-col gap-4 relative overflow-hidden group hover:shadow-xl transition-all bg-card">
                         <div className="flex justify-between items-start">
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{kpi.label}</p>
-                                <p className="text-3xl font-black text-slate-800 tracking-tighter mt-1">{kpi.value}</p>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">{kpi.label}</p>
+                                <p className="text-3xl font-black text-foreground tracking-tighter mt-1">{kpi.value}</p>
                             </div>
                             <div className={`flex items-center gap-1 text-[10px] font-black p-1.5 rounded-lg ${kpi.status === 'up' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
                                 }`}>
@@ -41,9 +41,9 @@ const ExecutiveOverview: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Sales Velocity Chart */}
-                <Card className="lg:col-span-2 border-none shadow-sm p-8 bg-white space-y-8">
+                <Card className="lg:col-span-2 border-none shadow-sm p-8 bg-card space-y-8">
                     <div className="flex justify-between items-center">
-                        <h3 className="font-bold text-slate-800 text-lg">Intraday Sales Velocity</h3>
+                        <h3 className="font-bold text-foreground text-lg">Intraday Sales Velocity</h3>
                         <div className="flex gap-4">
                             <span className="flex items-center gap-2 text-[10px] font-bold text-indigo-600">
                                 <span className="w-2 h-2 bg-indigo-600 rounded-full"></span> Revenue
@@ -54,18 +54,18 @@ const ExecutiveOverview: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="h-64 flex items-end gap-2 group/chart border-b border-slate-100 relative">
+                    <div className="h-64 flex items-end gap-2 group/chart border-b border-border relative">
                         {salesTrend.map((data, idx) => {
                             const maxRevenue = Math.max(...salesTrend.map((d: any) => d.revenue || 0), 1);
                             return (
                                 <div key={idx} className="flex-1 flex flex-col items-center gap-2 relative group cursor-pointer h-full justify-end">
                                     <div
-                                        className="w-full bg-slate-50 border border-slate-100 rounded-t-lg transition-all duration-700 min-h-[4px] relative overflow-hidden"
+                                        className="w-full bg-muted/80 border border-border rounded-t-lg transition-all duration-700 min-h-[4px] relative overflow-hidden"
                                         style={{ height: `${(data.revenue / maxRevenue) * 100}%` }}
                                     >
                                         <div className="absolute inset-0 bg-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     </div>
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">{data.timestamp}</span>
+                                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">{data.timestamp}</span>
                                 </div>
                             );
                         })}
@@ -74,29 +74,29 @@ const ExecutiveOverview: React.FC = () => {
 
                 {/* Top Branches Card */}
                 <Card className="border-none shadow-sm p-8 space-y-6 flex flex-col">
-                    <h3 className="font-bold text-slate-800 text-lg">Top Performing Nodes</h3>
+                    <h3 className="font-bold text-foreground text-lg">Top Performing Nodes</h3>
                     <div className="space-y-6 flex-1">
                         {storeRankings.map((store, i) => (
                             <div key={i} className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-400 border border-slate-100">
+                                    <div className="w-8 h-8 rounded-full bg-muted/80 flex items-center justify-center text-[10px] font-black text-muted-foreground border border-border">
                                         0{i + 1}
                                     </div>
                                     <div>
-                                        <p className="text-sm font-bold text-slate-800 leading-none">{store.storeName}</p>
+                                        <p className="text-sm font-bold text-foreground leading-none">{store.storeName}</p>
                                         <p className="text-[10px] text-emerald-500 font-bold mt-1">+{store.growth}% Growth</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-sm font-black text-slate-800 font-mono tracking-tighter">
+                                    <p className="text-sm font-black text-foreground font-mono tracking-tighter">
                                         {CURRENCY} {(store.revenue / 1000000).toFixed(1)}M
                                     </p>
-                                    <p className="text-[9px] text-slate-400 uppercase font-black tracking-widest">Rev</p>
+                                    <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest">Rev</p>
                                 </div>
                             </div>
                         ))}
                     </div>
-                    <button className="w-full py-4 bg-slate-50 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border border-dashed border-slate-200 hover:bg-slate-100 transition-all">
+                    <button className="w-full py-4 bg-muted/80 text-muted-foreground rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border border-dashed border-border hover:bg-muted transition-all">
                         Full Performance Audit
                     </button>
                 </Card>
@@ -104,8 +104,8 @@ const ExecutiveOverview: React.FC = () => {
 
             {/* AI Insights - populated when enough data is available */}
             {salesTrend.some((d: any) => d.revenue > 0) ? null : (
-                <div className="p-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center">
-                    <p className="text-xs font-bold text-slate-400">Insights will appear here once enough sales data is collected.</p>
+                <div className="p-6 rounded-2xl border border-dashed border-border bg-muted/80 text-center">
+                    <p className="text-xs font-bold text-muted-foreground">Insights will appear here once enough sales data is collected.</p>
                 </div>
             )}
         </div>

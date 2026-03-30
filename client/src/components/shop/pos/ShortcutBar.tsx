@@ -38,7 +38,7 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
     ];
 
     return (
-        <div className="bg-[#0f172a] px-6 py-4 flex items-center justify-between border-t border-slate-800 shadow-xl">
+        <div className="bg-[#0f172a] dark:bg-slate-800 px-6 py-4 flex items-center justify-between border-t border-slate-800 dark:border-slate-700 shadow-xl">
             <div className="flex items-center gap-1">
                 {shortcuts.map((s) => (
                     <button

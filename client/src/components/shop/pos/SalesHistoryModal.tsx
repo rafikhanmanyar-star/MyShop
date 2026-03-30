@@ -126,7 +126,7 @@ const SalesHistoryModal: React.FC = () => {
                     {ICONS.clock}
                 </div>
                 <div>
-                    <h2 className="text-2xl font-black text-slate-900 leading-none tracking-tight">Sales Archive</h2>
+                    <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 leading-none tracking-tight">Sales Archive</h2>
                     <div className="flex items-center gap-2 mt-2">
                         <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Reprint & Audit Station</span>
@@ -145,7 +145,7 @@ const SalesHistoryModal: React.FC = () => {
                         <input
                             type="text"
                             placeholder="Search Receipt #, Customer Name or scan barcode (F4)..."
-                            className={`w-full pl-16 pr-24 py-5 bg-[#f8fafc] border-2 rounded-[1.5rem] focus:bg-white transition-all font-black text-sm text-slate-900 placeholder-slate-400 outline-none ${isBarcodeScan
+                            className={`w-full pl-16 pr-24 py-5 bg-[#f8fafc] dark:bg-slate-800 border-2 rounded-[1.5rem] focus:bg-white dark:focus:bg-slate-700 transition-all font-black text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none ${isBarcodeScan
                                 ? 'border-indigo-500 ring-8 ring-indigo-500/5'
                                 : 'border-transparent focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5'
                                 } shadow-none`}
@@ -163,20 +163,20 @@ const SalesHistoryModal: React.FC = () => {
 
                 <div className="flex-1 flex gap-8 overflow-hidden">
                     {/* Sales List Panel */}
-                    <div className="w-[45%] flex flex-col bg-white border border-slate-100 rounded-[2.5rem] overflow-hidden shadow-none">
-                        <div className="px-8 py-5 bg-[#f8fafc]/50 border-b border-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] flex justify-between items-center">
+                    <div className="w-[45%] flex flex-col bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[2.5rem] overflow-hidden shadow-none">
+                        <div className="px-8 py-5 bg-[#f8fafc]/50 dark:bg-slate-800/80 border-b border-slate-50 dark:border-slate-700 text-[10px] font-black uppercase text-slate-400 dark:text-slate-500 tracking-[0.2em] flex justify-between items-center">
                             <span>Transactional Log</span>
-                            <span className="text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg">{filteredSales.length} RECORDED</span>
+                            <span className="text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-lg">{filteredSales.length} RECORDED</span>
                         </div>
                         <div className="flex-1 overflow-y-auto pos-scrollbar p-3">
                             {isLoading ? (
-                                <div className="py-24 flex flex-col items-center gap-4 text-slate-300">
-                                    <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                                <div className="py-24 flex flex-col items-center gap-4 text-slate-300 dark:text-slate-600">
+                                    <div className="w-10 h-10 border-4 border-indigo-100 dark:border-indigo-900 border-t-indigo-600 dark:border-t-indigo-400 rounded-full animate-spin"></div>
                                     <span className="font-black text-[10px] uppercase tracking-widest">Accessing Ledger...</span>
                                 </div>
                             ) : filteredSales.length === 0 ? (
-                                <div className="py-24 text-center text-slate-400 animate-fade-in px-8">
-                                    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                                <div className="py-24 text-center text-slate-400 dark:text-slate-500 animate-fade-in px-8">
+                                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-2xl flex items-center justify-center mx-auto mb-5">
                                         {React.cloneElement(ICONS.search as React.ReactElement, { size: 28, className: "opacity-20" })}
                                     </div>
                                     <h5 className="text-sm font-black uppercase tracking-widest">No Matches Found</h5>
@@ -189,22 +189,22 @@ const SalesHistoryModal: React.FC = () => {
                                             key={sale.id || sale.saleNumber}
                                             onClick={() => setSelectedSale(sale)}
                                             className={`w-full p-5 text-left rounded-3xl transition-all flex justify-between items-center group relative overflow-hidden ${selectedSale?.saleNumber === sale.saleNumber
-                                                ? 'bg-indigo-600 text-white shadow-none shadow-none-500/20'
-                                                : 'hover:bg-slate-50 border border-transparent'}`}
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'hover:bg-slate-50 dark:hover:bg-slate-700 border border-transparent'}`}
                                         >
                                             <div className="flex flex-col relative z-10">
-                                                <span className={`text-[13px] font-black uppercase tracking-tight mb-1 ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white' : 'text-slate-900'}`}>
+                                                <span className={`text-[13px] font-black uppercase tracking-tight mb-1 ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>
                                                     {sale.saleNumber}
                                                 </span>
-                                                <span className={`text-[9px] font-bold uppercase tracking-widest ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white/60' : 'text-slate-400'}`}>
+                                                <span className={`text-[9px] font-bold uppercase tracking-widest ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white/60' : 'text-slate-400 dark:text-slate-500'}`}>
                                                     {new Date(sale.createdAt).toLocaleDateString()} • {new Date(sale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </span>
                                             </div>
                                             <div className="text-right relative z-10">
-                                                <div className={`text-base font-black font-mono tracking-tighter ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white' : 'text-indigo-600'}`}>
+                                                <div className={`text-base font-black font-mono tracking-tighter ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`}>
                                                     {CURRENCY}{sale.grandTotal.toLocaleString()}
                                                 </div>
-                                                <div className={`text-[9px] font-black uppercase tracking-widest mt-1 ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white/40' : 'text-slate-300'}`}>
+                                                <div className={`text-[9px] font-black uppercase tracking-widest mt-1 ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white/40' : 'text-slate-300 dark:text-slate-600'}`}>
                                                     {sale.paymentMethod}
                                                 </div>
                                             </div>
@@ -216,7 +216,7 @@ const SalesHistoryModal: React.FC = () => {
                     </div>
 
                     {/* Sale Detail / Receipt Preview Panel */}
-                    <div className="flex-1 flex flex-col bg-[#0f172a] rounded-[2.5rem] p-10 text-white overflow-hidden relative shadow-none">
+                    <div className="flex-1 flex flex-col bg-[#0f172a] dark:bg-slate-800 rounded-[2.5rem] p-10 text-white overflow-hidden relative shadow-none">
                         <div className="absolute top-0 right-0 p-12 opacity-[0.03] text-white">
                             {React.cloneElement(ICONS.shoppingCart as React.ReactElement, { size: 200 })}
                         </div>

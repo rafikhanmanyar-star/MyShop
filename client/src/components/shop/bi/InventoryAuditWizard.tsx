@@ -102,15 +102,15 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                         { s: 3, l: 'Finalize & Sync', icon: ICONS.checkCircle },
                     ].map((st) => (
                         <div key={st.s} className="flex flex-col items-center gap-2 flex-1 relative">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 ${step >= st.s ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-white border-slate-200 text-slate-400'
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 ${step >= st.s ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-card border-border text-muted-foreground'
                                 }`}>
                                 {React.isValidElement(st.icon) ? React.cloneElement(st.icon as React.ReactElement<any>, { width: 18, height: 18 }) : st.icon}
                             </div>
-                            <span className={`text-[10px] font-black uppercase tracking-widest ${step >= st.s ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            <span className={`text-[10px] font-black uppercase tracking-widest ${step >= st.s ? 'text-indigo-600' : 'text-muted-foreground'}`}>
                                 {st.l}
                             </span>
                             {st.s < 3 && (
-                                <div className={`absolute top-5 left-[60%] w-[80%] h-0.5 transition-all duration-500 ${step > st.s ? 'bg-indigo-600' : 'bg-slate-100'}`} />
+                                <div className={`absolute top-5 left-[60%] w-[80%] h-0.5 transition-all duration-500 ${step > st.s ? 'bg-indigo-600' : 'bg-muted'}`} />
                             )}
                         </div>
                     ))}
@@ -118,19 +118,19 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
 
                 {step === 1 && (
                     <div className="space-y-6 animate-in slide-in-from-right duration-500">
-                        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <div className="flex justify-between items-center bg-muted/80 p-4 rounded-2xl border border-border">
                             <div>
-                                <h4 className="font-black text-slate-800 text-lg">Physical Stock Count</h4>
-                                <p className="text-xs text-slate-500 font-medium">Enter actual quantities found on shelf</p>
+                                <h4 className="font-black text-foreground text-lg">Physical Stock Count</h4>
+                                <p className="text-xs text-muted-foreground font-medium">Enter actual quantities found on shelf</p>
                             </div>
                             <div className="relative w-72">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
                                     {ICONS.search}
                                 </span>
                                 <input
                                     type="text"
                                     placeholder="Search products/SKU..."
-                                    className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    className="w-full pl-12 pr-4 py-3 bg-card border border-border rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
@@ -139,8 +139,8 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
 
                         <div className="max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                             <table className="w-full border-separate border-spacing-y-3">
-                                <thead className="sticky top-0 bg-white z-10">
-                                    <tr className="text-left text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                <thead className="sticky top-0 bg-card z-10">
+                                    <tr className="text-left text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                                         <th className="px-4 pb-2">Product Details</th>
                                         <th className="px-4 pb-2">Category</th>
                                         <th className="px-4 pb-2">System Qty</th>
@@ -154,36 +154,36 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                                             <td colSpan={5} className="py-20 text-center">
                                                 <div className="flex flex-col items-center gap-4">
                                                     <div className="w-12 h-12 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
-                                                    <p className="text-sm font-black text-slate-400 animate-pulse">Scanning Inventory...</p>
+                                                    <p className="text-sm font-black text-muted-foreground animate-pulse">Scanning Inventory...</p>
                                                 </div>
                                             </td>
                                         </tr>
                                     ) : filteredItems.map(item => {
                                         const variance = item.physicalQty - item.systemQty;
                                         return (
-                                            <tr key={item.id} className="bg-white border border-slate-100 shadow-sm rounded-xl transition-all hover:border-indigo-200 group">
+                                            <tr key={item.id} className="bg-card border border-border shadow-sm rounded-xl transition-all hover:border-indigo-200 group">
                                                 <td className="px-4 py-4 rounded-l-2xl border-y border-l">
                                                     <div className="flex flex-col">
-                                                        <span className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors">{item.name}</span>
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.sku}</span>
+                                                        <span className="font-bold text-foreground text-sm group-hover:text-indigo-600 transition-colors">{item.name}</span>
+                                                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{item.sku}</span>
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-4 border-y">
-                                                    <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-[10px] font-black uppercase">General</span>
+                                                    <span className="px-3 py-1 bg-muted text-muted-foreground rounded-full text-[10px] font-black uppercase">General</span>
                                                 </td>
                                                 <td className="px-4 py-4 border-y">
-                                                    <span className="font-black text-slate-800">{item.systemQty}</span>
+                                                    <span className="font-black text-foreground">{item.systemQty}</span>
                                                 </td>
                                                 <td className="px-4 py-4 border-y">
                                                     <input
                                                         type="number"
-                                                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm font-black focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all"
+                                                        className="w-full px-4 py-2 bg-muted/80 border border-border rounded-lg text-sm font-black focus:bg-card focus:ring-2 focus:ring-indigo-500 transition-all"
                                                         value={item.physicalQty}
                                                         onChange={(e) => handleQtyChange(item.id, e.target.value)}
                                                     />
                                                 </td>
                                                 <td className="px-4 py-4 rounded-r-2xl border-y border-r">
-                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${variance === 0 ? 'bg-slate-100 text-slate-400' :
+                                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${variance === 0 ? 'bg-muted text-muted-foreground' :
                                                         variance > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
                                                         }`}>
                                                         {variance === 0 ? 'No Change' : `${variance > 0 ? '+' : ''}${variance}`}
@@ -196,7 +196,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                             </table>
                         </div>
 
-                        <div className="flex justify-end pt-6 border-t border-slate-100">
+                        <div className="flex justify-end pt-6 border-t border-border">
                             <button
                                 onClick={() => setStep(2)}
                                 className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all flex items-center gap-2"
@@ -219,35 +219,35 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                                 <p className="text-3xl font-black text-emerald-900">{discrepancies.filter(d => d.physicalQty > d.systemQty).length}</p>
                             </Card>
                             <Card className="p-6 bg-slate-900 border-none shadow-xl">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Net Valuation Impact</p>
+                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Net Valuation Impact</p>
                                 <p className={`text-3xl font-black ${totalLossGain >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                     {totalLossGain >= 0 ? '+' : ''}{CURRENCY} {Math.abs(totalLossGain).toLocaleString()}
                                 </p>
                             </Card>
                         </div>
 
-                        <div className="bg-white rounded-3xl border border-slate-100 p-8 space-y-6">
-                            <h4 className="font-black text-slate-800 uppercase tracking-widest text-xs flex items-center gap-2">
+                        <div className="bg-card rounded-3xl border border-border p-8 space-y-6">
+                            <h4 className="font-black text-foreground uppercase tracking-widest text-xs flex items-center gap-2">
                                 {ICONS.alertTriangle} Discrepancy Breakdown
                             </h4>
                             <div className="space-y-4">
                                 {discrepancies.length === 0 ? (
-                                    <div className="py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                                    <div className="py-12 text-center bg-muted/80 rounded-2xl border-2 border-dashed border-border">
                                         <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 scale-150">
                                             {ICONS.checkCircle}
                                         </div>
-                                        <p className="font-black text-slate-800">Perfect Sync!</p>
-                                        <p className="text-xs text-slate-500">No discrepancies found in the audited items.</p>
+                                        <p className="font-black text-foreground">Perfect Sync!</p>
+                                        <p className="text-xs text-muted-foreground">No discrepancies found in the audited items.</p>
                                     </div>
                                 ) : discrepancies.map(item => (
-                                    <div key={item.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <div key={item.id} className="flex items-center justify-between p-4 bg-muted/80 rounded-2xl border border-border">
                                         <div className="flex items-center gap-4">
                                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.physicalQty > item.systemQty ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
                                                 {item.physicalQty > item.systemQty ? ICONS.plus : ICONS.minus}
                                             </div>
                                             <div>
-                                                <p className="font-bold text-slate-800 text-sm">{item.name}</p>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                <p className="font-bold text-foreground text-sm">{item.name}</p>
+                                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
                                                     System: {item.systemQty} → Physical: {item.physicalQty}
                                                 </p>
                                             </div>
@@ -256,17 +256,17 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                                             <p className={`font-black text-sm ${item.physicalQty > item.systemQty ? 'text-emerald-600' : 'text-rose-600'}`}>
                                                 {item.physicalQty > item.systemQty ? '+' : '-'}{CURRENCY} {Math.abs((item.physicalQty - item.systemQty) * item.costPrice).toLocaleString()}
                                             </p>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Impact</p>
+                                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Impact</p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        <div className="flex justify-between pt-6 border-t border-slate-100">
+                        <div className="flex justify-between pt-6 border-t border-border">
                             <button
                                 onClick={() => setStep(1)}
-                                className="px-8 py-3 text-slate-600 font-black text-xs uppercase tracking-widest hover:text-slate-900 transition-all"
+                                className="px-8 py-3 text-muted-foreground font-black text-xs uppercase tracking-widest hover:text-foreground transition-all"
                             >
                                 Back
                             </button>
@@ -287,21 +287,21 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                             {React.isValidElement(ICONS.shield) ? React.cloneElement(ICONS.shield as React.ReactElement<any>, { width: 64, height: 64 }) : ICONS.shield}
                         </div>
                         <div className="max-w-md mx-auto space-y-4">
-                            <h3 className="text-2xl font-black text-slate-800">Ready to Synchronize?</h3>
-                            <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                            <h3 className="text-2xl font-black text-foreground">Ready to Synchronize?</h3>
+                            <p className="text-sm text-muted-foreground leading-relaxed font-medium">
                                 You are about to adjust <span className="text-indigo-600 font-black">{discrepancies.length}</span> items in your live inventory.
                                 This will generate audit trail entries and update your valuation reports.
                             </p>
                         </div>
 
                         <div className="max-w-xl mx-auto grid grid-cols-2 gap-4 mt-8">
-                            <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 text-left">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Audit Reference</p>
-                                <p className="text-sm font-black text-slate-800">AUDIT-{new Date().getTime().toString().slice(-6)}</p>
+                            <div className="p-6 bg-muted/80 rounded-3xl border border-border text-left">
+                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Audit Reference</p>
+                                <p className="text-sm font-black text-foreground">AUDIT-{new Date().getTime().toString().slice(-6)}</p>
                             </div>
-                            <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100 text-left">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Authorized By</p>
-                                <p className="text-sm font-black text-slate-800">Current Administrator</p>
+                            <div className="p-6 bg-muted/80 rounded-3xl border border-border text-left">
+                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Authorized By</p>
+                                <p className="text-sm font-black text-foreground">Current Administrator</p>
                             </div>
                         </div>
 
@@ -321,7 +321,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                             <button
                                 onClick={() => setStep(2)}
                                 disabled={loading}
-                                className="text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-slate-600 transition-all"
+                                className="text-muted-foreground font-black text-[10px] uppercase tracking-widest hover:text-muted-foreground transition-all"
                             >
                                 Cancel and Review
                             </button>

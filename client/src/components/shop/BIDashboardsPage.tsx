@@ -24,7 +24,7 @@ const BIContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 -m-4 md:-m-8">
+        <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
             {/* Header / Tab Navigation */}
             <div className="bg-slate-900 border-b border-white/10 px-8 pt-8 shadow-2xl z-20">
                 <div className="flex justify-between items-center mb-8">
@@ -35,17 +35,17 @@ const BIContent: React.FC = () => {
                             </div>
                             <h1 className="text-2xl font-black text-white tracking-tight">Intelligence Engine</h1>
                         </div>
-                        <p className="text-slate-400 text-sm font-medium mt-1">Enterprise Analytics & Predictive Decision Support.</p>
+                        <p className="text-muted-foreground text-sm font-medium mt-1">Enterprise Analytics & Predictive Decision Support.</p>
                     </div>
                     <div className="flex items-center gap-4">
-                        <div className="flex bg-white/5 rounded-xl p-1 border border-white/10">
+                        <div className="flex bg-card/5 rounded-xl p-1 border border-white/10">
                             {['Today', 'MTD', 'QTD', 'YTD'].map(range => (
                                 <button
                                     key={range}
                                     onClick={() => setDateRange(range)}
                                     className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${dateRange === range
                                         ? 'bg-indigo-600 text-white shadow-lg'
-                                        : 'text-slate-400 hover:text-white'
+                                        : 'text-muted-foreground hover:text-white'
                                         }`}
                                 >
                                     {range}
@@ -54,7 +54,7 @@ const BIContent: React.FC = () => {
                         </div>
                         <button
                             onClick={handleExport}
-                            className="p-3 bg-white/5 text-white rounded-xl border border-white/10 hover:bg-white/10 transition-all"
+                            className="p-3 bg-card/5 text-white rounded-xl border border-white/10 hover:bg-card/10 transition-all"
                             title="Export Report"
                         >
                             {ICONS.download}
@@ -69,7 +69,7 @@ const BIContent: React.FC = () => {
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-black transition-all relative flex items-center gap-2 tracking-widest uppercase text-[10px] ${activeTab === tab.id
                                 ? 'text-indigo-400'
-                                : 'text-slate-500 hover:text-slate-300'
+                                : 'text-muted-foreground hover:text-slate-300'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 16, height: 16 })}

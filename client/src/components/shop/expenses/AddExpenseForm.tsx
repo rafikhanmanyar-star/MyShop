@@ -171,7 +171,7 @@ const AddExpenseForm: React.FC<AddExpenseFormProps> = ({ onSaved }) => {
             onChange={(e) => setForm((f) => ({ ...f, expenseDate: e.target.value }))}
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Category</label>
             <Select
               value={form.categoryId}
               onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
@@ -195,7 +195,7 @@ const AddExpenseForm: React.FC<AddExpenseFormProps> = ({ onSaved }) => {
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Method</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Payment Method</label>
             <Select
               value={form.paymentMethod}
               onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value as 'Cash' | 'Bank' | 'Credit' }))}
@@ -207,7 +207,7 @@ const AddExpenseForm: React.FC<AddExpenseFormProps> = ({ onSaved }) => {
           </div>
           {(form.paymentMethod === 'Cash' || form.paymentMethod === 'Bank') && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Account</label>
+              <label className="block text-sm font-medium text-foreground mb-1.5">Payment Account</label>
               <Select
                 value={form.paymentAccountId}
                 onChange={(e) => setForm((f) => ({ ...f, paymentAccountId: e.target.value }))}
@@ -229,7 +229,7 @@ const AddExpenseForm: React.FC<AddExpenseFormProps> = ({ onSaved }) => {
             placeholder="Name or select vendor below"
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Vendor (optional)</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Vendor (optional)</label>
             <Select
               value={form.vendorId}
               onChange={(e) => setForm((f) => ({ ...f, vendorId: e.target.value }))}
@@ -249,7 +249,7 @@ const AddExpenseForm: React.FC<AddExpenseFormProps> = ({ onSaved }) => {
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Branch (optional)</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Branch (optional)</label>
             <Select
               value={form.branchId}
               onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))}
@@ -275,13 +275,13 @@ const AddExpenseForm: React.FC<AddExpenseFormProps> = ({ onSaved }) => {
           onChange={(e) => setForm((f) => ({ ...f, taxAmount: e.target.value }))}
         />
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachment (bill/receipt)</label>
+          <label className="block text-sm font-medium text-foreground mb-1.5">Attachment (bill/receipt)</label>
           <div className="flex items-center gap-2">
             <input
               type="file"
               accept="image/*,.pdf"
               onChange={handleFileChange}
-              className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700"
+              className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700"
             />
             {form.attachmentUrl && (
               <a href={form.attachmentUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-sm flex items-center gap-1">

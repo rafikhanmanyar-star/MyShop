@@ -33,20 +33,20 @@ const InventoryIntelligence: React.FC = () => {
     return (
         <div className="space-y-8 animate-in zoom-in duration-700">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                <h3 className="text-xl font-black text-foreground tracking-tight flex items-center gap-2">
                     {ICONS.package} Supply Chain & Inventory IQ
                 </h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {stats.map((stat, i) => (
-                    <Card key={i} className="p-6 border-none shadow-sm flex items-center gap-4 bg-white">
+                    <Card key={i} className="p-6 border-none shadow-sm flex items-center gap-4 bg-card">
                         <div className={`w-12 h-12 rounded-xl ${stat.bg} ${stat.color} flex items-center justify-center`}>
                             {React.cloneElement(stat.icon as React.ReactElement<any>, { width: 24, height: 24 })}
                         </div>
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{stat.label}</p>
-                            <p className="text-xl font-black text-slate-800 tracking-tight">{stat.value}</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                            <p className="text-xl font-black text-foreground tracking-tight">{stat.value}</p>
                         </div>
                     </Card>
                 ))}
@@ -54,8 +54,8 @@ const InventoryIntelligence: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Category Distribution */}
-                <Card className="lg:col-span-2 border-none shadow-sm p-8 bg-white space-y-8">
-                    <h4 className="font-bold text-slate-800 uppercase tracking-widest text-[10px]">Category Distribution</h4>
+                <Card className="lg:col-span-2 border-none shadow-sm p-8 bg-card space-y-8">
+                    <h4 className="font-bold text-foreground uppercase tracking-widest text-[10px]">Category Distribution</h4>
                     {hasData ? (
                         <div className="flex gap-4 h-64 items-end justify-between px-4">
                             {categoryPerformance.slice(0, 6).map((cat: any, i: number) => {
@@ -64,26 +64,26 @@ const InventoryIntelligence: React.FC = () => {
                                 const colors = ['bg-emerald-500', 'bg-indigo-500', 'bg-amber-500', 'bg-rose-500', 'bg-purple-500', 'bg-sky-500'];
                                 return (
                                     <div key={i} className="flex-1 flex flex-col items-center gap-4">
-                                        <div className="text-xs font-black text-slate-800">{Number(cat.unitsSold) || 0}</div>
+                                        <div className="text-xs font-black text-foreground">{Number(cat.unitsSold) || 0}</div>
                                         <div
                                             className={`w-full ${colors[i % colors.length]} rounded-t-xl transition-all duration-1000 shadow-lg`}
                                             style={{ height: `${Math.max(percent * 2, 4)}px` }}
                                         ></div>
-                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest text-center leading-tight">{cat.category}</span>
+                                        <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest text-center leading-tight">{cat.category}</span>
                                     </div>
                                 );
                             })}
                         </div>
                     ) : (
                         <div className="h-64 flex items-center justify-center">
-                            <p className="text-xs text-slate-400">No inventory data available yet. Complete sales to see distribution.</p>
+                            <p className="text-xs text-muted-foreground">No inventory data available yet. Complete sales to see distribution.</p>
                         </div>
                     )}
                 </Card>
 
                 {/* Movement IQ */}
-                <Card className="border-none shadow-sm p-8 bg-white space-y-6">
-                    <h4 className="font-bold text-slate-800 uppercase tracking-widest text-[10px]">Movement IQ</h4>
+                <Card className="border-none shadow-sm p-8 bg-card space-y-6">
+                    <h4 className="font-bold text-foreground uppercase tracking-widest text-[10px]">Movement IQ</h4>
                     {hasData ? (
                         <div className="space-y-6">
                             {topCategory && (
@@ -109,7 +109,7 @@ const InventoryIntelligence: React.FC = () => {
                         </div>
                     ) : (
                         <div className="flex-1 flex items-center justify-center py-8">
-                            <p className="text-xs text-slate-400 text-center">Complete sales to see movement data.</p>
+                            <p className="text-xs text-muted-foreground text-center">Complete sales to see movement data.</p>
                         </div>
                     )}
                     <button

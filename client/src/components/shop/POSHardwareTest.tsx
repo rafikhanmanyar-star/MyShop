@@ -107,13 +107,13 @@ const POSHardwareTest: React.FC = () => {
 
                         <div className="mt-4">
                             <h3 className="font-semibold mb-2">Scanned Barcodes:</h3>
-                            <div className="bg-gray-100 rounded p-3 max-h-40 overflow-y-auto">
+                            <div className="bg-muted rounded p-3 max-h-40 overflow-y-auto">
                                 {scannedBarcodes.length === 0 ? (
-                                    <p className="text-gray-500 text-sm">No barcodes scanned yet</p>
+                                    <p className="text-muted-foreground text-sm">No barcodes scanned yet</p>
                                 ) : (
                                     <ul className="space-y-1">
                                         {scannedBarcodes.map((barcode, index) => (
-                                            <li key={index} className="text-sm font-mono bg-white p-2 rounded">
+                                            <li key={index} className="text-sm font-mono bg-card p-2 rounded">
                                                 {index + 1}. {barcode}
                                             </li>
                                         ))}
@@ -166,7 +166,7 @@ const POSHardwareTest: React.FC = () => {
 
                         <div className="mt-4">
                             <h3 className="font-semibold mb-2">Expected Receipt:</h3>
-                            <div className="bg-gray-100 rounded p-3 text-xs font-mono">
+                            <div className="bg-muted rounded p-3 text-xs font-mono">
                                 <div className="text-center border-b pb-2 mb-2">
                                     <div className="font-bold">PBooks Pro - TEST RECEIPT</div>
                                     <div>Test Address, Karachi</div>

@@ -95,7 +95,7 @@ const ForecastPage: React.FC = () => {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh]">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4" />
-                <p className="text-slate-500 font-medium">Analyzing demand patterns...</p>
+                <p className="text-muted-foreground font-medium">Analyzing demand patterns...</p>
             </div>
         );
     }
@@ -106,8 +106,8 @@ const ForecastPage: React.FC = () => {
                 <div className="w-20 h-20 bg-indigo-100 rounded-3xl flex items-center justify-center mb-6">
                     <Brain className="w-10 h-10 text-indigo-600" />
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900 mb-2">Initialize Forecast Engine</h2>
-                <p className="text-slate-500 max-w-md mb-8">
+                <h2 className="text-2xl font-bold text-foreground mb-2">Initialize Forecast Engine</h2>
+                <p className="text-muted-foreground max-w-md mb-8">
                     No forecast data available for {new Date(2025, month - 1).toLocaleString('default', { month: 'long' })} {year}.
                     Run the engine to analyze budgets and historical sales.
                 </p>
@@ -132,17 +132,17 @@ const ForecastPage: React.FC = () => {
                         <div className="p-2 bg-indigo-600 rounded-lg text-white">
                             <Brain className="w-5 h-5" />
                         </div>
-                        <h1 className="text-3xl font-black text-slate-900 tracking-tight">Demand Intelligence</h1>
+                        <h1 className="text-3xl font-black text-foreground tracking-tight">Demand Intelligence</h1>
                     </div>
-                    <p className="text-slate-500 font-medium ml-12">Predictive analytics driven by consumer intent & historical trends.</p>
+                    <p className="text-muted-foreground font-medium ml-12">Predictive analytics driven by consumer intent & historical trends.</p>
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <div className="flex bg-white rounded-2xl p-1 shadow-sm border border-slate-200">
+                    <div className="flex bg-card rounded-2xl p-1 shadow-sm border border-border">
                         <select
                             value={month}
                             onChange={(e) => setMonth(parseInt(e.target.value))}
-                            className="bg-transparent border-none text-sm font-bold text-slate-700 px-4 py-2 focus:ring-0 cursor-pointer"
+                            className="bg-transparent border-none text-sm font-bold text-foreground px-4 py-2 focus:ring-0 cursor-pointer"
                         >
                             {Array.from({ length: 12 }, (_, i) => (
                                 <option key={i + 1} value={i + 1}>
@@ -153,7 +153,7 @@ const ForecastPage: React.FC = () => {
                         <select
                             value={year}
                             onChange={(e) => setYear(parseInt(e.target.value))}
-                            className="bg-transparent border-none text-sm font-bold text-slate-700 px-4 py-2 focus:ring-0 cursor-pointer"
+                            className="bg-transparent border-none text-sm font-bold text-foreground px-4 py-2 focus:ring-0 cursor-pointer"
                         >
                             {[2024, 2025, 2026].map(y => (
                                 <option key={y} value={y}>{y}</option>
@@ -163,7 +163,7 @@ const ForecastPage: React.FC = () => {
                     <button
                         onClick={handleRunForecast}
                         disabled={running}
-                        className="p-3 bg-white text-slate-700 rounded-2xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-all disabled:opacity-50"
+                        className="p-3 bg-card text-foreground rounded-2xl shadow-sm border border-border hover:bg-muted/50 transition-all disabled:opacity-50"
                         title="Regenerate Forecast"
                     >
                         <RefreshCcw className={`w-5 h-5 ${running ? 'animate-spin' : ''}`} />
@@ -173,7 +173,7 @@ const ForecastPage: React.FC = () => {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                <div className="bg-card p-6 rounded-[2rem] shadow-sm border border-border hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
                             <DollarSign className="w-6 h-6" />
@@ -183,11 +183,11 @@ const ForecastPage: React.FC = () => {
                             12.5%
                         </div>
                     </div>
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Projected Revenue</p>
-                    <h3 className="text-2xl font-black text-slate-900">{formatCurrency(Number(data?.summary?.total_projected_revenue) || 0)}</h3>
+                    <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest mb-1">Projected Revenue</p>
+                    <h3 className="text-2xl font-black text-foreground">{formatCurrency(Number(data?.summary?.total_projected_revenue) || 0)}</h3>
                 </div>
 
-                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                <div className="bg-card p-6 rounded-[2rem] shadow-sm border border-border hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-fuchsia-50 text-fuchsia-600 rounded-2xl">
                             <TrendingUp className="w-6 h-6" />
@@ -197,11 +197,11 @@ const ForecastPage: React.FC = () => {
                             8.2%
                         </div>
                     </div>
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Expected Profit</p>
-                    <h3 className="text-2xl font-black text-slate-900">{formatCurrency(Number(data?.summary?.total_projected_profit) || 0)}</h3>
+                    <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest mb-1">Expected Profit</p>
+                    <h3 className="text-2xl font-black text-foreground">{formatCurrency(Number(data?.summary?.total_projected_profit) || 0)}</h3>
                 </div>
 
-                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                <div className="bg-card p-6 rounded-[2rem] shadow-sm border border-border hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
                             <Package className="w-6 h-6" />
@@ -211,23 +211,23 @@ const ForecastPage: React.FC = () => {
                             5 Risks
                         </div>
                     </div>
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Inventory Alert</p>
-                    <h3 className="text-2xl font-black text-slate-900">{data?.inventoryRisks?.length || 0} Items</h3>
+                    <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest mb-1">Inventory Alert</p>
+                    <h3 className="text-2xl font-black text-foreground">{data?.inventoryRisks?.length || 0} Items</h3>
                 </div>
 
-                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
+                <div className="bg-card p-6 rounded-[2rem] shadow-sm border border-border hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
                             <Info className="w-6 h-6" />
                         </div>
-                        <div className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-lg">
+                        <div className="text-[10px] font-bold text-muted-foreground bg-muted/80 px-2 py-1 rounded-lg">
                             AI Confidence
                         </div>
                     </div>
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-1">Forecast Accuracy</p>
+                    <p className="text-muted-foreground text-xs font-bold uppercase tracking-widest mb-1">Forecast Accuracy</p>
                     <div className="flex items-end gap-3">
-                        <h3 className="text-2xl font-black text-slate-900">{Number(data?.summary?.confidence_score || 0).toFixed(0)}%</h3>
-                        <div className="flex-1 h-3 bg-slate-100 rounded-full mb-1.5 overflow-hidden">
+                        <h3 className="text-2xl font-black text-foreground">{Number(data?.summary?.confidence_score || 0).toFixed(0)}%</h3>
+                        <div className="flex-1 h-3 bg-muted rounded-full mb-1.5 overflow-hidden">
                             <div
                                 className="h-full bg-gradient-to-r from-blue-500 to-indigo-500"
                                 style={{ width: `${Number(data?.summary?.confidence_score || 0)}%` }}
@@ -240,14 +240,14 @@ const ForecastPage: React.FC = () => {
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Category Demand */}
-                <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
+                <div className="bg-card p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-border">
                     <div className="flex justify-between items-center mb-8">
                         <div>
-                            <h3 className="text-xl font-black text-slate-900 tracking-tight">Category Opportunities</h3>
-                            <p className="text-slate-500 text-sm">Where the demand is growing.</p>
+                            <h3 className="text-xl font-black text-foreground tracking-tight">Category Opportunities</h3>
+                            <p className="text-muted-foreground text-sm">Where the demand is growing.</p>
                         </div>
-                        <div className="p-2 bg-slate-50 rounded-xl">
-                            <BarChart3 className="w-5 h-5 text-slate-400" />
+                        <div className="p-2 bg-muted/80 rounded-xl">
+                            <BarChart3 className="w-5 h-5 text-muted-foreground" />
                         </div>
                     </div>
                     <div className="h-[300px]">
@@ -278,11 +278,11 @@ const ForecastPage: React.FC = () => {
                 </div>
 
                 {/* Cash Flow Forecast */}
-                <div className="bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
+                <div className="bg-card p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-border">
                     <div className="flex justify-between items-center mb-8">
                         <div>
-                            <h3 className="text-xl font-black text-slate-900 tracking-tight">Liquidity Forecast</h3>
-                            <p className="text-slate-500 text-sm">Cash Flow Impact Analysis.</p>
+                            <h3 className="text-xl font-black text-foreground tracking-tight">Liquidity Forecast</h3>
+                            <p className="text-muted-foreground text-sm">Cash Flow Impact Analysis.</p>
                         </div>
                         <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${data?.cashFlow?.liquidity_risk_level === 'Low' ? 'bg-emerald-50 text-emerald-600' :
                             data?.cashFlow?.liquidity_risk_level === 'Medium' ? 'bg-amber-50 text-amber-600' :
@@ -325,65 +325,65 @@ const ForecastPage: React.FC = () => {
             {/* Tables Row */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 {/* Inventory Risks */}
-                <div className="xl:col-span-1 bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col">
+                <div className="xl:col-span-1 bg-card p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-border flex flex-col">
                     <div className="flex items-center gap-3 mb-6">
                         <AlertTriangle className="w-5 h-5 text-amber-500" />
-                        <h3 className="text-xl font-black text-slate-900 tracking-tight">Stock Risks</h3>
+                        <h3 className="text-xl font-black text-foreground tracking-tight">Stock Risks</h3>
                     </div>
                     <div className="space-y-4 flex-1">
                         {data?.inventoryRisks?.map((risk: any, i: number) => (
-                            <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                            <div key={i} className="flex items-center justify-between p-4 bg-muted/80 rounded-2xl border border-border">
                                 <div>
-                                    <p className="text-sm font-bold text-slate-800 line-clamp-1">{risk.product_name}</p>
+                                    <p className="text-sm font-bold text-foreground line-clamp-1">{risk.product_name}</p>
                                     <p className={`text-[10px] font-black uppercase inline-block px-2 py-0.5 rounded-md mt-1 ${risk.stock_risk_level === 'Stock-Out' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'
                                         }`}>
                                         {risk.stock_risk_level}
                                     </p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs font-black text-slate-900">{formatCurrency(Number(risk.forecast_revenue))}</p>
-                                    <p className="text-[10px] font-medium text-slate-400">Projected Revenue</p>
+                                    <p className="text-xs font-black text-foreground">{formatCurrency(Number(risk.forecast_revenue))}</p>
+                                    <p className="text-[10px] font-medium text-muted-foreground">Projected Revenue</p>
                                 </div>
                             </div>
                         ))}
                     </div>
-                    <button className="mt-6 w-full py-3 text-sm font-black text-slate-500 hover:text-indigo-600 transition-colors flex items-center justify-center gap-2">
+                    <button className="mt-6 w-full py-3 text-sm font-black text-muted-foreground hover:text-indigo-600 transition-colors flex items-center justify-center gap-2">
                         View All Risks <ChevronRight className="w-4 h-4" />
                     </button>
                 </div>
 
                 {/* Demand Forecast List */}
-                <div className="xl:col-span-2 bg-white p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100">
+                <div className="xl:col-span-2 bg-card p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-border">
                     <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-xl font-black text-slate-900 tracking-tight">Top High-Demand Products</h3>
+                        <h3 className="text-xl font-black text-foreground tracking-tight">Top High-Demand Products</h3>
                         <button className="text-indigo-600 text-xs font-black uppercase tracking-widest hover:underline">Full Report</button>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
                                 <tr className="text-left">
-                                    <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Product</th>
-                                    <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Intent (Budgets)</th>
-                                    <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Historical Avg</th>
-                                    <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Forecast Qty</th>
-                                    <th className="pb-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Proj. Revenue</th>
+                                    <th className="pb-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">Product</th>
+                                    <th className="pb-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Intent (Budgets)</th>
+                                    <th className="pb-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Historical Avg</th>
+                                    <th className="pb-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-center">Forecast Qty</th>
+                                    <th className="pb-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest text-right">Proj. Revenue</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {data?.products?.map((prod: any, i: number) => (
-                                    <tr key={i} className="border-t border-slate-50 group hover:bg-slate-50/50 transition-colors">
+                                    <tr key={i} className="border-t border-slate-50 group hover:bg-muted/50/50 transition-colors">
                                         <td className="py-4">
-                                            <p className="text-sm font-bold text-slate-800">{prod.product_name}</p>
-                                            <p className="text-[10px] font-medium text-slate-400">{prod.category_name}</p>
+                                            <p className="text-sm font-bold text-foreground">{prod.product_name}</p>
+                                            <p className="text-[10px] font-medium text-muted-foreground">{prod.category_name}</p>
                                         </td>
-                                        <td className="py-4 text-center font-bold text-sm text-slate-600">{prod.planned_quantity}</td>
-                                        <td className="py-4 text-center font-bold text-sm text-slate-600">{Number(prod.historical_avg_quantity).toFixed(1)}</td>
+                                        <td className="py-4 text-center font-bold text-sm text-muted-foreground">{prod.planned_quantity}</td>
+                                        <td className="py-4 text-center font-bold text-sm text-muted-foreground">{Number(prod.historical_avg_quantity).toFixed(1)}</td>
                                         <td className="py-4 text-center">
                                             <span className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-lg text-sm font-black">
                                                 {Number(prod.forecast_quantity).toFixed(1)}
                                             </span>
                                         </td>
-                                        <td className="py-4 text-right font-black text-sm text-slate-900">{formatCurrency(Number(prod.forecast_revenue))}</td>
+                                        <td className="py-4 text-right font-black text-sm text-foreground">{formatCurrency(Number(prod.forecast_revenue))}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -401,20 +401,20 @@ const ForecastPage: React.FC = () => {
                     <h3 className="text-xl font-black tracking-tight">AI-Generated Insights</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Inventory Strategy</p>
+                    <div className="p-4 bg-card/5 rounded-2xl border border-white/10">
+                        <p className="text-muted-foreground text-[10px] font-black uppercase tracking-widest mb-2">Inventory Strategy</p>
                         <p className="text-sm font-medium leading-relaxed">
                             Consumer budgets indicate <span className="text-indigo-400 font-bold">18% higher demand</span> for Beverages next month. Consider increasing procurement for top 5 items.
                         </p>
                     </div>
-                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Revenue Growth</p>
+                    <div className="p-4 bg-card/5 rounded-2xl border border-white/10">
+                        <p className="text-muted-foreground text-[10px] font-black uppercase tracking-widest mb-2">Revenue Growth</p>
                         <p className="text-sm font-medium leading-relaxed">
                             Projected revenue growth of <span className="text-emerald-400 font-bold">12%</span> compared to last 3 months average, driven by 42 unique customer budgets.
                         </p>
                     </div>
-                    <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2">Risk Mitigation</p>
+                    <div className="p-4 bg-card/5 rounded-2xl border border-white/10">
+                        <p className="text-muted-foreground text-[10px] font-black uppercase tracking-widest mb-2">Risk Mitigation</p>
                         <p className="text-sm font-medium leading-relaxed">
                             Stock-out risk detected for <span className="text-amber-400 font-bold">5 high-demand items</span>. Working capital requirement will increase by {formatCurrency(Number(data?.cashFlow?.working_capital_requirement) || 0)}.
                         </p>

@@ -43,7 +43,7 @@ const GeneralLedger: React.FC = () => {
             case 'Manual':
                 return <span className="px-2 py-0.5 bg-amber-100 text-amber-600 rounded text-[9px] font-black uppercase">Manual</span>;
             default:
-                return <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[9px] font-black uppercase">{source || 'System'}</span>;
+                return <span className="px-2 py-0.5 bg-muted text-muted-foreground rounded text-[9px] font-black uppercase">{source || 'System'}</span>;
         }
     };
 
@@ -137,12 +137,12 @@ const GeneralLedger: React.FC = () => {
             <div className="flex justify-between items-center mb-4">
                 <div className="flex gap-3 items-center">
                     <div className="relative group w-72">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
                             {ICONS.search}
                         </div>
                         <input
                             type="text"
-                            className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-xl leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-xs"
+                            className="block w-full pl-10 pr-3 py-2 border border-border rounded-xl leading-5 bg-card placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-xs"
                             placeholder="Search by Reference, Description..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -150,14 +150,14 @@ const GeneralLedger: React.FC = () => {
                     </div>
 
                     {/* Source Filter */}
-                    <div className="flex bg-white border border-slate-200 rounded-xl p-1">
+                    <div className="flex bg-card border border-border rounded-xl p-1">
                         {(['all', 'POS', 'MobileApp', 'Manual'] as const).map(filter => (
                             <button
                                 key={filter}
                                 onClick={() => setSourceFilter(filter)}
                                 className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${sourceFilter === filter
                                     ? 'bg-slate-900 text-white shadow'
-                                    : 'text-slate-400 hover:text-slate-600'
+                                    : 'text-muted-foreground hover:text-muted-foreground'
                                     }`}
                             >
                                 {filter === 'all' ? 'All' : filter === 'MobileApp' ? 'Mobile' : filter}
@@ -167,8 +167,8 @@ const GeneralLedger: React.FC = () => {
                 </div>
 
                 <div className="flex gap-2 items-center">
-                    <span className="text-[10px] font-bold text-slate-400">{filteredEntries.length} entries</span>
-                    <button className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-muted-foreground">{filteredEntries.length} entries</span>
+                    <button className="px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 transition-all flex items-center gap-2">
                         {ICONS.export} Export CSV
                     </button>
                 </div>
@@ -178,11 +178,11 @@ const GeneralLedger: React.FC = () => {
                 {loading ? (
                     <div className="py-20 text-center">
                         <div className="animate-spin inline-block w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-                        <p className="text-xs text-slate-400 mt-2">Loading ledger entries...</p>
+                        <p className="text-xs text-muted-foreground mt-2">Loading ledger entries...</p>
                     </div>
                 ) : (
                     <table className="w-full text-left">
-                        <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 sticky top-0 z-20">
+                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground sticky top-0 z-20">
                             <tr>
                                 <th className="px-6 py-4">Date</th>
                                 <th className="px-6 py-4">Reference</th>
@@ -196,8 +196,8 @@ const GeneralLedger: React.FC = () => {
                         <tbody className="divide-y divide-slate-100">
                             {filteredEntries.length > 0 ? filteredEntries.map((entry: any) => (
                                 <React.Fragment key={entry.id}>
-                                    <tr className="bg-slate-50/50">
-                                        <td className="px-6 py-4 text-xs font-bold text-slate-600">
+                                    <tr className="bg-muted/80/50">
+                                        <td className="px-6 py-4 text-xs font-bold text-muted-foreground">
                                             {new Date(entry.date).toLocaleDateString()}
                                         </td>
                                         <td className="px-6 py-4">
@@ -206,9 +206,9 @@ const GeneralLedger: React.FC = () => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="text-xs font-black text-slate-800">{entry.description}</div>
+                                            <div className="text-xs font-black text-foreground">{entry.description}</div>
                                         </td>
-                                        <td className="px-6 py-4 text-right font-mono font-black text-sm text-slate-900 border-t border-slate-200" colSpan={2}>
+                                        <td className="px-6 py-4 text-right font-mono font-black text-sm text-foreground border-t border-border" colSpan={2}>
                                             {/* Entry level total */}
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -220,7 +220,7 @@ const GeneralLedger: React.FC = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => openEditModal(entry)}
-                                                        className="p-1.5 rounded-lg text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                                                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
                                                         title="Edit entry"
                                                     >
                                                         {React.cloneElement(ICONS.edit as React.ReactElement<any>, { width: 16, height: 16 })}
@@ -228,7 +228,7 @@ const GeneralLedger: React.FC = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => setDeleteConfirmId(entry.id)}
-                                                        className="p-1.5 rounded-lg text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                                                        className="p-1.5 rounded-lg text-muted-foreground hover:bg-rose-50 hover:text-rose-600 transition-colors"
                                                         title="Delete entry"
                                                     >
                                                         {React.cloneElement(ICONS.trash as React.ReactElement<any>, { width: 16, height: 16 })}
@@ -238,18 +238,18 @@ const GeneralLedger: React.FC = () => {
                                         )}
                                     </tr>
                                     {(entry.lines || []).map((line: any, idx: number) => (
-                                        <tr key={`${entry.id}-${idx}`} className="hover:bg-slate-50/30">
+                                        <tr key={`${entry.id}-${idx}`} className="hover:bg-muted/50/30">
                                             <td colSpan={2}></td>
                                             <td className="px-6 py-3">
-                                                <div className="text-xs font-bold text-slate-700 pl-4 border-l-2 border-indigo-100 italic">
+                                                <div className="text-xs font-bold text-foreground pl-4 border-l-2 border-indigo-100 italic">
                                                     {line.accountCode} — {line.accountName}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-3 text-right">
-                                                {line.debit > 0 && <span className="font-mono text-xs font-bold text-slate-800">{Number(line.debit).toLocaleString()}</span>}
+                                                {line.debit > 0 && <span className="font-mono text-xs font-bold text-foreground">{Number(line.debit).toLocaleString()}</span>}
                                             </td>
                                             <td className="px-6 py-3 text-right">
-                                                {line.credit > 0 && <span className="font-mono text-xs font-bold text-slate-600">{Number(line.credit).toLocaleString()}</span>}
+                                                {line.credit > 0 && <span className="font-mono text-xs font-bold text-muted-foreground">{Number(line.credit).toLocaleString()}</span>}
                                             </td>
                                             <td></td>
                                             {isAdmin && <td></td>}
@@ -259,7 +259,7 @@ const GeneralLedger: React.FC = () => {
                             )) : (
                                 <tr>
                                     <td colSpan={isAdmin ? 7 : 6} className="px-6 py-20 text-center text-slate-300 italic">
-                                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <div className="w-16 h-16 bg-muted/80 rounded-full flex items-center justify-center mx-auto mb-4">
                                             {React.cloneElement(ICONS.clipboard as React.ReactElement<any>, { width: 32, height: 32 })}
                                         </div>
                                         <p className="font-bold uppercase tracking-[0.2em] text-[10px]">No ledger entries found</p>
@@ -301,9 +301,9 @@ const GeneralLedger: React.FC = () => {
                         />
                     </div>
 
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="bg-muted/80 border border-border rounded-xl overflow-hidden">
                         <table className="w-full text-left">
-                            <thead className="bg-slate-100 text-[10px] uppercase font-black text-slate-500">
+                            <thead className="bg-muted text-[10px] uppercase font-black text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3 w-[30%]">Account</th>
                                     <th className="px-4 py-3 w-[30%]">Description</th>
@@ -370,7 +370,7 @@ const GeneralLedger: React.FC = () => {
                                     </tr>
                                 ))}
                             </tbody>
-                            <tfoot className="bg-slate-50 font-bold text-xs border-t border-slate-200">
+                            <tfoot className="bg-muted/80 font-bold text-xs border-t border-border">
                                 <tr>
                                     <td colSpan={2} className="px-4 py-3">
                                         <button
@@ -414,7 +414,7 @@ const GeneralLedger: React.FC = () => {
                 size="sm"
             >
                 <div className="space-y-4">
-                    <p className="text-sm text-slate-600">
+                    <p className="text-sm text-muted-foreground">
                         This will remove the journal entry and all its lines. Account balances and report aggregates will be updated to stay in sync. This cannot be undone.
                     </p>
                     <div className="flex justify-end gap-3">

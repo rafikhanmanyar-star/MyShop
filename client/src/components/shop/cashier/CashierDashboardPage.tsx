@@ -152,19 +152,19 @@ export default function CashierDashboardPage() {
             Offline — Connect to the internet to start a shift.
           </div>
         )}
-        <div className="rounded-2xl bg-slate-50 border border-slate-200 p-8 shadow-sm">
+        <div className="rounded-2xl bg-muted/80 border border-border p-8 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center">
               <LogIn className="w-6 h-6 text-indigo-600" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-800">Start your shift</h1>
-              <p className="text-sm text-slate-500">Enter opening cash and confirm terminal</p>
+              <h1 className="text-xl font-bold text-foreground">Start your shift</h1>
+              <p className="text-sm text-muted-foreground">Enter opening cash and confirm terminal</p>
             </div>
           </div>
           <form onSubmit={handleStartShift} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Location</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Location</label>
               <select
                 value={startForm.branchId}
                 onChange={(e) => setStartForm((f) => ({ ...f, branchId: e.target.value, terminalId: '' }))}
@@ -179,11 +179,11 @@ export default function CashierDashboardPage() {
                 ))}
               </select>
               {branches.length === 0 && (
-                <p className="mt-1 text-xs text-slate-500">No locations. Ask admin to add branches in Multi-Store.</p>
+                <p className="mt-1 text-xs text-muted-foreground">No locations. Ask admin to add branches in Multi-Store.</p>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Terminal</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Terminal</label>
               <select
                 value={startForm.terminalId}
                 onChange={(e) => setStartForm((f) => ({ ...f, terminalId: e.target.value }))}
@@ -199,11 +199,11 @@ export default function CashierDashboardPage() {
                 ))}
               </select>
               {startForm.branchId && terminalsForBranch.length === 0 && (
-                <p className="mt-1 text-xs text-slate-500">No terminals at this location. Ask admin to add a terminal in Multi-Store.</p>
+                <p className="mt-1 text-xs text-muted-foreground">No terminals at this location. Ask admin to add a terminal in Multi-Store.</p>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Opening cash (amount in drawer)</label>
+              <label className="block text-sm font-medium text-foreground mb-1">Opening cash (amount in drawer)</label>
               <input
                 type="number"
                 step="0.01"
@@ -240,8 +240,8 @@ export default function CashierDashboardPage() {
       )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">My shift</h1>
-          <p className="text-slate-500 text-sm">
+          <h1 className="text-2xl font-bold text-foreground">My shift</h1>
+          <p className="text-muted-foreground text-sm">
             Started {new Date(currentShift.opening_time).toLocaleString()}
             {currentShift.terminal_id && terminals.length && (
               <> · {terminals.find((t) => t.id === currentShift.terminal_id)?.name || currentShift.terminal_id}</>
@@ -252,7 +252,7 @@ export default function CashierDashboardPage() {
           <button
             type="button"
             onClick={() => { refreshCurrentShift(); loadStats(); }}
-            className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"
+            className="p-2 rounded-xl border border-border text-muted-foreground hover:bg-muted/50"
             title="Refresh"
           >
             <RefreshCw className="w-5 h-5" />
@@ -272,90 +272,90 @@ export default function CashierDashboardPage() {
       {stats && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
                   <TrendingUp className="w-5 h-5 text-emerald-600" />
                 </div>
-                <span className="text-sm font-medium text-slate-500">Total sales</span>
+                <span className="text-sm font-medium text-muted-foreground">Total sales</span>
               </div>
-              <p className="text-2xl font-bold text-slate-800">
+              <p className="text-2xl font-bold text-foreground">
                 {CURRENCY} {Number(stats.totalSales).toFixed(2)}
               </p>
-              <p className="text-xs text-slate-400">{stats.totalTransactions} transactions</p>
+              <p className="text-xs text-muted-foreground">{stats.totalTransactions} transactions</p>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
                   <Receipt className="w-5 h-5 text-indigo-600" />
                 </div>
-                <span className="text-sm font-medium text-slate-500">Avg. bill</span>
+                <span className="text-sm font-medium text-muted-foreground">Avg. bill</span>
               </div>
-              <p className="text-2xl font-bold text-slate-800">
+              <p className="text-2xl font-bold text-foreground">
                 {CURRENCY} {Number(stats.averageBillValue).toFixed(2)}
               </p>
-              <p className="text-xs text-slate-400">{stats.totalItemsSold} items sold</p>
+              <p className="text-xs text-muted-foreground">{stats.totalItemsSold} items sold</p>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
                   <Wallet className="w-5 h-5 text-amber-600" />
                 </div>
-                <span className="text-sm font-medium text-slate-500">Expected cash</span>
+                <span className="text-sm font-medium text-muted-foreground">Expected cash</span>
               </div>
-              <p className="text-2xl font-bold text-slate-800">
+              <p className="text-2xl font-bold text-foreground">
                 {CURRENCY} {Number(stats.expectedCash).toFixed(2)}
               </p>
-              <p className="text-xs text-slate-400">Opening + Cash sales − Refunds − Expenses</p>
+              <p className="text-xs text-muted-foreground">Opening + Cash sales − Refunds − Expenses</p>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
-                  <Banknote className="w-5 h-5 text-slate-600" />
+                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                  <Banknote className="w-5 h-5 text-muted-foreground" />
                 </div>
-                <span className="text-sm font-medium text-slate-500">Cash collected</span>
+                <span className="text-sm font-medium text-muted-foreground">Cash collected</span>
               </div>
-              <p className="text-2xl font-bold text-slate-800">
+              <p className="text-2xl font-bold text-foreground">
                 {CURRENCY} {Number(stats.cashCollected).toFixed(2)}
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h3 className="font-semibold text-slate-800 mb-4">Payment breakdown</h3>
+            <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
+              <h3 className="font-semibold text-foreground mb-4">Payment breakdown</h3>
               <ul className="space-y-2 text-sm">
                 <li className="flex justify-between">
-                  <span className="text-slate-600">Cash</span>
+                  <span className="text-muted-foreground">Cash</span>
                   <span className="font-medium">{CURRENCY} {Number(stats.cashCollected).toFixed(2)}</span>
                 </li>
                 <li className="flex justify-between">
-                  <span className="text-slate-600">Card</span>
+                  <span className="text-muted-foreground">Card</span>
                   <span className="font-medium">{CURRENCY} {Number(stats.cardCollected).toFixed(2)}</span>
                 </li>
                 <li className="flex justify-between">
-                  <span className="text-slate-600">Bank transfer</span>
+                  <span className="text-muted-foreground">Bank transfer</span>
                   <span className="font-medium">{CURRENCY} {Number(stats.bankTransfer).toFixed(2)}</span>
                 </li>
                 <li className="flex justify-between">
-                  <span className="text-slate-600">Mobile wallet</span>
+                  <span className="text-muted-foreground">Mobile wallet</span>
                   <span className="font-medium">{CURRENCY} {Number(stats.mobileWallet).toFixed(2)}</span>
                 </li>
                 <li className="flex justify-between">
-                  <span className="text-slate-600">Credit</span>
+                  <span className="text-muted-foreground">Credit</span>
                   <span className="font-medium">{CURRENCY} {Number(stats.creditSales).toFixed(2)}</span>
                 </li>
               </ul>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h3 className="font-semibold text-slate-800 mb-4">Refunds & expenses</h3>
+            <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
+              <h3 className="font-semibold text-foreground mb-4">Refunds & expenses</h3>
               <ul className="space-y-2 text-sm">
                 <li className="flex justify-between">
-                  <span className="text-slate-600">Refunds</span>
+                  <span className="text-muted-foreground">Refunds</span>
                   <span className="font-medium">{stats.refundCount} · {CURRENCY} {Number(stats.totalRefundAmount).toFixed(2)}</span>
                 </li>
                 <li className="flex justify-between">
-                  <span className="text-slate-600">Shift expenses / petty cash</span>
+                  <span className="text-muted-foreground">Shift expenses / petty cash</span>
                   <span className="font-medium">{CURRENCY} {Number(stats.pettyCashUsed).toFixed(2)}</span>
                 </li>
               </ul>

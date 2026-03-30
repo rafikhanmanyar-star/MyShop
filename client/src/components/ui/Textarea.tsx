@@ -8,14 +8,14 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 const Textarea: React.FC<TextareaProps> = ({ label, id, name, enableSpellCheck = true, ...props }) => {
   // Mobile: py-3 and text-base to prevent zoom and increase touch area
   // Desktop: py-2 and text-sm for compactness
-  const finalClassName = `block w-full px-3 py-3 sm:py-2 border rounded-lg shadow-sm placeholder-gray-400 focus:outline-none text-base sm:text-sm disabled:bg-gray-100 disabled:cursor-not-allowed focus:ring-2 focus:ring-green-500/50 focus:border-green-500 border-gray-300 transition-colors`;
+  const finalClassName = `input block w-full px-3 py-3 sm:py-2 rounded-lg shadow-sm text-base sm:text-sm disabled:cursor-not-allowed focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors`;
 
   // Generate an id if not provided (for accessibility)
   const textareaId = id || `textarea-${name || label.toLowerCase().replace(/\s+/g, '-')}`;
 
   return (
     <div>
-      <label htmlFor={textareaId} className="block text-sm font-medium text-gray-700 mb-1">
+      <label htmlFor={textareaId} className="label mb-1 block">
         {label}
       </label>
       <textarea

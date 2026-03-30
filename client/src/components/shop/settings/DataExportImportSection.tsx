@@ -160,17 +160,17 @@ export default function DataExportImportSection() {
   return (
     <div className="space-y-6 max-w-3xl">
       <Card className="border-none shadow-sm p-6">
-        <h3 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-2">Export / Import data</h3>
-        <p className="text-slate-600 text-sm mb-6">
+        <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-2">Export / Import data</h3>
+        <p className="text-muted-foreground text-sm mb-6">
           Download a template, fill it in Excel, then import. If any row has errors, the system will show the Excel row number so you can correct and re-import.
         </p>
 
         <div className="grid gap-6 sm:grid-cols-2">
           {(['skus', 'inventory', 'bills', 'payments'] as DataKind[]).map((kind) => (
-            <Card key={kind} className="border border-slate-100 p-4 bg-slate-50/50">
+            <Card key={kind} className="border border-border p-4 bg-muted/80/50">
               <div className="flex items-center gap-2 mb-3">
                 <FileSpreadsheet className="w-5 h-5 text-indigo-500" />
-                <span className="font-bold text-slate-800">{LABELS[kind]}</span>
+                <span className="font-bold text-foreground">{LABELS[kind]}</span>
               </div>
               <div className="flex flex-wrap gap-2 mb-3">
                 <Button
@@ -200,7 +200,7 @@ export default function DataExportImportSection() {
                     onChange={(e) => handleFileSelect(kind, e)}
                     disabled={!!activeKind}
                   />
-                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border-2 border-slate-200 bg-white text-sm font-bold text-slate-700 hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
+                  <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border-2 border-border bg-card text-sm font-bold text-foreground hover:border-indigo-400 hover:bg-indigo-50 transition-colors">
                     <Upload className="w-4 h-4" />
                     {importing === kind ? 'Importing…' : 'Import'}
                   </span>

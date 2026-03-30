@@ -225,7 +225,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                 return (
                   <div key={billId} className="flex flex-wrap items-center gap-2 py-2 border-b border-amber-100 last:border-0">
                     <span className="body-text font-medium">{b.bill_number}</span>
-                    <span className="secondary-text text-slate-500 dark:text-slate-400">
+                    <span className="secondary-text text-muted-foreground dark:text-muted-foreground">
                       Balance: <span className="numeric-data">{CURRENCY} {Number(b.balance_due).toLocaleString()}</span>
                     </span>
                     <input
@@ -278,7 +278,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                 );
               })}
               {form.allocations.length > 0 && (
-                <p className="secondary-text mt-2 font-semibold text-slate-600 dark:text-slate-300">
+                <p className="secondary-text mt-2 font-semibold text-muted-foreground dark:text-slate-300">
                   Total allocated:{' '}
                   <span className="numeric-data">
                     {CURRENCY} {totalAllocated.toLocaleString()}
@@ -448,7 +448,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
                     return (
                       <div key={billId} className="flex flex-wrap items-center gap-2 py-1.5 border-b border-amber-100 last:border-0">
                         <span className="text-sm">{b.bill_number}</span>
-                        <span className="text-xs text-slate-500">Balance: {CURRENCY} {Number(b.balance_due).toLocaleString()}</span>
+                        <span className="text-xs text-muted-foreground">Balance: {CURRENCY} {Number(b.balance_due).toLocaleString()}</span>
                         <input
                           type="number"
                           step="0.01"
@@ -576,7 +576,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
               >
                 {updatingPayment ? 'Saving...' : 'Save'}
               </Button>
-              <Button onClick={() => !updatingPayment && (setEditPaymentId(null), setEditForm(null))} className="bg-slate-200 text-slate-700">
+              <Button onClick={() => !updatingPayment && (setEditPaymentId(null), setEditForm(null))} className="bg-slate-200 text-foreground">
                 Cancel
               </Button>
             </div>
@@ -610,7 +610,7 @@ export default function SupplierPaymentsSection({ initialPrefill, onClearPrefill
               >
                 {updatingPayment ? 'Deleting...' : 'Delete'}
               </Button>
-              <Button onClick={() => !updatingPayment && setDeleteConfirmPaymentId(null)} className="bg-slate-200 text-slate-700">
+              <Button onClick={() => !updatingPayment && setDeleteConfirmPaymentId(null)} className="bg-slate-200 text-foreground">
                 Cancel
               </Button>
             </div>

@@ -86,24 +86,24 @@ const MemberDirectory: React.FC = () => {
                     <button
                         key={stat.label}
                         onClick={() => setActiveTierFilter(stat.tier as any)}
-                        className={`p-4 rounded-2xl transition-all shadow-sm flex flex-col items-start gap-1 border-2 ${activeTierFilter === stat.tier ? 'border-rose-500 ring-2 ring-rose-100 shadow-lg scale-[1.02]' : 'border-transparent bg-white hover:border-slate-200'}`}
+                        className={`p-4 rounded-2xl transition-all shadow-sm flex flex-col items-start gap-1 border-2 ${activeTierFilter === stat.tier ? 'border-rose-500 ring-2 ring-rose-100 shadow-lg scale-[1.02]' : 'border-transparent bg-card hover:border-border'}`}
                     >
                         <div className={`w-2 h-2 rounded-full ${stat.color} mb-1`}></div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{stat.label}</p>
-                        <p className="text-xl font-black text-slate-800">{stat.count}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                        <p className="text-xl font-black text-foreground">{stat.count}</p>
                     </button>
                 ))}
             </div>
 
             {/* Filter & Search Toolbar */}
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-card p-4 rounded-2xl shadow-sm border border-border">
                 <div className="relative group flex-1 max-w-md">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-rose-500 transition-colors">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted-foreground group-focus-within:text-rose-500 transition-colors">
                         {ICONS.search}
                     </div>
                     <input
                         type="text"
-                        className="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl leading-5 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-xs font-medium placeholder-slate-400"
+                        className="block w-full pl-11 pr-4 py-3 bg-muted/80 border border-border rounded-xl leading-5 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all text-xs font-medium placeholder-slate-400"
                         placeholder="Search by Name, Card ID, or Phone..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -111,16 +111,16 @@ const MemberDirectory: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button className="px-4 py-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2">
+                    <button className="px-4 py-3 bg-card border border-border rounded-xl text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:bg-muted/50 transition-all flex items-center gap-2">
                         {ICONS.download} Export
                     </button>
                 </div>
             </div>
 
-            <Card className="border-none shadow-sm overflow-hidden flex-1 flex flex-col bg-white">
+            <Card className="border-none shadow-sm overflow-hidden flex-1 flex flex-col bg-card">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-slate-50/80 backdrop-blur-sm sticky top-0 z-10 text-[10px] font-black uppercase text-slate-400">
+                        <thead className="bg-muted/80/80 backdrop-blur-sm sticky top-0 z-10 text-[10px] font-black uppercase text-muted-foreground">
                             <tr>
                                 <th className="px-8 py-5">Card / Member</th>
                                 <th className="px-6 py-5">Tier Segment</th>
@@ -142,13 +142,13 @@ const MemberDirectory: React.FC = () => {
                                         <div className="flex items-center gap-4">
                                             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm transition-all group-hover:scale-110 shadow-sm ${m.tier === 'Platinum' ? 'bg-slate-900 text-rose-500' :
                                                 m.tier === 'Gold' ? 'bg-amber-100 text-amber-600' :
-                                                    'bg-slate-100 text-slate-400'
+                                                    'bg-muted text-muted-foreground'
                                                 }`}>
                                                 {m.customerName.charAt(0)}
                                             </div>
                                             <div>
-                                                <div className="font-bold text-slate-800 text-sm group-hover:text-rose-600 transition-colors">{m.customerName}</div>
-                                                <div className="text-[10px] text-slate-400 font-mono italic tracking-tighter">ID: {m.cardNumber}</div>
+                                                <div className="font-bold text-foreground text-sm group-hover:text-rose-600 transition-colors">{m.customerName}</div>
+                                                <div className="text-[10px] text-muted-foreground font-mono italic tracking-tighter">ID: {m.cardNumber}</div>
                                             </div>
                                         </div>
                                     </td>
@@ -156,28 +156,28 @@ const MemberDirectory: React.FC = () => {
                                         <div className="flex flex-col">
                                             <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block w-fit shadow-sm ${m.tier === 'Platinum' ? 'bg-rose-600 text-white' :
                                                 m.tier === 'Gold' ? 'bg-amber-400 text-amber-900' :
-                                                    'bg-slate-200 text-slate-600'
+                                                    'bg-slate-200 text-muted-foreground'
                                                 }`}>
                                                 {m.tier} Member
                                             </span>
-                                            <span className="text-[9px] text-slate-400 italic mt-1 font-medium">Joined {new Date(m.joinDate).toLocaleDateString()}</span>
+                                            <span className="text-[9px] text-muted-foreground italic mt-1 font-medium">Joined {new Date(m.joinDate).toLocaleDateString()}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5 text-center font-black text-slate-600 font-mono text-sm">
+                                    <td className="px-6 py-5 text-center font-black text-muted-foreground font-mono text-sm">
                                         {m.visitCount}
                                     </td>
                                     <td className="px-6 py-5 text-right">
-                                        <div className="text-sm font-black text-slate-800 font-mono tracking-tighter">{m.pointsBalance.toLocaleString()}</div>
+                                        <div className="text-sm font-black text-foreground font-mono tracking-tighter">{m.pointsBalance.toLocaleString()}</div>
                                         <div className="text-[9px] text-rose-500 font-bold uppercase tracking-widest mt-0.5 animate-pulse">Available</div>
                                     </td>
                                     <td className="px-6 py-5 text-right font-mono">
-                                        <div className="text-sm font-black text-slate-900 tracking-tighter">${m.totalSpend.toLocaleString()}</div>
-                                        <div className="text-[9px] text-slate-400 uppercase font-medium">Gross Value</div>
+                                        <div className="text-sm font-black text-foreground tracking-tighter">${m.totalSpend.toLocaleString()}</div>
+                                        <div className="text-[9px] text-muted-foreground uppercase font-medium">Gross Value</div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex items-center gap-1.5 focus:ring-2">
                                             <div className={`w-2 h-2 rounded-full ${m.status === 'Active' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`}></div>
-                                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">{m.status}</span>
+                                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{m.status}</span>
                                         </div>
                                     </td>
                                     <td className="px-8 py-5 text-right">
@@ -198,12 +198,12 @@ const MemberDirectory: React.FC = () => {
                                 <tr>
                                     <td colSpan={7} className="px-8 py-20 text-center">
                                         <div className="flex flex-col items-center justify-center gap-3">
-                                            <div className="p-6 bg-slate-50 rounded-3xl text-slate-200">
+                                            <div className="p-6 bg-muted/80 rounded-3xl text-slate-200">
                                                 {React.cloneElement(ICONS.users as React.ReactElement<any>, { width: 48, height: 48 })}
                                             </div>
                                             <div className="space-y-1">
-                                                <p className="text-slate-800 font-black tracking-tight text-lg">No Members Found</p>
-                                                <p className="text-slate-400 text-xs font-medium">Try adjusting your filters or search terms.</p>
+                                                <p className="text-foreground font-black tracking-tight text-lg">No Members Found</p>
+                                                <p className="text-muted-foreground text-xs font-medium">Try adjusting your filters or search terms.</p>
                                             </div>
                                             <button
                                                 onClick={() => { setSearchQuery(''); setActiveTierFilter('All'); }}
@@ -232,34 +232,34 @@ const MemberDirectory: React.FC = () => {
                         <div className="flex flex-col md:flex-row gap-8 items-start">
                             {/* Left Side: Basic Info Card */}
                             <div className="w-full md:w-1/3 space-y-4">
-                                <div className="p-8 bg-slate-50 rounded-[32px] border border-slate-100 flex flex-col items-center text-center">
+                                <div className="p-8 bg-muted/80 rounded-[32px] border border-border flex flex-col items-center text-center">
                                     <div className={`w-28 h-28 rounded-[40px] flex items-center justify-center font-black text-4xl mb-6 shadow-xl ${selectedMember.tier === 'Platinum' ? 'bg-slate-900 text-rose-600' :
                                         selectedMember.tier === 'Gold' ? 'bg-amber-400 text-amber-900' :
-                                            'bg-white text-slate-300 border-2 border-slate-100'
+                                            'bg-card text-slate-300 border-2 border-border'
                                         }`}>
                                         {(selectedMember.customerName || 'U').charAt(0)}
                                     </div>
-                                    <h4 className="text-2xl font-black text-slate-900 tracking-tight">{selectedMember.customerName || 'Unnamed Member'}</h4>
+                                    <h4 className="text-2xl font-black text-foreground tracking-tight">{selectedMember.customerName || 'Unnamed Member'}</h4>
                                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rose-600 mt-1">{selectedMember.tier} Elite Member</p>
 
-                                    <div className="w-full mt-8 pt-8 border-t border-slate-200 space-y-4">
+                                    <div className="w-full mt-8 pt-8 border-t border-border space-y-4">
                                         <div className="flex justify-between items-center text-xs">
-                                            <span className="font-bold text-slate-400 uppercase tracking-widest text-[9px]">Card Number</span>
-                                            <span className="font-mono text-slate-800 font-black">{selectedMember.cardNumber}</span>
+                                            <span className="font-bold text-muted-foreground uppercase tracking-widest text-[9px]">Card Number</span>
+                                            <span className="font-mono text-foreground font-black">{selectedMember.cardNumber}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-xs">
-                                            <span className="font-bold text-slate-400 uppercase tracking-widest text-[9px]">Mobile No</span>
-                                            <span className="font-mono text-slate-800 font-black">{selectedMember.phone || 'Not Provided'}</span>
+                                            <span className="font-bold text-muted-foreground uppercase tracking-widest text-[9px]">Mobile No</span>
+                                            <span className="font-mono text-foreground font-black">{selectedMember.phone || 'Not Provided'}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-xs">
-                                            <span className="font-bold text-slate-400 uppercase tracking-widest text-[9px]">Enrollment</span>
-                                            <span className="text-slate-800 font-black">{new Date(selectedMember.joinDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+                                            <span className="font-bold text-muted-foreground uppercase tracking-widest text-[9px]">Enrollment</span>
+                                            <span className="text-foreground font-black">{new Date(selectedMember.joinDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 <button
-                                    className="w-full py-4 bg-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all border border-transparent hover:border-rose-100"
+                                    className="w-full py-4 bg-muted text-muted-foreground rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all border border-transparent hover:border-rose-100"
                                     onClick={() => {
                                         if (window.confirm('Deactivate this member?')) {
                                             updateMember(selectedMember.id, { status: selectedMember.status === 'Active' ? 'Inactive' : 'Active' });
@@ -274,17 +274,17 @@ const MemberDirectory: React.FC = () => {
                             {/* Right Side: Performance stats and history */}
                             <div className="flex-1 space-y-8">
                                 <div className="grid grid-cols-3 gap-4">
-                                    <div className="p-6 bg-white border border-slate-100 rounded-3xl shadow-sm">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Points</p>
+                                    <div className="p-6 bg-card border border-border rounded-3xl shadow-sm">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Points</p>
                                         <p className="text-2xl font-black text-rose-600 font-mono tracking-tighter">{selectedMember.pointsBalance.toLocaleString()}</p>
                                     </div>
-                                    <div className="p-6 bg-white border border-slate-100 rounded-3xl shadow-sm">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Total LTV</p>
-                                        <p className="text-2xl font-black text-slate-900 font-mono tracking-tighter">${selectedMember.totalSpend.toLocaleString()}</p>
+                                    <div className="p-6 bg-card border border-border rounded-3xl shadow-sm">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Total LTV</p>
+                                        <p className="text-2xl font-black text-foreground font-mono tracking-tighter">${selectedMember.totalSpend.toLocaleString()}</p>
                                     </div>
-                                    <div className="p-6 bg-white border border-slate-100 rounded-3xl shadow-sm">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Visit Count</p>
-                                        <p className="text-2xl font-black text-slate-900 font-mono tracking-tighter">{selectedMember.visitCount}</p>
+                                    <div className="p-6 bg-card border border-border rounded-3xl shadow-sm">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Visit Count</p>
+                                        <p className="text-2xl font-black text-foreground font-mono tracking-tighter">{selectedMember.visitCount}</p>
                                     </div>
                                 </div>
 
@@ -294,15 +294,15 @@ const MemberDirectory: React.FC = () => {
                                         <div className="grid grid-cols-3 gap-4">
                                             <div>
                                                 <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest">Total Debit</p>
-                                                <p className="text-lg font-black text-slate-800 font-mono">{CURRENCY} {(khataSummary ?? { totalDebit: 0 }).totalDebit.toLocaleString()}</p>
+                                                <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {(khataSummary ?? { totalDebit: 0 }).totalDebit.toLocaleString()}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest">Total Credit</p>
-                                                <p className="text-lg font-black text-slate-800 font-mono">{CURRENCY} {(khataSummary ?? { totalCredit: 0 }).totalCredit.toLocaleString()}</p>
+                                                <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {(khataSummary ?? { totalCredit: 0 }).totalCredit.toLocaleString()}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest">Current Balance</p>
-                                                <p className={`text-lg font-black font-mono ${(khataSummary?.balance ?? 0) > 0 ? 'text-amber-600' : 'text-slate-800'}`}>{CURRENCY} {(khataSummary ?? { balance: 0 }).balance.toLocaleString()}</p>
+                                                <p className={`text-lg font-black font-mono ${(khataSummary?.balance ?? 0) > 0 ? 'text-amber-600' : 'text-foreground'}`}>{CURRENCY} {(khataSummary ?? { balance: 0 }).balance.toLocaleString()}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -310,31 +310,31 @@ const MemberDirectory: React.FC = () => {
 
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <h5 className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2 uppercase">
+                                        <h5 className="text-sm font-black text-foreground tracking-tight flex items-center gap-2 uppercase">
                                             {ICONS.barChart} Transaction History
                                         </h5>
                                         <button className="text-[10px] font-black text-rose-600 uppercase tracking-widest">Full Ledger</button>
                                     </div>
 
-                                    <div className="bg-slate-50/50 rounded-3xl border border-slate-100 overflow-hidden">
+                                    <div className="bg-muted/80/50 rounded-3xl border border-border overflow-hidden">
                                         {getMemberTransactions(selectedMember.id).length > 0 ? (
                                             <div className="divide-y divide-slate-100">
                                                 {getMemberTransactions(selectedMember.id).map(tx => (
-                                                    <div key={tx.id} className="p-4 flex justify-between items-center hover:bg-white transition-colors">
+                                                    <div key={tx.id} className="p-4 flex justify-between items-center hover:bg-card transition-colors">
                                                         <div className="flex items-center gap-4">
                                                             <div className={`p-2 rounded-lg ${tx.type === 'Earn' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                                                                 {tx.type === 'Earn' ? ICONS.plus : ICONS.minus}
                                                             </div>
                                                             <div>
-                                                                <p className="text-[11px] font-bold text-slate-800 uppercase tracking-tighter">Sale Ref: #{tx.referenceId.slice(-8)}</p>
-                                                                <p className="text-[9px] text-slate-400 font-medium italic">{new Date(tx.timestamp).toLocaleString()}</p>
+                                                                <p className="text-[11px] font-bold text-foreground uppercase tracking-tighter">Sale Ref: #{tx.referenceId.slice(-8)}</p>
+                                                                <p className="text-[9px] text-muted-foreground font-medium italic">{new Date(tx.timestamp).toLocaleString()}</p>
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
                                                             <p className={`text-xs font-black font-mono ${tx.type === 'Earn' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                                                 {tx.type === 'Earn' ? '+' : '-'}{tx.points} Pts
                                                             </p>
-                                                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.1em]">Verified</p>
+                                                            <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-[0.1em]">Verified</p>
                                                         </div>
                                                     </div>
                                                 ))}

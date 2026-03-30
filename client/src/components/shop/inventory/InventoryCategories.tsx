@@ -10,6 +10,11 @@ import Select from '../../ui/Select';
 
 type CategoryKind = 'main' | 'sub';
 
+interface CategoryTree {
+    category: ShopProductCategory;
+    children: ShopProductCategory[];
+}
+
 const InventoryCategories: React.FC = () => {
     const [categories, setCategories] = useState<ShopProductCategory[]>([]);
     const [loading, setLoading] = useState(true);
@@ -20,6 +25,7 @@ const InventoryCategories: React.FC = () => {
     const [categoryKind, setCategoryKind] = useState<CategoryKind>('main');
     const [parentId, setParentId] = useState('');
     const [saving, setSaving] = useState(false);
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
     const mainCategories = useMemo(
         () =>
@@ -28,6 +34,47 @@ const InventoryCategories: React.FC = () => {
                 .sort((a, b) => a.name.localeCompare(b.name)),
         [categories]
     );
+
+    const categoryTree = useMemo<CategoryTree[]>(() => {
+        const subsByParent = new Map<string, ShopProductCategory[]>();
+        for (const cat of categories) {
+            if (cat.parent_id) {
+                const list = subsByParent.get(cat.parent_id) || [];
+                list.push(cat);
+                subsByParent.set(cat.parent_id, list);
+            }
+        }
+        return mainCategories.map((main) => ({
+            category: main,
+            children: (subsByParent.get(main.id) || []).sort((a, b) =>
+                a.name.localeCompare(b.name)
+            ),
+        }));
+    }, [categories, mainCategories]);
+
+    const toggleExpand = (id: string) => {
+        setExpandedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const expandAll = () => {
+        setExpandedIds(new Set(mainCategories.filter((m) => {
+            return categories.some((c) => c.parent_id === m.id);
+        }).map((m) => m.id)));
+    };
+
+    const collapseAll = () => setExpandedIds(new Set());
+
+    const allExpanded = useMemo(() => {
+        const withChildren = mainCategories.filter((m) =>
+            categories.some((c) => c.parent_id === m.id)
+        );
+        return withChildren.length > 0 && withChildren.every((m) => expandedIds.has(m.id));
+    }, [mainCategories, categories, expandedIds]);
 
     const loadCategories = useCallback(async () => {
         try {
@@ -46,11 +93,16 @@ const InventoryCategories: React.FC = () => {
         loadCategories();
     }, [loadCategories]);
 
-    const openAdd = () => {
+    const openAdd = (presetParentId?: string) => {
         setEditingId(null);
         setFormName('');
-        setCategoryKind('main');
-        setParentId('');
+        if (presetParentId) {
+            setCategoryKind('sub');
+            setParentId(presetParentId);
+        } else {
+            setCategoryKind('main');
+            setParentId('');
+        }
         setIsModalOpen(true);
     };
 
@@ -102,7 +154,11 @@ const InventoryCategories: React.FC = () => {
         !saving;
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm('Remove this category? Products using it will have their category cleared.')) return;
+        const hasSubs = categories.some((c) => c.parent_id === id);
+        const msg = hasSubs
+            ? 'Remove this category and all its subcategories? Products using them will have their category cleared.'
+            : 'Remove this category? Products using it will have their category cleared.';
+        if (!window.confirm(msg)) return;
         try {
             await shopApi.deleteShopCategory(id);
             await loadCategories();
@@ -111,57 +167,137 @@ const InventoryCategories: React.FC = () => {
         }
     };
 
+    const totalSubs = categories.filter((c) => c.parent_id).length;
+
     return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+            <div className="p-6 border-b border-border flex justify-between items-center">
                 <div>
-                    <h2 className="text-lg font-bold text-slate-800">Product Categories</h2>
-                    <p className="text-slate-500 text-sm mt-0.5">Manage categories used when creating SKUs.</p>
+                    <h2 className="text-lg font-bold text-foreground">Product Categories</h2>
+                    <p className="text-muted-foreground text-sm mt-0.5">
+                        Manage categories and subcategories used when creating SKUs.
+                    </p>
                 </div>
-                <Button onClick={openAdd}>{ICONS.plus} Add Category</Button>
+                <Button onClick={() => openAdd()}>{ICONS.plus} Add Category</Button>
             </div>
             <div className="p-6">
-                {loading && <p className="text-slate-500 text-sm">Loading...</p>}
+                {loading && <p className="text-muted-foreground text-sm">Loading...</p>}
                 {error && <p className="text-rose-600 text-sm mb-3">{error}</p>}
                 {!loading && categories.length === 0 && !error && (
-                    <p className="text-slate-500 text-sm">No categories yet. Add one to use in product creation.</p>
+                    <p className="text-muted-foreground text-sm">No categories yet. Add one to use in product creation.</p>
                 )}
                 {!loading && categories.length > 0 && (
-                    <ul className="divide-y divide-slate-100">
-                        {categories.map(cat => {
-                            const parentName = cat.parent_id
-                                ? categories.find((c) => c.id === cat.parent_id)?.name
-                                : null;
-                            return (
-                            <li key={cat.id} className="py-3 flex items-center justify-between gap-4">
-                                <span className="font-medium text-slate-800">
-                                    {cat.name}
-                                    {parentName != null && (
-                                        <span className="text-slate-500 font-normal text-sm ml-2">
-                                            (under {parentName})
-                                        </span>
-                                    )}
-                                </span>
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => openEdit(cat)}
-                                        className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-                                    >
-                                        Edit
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleDelete(cat.id)}
-                                        className="text-sm text-rose-600 hover:text-rose-800 font-medium"
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
-                            </li>
-                            );
-                        })}
-                    </ul>
+                    <>
+                        <div className="flex items-center justify-between mb-4">
+                            <p className="text-sm text-muted-foreground">
+                                {mainCategories.length} {mainCategories.length === 1 ? 'category' : 'categories'}
+                                {totalSubs > 0 && (
+                                    <span> · {totalSubs} {totalSubs === 1 ? 'subcategory' : 'subcategories'}</span>
+                                )}
+                            </p>
+                            {totalSubs > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={allExpanded ? collapseAll : expandAll}
+                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                                >
+                                    {allExpanded ? 'Collapse all' : 'Expand all'}
+                                </button>
+                            )}
+                        </div>
+                        <div className="divide-y divide-slate-100">
+                            {categoryTree.map(({ category: main, children: subs }) => {
+                                const hasSubs = subs.length > 0;
+                                const isExpanded = expandedIds.has(main.id);
+                                return (
+                                    <div key={main.id}>
+                                        <div className="py-3 flex items-center justify-between gap-4">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                {hasSubs ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleExpand(main.id)}
+                                                        aria-label={isExpanded ? 'Collapse subcategories' : 'Expand subcategories'}
+                                                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
+                                                    >
+                                                        <svg
+                                                            className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                            strokeWidth={2.5}
+                                                        >
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                                        </svg>
+                                                    </button>
+                                                ) : (
+                                                    <span className="w-5 flex-shrink-0" />
+                                                )}
+                                                <span className="font-medium text-foreground">{main.name}</span>
+                                                {hasSubs && (
+                                                    <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-medium bg-muted text-muted-foreground rounded-full">
+                                                        {subs.length}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openAdd(main.id)}
+                                                    className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
+                                                    title="Add subcategory"
+                                                >
+                                                    + Sub
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => openEdit(main)}
+                                                    className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDelete(main.id)}
+                                                    className="text-sm text-rose-600 hover:text-rose-800 font-medium"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {hasSubs && isExpanded && (
+                                            <div className="ml-7 border-l-2 border-border">
+                                                {subs.map((sub) => (
+                                                    <div
+                                                        key={sub.id}
+                                                        className="py-2.5 pl-4 flex items-center justify-between gap-4"
+                                                    >
+                                                        <span className="text-sm text-muted-foreground">{sub.name}</span>
+                                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEdit(sub)}
+                                                                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDelete(sub.id)}
+                                                                className="text-sm text-rose-600 hover:text-rose-800 font-medium"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
                 )}
             </div>
 
@@ -179,9 +315,9 @@ const InventoryCategories: React.FC = () => {
                         onChange={(e) => setFormName(e.target.value)}
                     />
                     <div>
-                        <div className="block text-sm font-medium text-slate-700 mb-2">Category type</div>
+                        <div className="block text-sm font-medium text-foreground mb-2">Category type</div>
                         <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
-                            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-800">
+                            <label className="flex items-center gap-2 cursor-pointer text-sm text-foreground">
                                 <input
                                     type="radio"
                                     name="category-kind"
@@ -194,7 +330,7 @@ const InventoryCategories: React.FC = () => {
                                 />
                                 Main category
                             </label>
-                            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-800">
+                            <label className="flex items-center gap-2 cursor-pointer text-sm text-foreground">
                                 <input
                                     type="radio"
                                     name="category-kind"

@@ -113,16 +113,16 @@ const WarehouseHeatmapModal: React.FC<WarehouseHeatmapModalProps> = ({
             className="max-w-[min(96vw,1200px)]"
         >
             <div className="space-y-4">
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-muted-foreground">
                     Units per branch by product category (from per-warehouse stock). Darker cells hold more units in
                     that location.
                 </p>
                 {warehouses.length === 0 ? (
-                    <p className="text-sm text-slate-500 italic">Add warehouses or branches to see the heatmap.</p>
+                    <p className="text-sm text-muted-foreground italic">Add warehouses or branches to see the heatmap.</p>
                 ) : items.length === 0 ? (
-                    <p className="text-sm text-slate-500 italic">No inventory items to display.</p>
+                    <p className="text-sm text-muted-foreground italic">No inventory items to display.</p>
                 ) : columnCategories.length === 0 ? (
-                    <p className="text-sm text-slate-500 italic">No category breakdown available.</p>
+                    <p className="text-sm text-muted-foreground italic">No category breakdown available.</p>
                 ) : (
                     <>
                     {!hasWarehouseBreakdown && items.some((i) => i.onHand > 0) && warehouses.length !== 1 && (
@@ -131,11 +131,11 @@ const WarehouseHeatmapModal: React.FC<WarehouseHeatmapModalProps> = ({
                             movements that assign units to warehouses will fill this heatmap.
                         </p>
                     )}
-                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <div className="overflow-x-auto rounded-xl border border-border">
                         <table className="w-full min-w-[640px] text-left text-xs">
                             <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wide text-slate-500">
-                                    <th className="sticky left-0 z-[1] min-w-[140px] bg-slate-50 px-3 py-3 text-slate-700">
+                                <tr className="border-b border-border bg-muted/80 text-[10px] font-black uppercase tracking-wide text-muted-foreground">
+                                    <th className="sticky left-0 z-[1] min-w-[140px] bg-muted/80 px-3 py-3 text-foreground">
                                         Warehouse
                                     </th>
                                     {columnCategories.map((cat) => (
@@ -145,38 +145,38 @@ const WarehouseHeatmapModal: React.FC<WarehouseHeatmapModalProps> = ({
                                             </span>
                                         </th>
                                     ))}
-                                    <th className="min-w-[72px] bg-slate-100 px-2 py-3 text-center text-slate-700">Total</th>
+                                    <th className="min-w-[72px] bg-muted px-2 py-3 text-center text-foreground">Total</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {rows.map((r) => (
                                     <tr key={r.warehouse.id}>
-                                        <td className="sticky left-0 z-[1] bg-white px-3 py-2 font-bold text-slate-700 shadow-[2px_0_6px_-2px_rgba(0,0,0,0.06)]">
+                                        <td className="sticky left-0 z-[1] bg-card px-3 py-2 font-bold text-foreground shadow-[2px_0_6px_-2px_rgba(0,0,0,0.06)]">
                                             {r.warehouse.name}
                                         </td>
                                         {r.cells.map((units, i) => (
                                             <td
                                                 key={`${r.warehouse.id}-${columnCategories[i]}`}
-                                                className="px-1 py-1 text-center font-mono text-[11px] font-semibold text-slate-800"
+                                                className="px-1 py-1 text-center font-mono text-[11px] font-semibold text-foreground"
                                                 style={cellBackground(units, maxCell)}
                                                 title={`${r.warehouse.name} · ${columnCategories[i]}: ${units} units`}
                                             >
                                                 {units}
                                             </td>
                                         ))}
-                                        <td className="bg-slate-50 px-2 py-2 text-center font-mono text-[11px] font-black text-slate-800">
+                                        <td className="bg-muted/80 px-2 py-2 text-center font-mono text-[11px] font-black text-foreground">
                                             {r.rowTotal}
                                         </td>
                                     </tr>
                                 ))}
-                                <tr className="border-t-2 border-slate-200 bg-slate-50 font-black">
-                                    <td className="sticky left-0 z-[1] bg-slate-50 px-3 py-2 text-slate-700">Total</td>
+                                <tr className="border-t-2 border-border bg-muted/80 font-black">
+                                    <td className="sticky left-0 z-[1] bg-muted/80 px-3 py-2 text-foreground">Total</td>
                                     {columnTotals.map((t, i) => (
                                         <td key={`col-total-${i}`} className="px-2 py-2 text-center font-mono text-[11px]">
                                             {t}
                                         </td>
                                     ))}
-                                    <td className="bg-slate-100 px-2 py-2 text-center font-mono text-[11px] text-indigo-700">
+                                    <td className="bg-muted px-2 py-2 text-center font-mono text-[11px] text-indigo-700">
                                         {grandTotal}
                                     </td>
                                 </tr>
@@ -186,7 +186,7 @@ const WarehouseHeatmapModal: React.FC<WarehouseHeatmapModalProps> = ({
                     </>
                 )}
                 {categoriesTruncated && (
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[11px] text-muted-foreground">
                         Showing top {MAX_CATEGORY_COLUMNS} categories by total units. Refine products or categories for
                         more detail.
                     </p>

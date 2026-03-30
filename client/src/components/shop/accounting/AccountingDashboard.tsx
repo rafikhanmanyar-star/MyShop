@@ -29,7 +29,7 @@ const AccountingDashboard: React.FC = () => {
             {loading && (
                 <div className="text-center py-4">
                     <div className="animate-spin inline-block w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-                    <p className="text-xs text-slate-400 mt-2">Loading financial data...</p>
+                    <p className="text-xs text-muted-foreground mt-2">Loading financial data...</p>
                 </div>
             )}
 
@@ -41,8 +41,8 @@ const AccountingDashboard: React.FC = () => {
                             {React.cloneElement(m.icon as React.ReactElement<any>, { width: 28, height: 28 })}
                         </div>
                         <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-slate-400">{m.label}</p>
-                            <p className="text-2xl font-black text-slate-800 tracking-tight">
+                            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{m.label}</p>
+                            <p className="text-2xl font-black text-foreground tracking-tight">
                                 {m.isString ? m.value : `${CURRENCY} ${Number(m.value || 0).toLocaleString()}`}
                             </p>
                         </div>
@@ -54,7 +54,7 @@ const AccountingDashboard: React.FC = () => {
                 {/* Revenue by Source — POS vs Mobile */}
                 <Card className="lg:col-span-2 border-none shadow-sm p-8 space-y-6">
                     <div className="flex justify-between items-center">
-                        <h3 className="font-bold text-slate-800">Revenue by Source</h3>
+                        <h3 className="font-bold text-foreground">Revenue by Source</h3>
                         <div className="flex gap-4">
                             <span className="flex items-center gap-2 text-[10px] font-bold text-indigo-600">
                                 <span className="w-2 h-2 bg-indigo-600 rounded-full"></span> POS Sales
@@ -71,15 +71,15 @@ const AccountingDashboard: React.FC = () => {
                             <div className="space-y-2">
                                 <div className="flex justify-between items-end">
                                     <div>
-                                        <p className="text-sm font-black text-slate-800">POS Sales</p>
-                                        <p className="text-[10px] text-slate-400 font-bold">{salesBySource?.pos?.totalOrders || 0} transactions</p>
+                                        <p className="text-sm font-black text-foreground">POS Sales</p>
+                                        <p className="text-[10px] text-muted-foreground font-bold">{salesBySource?.pos?.totalOrders || 0} transactions</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-lg font-black text-slate-800 font-mono">{CURRENCY} {posRevenue.toLocaleString()}</p>
+                                        <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {posRevenue.toLocaleString()}</p>
                                         <p className="text-[10px] text-indigo-500 font-black">{posPercent.toFixed(1)}%</p>
                                     </div>
                                 </div>
-                                <div className="h-3 bg-slate-50 rounded-full overflow-hidden">
+                                <div className="h-3 bg-muted/80 rounded-full overflow-hidden">
                                     <div className="h-full bg-indigo-600 transition-all duration-1000 rounded-full" style={{ width: `${posPercent}%` }}></div>
                                 </div>
                             </div>
@@ -88,15 +88,15 @@ const AccountingDashboard: React.FC = () => {
                             <div className="space-y-2">
                                 <div className="flex justify-between items-end">
                                     <div>
-                                        <p className="text-sm font-black text-slate-800">Mobile App Orders</p>
-                                        <p className="text-[10px] text-slate-400 font-bold">{salesBySource?.mobile?.totalOrders || 0} orders</p>
+                                        <p className="text-sm font-black text-foreground">Mobile App Orders</p>
+                                        <p className="text-[10px] text-muted-foreground font-bold">{salesBySource?.mobile?.totalOrders || 0} orders</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-lg font-black text-slate-800 font-mono">{CURRENCY} {mobileRevenue.toLocaleString()}</p>
+                                        <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {mobileRevenue.toLocaleString()}</p>
                                         <p className="text-[10px] text-emerald-500 font-black">{mobilePercent.toFixed(1)}%</p>
                                     </div>
                                 </div>
-                                <div className="h-3 bg-slate-50 rounded-full overflow-hidden">
+                                <div className="h-3 bg-muted/80 rounded-full overflow-hidden">
                                     <div className="h-full bg-emerald-500 transition-all duration-1000 rounded-full" style={{ width: `${mobilePercent}%` }}></div>
                                 </div>
                                 {(salesBySource?.mobile?.unpaidCount || 0) > 0 && (
@@ -109,7 +109,7 @@ const AccountingDashboard: React.FC = () => {
                             </div>
 
                             {/* Avg Order Value Comparison */}
-                            <div className="flex gap-4 pt-4 border-t border-slate-100">
+                            <div className="flex gap-4 pt-4 border-t border-border">
                                 <div className="flex-1 p-4 bg-indigo-50 rounded-xl">
                                     <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">POS Avg. Order</p>
                                     <p className="text-lg font-black text-indigo-900 font-mono">{CURRENCY} {(salesBySource?.pos?.avgOrderValue || 0).toFixed(0)}</p>
@@ -121,7 +121,7 @@ const AccountingDashboard: React.FC = () => {
                             </div>
                         </div>
                     ) : (
-                        <div className="h-64 bg-slate-50 rounded-2xl border border-dashed border-slate-200 flex items-center justify-center text-slate-300">
+                        <div className="h-64 bg-muted/80 rounded-2xl border border-dashed border-border flex items-center justify-center text-slate-300">
                             <div className="text-center">
                                 {React.cloneElement(ICONS.barChart as React.ReactElement<any>, { width: 48, height: 48, className: 'mx-auto opacity-20' })}
                                 <p className="text-xs font-bold uppercase tracking-widest mt-2">No sales data yet. Complete a POS or mobile sale to see data here.</p>
@@ -132,25 +132,25 @@ const AccountingDashboard: React.FC = () => {
 
                 {/* Cash & Bank Summary */}
                 <Card className="border-none shadow-sm p-6 space-y-6 flex flex-col">
-                    <h3 className="font-bold text-slate-800">Cash & Bank Balances</h3>
+                    <h3 className="font-bold text-foreground">Cash & Bank Balances</h3>
                     <div className="space-y-4 flex-1 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
                         {bankAccounts.length === 0 ? (
-                            <div className="p-8 text-center text-slate-400 text-xs font-medium">
+                            <div className="p-8 text-center text-muted-foreground text-xs font-medium">
                                 No bank accounts linked yet. Use Settings to create them.
                             </div>
                         ) : (
                             bankAccounts.map((acc: any, i: number) => (
-                                <div key={i} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group hover:border-indigo-200 transition-all">
+                                <div key={i} className="flex items-center justify-between p-4 bg-muted/80 rounded-2xl border border-border group hover:border-indigo-200 transition-all">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 group-hover:text-indigo-600">
+                                        <div className="w-10 h-10 rounded-xl bg-card flex items-center justify-center text-muted-foreground shadow-sm border border-border group-hover:text-indigo-600">
                                             {acc.account_type === 'Cash' ? ICONS.wallet : ICONS.building}
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-sm font-bold text-slate-800 truncate">{acc.name}</p>
-                                            <p className="text-[10px] text-slate-400 font-medium uppercase">{acc.code || acc.account_type}</p>
+                                            <p className="text-sm font-bold text-foreground truncate">{acc.name}</p>
+                                            <p className="text-[10px] text-muted-foreground font-medium uppercase">{acc.code || acc.account_type}</p>
                                         </div>
                                     </div>
-                                    <div className="text-sm font-black text-slate-900 font-mono">
+                                    <div className="text-sm font-black text-foreground font-mono">
                                         {CURRENCY} {(parseFloat(acc.balance) || 0).toLocaleString()}
                                     </div>
                                 </div>
@@ -160,13 +160,13 @@ const AccountingDashboard: React.FC = () => {
 
                     {/* Account Ledger Balances */}
                     {accounts.filter(a => a.type === 'Asset').length > 0 && (
-                        <div className="border-t border-slate-100 pt-4">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Ledger Account Balances</p>
+                        <div className="border-t border-border pt-4">
+                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Ledger Account Balances</p>
                             <div className="space-y-2">
                                 {accounts.filter(a => a.type === 'Asset' || a.type === 'Income').slice(0, 5).map((acc: any, i: number) => (
                                     <div key={i} className="flex justify-between text-xs">
-                                        <span className="text-slate-600 font-medium">{acc.code} — {acc.name}</span>
-                                        <span className="font-mono font-bold text-slate-800">{acc.balance.toLocaleString()}</span>
+                                        <span className="text-muted-foreground font-medium">{acc.code} — {acc.name}</span>
+                                        <span className="font-mono font-bold text-foreground">{acc.balance.toLocaleString()}</span>
                                     </div>
                                 ))}
                             </div>
