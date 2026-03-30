@@ -187,7 +187,7 @@ function AppLayout() {
           <Suspense fallback={
             <div className="flex items-center justify-center min-h-[60vh]">
               <div className="relative w-12 h-12">
-                <div className="absolute inset-0 border-4 border-indigo-200 rounded-full"></div>
+                <div className="absolute inset-0 border-4 border-indigo-200 dark:border-indigo-800 rounded-full"></div>
                 <div className="absolute inset-0 border-4 border-indigo-600 rounded-full animate-spin border-t-transparent"></div>
               </div>
             </div>

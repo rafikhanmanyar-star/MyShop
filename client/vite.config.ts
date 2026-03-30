@@ -14,6 +14,10 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiTarget = env.VITE_API_URL || 'http://localhost:3000';
 
+  /** Electron `loadFile()` uses file:// — absolute `/assets/...` breaks (ERR_FILE_NOT_FOUND). Use `npm run build:cloud` or `--mode cloud`. */
+  const useRelativeAssetBase =
+    process.env.VITE_ELECTRON_BUILD === '1' || mode === 'cloud';
+
   return {
     plugins: [react(), tailwindcss()],
     define: {
@@ -22,7 +26,7 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: {
       exclude: ['react-window'],
     },
-    base: process.env.VITE_ELECTRON_BUILD === '1' ? './' : '/',
+    base: useRelativeAssetBase ? './' : '/',
     server: {
       port: 5173,
       proxy: {

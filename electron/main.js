@@ -171,6 +171,8 @@ function createWindow() {
   if (isCloud) {
     const clientPath = getClientDistPath();
     const indexPath = path.join(clientPath, 'index.html');
+    // file:// loads must use relative asset URLs (./assets/...) from `npm run build:cloud`.
+    // A plain client `vite build` emits /assets/... which resolves to the drive root and 404s.
     win.loadFile(indexPath);
   } else {
     win.loadURL(`http://localhost:${PORT}`);
