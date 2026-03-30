@@ -9,7 +9,32 @@ import HeldSalesModal from './pos/HeldSalesModal';
 import CustomerSelectionModal from './pos/CustomerSelectionModal';
 import SalesHistoryModal from './pos/SalesHistoryModal';
 import { useAppContext } from '../../context/AppContext';
+import { POSColumnResizeHandle } from './pos/POSColumnResizeHandle';
 import './pos/POSStyles.css';
+
+const STORAGE_POS_LEFT_W = 'pos-layout-left-w-px';
+const STORAGE_POS_RIGHT_W = 'pos-layout-right-w-px';
+
+const MIN_LEFT_W = 220;
+const MAX_LEFT_W = 520;
+const MIN_RIGHT_W = 180;
+const MAX_RIGHT_W = 400;
+/** Default: slightly narrower than before so the bill / product grid column gains space. */
+const DEFAULT_LEFT_W = 280;
+/** Default: narrower checkout / cart sidebar (was ~320px fixed). */
+const DEFAULT_RIGHT_W = 260;
+
+function loadStoredWidth(key: string, fallback: number, min: number, max: number): number {
+    try {
+        const v = localStorage.getItem(key);
+        if (v === null) return fallback;
+        const n = parseInt(v, 10);
+        if (!Number.isFinite(n)) return fallback;
+        return Math.min(max, Math.max(min, n));
+    } catch {
+        return fallback;
+    }
+}
 
 const POSSalesContent: React.FC = () => {
     const { state } = useAppContext();
@@ -29,6 +54,79 @@ const POSSalesContent: React.FC = () => {
         setIsDenseMode
     } = usePOS();
     const mainRef = useRef<HTMLDivElement>(null);
+
+    const [leftColWidthPx, setLeftColWidthPx] = useState(() =>
+        loadStoredWidth(STORAGE_POS_LEFT_W, DEFAULT_LEFT_W, MIN_LEFT_W, MAX_LEFT_W)
+    );
+    const [rightColWidthPx, setRightColWidthPx] = useState(() =>
+        loadStoredWidth(STORAGE_POS_RIGHT_W, DEFAULT_RIGHT_W, MIN_RIGHT_W, MAX_RIGHT_W)
+    );
+
+    const persistLeft = useCallback((w: number) => {
+        const clamped = Math.min(MAX_LEFT_W, Math.max(MIN_LEFT_W, Math.round(w)));
+        setLeftColWidthPx(clamped);
+        try {
+            localStorage.setItem(STORAGE_POS_LEFT_W, String(clamped));
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    const persistRight = useCallback((w: number) => {
+        const clamped = Math.min(MAX_RIGHT_W, Math.max(MIN_RIGHT_W, Math.round(w)));
+        setRightColWidthPx(clamped);
+        try {
+            localStorage.setItem(STORAGE_POS_RIGHT_W, String(clamped));
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    const startResizeLeft = useCallback(
+        (e: React.MouseEvent) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startW = leftColWidthPx;
+            const onMove = (ev: MouseEvent) => {
+                const dx = ev.clientX - startX;
+                persistLeft(startW + dx);
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            };
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        },
+        [leftColWidthPx, persistLeft]
+    );
+
+    const startResizeRight = useCallback(
+        (e: React.MouseEvent) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startW = rightColWidthPx;
+            const onMove = (ev: MouseEvent) => {
+                const dx = ev.clientX - startX;
+                persistRight(startW + dx);
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            };
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        },
+        [rightColWidthPx, persistRight]
+    );
 
     const isActive = (state as any).currentPage === 'posSales' || true; // Fallback to true if not managed by AppContext
 
@@ -164,23 +262,36 @@ const POSSalesContent: React.FC = () => {
             {/* Top Status Bar */}
             <POSHeader />
 
-            <div className="flex flex-1 min-h-0 w-full min-w-0 relative p-4 md:p-6 gap-4 md:gap-6 z-10 overflow-hidden">
-                {/* Left Panel: Search & Products */}
-                <div className="flex flex-col bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20 min-w-0 w-[28%] max-w-[420px] flex-shrink-0">
+            <div className="flex flex-1 min-h-0 w-full min-w-0 relative p-4 md:p-6 gap-0 z-10 overflow-hidden">
+                {/* Left: category tree + product grid */}
+                <div
+                    className="flex flex-col bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20 min-w-0 flex-shrink-0"
+                    style={{ width: leftColWidthPx, minWidth: MIN_LEFT_W, maxWidth: MAX_LEFT_W }}
+                >
                     <ProductSearch />
                 </div>
 
-                {/* Center & Right Panel Container */}
-                <div className="flex-1 flex gap-4 md:gap-6 min-w-0 overflow-hidden">
-                    {/* Center Panel: Cart / Bill Grid */}
-                    <div className="flex-1 flex flex-col min-w-0 bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden">
-                        <CartGrid />
-                    </div>
+                <POSColumnResizeHandle
+                    aria-label="Resize catalog and bill columns"
+                    onMouseDown={startResizeLeft}
+                />
 
-                    {/* Right Panel: Totals & Payments */}
-                    <div className="w-[320px] min-w-[280px] max-w-[380px] flex flex-col flex-shrink-0 bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20">
-                        <CheckoutPanel />
-                    </div>
+                {/* Center: line items (bill grid) — grows with remaining space */}
+                <div className="flex-1 flex flex-col min-w-[200px] bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden min-h-0">
+                    <CartGrid />
+                </div>
+
+                <POSColumnResizeHandle
+                    aria-label="Resize bill and checkout columns"
+                    onMouseDown={startResizeRight}
+                />
+
+                {/* Right: customer, totals, payment */}
+                <div
+                    className="flex flex-col flex-shrink-0 bg-white rounded-3xl border border-[#e2e8f0] shadow-sm overflow-hidden z-20 min-h-0"
+                    style={{ width: rightColWidthPx, minWidth: MIN_RIGHT_W, maxWidth: MAX_RIGHT_W }}
+                >
+                    <CheckoutPanel />
                 </div>
             </div>
 

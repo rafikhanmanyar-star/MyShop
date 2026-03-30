@@ -85,8 +85,10 @@ export const shopApi = {
   deleteTerminal: (id: string) => apiClient.delete(`/shop/terminals/${id}`),
 
   getShopCategories: () => apiClient.get<ShopProductCategory[]>('/shop/categories'),
-  createShopCategory: (data: { name: string }) => apiClient.post<{ id: string }>('/shop/categories', data),
-  updateShopCategory: (id: string, data: { name: string }) => apiClient.put(`/shop/categories/${id}`, data),
+  createShopCategory: (data: { name: string; parentId?: string | null }) =>
+    apiClient.post<{ id: string }>('/shop/categories', data),
+  updateShopCategory: (id: string, data: { name: string; parentId?: string | null }) =>
+    apiClient.put(`/shop/categories/${id}`, data),
   deleteShopCategory: (id: string) => apiClient.delete(`/shop/categories/${id}`),
 
   getProducts: () => apiClient.get<ShopProduct[]>('/shop/products'),

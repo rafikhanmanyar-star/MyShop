@@ -9,6 +9,8 @@ const STORE_NAME = 'pending_categories';
 export interface PendingCategoryItem {
   localId: string;
   name: string;
+  /** When set, create as subcategory of this main category id */
+  parentId?: string | null;
   createdAt: string;
   status: 'pending' | 'syncing' | 'synced' | 'failed';
   serverId?: string;
@@ -19,12 +21,13 @@ function generateLocalId(): string {
   return `pos-cat-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-export async function addPendingCategory(name: string): Promise<string> {
+export async function addPendingCategory(name: string, parentId?: string | null): Promise<string> {
   const db = await openPosOfflineDb();
   const localId = generateLocalId();
   const item: PendingCategoryItem = {
     localId,
     name,
+    parentId: parentId ?? undefined,
     createdAt: new Date().toISOString(),
     status: 'pending',
   };

@@ -24,36 +24,58 @@ function isRetryableError(err: any): boolean {
   return /unavailable|bad gateway|network|timed out|failed to fetch/i.test(msg);
 }
 
-export async function createCategoryOfflineFirst(name: string): Promise<{
+export async function createCategoryOfflineFirst(
+  name: string,
+  parentId?: string | null
+): Promise<{
   synced: boolean;
   id?: string;
   localId?: string;
 }> {
   const tenantId = getTenantId();
+  const payload = { name, ...(parentId ? { parentId } : {}) };
   if (isOnline()) {
     try {
-      const result = await shopApi.createShopCategory({ name });
+      const result = await shopApi.createShopCategory(payload);
       const list = await shopApi.getShopCategories();
       if (tenantId) await setCategories(tenantId, Array.isArray(list) ? list : []);
       return { synced: true, id: result?.id };
     } catch (err: any) {
       if (!isOnline() || isRetryableError(err)) {
-        const localId = await addPendingCategory(name);
+        const localId = await addPendingCategory(name, parentId);
         if (tenantId) {
           const cached = await getCachedCategories(tenantId);
           const items = cached?.items ?? [];
-          await setCategories(tenantId, [...items, { id: localId, name, type: 'product', created_at: new Date().toISOString() }]);
+          await setCategories(tenantId, [
+            ...items,
+            {
+              id: localId,
+              name,
+              type: 'product',
+              parent_id: parentId ?? null,
+              created_at: new Date().toISOString(),
+            },
+          ]);
         }
         return { synced: false, localId };
       }
       throw err;
     }
   }
-  const localId = await addPendingCategory(name);
+  const localId = await addPendingCategory(name, parentId);
   if (tenantId) {
     const cached = await getCachedCategories(tenantId);
     const items = cached?.items ?? [];
-    await setCategories(tenantId, [...items, { id: localId, name, type: 'product', created_at: new Date().toISOString() }]);
+    await setCategories(tenantId, [
+      ...items,
+      {
+        id: localId,
+        name,
+        type: 'product',
+        parent_id: parentId ?? null,
+        created_at: new Date().toISOString(),
+      },
+    ]);
   }
   return { synced: false, localId };
 }
@@ -71,7 +93,10 @@ export async function processPendingCategoryQueue(): Promise<{
     if (!isOnline()) break;
     await setPendingCategoryStatus(item.localId, 'syncing');
     try {
-      const result = await shopApi.createShopCategory({ name: item.name });
+      const result = await shopApi.createShopCategory({
+        name: item.name,
+        ...(item.parentId ? { parentId: item.parentId } : {}),
+      });
       await setPendingCategoryStatus(item.localId, 'synced', result?.id);
       await removePendingCategory(item.localId);
       succeeded++;

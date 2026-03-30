@@ -7,7 +7,7 @@ import {
     ChevronRight, WifiOff, Wifi, QrCode, Settings as SettingsIcon,
     Filter, Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
     Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
-    Banknote, Building2, Wallet,
+    Banknote, Building2, Wallet, KeyRound,
 } from 'lucide-react';
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
@@ -468,12 +468,17 @@ function OrderDetailPanel({
     formatPrice: (p: any) => string;
     formatDate: (d: string) => string;
 }) {
+    const [pwResetOpen, setPwResetOpen] = useState(false);
+    const [newPw, setNewPw] = useState('');
+    const [confirmPw, setConfirmPw] = useState('');
+    const [pwResetLoading, setPwResetLoading] = useState(false);
+
     const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Pending;
     const nextStatus = getNextMobileOrderStatus(order);
     const isUnpaid = order.status === 'Delivered' && order.payment_status !== 'Paid';
 
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm relative">
             {/* Header */}
             <div className="p-5 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
                 <div className="flex items-center justify-between mb-2">
@@ -507,6 +512,20 @@ function OrderDetailPanel({
                         <div className="flex items-center gap-2 text-gray-700">
                             <Phone className="w-4 h-4 text-gray-400" />{order.customer_phone}
                         </div>
+                        {order.customer_id && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setPwResetOpen(true);
+                                    setNewPw('');
+                                    setConfirmPw('');
+                                }}
+                                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                            >
+                                <KeyRound className="w-3.5 h-3.5" />
+                                Reset app password
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -629,6 +648,95 @@ function OrderDetailPanel({
                         <Banknote className="w-4 h-4" />
                         Collect Payment — {formatPrice(order.grand_total)}
                     </button>
+                </div>
+            )}
+
+            {pwResetOpen && order.customer_id && (
+                <div
+                    className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+                    onClick={() => !pwResetLoading && setPwResetOpen(false)}
+                >
+                    <div
+                        className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="p-5 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-indigo-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                                    <KeyRound className="w-5 h-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-gray-900">Reset mobile app password</h3>
+                                    <p className="text-xs text-gray-500">{order.customer_phone}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <p className="text-sm text-gray-600">
+                                Set a new password for this customer. They will use it to sign in to the mobile ordering app for your shop.
+                            </p>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">New password</label>
+                                <input
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={newPw}
+                                    onChange={e => setNewPw(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                    placeholder="At least 6 characters"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Confirm password</label>
+                                <input
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={confirmPw}
+                                    onChange={e => setConfirmPw(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                                />
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-gray-100 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setPwResetOpen(false)}
+                                disabled={pwResetLoading}
+                                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    if (newPw.length < 6) {
+                                        alert('Password must be at least 6 characters.');
+                                        return;
+                                    }
+                                    if (newPw !== confirmPw) {
+                                        alert('Passwords do not match.');
+                                        return;
+                                    }
+                                    setPwResetLoading(true);
+                                    try {
+                                        await mobileOrdersApi.resetCustomerPassword(order.customer_id!, newPw);
+                                        setPwResetOpen(false);
+                                        setNewPw('');
+                                        setConfirmPw('');
+                                        alert('Password updated. The customer can sign in with the new password.');
+                                    } catch (err: any) {
+                                        alert(err.error || err.message || 'Failed to reset password');
+                                    }
+                                    setPwResetLoading(false);
+                                }}
+                                disabled={pwResetLoading}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                            >
+                                {pwResetLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                                Save password
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

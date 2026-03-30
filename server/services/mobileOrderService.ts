@@ -523,6 +523,34 @@ export class MobileOrderService {
                 duplicate: false,
             };
         });
+
+        // First order for this mobile customer: ensure loyalty member (covers legacy users who registered before enrollment existed)
+        if (placed && !placed.duplicate && placed.order) {
+            try {
+                const custRows = await this.db.query(
+                    'SELECT phone, name, email FROM mobile_customers WHERE id = $1 AND tenant_id = $2',
+                    [input.customerId, tenantId]
+                );
+                if (custRows.length > 0) {
+                    const cntRows = await this.db.query(
+                        'SELECT COUNT(*)::int AS c FROM mobile_orders WHERE tenant_id = $1 AND customer_id = $2',
+                        [tenantId, input.customerId]
+                    );
+                    const orderCount = Number(cntRows[0]?.c) || 0;
+                    if (orderCount === 1) {
+                        const { getShopService } = await import('./shopService.js');
+                        await getShopService().ensureLoyaltyMemberForMobileUser(tenantId, {
+                            phone: custRows[0].phone,
+                            name: custRows[0].name,
+                            email: custRows[0].email ?? null,
+                        });
+                    }
+                }
+            } catch (_loyaltyErr) {
+                // best-effort; order already placed
+            }
+        }
+
         const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
         notifyDailyReportUpdated(tenantId).catch(() => {});
         return placed;

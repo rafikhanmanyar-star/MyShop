@@ -12,8 +12,26 @@ import { FixedSizeList } from 'react-window';
 import Fuse from 'fuse.js';
 import { debounce } from 'lodash-es';
 import AddOrEditSkuModal from './AddOrEditSkuModal';
+import { POSColumnResizeHandle } from './POSColumnResizeHandle';
 
 const POS_CATEGORY_TREE_VISIBLE_KEY = 'pos-category-tree-visible';
+const POS_CATEGORY_TREE_W_KEY = 'pos-category-tree-w-px';
+
+const MIN_TREE_W = 140;
+const MAX_TREE_W = 360;
+const DEFAULT_TREE_W = 220;
+
+function loadTreeWidth(): number {
+    try {
+        const v = localStorage.getItem(POS_CATEGORY_TREE_W_KEY);
+        if (v === null) return DEFAULT_TREE_W;
+        const n = parseInt(v, 10);
+        if (!Number.isFinite(n)) return DEFAULT_TREE_W;
+        return Math.min(MAX_TREE_W, Math.max(MIN_TREE_W, n));
+    } catch {
+        return DEFAULT_TREE_W;
+    }
+}
 
 type CategoryTreeNode = { id: string; name: string; children: CategoryTreeNode[] };
 
@@ -181,13 +199,47 @@ const ProductSearch: React.FC = () => {
     const [categoryTreeVisible, setCategoryTreeVisible] = useState(() => {
         try {
             const v = localStorage.getItem(POS_CATEGORY_TREE_VISIBLE_KEY);
-            if (v === null) return true;
+            if (v === null) return false;
             return v === 'true';
         } catch {
-            return true;
+            return false;
         }
     });
     const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set());
+    const [categoryTreeWidthPx, setCategoryTreeWidthPx] = useState(loadTreeWidth);
+
+    const persistCategoryTreeWidth = useCallback((w: number) => {
+        const clamped = Math.min(MAX_TREE_W, Math.max(MIN_TREE_W, Math.round(w)));
+        setCategoryTreeWidthPx(clamped);
+        try {
+            localStorage.setItem(POS_CATEGORY_TREE_W_KEY, String(clamped));
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    const startResizeCategoryTree = useCallback(
+        (e: React.MouseEvent) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startW = categoryTreeWidthPx;
+            const onMove = (ev: MouseEvent) => {
+                const dx = ev.clientX - startX;
+                persistCategoryTreeWidth(startW + dx);
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            };
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        },
+        [categoryTreeWidthPx, persistCategoryTreeWidth]
+    );
 
     const persistCategoryTreeVisible = useCallback((visible: boolean) => {
         setCategoryTreeVisible(visible);
@@ -559,7 +611,10 @@ const ProductSearch: React.FC = () => {
     return (
         <div className="flex flex-row h-full min-h-0 bg-white relative overflow-hidden">
             {categoryTreeVisible ? (
-                <aside className="w-[220px] xl:w-[240px] shrink-0 flex flex-col border-r border-slate-200 bg-slate-50 min-h-0">
+                <aside
+                    className="shrink-0 flex flex-col border-r border-slate-200 bg-slate-50 min-h-0"
+                    style={{ width: categoryTreeWidthPx, minWidth: MIN_TREE_W, maxWidth: MAX_TREE_W }}
+                >
                     <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-100 bg-white/90 shrink-0">
                         <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Categories</span>
                         <button
@@ -597,7 +652,14 @@ const ProductSearch: React.FC = () => {
                         )}
                     </div>
                 </aside>
-            ) : (
+            ) : null}
+            {categoryTreeVisible ? (
+                <POSColumnResizeHandle
+                    aria-label="Resize categories and product list"
+                    onMouseDown={startResizeCategoryTree}
+                />
+            ) : null}
+            {!categoryTreeVisible ? (
                 <button
                     type="button"
                     className="w-9 shrink-0 flex flex-col items-center justify-center gap-1 border-r border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition-colors"
@@ -608,7 +670,7 @@ const ProductSearch: React.FC = () => {
                     {React.cloneElement(ICONS.chevronRight as any, { size: 16 })}
                     {React.cloneElement(ICONS.layers as any, { size: 12 })}
                 </button>
-            )}
+            ) : null}
 
             <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
                 {/* Search Bar - Premium Fixed Header */}

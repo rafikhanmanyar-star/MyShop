@@ -2,6 +2,8 @@ import { apiClient } from './apiClient';
 
 export interface MobileOrder {
     id: string;
+    /** Mobile app customer record (for shop actions such as password reset). */
+    customer_id?: string;
     order_number: string;
     status: string;
     subtotal: number;
@@ -89,6 +91,11 @@ export const mobileOrdersApi = {
         apiClient.put(`/shop/mobile-orders/${id}/collect-payment`, { bankAccountId }),
     markSynced: (id: string) =>
         apiClient.put(`/shop/mobile-orders/${id}/synced`),
+
+    resetCustomerPassword: (customerId: string, newPassword: string) =>
+        apiClient.put<{ success: boolean }>(`/shop/mobile-orders/customers/${encodeURIComponent(customerId)}/reset-password`, {
+            newPassword,
+        }),
 
     // Settings
     getSettings: () =>

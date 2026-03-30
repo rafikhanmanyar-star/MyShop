@@ -259,6 +259,24 @@ router.put('/products/:id/mobile', checkRole(['admin']), async (req: any, res) =
     }
 });
 
+// ─── Reset mobile customer password (shop support) — before /:id ─────
+router.put('/customers/:customerId/reset-password', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const { newPassword } = req.body;
+        if (!newPassword) {
+            return res.status(400).json({ error: 'newPassword is required' });
+        }
+        const result = await getMobileCustomerService().resetPasswordByShop(
+            req.tenantId,
+            req.params.customerId,
+            newPassword
+        );
+        res.json(result);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 // ─── Mobile Orders List (POS view) ──────────────────────────────────
 router.get('/', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
     try {

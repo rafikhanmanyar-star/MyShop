@@ -208,13 +208,13 @@ export class MobileCustomerService {
             [customerId, tenantId, phone, name, addressLine1, hashedPassword]
         );
 
-        // Auto-enroll in the loyalty program as a new customer
+        // Auto-enroll in loyalty (contact + member), idempotent
         try {
             const { getShopService } = await import('./shopService.js');
-            await getShopService().createLoyaltyMember(tenantId, {
+            await getShopService().ensureLoyaltyMemberForMobileUser(tenantId, {
                 name,
                 phone,
-                cardNumber: `L-${phone.replace(/\D/g, '').slice(-8)}`,
+                email: null,
             });
         } catch (_loyaltyErr) {
             // Loyalty enrollment is best-effort; don't block registration
@@ -314,6 +314,26 @@ export class MobileCustomerService {
             ]
         );
         return this.getProfile(tenantId, customerId);
+    }
+
+    /** Set a new login password for a mobile customer (shop staff, in-person support). */
+    async resetPasswordByShop(tenantId: string, customerId: string, newPassword: string) {
+        if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+            throw new Error('Password must be at least 6 characters.');
+        }
+        const rows = await this.db.query(
+            'SELECT id FROM mobile_customers WHERE tenant_id = $1 AND id = $2',
+            [tenantId, customerId]
+        );
+        if (rows.length === 0) {
+            throw new Error('Customer not found.');
+        }
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await this.db.execute(
+            'UPDATE mobile_customers SET password = $1, updated_at = NOW() WHERE tenant_id = $2 AND id = $3',
+            [hashedPassword, tenantId, customerId]
+        );
+        return { success: true };
     }
 }
 

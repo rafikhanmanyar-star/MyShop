@@ -883,6 +883,69 @@ export class ShopService {
     });
   }
 
+  /**
+   * Ensure a loyalty member exists for a mobile app user: resolve or create a contact by phone, then insert membership if missing.
+   * Idempotent — safe on registration and on first order (legacy users who were never enrolled).
+   */
+  async ensureLoyaltyMemberForMobileUser(
+    tenantId: string,
+    data: { phone: string; name: string; email?: string | null }
+  ): Promise<string | null> {
+    const phone = (data.phone || '').trim();
+    if (!phone) return null;
+
+    return this.db.transaction(async (client: any) => {
+      let customerId: string;
+
+      const existing = await client.query(
+        'SELECT id FROM contacts WHERE tenant_id = $1 AND contact_no = $2 LIMIT 1',
+        [tenantId, phone]
+      );
+      if (existing.length > 0) {
+        customerId = existing[0].id;
+      } else {
+        const newContactId = `contact_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        const newContact = await client.query(`
+          INSERT INTO contacts (id, tenant_id, name, type, contact_no, address)
+          VALUES ($1, $2, $3, 'Customer', $4, $5) RETURNING id
+        `, [newContactId, tenantId, data.name || 'Customer', phone, data.email || null]);
+        customerId = newContact[0].id;
+      }
+
+      const already = await client.query(
+        'SELECT id FROM shop_loyalty_members WHERE tenant_id = $1 AND customer_id = $2',
+        [tenantId, customerId]
+      );
+      if (already.length > 0) {
+        return already[0].id as string;
+      }
+
+      const digits = phone.replace(/\D/g, '');
+      const baseCard = `L-${digits.slice(-8) || '00000000'}`;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const cardNumber = attempt === 0 ? baseCard : `${baseCard}-${attempt}`;
+        try {
+          const res = await client.query(`
+            INSERT INTO shop_loyalty_members (tenant_id, customer_id, card_number, tier, status)
+            VALUES ($1, $2, $3, 'Silver', 'Active') RETURNING id
+          `, [tenantId, customerId, cardNumber]);
+          return res[0].id as string;
+        } catch (e: any) {
+          if (e?.code === '23505' && attempt < 4) {
+            continue;
+          }
+          const retry = await client.query(
+            'SELECT id FROM shop_loyalty_members WHERE tenant_id = $1 AND customer_id = $2',
+            [tenantId, customerId]
+          );
+          if (retry.length > 0) return retry[0].id as string;
+          throw e;
+        }
+      }
+      throw new Error('Could not create loyalty member');
+    });
+  }
+
   async updateLoyaltyMember(tenantId: string, memberId: string, data: any) {
     return this.db.query(`
       UPDATE shop_loyalty_members
@@ -936,22 +999,58 @@ export class ShopService {
     );
   }
 
-  async createShopCategory(tenantId: string, data: { name: string }) {
+  async createShopCategory(tenantId: string, data: { name: string; parentId?: string | null }) {
+    let parentId: string | null = data.parentId ?? null;
+    if (parentId) {
+      const parentRows = await this.db.query(
+        `SELECT id FROM categories WHERE id = $1 AND tenant_id = $2 AND type = 'product'
+         AND deleted_at IS NULL AND parent_id IS NULL`,
+        [parentId, tenantId]
+      );
+      if (parentRows.length === 0) {
+        const err: any = new Error('Parent category not found or must be a main category.');
+        throw err;
+      }
+    }
     const id = `shop_cat_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     await this.db.query(
-      `INSERT INTO categories (id, tenant_id, name, type, created_at, updated_at)
-       VALUES ($1, $2, $3, 'product', NOW(), NOW())`,
-      [id, tenantId, data.name]
+      `INSERT INTO categories (id, tenant_id, name, type, parent_id, created_at, updated_at)
+       VALUES ($1, $2, $3, 'product', $4, NOW(), NOW())`,
+      [id, tenantId, data.name, parentId]
     );
     return id;
   }
 
-  async updateShopCategory(tenantId: string, categoryId: string, data: { name: string }) {
-    await this.db.query(
-      `UPDATE categories SET name = $1, updated_at = NOW()
-       WHERE id = $2 AND tenant_id = $3 AND type = 'product'`,
-      [data.name, categoryId, tenantId]
-    );
+  async updateShopCategory(tenantId: string, categoryId: string, data: { name: string; parentId?: string | null }) {
+    if ('parentId' in data) {
+      const parentId = data.parentId ?? null;
+      if (parentId && parentId === categoryId) {
+        const err: any = new Error('A category cannot be its own parent.');
+        throw err;
+      }
+      if (parentId) {
+        const parentRows = await this.db.query(
+          `SELECT id FROM categories WHERE id = $1 AND tenant_id = $2 AND type = 'product'
+           AND deleted_at IS NULL AND parent_id IS NULL`,
+          [parentId, tenantId]
+        );
+        if (parentRows.length === 0) {
+          const err: any = new Error('Parent category not found or must be a main category.');
+          throw err;
+        }
+      }
+      await this.db.query(
+        `UPDATE categories SET name = $1, parent_id = $2, updated_at = NOW()
+         WHERE id = $3 AND tenant_id = $4 AND type = 'product'`,
+        [data.name, parentId, categoryId, tenantId]
+      );
+    } else {
+      await this.db.query(
+        `UPDATE categories SET name = $1, updated_at = NOW()
+         WHERE id = $2 AND tenant_id = $3 AND type = 'product'`,
+        [data.name, categoryId, tenantId]
+      );
+    }
   }
 
   async deleteShopCategory(tenantId: string, categoryId: string) {

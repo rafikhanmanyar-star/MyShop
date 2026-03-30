@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import { createCategoryOfflineFirst } from '../../../services/categorySyncService';
@@ -6,6 +6,9 @@ import { ICONS } from '../../../constants';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import Modal from '../../ui/Modal';
+import Select from '../../ui/Select';
+
+type CategoryKind = 'main' | 'sub';
 
 const InventoryCategories: React.FC = () => {
     const [categories, setCategories] = useState<ShopProductCategory[]>([]);
@@ -14,7 +17,17 @@ const InventoryCategories: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formName, setFormName] = useState('');
+    const [categoryKind, setCategoryKind] = useState<CategoryKind>('main');
+    const [parentId, setParentId] = useState('');
     const [saving, setSaving] = useState(false);
+
+    const mainCategories = useMemo(
+        () =>
+            [...categories]
+                .filter((c) => !c.parent_id)
+                .sort((a, b) => a.name.localeCompare(b.name)),
+        [categories]
+    );
 
     const loadCategories = useCallback(async () => {
         try {
@@ -36,26 +49,42 @@ const InventoryCategories: React.FC = () => {
     const openAdd = () => {
         setEditingId(null);
         setFormName('');
+        setCategoryKind('main');
+        setParentId('');
         setIsModalOpen(true);
     };
 
     const openEdit = (cat: ShopProductCategory) => {
         setEditingId(cat.id);
         setFormName(cat.name);
+        const isSub = Boolean(cat.parent_id);
+        setCategoryKind(isSub ? 'sub' : 'main');
+        setParentId(isSub && cat.parent_id ? cat.parent_id : '');
         setIsModalOpen(true);
     };
 
     const handleSave = async () => {
         const name = formName.trim();
         if (!name) return;
+        if (categoryKind === 'sub' && !parentId) return;
+        const resolvedParentId = categoryKind === 'sub' ? parentId : null;
         setSaving(true);
         try {
             if (editingId) {
-                await shopApi.updateShopCategory(editingId, { name });
+                await shopApi.updateShopCategory(editingId, { name, parentId: resolvedParentId });
             } else {
-                const result = await createCategoryOfflineFirst(name);
+                const result = await createCategoryOfflineFirst(name, resolvedParentId);
                 if (!result.synced && result.localId) {
-                    setCategories((prev) => [...prev, { id: result.localId!, name, type: 'product', created_at: new Date().toISOString() }]);
+                    setCategories((prev) => [
+                        ...prev,
+                        {
+                            id: result.localId!,
+                            name,
+                            type: 'product',
+                            parent_id: resolvedParentId,
+                            created_at: new Date().toISOString(),
+                        },
+                    ]);
                 }
             }
             setIsModalOpen(false);
@@ -66,6 +95,11 @@ const InventoryCategories: React.FC = () => {
             setSaving(false);
         }
     };
+
+    const canSubmit =
+        formName.trim().length > 0 &&
+        (categoryKind === 'main' || parentId.length > 0) &&
+        !saving;
 
     const handleDelete = async (id: string) => {
         if (!window.confirm('Remove this category? Products using it will have their category cleared.')) return;
@@ -94,9 +128,20 @@ const InventoryCategories: React.FC = () => {
                 )}
                 {!loading && categories.length > 0 && (
                     <ul className="divide-y divide-slate-100">
-                        {categories.map(cat => (
+                        {categories.map(cat => {
+                            const parentName = cat.parent_id
+                                ? categories.find((c) => c.id === cat.parent_id)?.name
+                                : null;
+                            return (
                             <li key={cat.id} className="py-3 flex items-center justify-between gap-4">
-                                <span className="font-medium text-slate-800">{cat.name}</span>
+                                <span className="font-medium text-slate-800">
+                                    {cat.name}
+                                    {parentName != null && (
+                                        <span className="text-slate-500 font-normal text-sm ml-2">
+                                            (under {parentName})
+                                        </span>
+                                    )}
+                                </span>
                                 <div className="flex gap-2">
                                     <button
                                         type="button"
@@ -114,7 +159,8 @@ const InventoryCategories: React.FC = () => {
                                     </button>
                                 </div>
                             </li>
-                        ))}
+                            );
+                        })}
                     </ul>
                 )}
             </div>
@@ -132,9 +178,61 @@ const InventoryCategories: React.FC = () => {
                         value={formName}
                         onChange={(e) => setFormName(e.target.value)}
                     />
+                    <div>
+                        <div className="block text-sm font-medium text-slate-700 mb-2">Category type</div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+                            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-800">
+                                <input
+                                    type="radio"
+                                    name="category-kind"
+                                    className="text-green-600 focus:ring-green-500"
+                                    checked={categoryKind === 'main'}
+                                    onChange={() => {
+                                        setCategoryKind('main');
+                                        setParentId('');
+                                    }}
+                                />
+                                Main category
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-800">
+                                <input
+                                    type="radio"
+                                    name="category-kind"
+                                    className="text-green-600 focus:ring-green-500"
+                                    checked={categoryKind === 'sub'}
+                                    onChange={() => setCategoryKind('sub')}
+                                />
+                                Sub category
+                            </label>
+                        </div>
+                    </div>
+                    {categoryKind === 'sub' && (
+                        <div className="space-y-1">
+                            <Select
+                                label="Parent category"
+                                value={parentId}
+                                onChange={(e) => setParentId(e.target.value)}
+                                required
+                            >
+                                <option value="">Select a main category</option>
+                                {mainCategories
+                                    .filter((m) => !editingId || m.id !== editingId)
+                                    .map((m) => (
+                                        <option key={m.id} value={m.id}>
+                                            {m.name}
+                                        </option>
+                                    ))}
+                            </Select>
+                            {mainCategories.length === 0 && (
+                                <p className="text-xs text-amber-700">
+                                    Add at least one main category first, then you can create subcategories under it.
+                                </p>
+                            )}
+                        </div>
+                    )}
                     <div className="flex justify-end gap-2">
                         <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-                        <Button onClick={handleSave} disabled={!formName.trim() || saving}>
+                        <Button onClick={handleSave} disabled={!canSubmit}>
                             {saving ? 'Saving...' : (editingId ? 'Update' : 'Add')}
                         </Button>
                     </div>
