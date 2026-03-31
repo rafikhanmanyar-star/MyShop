@@ -182,6 +182,11 @@ export const khataApi = {
       contactNo: data.contactNo,
       companyName: data.companyName,
     }),
+  updateLedgerEntry: (
+    entryId: string,
+    data: { type: 'debit' | 'credit'; amount: number; note?: string | null }
+  ) => apiClient.put<{ ok: boolean }>(`/shop/khata/ledger/${encodeURIComponent(entryId)}`, data),
+  deleteLedgerEntry: (entryId: string) => apiClient.delete<{ ok: boolean }>(`/shop/khata/ledger/${encodeURIComponent(entryId)}`),
 };
 
 export interface ShopUser {

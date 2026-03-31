@@ -6,7 +6,7 @@ import { getDashboardCache, setDashboardCache, type DashboardStats } from '../se
 import { getTenantId } from '../services/posOfflineDb';
 import { mobileOrdersApi } from '../services/mobileOrdersApi';
 import Card from '../components/ui/Card';
-import { CURRENCY } from '../constants';
+import { CURRENCY, ICONS } from '../constants';
 import {
   Package,
   ShoppingCart,
@@ -252,7 +252,15 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+      <div className="flex flex-wrap justify-between items-start gap-4">
+        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <Link
+          to="/accounting/reports/daily"
+          className="px-4 py-2 bg-card dark:bg-slate-800 border border-border dark:border-slate-700 text-foreground dark:text-slate-200 rounded-xl text-sm font-bold shadow-sm hover:border-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-400 transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"
+        >
+          {ICONS.barChart} Daily Report
+        </Link>
+      </div>
 
       {cachedAt && (
         <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 text-sm border border-amber-200 dark:border-amber-700">

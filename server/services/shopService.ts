@@ -1,6 +1,7 @@
 import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
 import { COA } from '../constants/accountCodes.js';
+import { fetchUnitCostForProduct, resolveUnitCostFromProductRow } from '../utils/productUnitCost.js';
 
 /** Strip absolute URLs (e.g. http://localhost:3000/uploads/...) to relative paths for DB storage. */
 function normalizeImageUrl(url: string | null | undefined): string | null {
@@ -39,6 +40,8 @@ export interface ShopSaleItem {
   taxAmount: number;
   discountAmount: number;
   subtotal: number;
+  /** Set server-side at sale time; used for COGS so later product cost edits do not change posted amounts. */
+  unitCostAtSale?: number;
 }
 
 export class ShopService {
@@ -548,11 +551,15 @@ export class ShopService {
 
       const saleId = saleRes[0].id;
 
+      const itemsWithCost: ShopSaleItem[] = [];
       for (const item of saleData.items) {
+        const unitCostAtSale = await fetchUnitCostForProduct(client, tenantId, item.productId);
+        itemsWithCost.push({ ...item, unitCostAtSale });
+
         await client.query(`
-          INSERT INTO shop_sale_items (tenant_id, sale_id, product_id, quantity, unit_price, tax_amount, discount_amount, subtotal)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `, [tenantId, saleId, item.productId, item.quantity, item.unitPrice, item.taxAmount, item.discountAmount, item.subtotal]);
+          INSERT INTO shop_sale_items (tenant_id, sale_id, product_id, quantity, unit_price, tax_amount, discount_amount, subtotal, unit_cost_at_sale)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [tenantId, saleId, item.productId, item.quantity, item.unitPrice, item.taxAmount, item.discountAmount, item.subtotal, unitCostAtSale > 0 ? unitCostAtSale : null]);
 
         // Deduct from the sale's branch warehouse when branchId is set (branch id = warehouse id); otherwise first warehouse
         let warehouseId: string | null = null;
@@ -573,21 +580,8 @@ export class ShopService {
             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4
           `, [item.quantity, tenantId, item.productId, warehouseId]);
 
-          let unitCost: number | null = null;
-          let totalCost: number | null = null;
-          const prodRow = await client.query(
-            'SELECT average_cost, cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1',
-            [item.productId, tenantId]
-          );
-          if (prodRow.length > 0) {
-            const ac = prodRow[0].average_cost != null && Number(prodRow[0].average_cost) > 0
-              ? Number(prodRow[0].average_cost)
-              : Number(prodRow[0].cost_price) || 0;
-            if (ac > 0) {
-              unitCost = ac;
-              totalCost = ac * item.quantity;
-            }
-          }
+          const unitCost: number | null = unitCostAtSale > 0 ? unitCostAtSale : null;
+          const totalCost: number | null = unitCost != null ? unitCost * item.quantity : null;
           await client.query(`
             INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, unit_cost, total_cost)
             VALUES ($1, $2, $3, 'Sale', $4, $5, $6, $7, $8)
@@ -623,7 +617,7 @@ export class ShopService {
         }
       }
 
-      await this.postSaleToAccounting(client, saleId, tenantId, saleData);
+      await this.postSaleToAccounting(client, saleId, tenantId, { ...saleData, items: itemsWithCost });
 
       // --- UPDATE BUDGET ACTUALS (if customer linked) ---
       if (saleData.customerId) {
@@ -739,19 +733,18 @@ export class ShopService {
       }
     }
 
-    // COGS vs Inventory: use weighted average cost when set, else cost_price
+    // COGS vs Inventory: use per-line snapshot from sale time (not current shop_products)
     let totalCogs = 0;
     for (const item of saleData.items) {
-      const prodRes = await client.query(
-        'SELECT average_cost, cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1',
-        [item.productId, tenantId]
-      );
-      if (prodRes.length > 0) {
-        const avgCost = prodRes[0].average_cost != null && Number(prodRes[0].average_cost) > 0
-          ? Number(prodRes[0].average_cost)
-          : Number(prodRes[0].cost_price) || 0;
-        if (avgCost > 0) totalCogs += avgCost * item.quantity;
+      let unitCost = typeof item.unitCostAtSale === 'number' ? item.unitCostAtSale : NaN;
+      if (!Number.isFinite(unitCost) || unitCost < 0) {
+        const prodRes = await client.query(
+          'SELECT average_cost, cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1',
+          [item.productId, tenantId]
+        );
+        unitCost = prodRes.length > 0 ? resolveUnitCostFromProductRow(prodRes[0]) : 0;
       }
+      if (unitCost > 0) totalCogs += unitCost * item.quantity;
     }
 
     if (totalCogs > 0) {
@@ -796,7 +789,8 @@ export class ShopService {
             'unitPrice', si.unit_price,
             'taxAmount', si.tax_amount,
             'discountAmount', si.discount_amount,
-            'subtotal', si.subtotal
+            'subtotal', si.subtotal,
+            'unitCostAtSale', si.unit_cost_at_sale
           ))
           FROM shop_sale_items si
           LEFT JOIN shop_products p ON si.product_id = p.id AND p.tenant_id = $1
@@ -831,7 +825,8 @@ export class ShopService {
             'unitPrice', oi.unit_price,
             'taxAmount', oi.tax_amount,
             'discountAmount', oi.discount_amount,
-            'subtotal', oi.subtotal
+            'subtotal', oi.subtotal,
+            'unitCostAtSale', oi.unit_cost_at_sale
           ))
           FROM mobile_order_items oi
           WHERE oi.order_id = o.id AND oi.tenant_id = $1
@@ -1441,7 +1436,7 @@ export class ShopService {
         s.payment_details as "paymentDetails", s.status, s.created_at as "createdAt",
         s.barcode_value as "barcodeValue", s.reprint_count as "reprintCount", s.printed_at as "printedAt",
         c.name as "customerName", b.name as "branchName", u.name as "cashierName", COALESCE(cs.id, s.shift_id) as "shiftId",
-        (SELECT json_agg(json_build_object('productId', si.product_id, 'name', COALESCE(p.name, 'Unknown'), 'quantity', si.quantity, 'unitPrice', si.unit_price, 'taxAmount', si.tax_amount, 'discountAmount', si.discount_amount, 'subtotal', si.subtotal))
+        (SELECT json_agg(json_build_object('productId', si.product_id, 'name', COALESCE(p.name, 'Unknown'), 'quantity', si.quantity, 'unitPrice', si.unit_price, 'taxAmount', si.tax_amount, 'discountAmount', si.discount_amount, 'subtotal', si.subtotal, 'unitCostAtSale', si.unit_cost_at_sale))
          FROM shop_sale_items si LEFT JOIN shop_products p ON si.product_id = p.id AND p.tenant_id = $1 WHERE si.sale_id = s.id AND si.tenant_id = $1) as items
        FROM shop_sales s
        LEFT JOIN contacts c ON s.customer_id = c.id AND c.tenant_id = $1

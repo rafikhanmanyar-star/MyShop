@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { usePOS } from '../../context/POSContext';
 import POSHeader from './pos/POSHeader';
 import ProductSearch from './pos/ProductSearch';
@@ -23,6 +23,35 @@ const MAX_RIGHT_W = 400;
 const DEFAULT_LEFT_W = 280;
 /** Default: narrower checkout / cart sidebar (was ~320px fixed). */
 const DEFAULT_RIGHT_W = 260;
+
+/** Two vertical resize handles between the three columns (see POSColumnResizeHandle). */
+const HANDLES_TOTAL_PX = 12;
+/** Minimum width reserved for the center (line items) column before we stack or clamp sides. */
+const CENTER_MIN_PX = 100;
+/**
+ * When the POS content row is narrower than this (e.g. sidebar open + small window),
+ * stack catalog / cart / checkout vertically so nothing is clipped off-screen.
+ */
+const STACK_LAYOUT_BELOW_PX = 960;
+
+function clampSideWidths(rowWidth: number, left: number, right: number): { left: number; right: number } {
+    const budget = rowWidth - HANDLES_TOTAL_PX - CENTER_MIN_PX;
+    if (budget <= MIN_LEFT_W + MIN_RIGHT_W) {
+        return { left: MIN_LEFT_W, right: MIN_RIGHT_W };
+    }
+    if (left + right <= budget) return { left, right };
+    const excess = left + right - budget;
+    const canL = Math.max(0, left - MIN_LEFT_W);
+    const canR = Math.max(0, right - MIN_RIGHT_W);
+    const canTotal = canL + canR;
+    if (canTotal <= 0) return { left: MIN_LEFT_W, right: MIN_RIGHT_W };
+    const fromL = Math.min(canL, excess * (canL / canTotal));
+    const fromR = excess - fromL;
+    return {
+        left: Math.round(Math.max(MIN_LEFT_W, left - fromL)),
+        right: Math.round(Math.max(MIN_RIGHT_W, right - fromR))
+    };
+}
 
 function loadStoredWidth(key: string, fallback: number, min: number, max: number): number {
     try {
@@ -54,6 +83,8 @@ const POSSalesContent: React.FC = () => {
         setIsDenseMode
     } = usePOS();
     const mainRef = useRef<HTMLDivElement>(null);
+    const layoutRowRef = useRef<HTMLDivElement>(null);
+    const [layoutRowWidth, setLayoutRowWidth] = useState(0);
 
     const [leftColWidthPx, setLeftColWidthPx] = useState(() =>
         loadStoredWidth(STORAGE_POS_LEFT_W, DEFAULT_LEFT_W, MIN_LEFT_W, MAX_LEFT_W)
@@ -81,6 +112,27 @@ const POSSalesContent: React.FC = () => {
             /* ignore */
         }
     }, []);
+
+    useEffect(() => {
+        const row = layoutRowRef.current;
+        if (!row || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver((entries) => {
+            const w = entries[0]?.contentRect?.width;
+            if (typeof w === 'number' && Number.isFinite(w)) setLayoutRowWidth(w);
+        });
+        ro.observe(row);
+        return () => ro.disconnect();
+    }, []);
+
+    const useStackedLayout = layoutRowWidth > 0 && layoutRowWidth < STACK_LAYOUT_BELOW_PX;
+
+    const { displayLeftW, displayRightW } = useMemo(() => {
+        if (useStackedLayout || layoutRowWidth === 0) {
+            return { displayLeftW: leftColWidthPx, displayRightW: rightColWidthPx };
+        }
+        const { left, right } = clampSideWidths(layoutRowWidth, leftColWidthPx, rightColWidthPx);
+        return { displayLeftW: left, displayRightW: right };
+    }, [useStackedLayout, layoutRowWidth, leftColWidthPx, rightColWidthPx]);
 
     const startResizeLeft = useCallback(
         (e: React.MouseEvent) => {
@@ -262,34 +314,61 @@ const POSSalesContent: React.FC = () => {
             {/* Top Status Bar */}
             <POSHeader />
 
-            <div className="flex flex-1 min-h-0 w-full min-w-0 relative p-4 md:p-6 gap-0 z-10 overflow-hidden">
+            <div
+                ref={layoutRowRef}
+                className={`flex flex-1 min-h-0 w-full min-w-0 relative z-10 p-4 md:p-6 ${
+                    useStackedLayout
+                        ? 'flex-col gap-3 overflow-y-auto overflow-x-hidden'
+                        : 'flex-row gap-0 overflow-x-auto overflow-y-hidden'
+                }`}
+            >
                 {/* Left: category tree + product grid */}
                 <div
-                    className="flex flex-col bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-w-0 flex-shrink-0"
-                    style={{ width: leftColWidthPx, minWidth: MIN_LEFT_W, maxWidth: MAX_LEFT_W }}
+                    className={`flex flex-col bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-w-0 ${
+                        useStackedLayout ? 'w-full min-h-[min(40vh,420px)] flex-1 shrink-0' : 'flex-shrink-0'
+                    }`}
+                    style={
+                        useStackedLayout
+                            ? { minWidth: 0, maxWidth: 'none' }
+                            : { width: displayLeftW, minWidth: MIN_LEFT_W, maxWidth: MAX_LEFT_W }
+                    }
                 >
                     <ProductSearch />
                 </div>
 
-                <POSColumnResizeHandle
-                    aria-label="Resize catalog and bill columns"
-                    onMouseDown={startResizeLeft}
-                />
+                {!useStackedLayout && (
+                    <POSColumnResizeHandle
+                        aria-label="Resize catalog and bill columns"
+                        onMouseDown={startResizeLeft}
+                    />
+                )}
 
                 {/* Center: line items (bill grid) — grows with remaining space */}
-                <div className="flex-1 flex flex-col min-w-[200px] bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden min-h-0">
+                <div
+                    className={`flex-1 flex flex-col bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden min-h-0 min-w-0 ${
+                        useStackedLayout ? 'min-h-[min(32vh,360px)] shrink-0' : 'min-w-[120px]'
+                    }`}
+                >
                     <CartGrid />
                 </div>
 
-                <POSColumnResizeHandle
-                    aria-label="Resize bill and checkout columns"
-                    onMouseDown={startResizeRight}
-                />
+                {!useStackedLayout && (
+                    <POSColumnResizeHandle
+                        aria-label="Resize bill and checkout columns"
+                        onMouseDown={startResizeRight}
+                    />
+                )}
 
                 {/* Right: customer, totals, payment */}
                 <div
-                    className="flex flex-col flex-shrink-0 bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-h-0"
-                    style={{ width: rightColWidthPx, minWidth: MIN_RIGHT_W, maxWidth: MAX_RIGHT_W }}
+                    className={`flex flex-col bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-h-0 min-w-0 ${
+                        useStackedLayout ? 'w-full shrink-0 max-w-full' : 'flex-shrink-0'
+                    }`}
+                    style={
+                        useStackedLayout
+                            ? { minWidth: 0, maxWidth: 'none' }
+                            : { width: displayRightW, minWidth: MIN_RIGHT_W, maxWidth: MAX_RIGHT_W }
+                    }
                 >
                     <CheckoutPanel />
                 </div>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { InventoryProvider, useInventory } from '../../context/InventoryContext';
 import InventoryDashboard from './inventory/InventoryDashboard';
 import StockMaster from './inventory/StockMaster';
@@ -13,8 +14,6 @@ import { shopApi, ShopProductCategory } from '../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../services/categoriesOfflineCache';
 import { createCategoryOfflineFirst } from '../../services/categorySyncService';
 import { getFullImageUrl } from '../../config/apiUrl';
-import { useClickOutside } from '../../hooks/useClickOutside';
-
 const InventoryContent: React.FC = () => {
     const { items, addItem, refreshItems } = useInventory();
     const [activeTab, setActiveTab] = useState<'dashboard' | 'stock' | 'movements' | 'adjustments' | 'categories'>('dashboard');
@@ -37,6 +36,12 @@ const InventoryContent: React.FC = () => {
     const [categorySearchQuery, setCategorySearchQuery] = useState('');
     const [addingCategory, setAddingCategory] = useState(false);
     const categoryInputRef = useRef<HTMLDivElement>(null);
+    const categoryDropdownPortalRef = useRef<HTMLDivElement>(null);
+    const [categoryDropdownPos, setCategoryDropdownPos] = useState<{
+        top: number;
+        left: number;
+        width: number;
+    } | null>(null);
 
     const loadShopCategories = useCallback(async () => {
         try {
@@ -53,29 +58,82 @@ const InventoryContent: React.FC = () => {
         loadShopCategories();
     }, [refreshItems, loadShopCategories]);
 
-    // When modal opens, sync category search state; when it closes, collapse dropdown
+    // When modal opens, refresh categories and sync search state (deps: modal open only)
     useEffect(() => {
-        if (isNewSkuModalOpen) {
-            setCategorySearchQuery(newItemData.category);
+        if (!isNewSkuModalOpen) return;
+        loadShopCategories();
+        setCategorySearchQuery(newItemData.category);
+        setCategoryDropdownOpen(false);
+    }, [isNewSkuModalOpen, loadShopCategories]);
+
+    /** Close category picker when clicking outside the field and the portaled list */
+    useEffect(() => {
+        if (!categoryDropdownOpen) return;
+        const handle = (e: PointerEvent) => {
+            const t = e.target as Node;
+            if (categoryInputRef.current?.contains(t)) return;
+            if (categoryDropdownPortalRef.current?.contains(t)) return;
             setCategoryDropdownOpen(false);
-        }
-    }, [isNewSkuModalOpen]);
+        };
+        document.addEventListener('pointerdown', handle, true);
+        return () => document.removeEventListener('pointerdown', handle, true);
+    }, [categoryDropdownOpen]);
 
-    useClickOutside(categoryInputRef, () => setCategoryDropdownOpen(false), categoryDropdownOpen);
-
-    // All category names: General + existing shop categories
-    const allCategoryNames = useCallback(() => {
-        const names = new Set<string>(['General']);
-        shopCategories.forEach((c) => names.add(c.name));
-        return Array.from(names);
+    /** Main and sub categories with a display label (Parent › Sub) for the picker. */
+    const categoryPickerRows = useMemo(() => {
+        const byId = new Map(shopCategories.map((c) => [c.id, c]));
+        return shopCategories.map((c) => {
+            const parent = c.parent_id ? byId.get(c.parent_id) : undefined;
+            const label = parent ? `${parent.name} › ${c.name}` : c.name;
+            return { id: c.id, name: c.name, label };
+        });
     }, [shopCategories]);
 
-    const filteredCategories = React.useMemo(() => {
+    const allCategoryNames = useCallback(() => {
+        const names = new Set<string>(['General']);
+        categoryPickerRows.forEach((r) => names.add(r.name));
+        return Array.from(names);
+    }, [categoryPickerRows]);
+
+    const filteredCategoryPickerRows = React.useMemo(() => {
         const q = (categorySearchQuery || '').trim().toLowerCase();
-        const all = allCategoryNames();
-        if (!q) return all;
-        return all.filter((name) => name.toLowerCase().includes(q));
-    }, [categorySearchQuery, allCategoryNames]);
+        const all = categoryPickerRows;
+        const list =
+            !q
+                ? all
+                : all.filter(
+                      (r) =>
+                          r.label.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)
+                  );
+        return [...list].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    }, [categorySearchQuery, categoryPickerRows]);
+
+    // Fixed-position portal so the list is not clipped by the modal body (overflow-y-auto)
+    useLayoutEffect(() => {
+        if (!categoryDropdownOpen || !categoryInputRef.current) {
+            setCategoryDropdownPos(null);
+            return;
+        }
+        const update = () => {
+            const el = categoryInputRef.current;
+            if (!el) return;
+            const r = el.getBoundingClientRect();
+            setCategoryDropdownPos({ top: r.bottom + 4, left: r.left, width: r.width });
+        };
+        update();
+        window.addEventListener('scroll', update, true);
+        window.addEventListener('resize', update);
+        return () => {
+            window.removeEventListener('scroll', update, true);
+            window.removeEventListener('resize', update);
+        };
+    }, [categoryDropdownOpen, categorySearchQuery, filteredCategoryPickerRows]);
+
+    const showGeneralInList = useMemo(() => {
+        const q = (categorySearchQuery || '').trim().toLowerCase();
+        if (!q) return true;
+        return 'general'.includes(q);
+    }, [categorySearchQuery]);
 
     const trimmedQuery = (categorySearchQuery || '').trim();
     const exactMatch = trimmedQuery && allCategoryNames().some((n) => n.toLowerCase() === trimmedQuery.toLowerCase());
@@ -331,33 +389,59 @@ const InventoryContent: React.FC = () => {
                                     setCategoryDropdownOpen(true);
                                 }}
                             />
-                            {categoryDropdownOpen && (
-                                <div className="absolute z-20 mt-1 w-full rounded-lg border border-border dark:border-slate-700 bg-card dark:bg-slate-800 py-1 shadow-lg max-h-48 overflow-y-auto">
-                                    {filteredCategories.length === 0 && !showAddOption && (
-                                        <div className="px-3 py-2 text-sm text-muted-foreground dark:text-muted-foreground">No categories match.</div>
-                                    )}
-                                    {filteredCategories.map((name) => (
-                                        <button
-                                            key={name}
-                                            type="button"
-                                            className="block w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-foreground dark:text-slate-200"
-                                            onClick={() => handleSelectCategory(name)}
-                                        >
-                                            {name}
-                                        </button>
-                                    ))}
-                                    {showAddOption && (
-                                        <button
-                                            type="button"
-                                            className="block w-full text-left px-3 py-2 text-sm bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-medium border-t border-border dark:border-slate-700"
-                                            onClick={handleAddCategoryOnTheFly}
-                                            disabled={addingCategory}
-                                        >
-                                            {addingCategory ? 'Adding…' : `Add "${trimmedQuery}" as new category`}
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+                            {categoryDropdownOpen &&
+                                categoryDropdownPos &&
+                                createPortal(
+                                    <div
+                                        ref={categoryDropdownPortalRef}
+                                        className="rounded-lg border border-border dark:border-slate-700 bg-card dark:bg-slate-800 py-1 shadow-lg max-h-48 overflow-y-auto"
+                                        style={{
+                                            position: 'fixed',
+                                            top: categoryDropdownPos.top,
+                                            left: categoryDropdownPos.left,
+                                            width: categoryDropdownPos.width,
+                                            zIndex: 10050
+                                        }}
+                                    >
+                                        {filteredCategoryPickerRows.length === 0 &&
+                                            !showAddOption &&
+                                            !showGeneralInList && (
+                                                <div className="px-3 py-2 text-sm text-muted-foreground dark:text-muted-foreground">
+                                                    No categories match.
+                                                </div>
+                                            )}
+                                        {showGeneralInList && (
+                                            <button
+                                                type="button"
+                                                className="block w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-foreground dark:text-slate-200"
+                                                onClick={() => handleSelectCategory('General')}
+                                            >
+                                                General
+                                            </button>
+                                        )}
+                                        {filteredCategoryPickerRows.map((row) => (
+                                            <button
+                                                key={row.id}
+                                                type="button"
+                                                className="block w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-foreground dark:text-slate-200"
+                                                onClick={() => handleSelectCategory(row.name)}
+                                            >
+                                                {row.label}
+                                            </button>
+                                        ))}
+                                        {showAddOption && (
+                                            <button
+                                                type="button"
+                                                className="block w-full text-left px-3 py-2 text-sm bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-medium border-t border-border dark:border-slate-700"
+                                                onClick={handleAddCategoryOnTheFly}
+                                                disabled={addingCategory}
+                                            >
+                                                {addingCategory ? 'Adding…' : `Add "${trimmedQuery}" as new category`}
+                                            </button>
+                                        )}
+                                    </div>,
+                                    document.body
+                                )}
                         </div>
                         <Input
                             label="Unit"

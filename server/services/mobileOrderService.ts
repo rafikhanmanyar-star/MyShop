@@ -1,6 +1,7 @@
 import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
 import { COA } from '../constants/accountCodes.js';
+import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -623,6 +624,7 @@ export class MobileOrderService {
             subtotal: safeNum(i.subtotal),
             tax_amount: safeNum(i.tax_amount),
             discount_amount: safeNum(i.discount_amount),
+            unit_cost_at_sale: i.unit_cost_at_sale != null && i.unit_cost_at_sale !== '' ? safeNum(i.unit_cost_at_sale) : null,
         }));
         let subtotal = safeNum(order.subtotal);
         let tax_total = safeNum(order.tax_total);
@@ -685,14 +687,12 @@ export class MobileOrderService {
 
                     // Revenue recognition: Debit Accounts Receivable, Credit Revenue + COGS entries
                     try {
-                        const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1 AND tenant_id = $2', [orderId, tenantId]);
                         await this.postMobileDeliveryToAccounting(client, orderId, tenantId, {
                             orderNumber: order_number,
                             grandTotal: parseFloat(grand_total),
                             subtotal: parseFloat(subtotal),
                             taxTotal: parseFloat(tax_total),
                             paymentMethod: payment_method,
-                            items: orderItems,
                             customerId: orders[0].customer_id,
                         });
                     } catch (accErr) {
@@ -771,6 +771,9 @@ export class MobileOrderService {
             const qty = parseFloat(item.quantity);
 
             if (action === 'confirm') {
+                const unitCostAtConfirm = await fetchUnitCostForProduct(client, tenantId, item.product_id);
+                const unitCost = unitCostAtConfirm > 0 ? unitCostAtConfirm : null;
+                const totalCost = unitCost != null ? unitCost * qty : null;
                 // Deduct from on_hand, release reserved
                 await client.query(
                     `UPDATE shop_inventory
@@ -781,9 +784,9 @@ export class MobileOrderService {
                     [qty, item.product_id, warehouseId, tenantId]
                 );
                 await client.query(
-                    `INSERT INTO shop_inventory_movements (id, tenant_id, product_id, warehouse_id, type, quantity, reference_id, reason)
-           VALUES ($1, $2, $3, $4, 'MobileSale', $5, $6, 'Mobile order confirmed')`,
-                    [generateId('im'), tenantId, item.product_id, warehouseId, -qty, orderId]
+                    `INSERT INTO shop_inventory_movements (id, tenant_id, product_id, warehouse_id, type, quantity, reference_id, reason, unit_cost, total_cost)
+           VALUES ($1, $2, $3, $4, 'MobileSale', $5, $6, 'Mobile order confirmed', $7, $8)`,
+                    [generateId('im'), tenantId, item.product_id, warehouseId, -qty, orderId, unitCost, totalCost]
                 );
             } else if (action === 'cancel') {
                 // Release reserved
@@ -962,7 +965,6 @@ export class MobileOrderService {
         subtotal: number;
         taxTotal: number;
         paymentMethod: string;
-        items: any[];
         customerId: string;
     }) {
         const journalRes = await client.query(`
@@ -988,13 +990,19 @@ export class MobileOrderService {
             [tenantId, journalId, receivableAcc, data.grandTotal]
         );
 
-        // 3. COGS vs Inventory (51001, 11301)
+        // 3. COGS vs Inventory (51001, 11301) — snapshot unit cost on each line at delivery (immutable vs later product edits)
         let totalCogs = 0;
-        for (const item of data.items) {
-            const prodRes = await client.query('SELECT cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1', [item.product_id, tenantId]);
-            if (prodRes.length > 0 && prodRes[0].cost_price) {
-                totalCogs += (Number(prodRes[0].cost_price) * Number(item.quantity));
-            }
+        const orderLines = await client.query(
+            'SELECT id, product_id, quantity FROM mobile_order_items WHERE order_id = $1 AND tenant_id = $2',
+            [orderId, tenantId]
+        );
+        for (const line of orderLines) {
+            const uc = await fetchUnitCostForProduct(client, tenantId, line.product_id);
+            await client.query(
+                'UPDATE mobile_order_items SET unit_cost_at_sale = $1 WHERE id = $2 AND tenant_id = $3',
+                [uc > 0 ? uc : null, line.id, tenantId]
+            );
+            if (uc > 0) totalCogs += uc * Number(line.quantity);
         }
 
         if (totalCogs > 0) {

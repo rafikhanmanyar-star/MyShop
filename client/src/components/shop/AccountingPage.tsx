@@ -1,6 +1,4 @@
-
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { AccountingProvider, useAccounting } from '../../context/AccountingContext';
 import AccountingDashboard from './accounting/AccountingDashboard';
 import GeneralLedger from './accounting/GeneralLedger';
@@ -105,12 +103,6 @@ const AccountingContent: React.FC = () => {
                         <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">POS source-of-truth automated accounting.</p>
                     </div>
                     <div className="flex gap-3 flex-wrap">
-                        <Link
-                            to="/accounting/reports/daily"
-                            className="px-4 py-2 bg-card dark:bg-slate-800 border border-border dark:border-slate-700 text-foreground dark:text-slate-200 rounded-xl text-sm font-bold shadow-sm hover:border-indigo-300 hover:text-indigo-700 transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"
-                        >
-                            {ICONS.barChart} Daily Report
-                        </Link>
                         <button
                             onClick={() => setIsJournalModalOpen(true)}
                             className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-slate-200 dark:shadow-slate-900 hover:bg-black dark:hover:bg-indigo-700 transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"

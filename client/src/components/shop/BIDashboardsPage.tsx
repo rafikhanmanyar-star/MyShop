@@ -67,15 +67,15 @@ const BIContent: React.FC = () => {
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`pb-4 text-sm font-black transition-all relative flex items-center gap-2 tracking-widest uppercase text-[10px] shrink-0 ${activeTab === tab.id
-                                ? 'text-indigo-400'
-                                : 'text-slate-400 hover:text-slate-300 dark:text-slate-500 dark:hover:text-slate-300'
+                            className={`pb-4 text-[0.7875rem] tracking-wide transition-all duration-300 relative flex items-center gap-2 shrink-0 ${activeTab === tab.id
+                                ? 'text-primary font-semibold'
+                                : 'font-medium text-slate-400 hover:text-white dark:text-slate-500 dark:hover:text-slate-200'
                                 }`}
                         >
-                            {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 16, height: 16 })}
+                            {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
                             {tab.label}
                             {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-500 rounded-t-full shadow-[0_-4px_12px_rgba(99,102,241,0.5)]"></div>
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_-4px_12px_rgba(99,102,241,0.5)]"></div>
                             )}
                         </button>
                     ))}

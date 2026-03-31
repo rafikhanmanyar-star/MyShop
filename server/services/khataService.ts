@@ -169,4 +169,44 @@ export class KhataService {
     const r = rows[0];
     return { id: r.id, name: r.name, contact_no: r.contact_no, company_name: r.company_name };
   }
+
+  async updateEntry(
+    tenantId: string,
+    entryId: string,
+    data: { type: 'debit' | 'credit'; amount: number; note?: string | null }
+  ): Promise<boolean> {
+    const res =
+      data.note !== undefined
+        ? await this.db.query(
+            `UPDATE khata_ledger
+             SET type = $1, amount = $2, note = $3
+             WHERE tenant_id = $4 AND id = $5
+             RETURNING id`,
+            [data.type, data.amount, data.note, tenantId, entryId]
+          )
+        : await this.db.query(
+            `UPDATE khata_ledger
+             SET type = $1, amount = $2
+             WHERE tenant_id = $3 AND id = $4
+             RETURNING id`,
+            [data.type, data.amount, tenantId, entryId]
+          );
+    if (res.length) {
+      const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+      notifyDailyReportUpdated(tenantId).catch(() => {});
+    }
+    return res.length > 0;
+  }
+
+  async deleteEntry(tenantId: string, entryId: string): Promise<boolean> {
+    const res = await this.db.query(
+      `DELETE FROM khata_ledger WHERE tenant_id = $1 AND id = $2 RETURNING id`,
+      [tenantId, entryId]
+    );
+    if (res.length) {
+      const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+      notifyDailyReportUpdated(tenantId).catch(() => {});
+    }
+    return res.length > 0;
+  }
 }

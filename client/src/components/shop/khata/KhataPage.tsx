@@ -16,6 +16,13 @@ const KhataPage: React.FC = () => {
   const [receiveNote, setReceiveNote] = useState('');
   const [receiveSubmitting, setReceiveSubmitting] = useState(false);
   const [customers, setCustomers] = useState<{ id: string; name: string; contact_no: string | null }[]>([]);
+  const [editingEntry, setEditingEntry] = useState<KhataLedgerEntry | null>(null);
+  const [editType, setEditType] = useState<'debit' | 'credit'>('debit');
+  const [editAmount, setEditAmount] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [entryPendingDelete, setEntryPendingDelete] = useState<KhataLedgerEntry | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   const loadSummary = useCallback(async () => {
     try {
@@ -71,6 +78,70 @@ const KhataPage: React.FC = () => {
     setReceiveModalOpen(true);
   };
 
+  const refreshSummaryAndLedger = useCallback(async () => {
+    let arr: KhataSummaryRow[] = [];
+    try {
+      const data = await khataApi.getSummary();
+      arr = Array.isArray(data) ? data : [];
+      setSummary(arr);
+    } catch {
+      setSummary([]);
+    }
+    const stillListed =
+      selectedCustomerId != null && arr.some((r) => r.customer_id === selectedCustomerId);
+    if (!stillListed && selectedCustomerId) {
+      setSelectedCustomerId(null);
+      setSelectedCustomerName('');
+      setLedger([]);
+    } else if (stillListed && selectedCustomerId) {
+      await loadLedger(selectedCustomerId);
+    }
+  }, [selectedCustomerId, loadLedger]);
+
+  const openEditEntry = (entry: KhataLedgerEntry) => {
+    setEditingEntry(entry);
+    setEditType(entry.type);
+    setEditAmount(String(entry.amount));
+    setEditNote(entry.note ?? '');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEntry) return;
+    const amount = parseFloat(editAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    setEditSubmitting(true);
+    try {
+      await khataApi.updateLedgerEntry(editingEntry.id, {
+        type: editType,
+        amount,
+        note: editNote.trim() || null,
+      });
+      setEditingEntry(null);
+      await refreshSummaryAndLedger();
+    } catch (err) {
+      console.error('Update khata entry failed', err);
+      alert('Failed to update entry. Please try again.');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!entryPendingDelete) return;
+    setDeleteSubmitting(true);
+    try {
+      await khataApi.deleteLedgerEntry(entryPendingDelete.id);
+      setEntryPendingDelete(null);
+      await refreshSummaryAndLedger();
+    } catch (err) {
+      console.error('Delete khata entry failed', err);
+      alert('Failed to delete entry. Please try again.');
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
+
   const handleReceivePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(receiveAmount);
@@ -86,8 +157,7 @@ const KhataPage: React.FC = () => {
       setReceiveCustomerId('');
       setReceiveAmount('');
       setReceiveNote('');
-      await loadSummary();
-      if (selectedCustomerId === receiveCustomerId) await loadLedger(selectedCustomerId);
+      await refreshSummaryAndLedger();
     } catch (err) {
       console.error('Receive payment failed', err);
       alert('Failed to record payment. Please try again.');
@@ -203,6 +273,7 @@ const KhataPage: React.FC = () => {
                         <th className="px-4 py-3">Type</th>
                         <th className="px-4 py-3">Reference</th>
                         <th className="px-4 py-3 text-right">Amount</th>
+                        <th className="px-4 py-3 text-right w-[1%] whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -219,6 +290,28 @@ const KhataPage: React.FC = () => {
                           <td className="px-4 py-3 text-muted-foreground">{entry.note || entry.sale_number || '—'}</td>
                           <td className="px-4 py-3 text-right font-mono font-bold">
                             {entry.type === 'debit' ? '+' : '-'}{CURRENCY} {entry.amount.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openEditEntry(entry)}
+                                className="p-2 rounded-lg text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
+                                title="Edit entry"
+                                aria-label="Edit entry"
+                              >
+                                {React.cloneElement(ICONS.edit as React.ReactElement, { className: 'w-4 h-4' })}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEntryPendingDelete(entry)}
+                                className="p-2 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                                title="Delete entry"
+                                aria-label="Delete entry"
+                              >
+                                {React.cloneElement(ICONS.trash as React.ReactElement, { className: 'w-4 h-4' })}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -302,6 +395,113 @@ const KhataPage: React.FC = () => {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        isOpen={!!editingEntry}
+        onClose={() => !editSubmitting && setEditingEntry(null)}
+        title="Edit khata entry"
+        size="md"
+      >
+        {editingEntry && (
+          <form onSubmit={handleSaveEdit} className="space-y-5">
+            {editingEntry.order_id && editingEntry.sale_number && (
+              <p className="text-xs text-muted-foreground">
+                Linked sale: <span className="font-mono font-semibold text-foreground">{editingEntry.sale_number}</span>
+              </p>
+            )}
+            <div>
+              <label className="block text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Type</label>
+              <select
+                aria-label="Entry type"
+                value={editType}
+                onChange={(e) => setEditType(e.target.value as 'debit' | 'credit')}
+                className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                <option value="debit">Debit (adds to balance)</option>
+                <option value="credit">Credit (reduces balance)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Amount ({CURRENCY})</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 outline-none"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Note</label>
+              <input
+                type="text"
+                aria-label="Note"
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Optional"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingEntry(null)}
+                disabled={editSubmitting}
+                className="flex-1 py-3 rounded-xl border-2 border-border text-muted-foreground font-bold hover:bg-muted/50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={editSubmitting || !editAmount || parseFloat(editAmount) <= 0}
+                className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {editSubmitting ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={!!entryPendingDelete}
+        onClose={() => !deleteSubmitting && setEntryPendingDelete(null)}
+        title="Delete entry?"
+        size="sm"
+      >
+        {entryPendingDelete && (
+          <div className="space-y-5">
+            <p className="text-sm text-muted-foreground">
+              This will remove the{' '}
+              <span className="font-bold text-foreground">{entryPendingDelete.type === 'debit' ? 'Debit' : 'Credit'}</span> of{' '}
+              <span className="font-mono font-bold text-foreground">
+                {CURRENCY} {entryPendingDelete.amount.toLocaleString()}
+              </span>{' '}
+              from the ledger. Balances will update accordingly.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setEntryPendingDelete(null)}
+                disabled={deleteSubmitting}
+                className="flex-1 py-3 rounded-xl border-2 border-border text-muted-foreground font-bold hover:bg-muted/50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleteSubmitting}
+                className="flex-1 py-3 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deleteSubmitting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

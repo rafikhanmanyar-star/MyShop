@@ -136,6 +136,8 @@ export interface POSSale {
         taxAmount: number;
         discountAmount: number;
         subtotal: number;
+        /** Unit cost snapshot at sale time (server); not sent when creating a sale. */
+        unitCostAtSale?: number | null;
     }[];
     createdAt: string;
 }

@@ -41,6 +41,40 @@ router.get('/customer/:customerId/summary', checkRole(['admin', 'pos_cashier', '
   }
 });
 
+router.put('/ledger/:entryId', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const { entryId } = req.params;
+    const { type, amount, note } = req.body || {};
+    if (type !== 'debit' && type !== 'credit') {
+      return res.status(400).json({ error: 'type must be debit or credit' });
+    }
+    const num = Number(amount);
+    if (!Number.isFinite(num) || num <= 0) {
+      return res.status(400).json({ error: 'amount must be a positive number' });
+    }
+    const ok = await getKhataService().updateEntry(req.tenantId, entryId, {
+      type,
+      amount: num,
+      note: note === undefined ? undefined : note === null || note === '' ? null : String(note),
+    });
+    if (!ok) return res.status(404).json({ error: 'Ledger entry not found' });
+    res.json({ ok: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/ledger/:entryId', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const { entryId } = req.params;
+    const ok = await getKhataService().deleteEntry(req.tenantId, entryId);
+    if (!ok) return res.status(404).json({ error: 'Ledger entry not found' });
+    res.json({ ok: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/receive-payment', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
     const { customerId, amount, note } = req.body || {};

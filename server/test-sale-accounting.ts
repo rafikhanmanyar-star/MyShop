@@ -23,9 +23,9 @@ async function runTests() {
                 return [{ id: 'mock-acc-xyz' }];
             }
 
-            // Mock Product cost price for COGS calculation
-            if (text.includes('SELECT cost_price FROM shop_products')) {
-                return [{ cost_price: 50.00 }]; // mock unit cost price
+            // Mock Product cost for COGS (postSaleToAccounting fallback uses average_cost / cost_price)
+            if (text.includes('SELECT cost_price FROM shop_products') || text.includes('SELECT average_cost, cost_price FROM shop_products')) {
+                return [{ average_cost: null, cost_price: 50.0 }];
             }
 
             return [];

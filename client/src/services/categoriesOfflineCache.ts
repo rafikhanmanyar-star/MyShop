@@ -8,6 +8,21 @@ import { openPosOfflineDb, getTenantId } from './posOfflineDb';
 
 const STORE_NAME = 'categories';
 
+/** When `tenant_id` is missing from localStorage but the user has a valid session token (JWT). */
+function getTenantIdFromAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const token = localStorage.getItem('auth_token');
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1])) as { tenantId?: string };
+    return typeof payload.tenantId === 'string' ? payload.tenantId : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface CachedCategories {
   items: ShopProductCategory[];
   cachedAt?: string;
@@ -42,7 +57,7 @@ export async function getCachedCategories(tenantId: string): Promise<CachedCateg
  * on failure, return cached list. Uses getTenantId() for cache key.
  */
 export async function getShopCategoriesOfflineFirst(): Promise<ShopProductCategory[]> {
-  const tenantId = getTenantId();
+  const tenantId = getTenantId() || getTenantIdFromAuthToken();
   if (!tenantId) return [];
 
   const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
