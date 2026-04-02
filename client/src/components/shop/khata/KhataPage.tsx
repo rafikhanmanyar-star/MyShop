@@ -16,6 +16,8 @@ const KhataPage: React.FC = () => {
   const [receiveNote, setReceiveNote] = useState('');
   const [receiveBankAccountId, setReceiveBankAccountId] = useState('');
   const [depositAccounts, setDepositAccounts] = useState<ShopBankAccount[]>([]);
+  /** When true, customer was chosen from a ledger row — field stays fixed to that customer */
+  const [receiveCustomerLocked, setReceiveCustomerLocked] = useState(false);
   const [receiveSubmitting, setReceiveSubmitting] = useState(false);
   const [customers, setCustomers] = useState<{ id: string; name: string; contact_no: string | null }[]>([]);
   const [editingEntry, setEditingEntry] = useState<KhataLedgerEntry | null>(null);
@@ -86,9 +88,40 @@ const KhataPage: React.FC = () => {
   }, [receiveModalOpen, loadCustomers, loadDepositAccounts]);
 
   const openReceiveModal = () => {
+    setReceiveCustomerLocked(false);
     setReceiveCustomerId('');
     setReceiveAmount('');
     setReceiveNote('');
+    setReceiveBankAccountId('');
+    setReceiveModalOpen(true);
+  };
+
+  /** Prefill customer from the open ledger (amount and note left for you to enter). */
+  const openReceiveModalForCurrentCustomer = () => {
+    if (!selectedCustomerId) return;
+    setReceiveCustomerLocked(true);
+    setReceiveCustomerId(selectedCustomerId);
+    setReceiveAmount('');
+    setReceiveNote('');
+    setReceiveBankAccountId('');
+    setReceiveModalOpen(true);
+  };
+
+  const noteFromLedgerEntry = (entry: KhataLedgerEntry): string => {
+    if (entry.sale_number && entry.note) return `${entry.note} (${entry.sale_number})`;
+    if (entry.sale_number) return `Payment for ${entry.sale_number}`;
+    if (entry.note) return `Payment toward: ${entry.note}`;
+    return '';
+  };
+
+  /** Prefill receive form from a debit row (amount owed on that line). */
+  const openReceiveModalFromEntry = (entry: KhataLedgerEntry) => {
+    if (entry.type !== 'debit') return;
+    const cid = selectedCustomerId || entry.customer_id;
+    setReceiveCustomerLocked(true);
+    setReceiveCustomerId(cid);
+    setReceiveAmount(String(entry.amount));
+    setReceiveNote(noteFromLedgerEntry(entry));
     setReceiveBankAccountId('');
     setReceiveModalOpen(true);
   };
@@ -174,6 +207,7 @@ const KhataPage: React.FC = () => {
       setReceiveAmount('');
       setReceiveNote('');
       setReceiveBankAccountId('');
+      setReceiveCustomerLocked(false);
       await refreshSummaryAndLedger();
     } catch (err) {
       console.error('Receive payment failed', err);
@@ -267,16 +301,26 @@ const KhataPage: React.FC = () => {
                   {selectedCustomerId ? `Ledger: ${selectedCustomerName}` : 'Transaction history'}
                 </h2>
                 {selectedCustomerId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedCustomerId(null);
-                      setSelectedCustomerName('');
-                    }}
-                    className="text-xs font-bold text-muted-foreground hover:text-foreground"
-                  >
-                    Clear
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => openReceiveModalForCurrentCustomer()}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700"
+                    >
+                      {ICONS.wallet && React.cloneElement(ICONS.wallet as React.ReactElement, { className: 'w-3.5 h-3.5' })}
+                      Receive for this customer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCustomerId(null);
+                        setSelectedCustomerName('');
+                      }}
+                      className="text-xs font-bold text-muted-foreground hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 )}
               </div>
               <div className="flex-1 min-h-[200px] max-h-[400px] overflow-y-auto">
@@ -311,7 +355,17 @@ const KhataPage: React.FC = () => {
                             {entry.type === 'debit' ? '+' : '-'}{CURRENCY} {entry.amount.toLocaleString()}
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <div className="inline-flex items-center gap-1">
+                            <div className="inline-flex flex-wrap items-center justify-end gap-1">
+                              {entry.type === 'debit' && (
+                                <button
+                                  type="button"
+                                  onClick={() => openReceiveModalFromEntry(entry)}
+                                  className="mr-1 rounded-lg bg-emerald-600/90 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm hover:bg-emerald-700"
+                                  title="Receive payment for this amount"
+                                >
+                                  Receive
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => openEditEntry(entry)}
@@ -353,25 +407,51 @@ const KhataPage: React.FC = () => {
 
       <Modal
         isOpen={receiveModalOpen}
-        onClose={() => !receiveSubmitting && setReceiveModalOpen(false)}
+        onClose={() => {
+          if (receiveSubmitting) return;
+          setReceiveModalOpen(false);
+          setReceiveCustomerLocked(false);
+        }}
         title="Receive Payment"
         size="md"
       >
         <form onSubmit={handleReceivePayment} className="space-y-5">
+          {receiveCustomerLocked && selectedCustomerName && (
+            <p className="text-xs text-muted-foreground rounded-lg bg-muted/80 px-3 py-2 border border-border">
+              Ledger: <span className="font-bold text-foreground">{selectedCustomerName}</span>
+              {receiveAmount ? (
+                <>
+                  {' · '}
+                  Amount from this debit line: {CURRENCY} {receiveAmount}
+                </>
+              ) : (
+                ' — choose deposit account and amount below.'
+              )}
+            </p>
+          )}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Customer</label>
             <select
               aria-label="Select customer"
               value={receiveCustomerId}
               onChange={(e) => setReceiveCustomerId(e.target.value)}
-              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-colors"
+              disabled={receiveSubmitting || receiveCustomerLocked}
+              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
               required
             >
               <option value="">Select customer</option>
+              {receiveCustomerId &&
+                !customers.some((c) => c.id === receiveCustomerId) &&
+                selectedCustomerName && (
+                  <option value={receiveCustomerId}>{selectedCustomerName} (current)</option>
+                )}
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}{c.contact_no ? ` — ${c.contact_no}` : ''}</option>
               ))}
             </select>
+            {receiveCustomerLocked && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">Customer is fixed to match this ledger. Use the top &quot;Receive Payment&quot; to choose another customer.</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Deposit to (chart-linked account)</label>
@@ -423,7 +503,10 @@ const KhataPage: React.FC = () => {
           <div className="flex gap-3 pt-2">
             <button
               type="button"
-              onClick={() => setReceiveModalOpen(false)}
+              onClick={() => {
+                setReceiveModalOpen(false);
+                setReceiveCustomerLocked(false);
+              }}
               disabled={receiveSubmitting}
               className="flex-1 py-3 rounded-xl border-2 border-border dark:border-slate-600 text-muted-foreground font-bold hover:bg-muted/50 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
             >

@@ -105,7 +105,11 @@ if (clientDistPath) {
 
 if (clientDistPath) {
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
+    if (req.path.startsWith('/uploads')) return next();
+    // Unmatched /api/* would otherwise fall through and yield a non-JSON 404 (confusing the client).
+    if (req.path.startsWith('/api')) {
+      return res.status(404).json({ error: 'Not found', path: req.path });
+    }
     res.sendFile(path.join(clientDistPath, 'index.html'));
   });
 }

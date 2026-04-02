@@ -394,6 +394,37 @@ router.post('/sales', checkRole(['admin', 'pos_cashier']), async (req: any, res)
   }
 });
 
+// Sales returns — nested under /sales/returns (primary; avoids hyphen/proxy quirks). Legacy /sales-returns aliases below.
+router.get('/sales/returns', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const rows = await getSalesReturnService().listReturns(req.tenantId);
+    res.json(rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/sales/returns/:id', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const row = await getSalesReturnService().getReturnById(req.tenantId, req.params.id);
+    if (!row) return res.status(404).json({ error: 'Return not found' });
+    res.json(row);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/sales/returns', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+  try {
+    const body = { ...req.body, userId: req.userId ?? req.body?.userId };
+    const result = await getSalesReturnService().createReturn(req.tenantId, body);
+    res.status(201).json(result);
+  } catch (error: any) {
+    const status = /not found|void|already|exceeds|required|Invalid/i.test(String(error.message)) ? 400 : 500;
+    res.status(status).json({ error: error.message || 'Failed to create return' });
+  }
+});
+
 router.get('/sales-returns', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
     const rows = await getSalesReturnService().listReturns(req.tenantId);

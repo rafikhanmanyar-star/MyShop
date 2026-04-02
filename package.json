@@ -1,6 +1,6 @@
 {
   "name": "myshop",
-  "version": "1.0.96",
+  "version": "1.0.97",
   "description": "MyShop - POS & Inventory Management",
   "main": "electron/main.js",
   "private": true,
@@ -14,6 +14,7 @@
     "dev:client": "cd client && npm run dev",
     "build": "npm run build:server && npm run build:client",
     "build:server": "cd server && npm run build",
+    "check:typography": "cd client && npm run check:typography",
     "build:client": "cd client && npm run build",
     "build:client:cloud": "cd client && npm run build:cloud",
     "electron": "npm run build && electron .",

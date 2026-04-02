@@ -124,6 +124,16 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         [items]
     );
 
+    const categoryPickerRows = useMemo(() => {
+        const byId = new Map(shopCategories.map((c) => [c.id, c]));
+        const rows = shopCategories.map((c) => {
+            const parent = c.parent_id ? byId.get(c.parent_id) : undefined;
+            const label = parent ? `${parent.name} › ${c.name}` : c.name;
+            return { id: c.id, label };
+        });
+        return [...rows].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    }, [shopCategories]);
+
     const existingResults = useMemo(() => {
         const q = existingSearch.trim().toLowerCase();
         if (!q) return items.slice(0, 20);
@@ -474,15 +484,23 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                         </div>
                         <div className="grid grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+                                <label
+                                    htmlFor="pos-add-edit-sku-category"
+                                    className="block text-sm font-medium text-slate-700 mb-1"
+                                >
+                                    Category
+                                </label>
                                 <select
+                                    id="pos-add-edit-sku-category"
                                     className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                     value={formData.category}
                                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                                 >
                                     <option value="General">General</option>
-                                    {shopCategories.map((c) => (
-                                        <option key={c.id} value={c.name}>{c.name}</option>
+                                    {categoryPickerRows.map((row) => (
+                                        <option key={row.id} value={row.id}>
+                                            {row.label}
+                                        </option>
                                     ))}
                                 </select>
                             </div>

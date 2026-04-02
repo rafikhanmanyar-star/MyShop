@@ -146,9 +146,11 @@ export const shopApi = {
 
   getSaleReturnEligibility: (saleId: string) =>
     apiClient.get<any>(`/shop/sales/return-eligibility/${encodeURIComponent(saleId)}`),
-  getSalesReturns: () => apiClient.get<any[]>('/shop/sales-returns'),
-  getSalesReturn: (id: string) => apiClient.get<any>(`/shop/sales-returns/${encodeURIComponent(id)}`),
-  createSalesReturn: (data: Record<string, unknown>) => apiClient.post<{ id: string; returnNumber: string; totalReturnAmount: number }>('/shop/sales-returns', data),
+  /** Nested under /sales/returns — avoids some proxies/hyphen path issues */
+  getSalesReturns: () => apiClient.get<any[]>('/shop/sales/returns'),
+  getSalesReturn: (id: string) => apiClient.get<any>(`/shop/sales/returns/${encodeURIComponent(id)}`),
+  createSalesReturn: (data: Record<string, unknown>) =>
+    apiClient.post<{ id: string; returnNumber: string; totalReturnAmount: number }>('/shop/sales/returns', data),
 };
 
 // --- Khata / Customer Credit API ---

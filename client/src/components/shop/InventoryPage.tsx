@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useLayoutEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { InventoryProvider, useInventory } from '../../context/InventoryContext';
 import InventoryDashboard from './inventory/InventoryDashboard';
 import StockMaster from './inventory/StockMaster';
@@ -12,7 +11,6 @@ import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { shopApi, ShopProductCategory } from '../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../services/categoriesOfflineCache';
-import { createCategoryOfflineFirst } from '../../services/categorySyncService';
 import { getFullImageUrl } from '../../config/apiUrl';
 const InventoryContent: React.FC = () => {
     const { items, addItem, refreshItems } = useInventory();
@@ -32,16 +30,6 @@ const InventoryContent: React.FC = () => {
     });
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
-    const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-    const [categorySearchQuery, setCategorySearchQuery] = useState('');
-    const [addingCategory, setAddingCategory] = useState(false);
-    const categoryInputRef = useRef<HTMLDivElement>(null);
-    const categoryDropdownPortalRef = useRef<HTMLDivElement>(null);
-    const [categoryDropdownPos, setCategoryDropdownPos] = useState<{
-        top: number;
-        left: number;
-        width: number;
-    } | null>(null);
 
     const loadShopCategories = useCallback(async () => {
         try {
@@ -58,108 +46,22 @@ const InventoryContent: React.FC = () => {
         loadShopCategories();
     }, [refreshItems, loadShopCategories]);
 
-    // When modal opens, refresh categories and sync search state (deps: modal open only)
+    // When modal opens, refresh categories
     useEffect(() => {
         if (!isNewSkuModalOpen) return;
         loadShopCategories();
-        setCategorySearchQuery(newItemData.category);
-        setCategoryDropdownOpen(false);
     }, [isNewSkuModalOpen, loadShopCategories]);
-
-    /** Close category picker when clicking outside the field and the portaled list */
-    useEffect(() => {
-        if (!categoryDropdownOpen) return;
-        const handle = (e: PointerEvent) => {
-            const t = e.target as Node;
-            if (categoryInputRef.current?.contains(t)) return;
-            if (categoryDropdownPortalRef.current?.contains(t)) return;
-            setCategoryDropdownOpen(false);
-        };
-        document.addEventListener('pointerdown', handle, true);
-        return () => document.removeEventListener('pointerdown', handle, true);
-    }, [categoryDropdownOpen]);
 
     /** Main and sub categories with a display label (Parent › Sub) for the picker. */
     const categoryPickerRows = useMemo(() => {
         const byId = new Map(shopCategories.map((c) => [c.id, c]));
-        return shopCategories.map((c) => {
+        const rows = shopCategories.map((c) => {
             const parent = c.parent_id ? byId.get(c.parent_id) : undefined;
             const label = parent ? `${parent.name} › ${c.name}` : c.name;
             return { id: c.id, name: c.name, label };
         });
+        return [...rows].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
     }, [shopCategories]);
-
-    const allCategoryNames = useCallback(() => {
-        const names = new Set<string>(['General']);
-        categoryPickerRows.forEach((r) => names.add(r.name));
-        return Array.from(names);
-    }, [categoryPickerRows]);
-
-    const filteredCategoryPickerRows = React.useMemo(() => {
-        const q = (categorySearchQuery || '').trim().toLowerCase();
-        const all = categoryPickerRows;
-        const list =
-            !q
-                ? all
-                : all.filter(
-                      (r) =>
-                          r.label.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)
-                  );
-        return [...list].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
-    }, [categorySearchQuery, categoryPickerRows]);
-
-    // Fixed-position portal so the list is not clipped by the modal body (overflow-y-auto)
-    useLayoutEffect(() => {
-        if (!categoryDropdownOpen || !categoryInputRef.current) {
-            setCategoryDropdownPos(null);
-            return;
-        }
-        const update = () => {
-            const el = categoryInputRef.current;
-            if (!el) return;
-            const r = el.getBoundingClientRect();
-            setCategoryDropdownPos({ top: r.bottom + 4, left: r.left, width: r.width });
-        };
-        update();
-        window.addEventListener('scroll', update, true);
-        window.addEventListener('resize', update);
-        return () => {
-            window.removeEventListener('scroll', update, true);
-            window.removeEventListener('resize', update);
-        };
-    }, [categoryDropdownOpen, categorySearchQuery, filteredCategoryPickerRows]);
-
-    const showGeneralInList = useMemo(() => {
-        const q = (categorySearchQuery || '').trim().toLowerCase();
-        if (!q) return true;
-        return 'general'.includes(q);
-    }, [categorySearchQuery]);
-
-    const trimmedQuery = (categorySearchQuery || '').trim();
-    const exactMatch = trimmedQuery && allCategoryNames().some((n) => n.toLowerCase() === trimmedQuery.toLowerCase());
-    const showAddOption = trimmedQuery.length > 0 && !exactMatch;
-
-    const handleSelectCategory = (name: string) => {
-        setNewItemData((prev) => ({ ...prev, category: name }));
-        setCategorySearchQuery(name);
-        setCategoryDropdownOpen(false);
-    };
-
-    const handleAddCategoryOnTheFly = async () => {
-        if (!trimmedQuery || addingCategory) return;
-        setAddingCategory(true);
-        try {
-            await createCategoryOfflineFirst(trimmedQuery);
-            await loadShopCategories();
-            setNewItemData((prev) => ({ ...prev, category: trimmedQuery }));
-            setCategorySearchQuery(trimmedQuery);
-            setCategoryDropdownOpen(false);
-        } catch (err) {
-            console.error('Failed to create category:', err);
-        } finally {
-            setAddingCategory(false);
-        }
-    };
 
     // Real-time duplicate checks for barcode and product name
     const barcodeConflictItems = React.useMemo(() => {
@@ -373,75 +275,31 @@ const InventoryContent: React.FC = () => {
                         )}
                     </div>
                     <div className="grid grid-cols-3 gap-4">
-                        <div ref={categoryInputRef} className="relative">
-                            <label className="block text-sm font-medium text-foreground dark:text-slate-300 mb-1">Category</label>
-                            <input
-                                type="text"
+                        <div>
+                            <label
+                                htmlFor="inventory-create-sku-category"
+                                className="block text-sm font-medium text-foreground dark:text-slate-300 mb-1"
+                            >
+                                Category
+                            </label>
+                            <select
+                                id="inventory-create-sku-category"
                                 className="block w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-card dark:bg-slate-800 dark:text-slate-100 py-2 px-3 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                placeholder="Search or add category..."
-                                value={categoryDropdownOpen ? categorySearchQuery : newItemData.category}
-                                onChange={(e) => {
-                                    setCategorySearchQuery(e.target.value);
-                                    setCategoryDropdownOpen(true);
-                                }}
-                                onFocus={() => {
-                                    setCategorySearchQuery(newItemData.category);
-                                    setCategoryDropdownOpen(true);
-                                }}
-                            />
-                            {categoryDropdownOpen &&
-                                categoryDropdownPos &&
-                                createPortal(
-                                    <div
-                                        ref={categoryDropdownPortalRef}
-                                        className="rounded-lg border border-border dark:border-slate-700 bg-card dark:bg-slate-800 py-1 shadow-lg max-h-48 overflow-y-auto"
-                                        style={{
-                                            position: 'fixed',
-                                            top: categoryDropdownPos.top,
-                                            left: categoryDropdownPos.left,
-                                            width: categoryDropdownPos.width,
-                                            zIndex: 10050
-                                        }}
-                                    >
-                                        {filteredCategoryPickerRows.length === 0 &&
-                                            !showAddOption &&
-                                            !showGeneralInList && (
-                                                <div className="px-3 py-2 text-sm text-muted-foreground dark:text-muted-foreground">
-                                                    No categories match.
-                                                </div>
-                                            )}
-                                        {showGeneralInList && (
-                                            <button
-                                                type="button"
-                                                className="block w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-foreground dark:text-slate-200"
-                                                onClick={() => handleSelectCategory('General')}
-                                            >
-                                                General
-                                            </button>
-                                        )}
-                                        {filteredCategoryPickerRows.map((row) => (
-                                            <button
-                                                key={row.id}
-                                                type="button"
-                                                className="block w-full text-left px-3 py-2 text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-foreground dark:text-slate-200"
-                                                onClick={() => handleSelectCategory(row.name)}
-                                            >
-                                                {row.label}
-                                            </button>
-                                        ))}
-                                        {showAddOption && (
-                                            <button
-                                                type="button"
-                                                className="block w-full text-left px-3 py-2 text-sm bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-medium border-t border-border dark:border-slate-700"
-                                                onClick={handleAddCategoryOnTheFly}
-                                                disabled={addingCategory}
-                                            >
-                                                {addingCategory ? 'Adding…' : `Add "${trimmedQuery}" as new category`}
-                                            </button>
-                                        )}
-                                    </div>,
-                                    document.body
-                                )}
+                                value={newItemData.category}
+                                onChange={(e) =>
+                                    setNewItemData({ ...newItemData, category: e.target.value })
+                                }
+                            >
+                                <option value="General">General</option>
+                                {categoryPickerRows.map((row) => (
+                                    <option key={row.id} value={row.id}>
+                                        {row.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-muted-foreground dark:text-muted-foreground mt-1">
+                                Includes subcategories as &quot;Parent › Sub&quot;.
+                            </p>
                         </div>
                         <Input
                             label="Unit"
