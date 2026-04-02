@@ -77,11 +77,19 @@ router.delete('/ledger/:entryId', checkRole(['admin', 'pos_cashier', 'accountant
 
 router.post('/receive-payment', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
-    const { customerId, amount, note } = req.body || {};
+    const { customerId, amount, note, bankAccountId } = req.body || {};
     if (!customerId || amount == null || Number(amount) <= 0) {
       return res.status(400).json({ error: 'customerId and positive amount are required' });
     }
-    const id = await getKhataService().addCredit(req.tenantId, customerId, Number(amount), note || undefined);
+    if (!bankAccountId || typeof bankAccountId !== 'string') {
+      return res.status(400).json({ error: 'bankAccountId is required (deposit to chart-linked cash/bank account)' });
+    }
+    const id = await getKhataService().receivePayment(req.tenantId, {
+      customerId,
+      amount: Number(amount),
+      note: note === undefined || note === null || String(note).trim() === '' ? undefined : String(note).trim(),
+      bankAccountId,
+    });
     res.status(201).json({ id, message: 'Payment recorded' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

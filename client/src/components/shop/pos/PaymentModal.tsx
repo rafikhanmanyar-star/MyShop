@@ -76,10 +76,10 @@ const PaymentModal: React.FC = () => {
                     {ICONS.creditCard}
                 </div>
                 <div>
-                    <h2 className="text-2xl font-black text-slate-900 leading-none tracking-tight">Checkout Terminal</h2>
+                    <h2 className="text-2xl font-semibold text-slate-900 leading-none tracking-tight">Checkout Terminal</h2>
                     <div className="flex items-center gap-2 mt-2">
                         <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Secure Transaction Session</span>
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest leading-none">Secure Transaction Session</span>
                     </div>
                 </div>
             </div>}
@@ -93,8 +93,8 @@ const PaymentModal: React.FC = () => {
                     {!lastCompletedSale ? (
                         <>
                             <div>
-                                <h3 className="text-[10px] font-black uppercase text-slate-400 mb-3 tracking-[0.25em] flex items-center gap-2">
-                                    <span className="w-5 h-5 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-[10px]">1</span>
+                                <h3 className="text-xs font-semibold uppercase text-slate-400 mb-3 tracking-[0.25em] flex items-center gap-2">
+                                    <span className="w-5 h-5 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-xs">1</span>
                                     Payment Mode
                                 </h3>
                                 <div className="grid grid-cols-3 gap-4">
@@ -122,7 +122,7 @@ const PaymentModal: React.FC = () => {
                                             <div className={`mb-2 transition-transform group-hover:scale-110 ${selectedMethod === method ? 'text-indigo-600' : 'text-slate-300'}`}>
                                                 {method === POSPaymentMethod.CASH ? ICONS.dollarSign : method === POSPaymentMethod.KHATA ? ICONS.user : ICONS.creditCard}
                                             </div>
-                                            <span className="text-xs font-black uppercase tracking-widest leading-none text-center">{method}</span>
+                                            <span className="text-xs font-semibold uppercase tracking-widest leading-none text-center">{method}</span>
                                             {selectedMethod === method && (
                                                 <div className="absolute top-4 right-4 w-3 h-3 bg-indigo-600 rounded-full animate-pulse"></div>
                                             )}
@@ -138,8 +138,8 @@ const PaymentModal: React.FC = () => {
 
                             {!isKhata && (
                             <div>
-                                <h3 className="text-[11px] font-black uppercase text-slate-400 mb-3 tracking-[0.25em] flex items-center gap-3">
-                                    <span className="w-5 h-5 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-[10px]">2</span>
+                                <h3 className="text-xs font-semibold uppercase text-slate-400 mb-3 tracking-[0.25em] flex items-center gap-3">
+                                    <span className="w-5 h-5 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 text-xs">2</span>
                                     Banking Source
                                 </h3>
                                 <div className="relative group">
@@ -147,7 +147,7 @@ const PaymentModal: React.FC = () => {
                                         {ICONS.briefcase}
                                     </div>
                                     <select
-                                        className="block w-full rounded-[1.25rem] border-2 border-slate-50 bg-[#f8fafc] pl-14 pr-6 py-3 text-sm font-black text-slate-800 transition-all outline-none focus:bg-white focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 appearance-none"
+                                        className="block w-full rounded-[1.25rem] border-2 border-slate-50 bg-[#f8fafc] pl-14 pr-6 py-3 text-sm font-semibold text-slate-800 transition-all outline-none focus:bg-white focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 appearance-none"
                                         value={selectedBankId}
                                         onChange={e => setSelectedBankId(e.target.value)}
                                         disabled={selectedMethod === POSPaymentMethod.CASH && bankAccounts.some(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'))}
@@ -170,12 +170,12 @@ const PaymentModal: React.FC = () => {
                                 <div className="absolute -top-4 -right-4 p-12 opacity-[0.03] text-slate-900 group-hover:scale-110 group-hover:-rotate-12 transition-all duration-1000">
                                     {React.cloneElement(ICONS.shoppingCart as React.ReactElement, { size: 160 })}
                                 </div>
-                                <label className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-400 mb-4 block leading-none">Amount to Tender</label>
+                                <label className="text-xs font-semibold uppercase tracking-[0.4em] text-slate-400 mb-4 block leading-none">Amount to Tender</label>
                                 <div className="flex items-center gap-6 relative z-10">
-                                    <span className="text-5xl font-black text-slate-300 font-mono tracking-tighter">{CURRENCY}</span>
+                                    <span className="text-5xl font-semibold text-slate-300 font-mono tracking-tighter">{CURRENCY}</span>
                                     <input
                                         type="text"
-                                        className="bg-transparent border-none text-5xl font-black text-slate-900 focus:ring-0 w-full p-0 font-mono tracking-[-0.05em] select-all"
+                                        className="bg-transparent border-none text-5xl font-semibold text-slate-900 focus:ring-0 w-full p-0 font-mono tracking-[-0.05em] select-all"
                                         value={tenderAmount}
                                         onChange={(e) => setTenderAmount(e.target.value)}
                                         autoFocus
@@ -187,7 +187,7 @@ const PaymentModal: React.FC = () => {
                                         <button
                                             key={amt}
                                             onClick={() => handleQuickAmount(amt)}
-                                            className="group relative py-4 rounded-2xl bg-white border border-slate-100 text-sm font-black text-slate-900 shadow-none hover:border-indigo-500 hover:text-indigo-600 transition-all overflow-hidden"
+                                            className="group relative py-4 rounded-2xl bg-white border border-slate-100 text-sm font-semibold text-slate-900 shadow-none hover:border-indigo-500 hover:text-indigo-600 transition-all overflow-hidden"
                                         >
                                             <div className="absolute inset-0 bg-indigo-600 scale-0 group-hover:scale-100 opacity-0 group-hover:opacity-[0.03] transition-transform"></div>
                                             +{amt}
@@ -199,7 +199,7 @@ const PaymentModal: React.FC = () => {
                             <button
                                 onClick={handleAddPayment}
                                 disabled={parseFloat(tenderAmount) <= 0}
-                                className="w-full py-5 pos-gradient-dark hover:opacity-95 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-[1.5rem] font-black text-xl transition-all shadow-none shadow-none-200 uppercase tracking-[0.2em] relative overflow-hidden group"
+                                className="w-full py-5 pos-gradient-dark hover:opacity-95 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-[1.5rem] font-semibold text-xl transition-all shadow-none shadow-none-200 uppercase tracking-[0.2em] relative overflow-hidden group"
                             >
                                 <div className="absolute inset-x-0 h-px top-0 bg-white/20"></div>
                                 <span className="relative z-10 flex items-center justify-center gap-4">
@@ -214,13 +214,13 @@ const PaymentModal: React.FC = () => {
                                 <div className="absolute inset-0 bg-emerald-500 rounded-[2.5rem] animate-ping opacity-10"></div>
                                 {React.cloneElement(ICONS.checkCircle as React.ReactElement, { size: 64 })}
                             </div>
-                            <h2 className="text-4xl font-black text-slate-900 tracking-[-0.04em] mb-4 uppercase">Success</h2>
+                            <h2 className="text-4xl font-semibold text-slate-900 tracking-[-0.04em] mb-4 uppercase">Success</h2>
                             <p className="text-slate-500 font-bold mb-14 max-w-sm text-lg leading-relaxed">The transaction has been successfully authorized and recorded.</p>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full">
                                 <button
                                     onClick={() => printReceipt()}
-                                    className="flex items-center justify-center gap-4 py-6 pos-gradient-primary text-white rounded-3xl font-black uppercase tracking-widest transition-all shadow-none shadow-none-500/20 active:scale-[0.97]"
+                                    className="flex items-center justify-center gap-4 py-6 pos-gradient-primary text-white rounded-3xl font-semibold uppercase tracking-widest transition-all shadow-none shadow-none-500/20 active:scale-[0.97]"
                                 >
                                     {ICONS.print}
                                     PRINT SLIP
@@ -230,7 +230,7 @@ const PaymentModal: React.FC = () => {
                                         setIsPaymentModalOpen(false);
                                         setLastCompletedSale(null);
                                     }}
-                                    className="flex items-center justify-center gap-4 py-6 bg-slate-100 text-slate-900 hover:bg-slate-200 rounded-3xl font-black uppercase tracking-widest transition-all shadow-none active:scale-[0.97]"
+                                    className="flex items-center justify-center gap-4 py-6 bg-slate-100 text-slate-900 hover:bg-slate-200 rounded-3xl font-semibold uppercase tracking-widest transition-all shadow-none active:scale-[0.97]"
                                 >
                                     {ICONS.refresh}
                                     NEW ORDER
@@ -247,37 +247,37 @@ const PaymentModal: React.FC = () => {
                     <div className="space-y-4 mb-auto overflow-y-auto pos-scrollbar relative z-10">
                         <div className="border-b-2 border-slate-200 border-dashed pb-4 px-2 flex flex-col gap-3">
                             <div className="flex flex-col">
-                                <span className="text-[11px] font-black uppercase text-slate-400 tracking-[0.4em]">Audit Summary</span>
-                                <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-1">Sale Reference: #{Math.random().toString(36).substring(7).toUpperCase()}</span>
+                                <span className="text-xs font-semibold uppercase text-slate-400 tracking-[0.4em]">Audit Summary</span>
+                                <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest mt-1">Sale Reference: #{Math.random().toString(36).substring(7).toUpperCase()}</span>
                             </div>
                             <div className="flex items-baseline gap-2">
-                                <span className="text-xl font-black text-slate-300 font-mono tracking-tighter">{CURRENCY}</span>
-                                <span className="text-4xl font-black text-slate-900 font-mono tracking-[-0.05em]">{grandTotal.toLocaleString()}</span>
+                                <span className="text-xl font-semibold text-slate-300 font-mono tracking-tighter">{CURRENCY}</span>
+                                <span className="text-4xl font-semibold text-slate-900 font-mono tracking-[-0.05em]">{grandTotal.toLocaleString()}</span>
                             </div>
                         </div>
 
                         <div className="space-y-5">
-                            <h4 className="text-[11px] font-black uppercase text-slate-400 px-2 tracking-[0.3em]">Captured Funds</h4>
+                            <h4 className="text-xs font-semibold uppercase text-slate-400 px-2 tracking-[0.3em]">Captured Funds</h4>
                             {payments.length === 0 ? (
                                 <div className="py-12 rounded-[2rem] border-2 border-slate-200 border-dashed flex flex-col items-center justify-center text-slate-300 bg-white/50">
                                     <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-none border border-slate-100">
                                         {React.cloneElement(ICONS.creditCard as React.ReactElement, { size: 24 })}
                                     </div>
-                                    <span className="text-[11px] uppercase font-black tracking-widest">Waiting...</span>
+                                    <span className="text-xs uppercase font-semibold tracking-widest">Waiting...</span>
                                 </div>
                             ) : (
                                 <div className="space-y-3">
                                     {payments.map(p => (
                                         <div key={p.id} className="flex justify-between items-center bg-white p-5 rounded-3xl border border-slate-50 shadow-none group animate-slide-up">
                                             <div className="flex flex-col">
-                                                <span className="text-[11px] font-black text-slate-900 uppercase tracking-wider mb-1">{p.method}</span>
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-1.5">
+                                                <span className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-1">{p.method}</span>
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-tighter flex items-center gap-1.5">
                                                     <span className="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
                                                     {p.bankAccountName || 'PRIMARY TILL'}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-5">
-                                                <span className="text-lg font-black font-mono text-slate-900 tracking-tighter">{p.amount.toLocaleString()}</span>
+                                                <span className="text-lg font-semibold font-mono text-slate-900 tracking-tighter">{p.amount.toLocaleString()}</span>
                                                 {!lastCompletedSale && (
                                                     <button
                                                         onClick={() => removePayment(p.id)}
@@ -297,8 +297,8 @@ const PaymentModal: React.FC = () => {
                     <div className="mt-6 space-y-4 relative z-10">
                         <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-none shadow-none-200/50 space-y-6">
                             <div className="flex justify-between items-center">
-                                <span className="text-[11px] font-black uppercase text-slate-400 tracking-[0.25em]">Balance</span>
-                                <span className={`text-3xl font-black font-mono tracking-tighter ${balanceDue > 0 ? 'text-rose-600' : 'text-emerald-500'}`}>
+                                <span className="text-xs font-semibold uppercase text-slate-400 tracking-[0.25em]">Balance</span>
+                                <span className={`text-3xl font-semibold font-mono tracking-tighter ${balanceDue > 0 ? 'text-rose-600' : 'text-emerald-500'}`}>
                                     {balanceDue.toLocaleString()}
                                 </span>
                             </div>
@@ -306,10 +306,10 @@ const PaymentModal: React.FC = () => {
                             {changeDue > 0 && (
                                 <div className="pt-6 border-t-2 border-slate-50 border-dashed">
                                     <div className="flex flex-col items-center justify-center p-4 bg-emerald-50 rounded-[1.5rem] border border-emerald-100">
-                                        <span className="text-[10px] font-black uppercase text-emerald-600 tracking-[0.3em] mb-2">Refund Amount</span>
+                                        <span className="text-xs font-semibold uppercase text-emerald-600 tracking-[0.3em] mb-2">Refund Amount</span>
                                         <div className="flex items-center gap-3">
-                                            <span className="text-sm font-black text-emerald-300 font-mono">{CURRENCY}</span>
-                                            <span className="text-4xl font-black font-mono text-emerald-600 tracking-tighter">
+                                            <span className="text-sm font-semibold text-emerald-300 font-mono">{CURRENCY}</span>
+                                            <span className="text-4xl font-semibold font-mono text-emerald-600 tracking-tighter">
                                                 {changeDue.toLocaleString()}
                                             </span>
                                         </div>
@@ -320,10 +320,10 @@ const PaymentModal: React.FC = () => {
                             {parseFloat(tenderAmount) > balanceDue && balanceDue > 0 && (
                                 <div className="pt-6 border-t-2 border-slate-50 border-dashed animate-pulse">
                                     <div className="flex flex-col items-center justify-center p-4 bg-amber-50 rounded-[1.5rem] border border-amber-100">
-                                        <span className="text-[10px] font-black uppercase text-amber-600 tracking-[0.3em] mb-2">Projected Refund</span>
+                                        <span className="text-xs font-semibold uppercase text-amber-600 tracking-[0.3em] mb-2">Projected Refund</span>
                                         <div className="flex items-center gap-3">
-                                            <span className="text-sm font-black text-amber-300 font-mono">{CURRENCY}</span>
-                                            <span className="text-4xl font-black font-mono text-amber-600 tracking-tighter">
+                                            <span className="text-sm font-semibold text-amber-300 font-mono">{CURRENCY}</span>
+                                            <span className="text-4xl font-semibold font-mono text-amber-600 tracking-tighter">
                                                 {(parseFloat(tenderAmount) - balanceDue).toLocaleString()}
                                             </span>
                                         </div>
@@ -343,7 +343,7 @@ const PaymentModal: React.FC = () => {
                                         console.error("Sale failed", e);
                                     }
                                 }}
-                                className={`w-full py-5 rounded-[2rem] font-black text-xl transition-all active:scale-[0.97] flex items-center justify-center gap-4 relative overflow-hidden group shadow-none ${balanceDue > 0 || khataRequiresCustomer
+                                className={`w-full py-5 rounded-[2rem] font-semibold text-xl transition-all active:scale-[0.97] flex items-center justify-center gap-4 relative overflow-hidden group shadow-none ${balanceDue > 0 || khataRequiresCustomer
                                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                                     : 'pos-gradient-success text-white shadow-none-500/20 hover:shadow-none-500/40'
                                     }`}

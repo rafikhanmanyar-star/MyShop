@@ -29,8 +29,8 @@ const OrganizationDashboard: React.FC = () => {
                             {React.cloneElement(stat.icon as React.ReactElement<any>, { width: 28, height: 28 })}
                         </div>
                         <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
-                            <p className="text-2xl font-black text-foreground tracking-tight">{stat.value}</p>
+                            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                            <p className="text-2xl font-semibold text-foreground tracking-tight">{stat.value}</p>
                         </div>
                     </Card>
                 ))}
@@ -55,15 +55,15 @@ const OrganizationDashboard: React.FC = () => {
                                 <div key={perf.storeId} className="space-y-2">
                                     <div className="flex justify-between items-end">
                                         <div className="flex items-center gap-3">
-                                            <span className="text-xs font-black text-slate-300 dark:text-slate-600">#0{i + 1}</span>
+                                            <span className="text-xs font-semibold text-slate-300 dark:text-slate-600">#0{i + 1}</span>
                                             <div>
                                                 <p className="text-sm font-bold text-foreground">{store?.name}</p>
-                                                <p className="text-[10px] text-muted-foreground uppercase font-mono">{store?.code}</p>
+                                                <p className="text-xs text-muted-foreground uppercase font-mono">{store?.code}</p>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-sm font-black text-foreground font-mono">{CURRENCY} {perf.salesToday.toLocaleString()}</p>
-                                            <p className={`text-[10px] font-bold ${perf.variance >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                                            <p className="text-sm font-semibold text-foreground font-mono">{CURRENCY} {perf.salesToday.toLocaleString()}</p>
+                                            <p className={`text-xs font-bold ${perf.variance >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                                                 {perf.variance >= 0 ? '+' : ''}{perf.variance}% vs Yesterday
                                             </p>
                                         </div>
@@ -86,8 +86,8 @@ const OrganizationDashboard: React.FC = () => {
                     <div className="flex-1 flex items-center justify-center relative">
                         <div className="w-48 h-48 rounded-full border-8 border-slate-50 dark:border-slate-700 flex items-center justify-center relative">
                             <div className="text-center">
-                                <p className="text-3xl font-black text-foreground">{activeBranches}</p>
-                                <p className="text-[10px] font-bold text-muted-foreground uppercase">Active Branches</p>
+                                <p className="text-3xl font-semibold text-foreground">{activeBranches}</p>
+                                <p className="text-xs font-bold text-muted-foreground uppercase">Active Branches</p>
                             </div>
                         </div>
                     </div>
@@ -123,7 +123,7 @@ const RegionalBreakdown: React.FC<{ stores: any[] }> = ({ stores }) => {
                         <div className={`w-2 h-2 rounded-full ${regionColors[i % regionColors.length]}`}></div>
                         <span className="text-xs font-bold text-muted-foreground">{region.name}</span>
                     </div>
-                    <span className="text-xs font-black text-foreground font-mono">{region.count} {region.count === 1 ? 'Store' : 'Stores'}</span>
+                    <span className="text-xs font-semibold text-foreground font-mono">{region.count} {region.count === 1 ? 'Store' : 'Stores'}</span>
                 </div>
             ))}
         </div>

@@ -11,6 +11,10 @@ export interface DashboardStats {
   totalProducts: number;
   totalSales: number;
   totalRevenue: number;
+  /** Sum of shop_sales_returns.total_return_amount (all time; approximates returns volume) */
+  totalReturns: number;
+  /** totalRevenue − totalReturns (approximate net over sales list + returns) */
+  netRevenue: number;
   totalCustomers: number;
   lowStockItems: number;
   outOfStockItems: number;
@@ -75,6 +79,7 @@ export async function refreshDashboardCache(tenantId: string): Promise<void> {
       categories,
       vendors,
       mobileOrders,
+      salesReturns,
     ] = await Promise.all([
       shopApi.getProducts().catch(() => []),
       shopApi.getSales().catch(() => []),
@@ -85,12 +90,19 @@ export async function refreshDashboardCache(tenantId: string): Promise<void> {
       getShopCategoriesOfflineFirst().catch(() => []),
       shopApi.getVendors().catch(() => []),
       mobileOrdersApi.getOrders().catch(() => []),
+      shopApi.getSalesReturns().catch(() => []),
     ]);
     const salesList = (sales as any[]) || [];
     const totalRevenue = salesList.reduce(
       (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
       0
     );
+    const retList = (salesReturns as any[]) || [];
+    const totalReturns = retList.reduce(
+      (sum: number, r: any) => sum + parseFloat(r.totalReturnAmount ?? r.total_return_amount ?? 0),
+      0
+    );
+    const netRevenue = Math.max(0, totalRevenue - totalReturns);
     const invList = (inventory as any[]) || [];
     const lowStockItems = invList.filter(
       (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 10
@@ -118,6 +130,8 @@ export async function refreshDashboardCache(tenantId: string): Promise<void> {
       totalProducts: (products as any[]).length,
       totalSales: totalSalesCount,
       totalRevenue,
+      totalReturns,
+      netRevenue,
       totalCustomers: (loyaltyMembers as any[]).length,
       lowStockItems,
       outOfStockItems,

@@ -1,28 +1,74 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Store, Eye, EyeOff } from 'lucide-react';
-import { getQrParamsFromUrl } from '../utils/urlParams';
+import { Store, Eye, EyeOff, Building2 } from 'lucide-react';
+import { getLoginOrgParamsFromUrl } from '../utils/urlParams';
 import { setAppContext, getAppContext } from '../services/appContext';
+import { authApi, type PublicOrganizationInfo } from '../services/authApi';
 import ThemeToggle from '../components/ui/ThemeToggle';
 
 export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => void }) {
   const { login } = useAuth();
+  const location = useLocation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [orgInfo, setOrgInfo] = useState<PublicOrganizationInfo | null>(null);
+  const [orgLoading, setOrgLoading] = useState(false);
+  const [orgLookupFailed, setOrgLookupFailed] = useState(false);
 
   useEffect(() => {
-    const qr = getQrParamsFromUrl();
-    if (qr) {
-      setAppContext({
-        organization_id: qr.org_id,
-        branch_id: qr.branch_id,
-        selected_by_qr: true,
-      });
+    const { org_id, branch_id } = getLoginOrgParamsFromUrl();
+    if (org_id) {
+      if (branch_id) {
+        setAppContext({ organization_id: org_id, branch_id, selected_by_qr: true });
+      } else {
+        setAppContext({ organization_id: org_id });
+      }
     }
-  }, []);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const { org_id: urlOrg, branch_id: urlBranch } = getLoginOrgParamsFromUrl();
+    const ctx = getAppContext();
+    const orgId = urlOrg || ctx.organization_id;
+    const branchId = urlBranch || ctx.branch_id || null;
+
+    if (!orgId) {
+      setOrgInfo(null);
+      setOrgLookupFailed(false);
+      setOrgLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setOrgLoading(true);
+    setOrgLookupFailed(false);
+
+    authApi
+      .getPublicOrganization(orgId, branchId)
+      .then((data) => {
+        if (!cancelled) {
+          setOrgInfo(data);
+          setOrgLookupFailed(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOrgInfo(null);
+          setOrgLookupFailed(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setOrgLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, location.search]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +83,10 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
       setLoading(false);
     }
   };
+
+  const displayOrgName = orgInfo
+    ? (orgInfo.company_name?.trim() || orgInfo.name || 'Organization')
+    : null;
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center bg-background p-4 text-foreground transition-colors duration-300">
@@ -54,7 +104,52 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-8 text-card-foreground shadow-erp-md">
-          <h2 className="mb-6 text-xl font-semibold text-foreground">Sign in to your account</h2>
+          <h2 className="mb-2 text-xl font-semibold text-foreground">Sign in to your account</h2>
+
+          {orgLoading && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+              <span className="inline-block h-4 w-4 animate-pulse rounded-full bg-muted-foreground/30" />
+              Loading organization…
+            </div>
+          )}
+
+          {!orgLoading && orgInfo && displayOrgName && (
+            <div className="mb-4 rounded-lg border border-primary/25 bg-primary/5 px-3 py-3 text-sm">
+              <div className="flex items-start gap-2.5">
+                <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+                <div className="min-w-0 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Signing in to
+                  </p>
+                  <p className="truncate font-semibold text-foreground">{displayOrgName}</p>
+                  {orgInfo.branch_name && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Branch: <span className="font-medium text-foreground">{orgInfo.branch_name}</span>
+                    </p>
+                  )}
+                  {orgInfo.slug && (
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">@{orgInfo.slug}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!orgLoading && orgLookupFailed && (
+            <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-200">
+              Could not load organization details. Check that your link includes the correct{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">org</code> value, or ask your administrator for
+              the right sign-in URL.
+            </div>
+          )}
+
+          {!orgLoading && !orgInfo && !orgLookupFailed && (
+            <p className="mb-4 text-sm text-muted-foreground">
+              Open the sign-in link from your organization (or add{' '}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">?org=…</code> to the address bar) so we can show
+              which store you are signing in to.
+            </p>
+          )}
 
           {error && (
             <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">

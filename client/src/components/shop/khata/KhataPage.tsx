@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { khataApi, KhataLedgerEntry, KhataSummaryRow } from '../../../services/shopApi';
+import { khataApi, KhataLedgerEntry, KhataSummaryRow, shopApi, ShopBankAccount } from '../../../services/shopApi';
 import { ICONS, CURRENCY } from '../../../constants';
 import Modal from '../../ui/Modal';
 import Card from '../../ui/Card';
@@ -14,6 +14,8 @@ const KhataPage: React.FC = () => {
   const [receiveCustomerId, setReceiveCustomerId] = useState('');
   const [receiveAmount, setReceiveAmount] = useState('');
   const [receiveNote, setReceiveNote] = useState('');
+  const [receiveBankAccountId, setReceiveBankAccountId] = useState('');
+  const [depositAccounts, setDepositAccounts] = useState<ShopBankAccount[]>([]);
   const [receiveSubmitting, setReceiveSubmitting] = useState(false);
   const [customers, setCustomers] = useState<{ id: string; name: string; contact_no: string | null }[]>([]);
   const [editingEntry, setEditingEntry] = useState<KhataLedgerEntry | null>(null);
@@ -59,6 +61,15 @@ const KhataPage: React.FC = () => {
     }
   }, []);
 
+  const loadDepositAccounts = useCallback(async () => {
+    try {
+      const data = await shopApi.getBankAccounts(true);
+      setDepositAccounts(Array.isArray(data) ? data : []);
+    } catch {
+      setDepositAccounts([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadSummary();
   }, [loadSummary]);
@@ -68,13 +79,17 @@ const KhataPage: React.FC = () => {
   }, [selectedCustomerId, loadLedger]);
 
   useEffect(() => {
-    if (receiveModalOpen) loadCustomers();
-  }, [receiveModalOpen, loadCustomers]);
+    if (receiveModalOpen) {
+      loadCustomers();
+      loadDepositAccounts();
+    }
+  }, [receiveModalOpen, loadCustomers, loadDepositAccounts]);
 
   const openReceiveModal = () => {
     setReceiveCustomerId('');
     setReceiveAmount('');
     setReceiveNote('');
+    setReceiveBankAccountId('');
     setReceiveModalOpen(true);
   };
 
@@ -145,18 +160,20 @@ const KhataPage: React.FC = () => {
   const handleReceivePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(receiveAmount);
-    if (!receiveCustomerId || !amount || amount <= 0) return;
+    if (!receiveCustomerId || !receiveBankAccountId || !amount || amount <= 0) return;
     setReceiveSubmitting(true);
     try {
       await khataApi.receivePayment({
         customerId: receiveCustomerId,
         amount,
+        bankAccountId: receiveBankAccountId,
         note: receiveNote.trim() || undefined,
       });
       setReceiveModalOpen(false);
       setReceiveCustomerId('');
       setReceiveAmount('');
       setReceiveNote('');
+      setReceiveBankAccountId('');
       await refreshSummaryAndLedger();
     } catch (err) {
       console.error('Receive payment failed', err);
@@ -173,8 +190,10 @@ const KhataPage: React.FC = () => {
       <div className="bg-card border-b border-border px-6 md:px-8 py-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-foreground tracking-tight">Customer Khata Ledger</h1>
-            <p className="text-muted-foreground text-sm mt-1">Credit sales and payments. Balance = Debit − Credit.</p>
+            <h1 className="text-2xl font-semibold text-foreground tracking-tight">Customer Khata Ledger</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Credit sales and payments. Balance = Debit − Credit. Received payments post to your chart: debit the selected cash/bank asset, credit Trade Receivables.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -189,10 +208,10 @@ const KhataPage: React.FC = () => {
         </div>
 
         <div className="mt-6 p-4 rounded-2xl bg-muted border border-border">
-          <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">Total outstanding (all customers)</span>
+          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Total outstanding (all customers)</span>
           <div className="flex items-baseline gap-2 mt-1">
             <span className="text-muted-foreground font-mono text-lg">{CURRENCY}</span>
-            <span className={`text-2xl font-black font-mono ${totalBalance > 0 ? 'text-amber-600' : 'text-foreground'}`}>
+            <span className={`text-2xl font-semibold font-mono ${totalBalance > 0 ? 'text-amber-600' : 'text-foreground'}`}>
               {totalBalance.toLocaleString()}
             </span>
           </div>
@@ -208,7 +227,7 @@ const KhataPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="p-0 overflow-hidden">
               <div className="px-6 py-4 border-b border-border bg-muted/80/80">
-                <h2 className="text-sm font-black uppercase tracking-widest text-muted-foreground">Customers with balance</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">Customers with balance</h2>
               </div>
               <div className="max-h-[400px] overflow-y-auto">
                 {summary.length === 0 ? (
@@ -244,7 +263,7 @@ const KhataPage: React.FC = () => {
 
             <Card className="p-0 overflow-hidden flex flex-col">
               <div className="px-6 py-4 border-b border-border bg-muted/80/80 flex items-center justify-between">
-                <h2 className="text-sm font-black uppercase tracking-widest text-muted-foreground">
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
                   {selectedCustomerId ? `Ledger: ${selectedCustomerName}` : 'Transaction history'}
                 </h2>
                 {selectedCustomerId && (
@@ -267,7 +286,7 @@ const KhataPage: React.FC = () => {
                   <div className="p-12 text-center text-muted-foreground text-sm">No transactions for this customer.</div>
                 ) : (
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-muted/80 sticky top-0 text-[10px] font-black uppercase text-muted-foreground">
+                    <thead className="bg-muted/80 sticky top-0 text-xs font-semibold uppercase text-muted-foreground">
                       <tr>
                         <th className="px-4 py-3">Date</th>
                         <th className="px-4 py-3">Type</th>
@@ -321,8 +340,8 @@ const KhataPage: React.FC = () => {
               </div>
               {selectedCustomerId && summary.find((s) => s.customer_id === selectedCustomerId) && (
                 <div className="px-6 py-4 border-t border-border bg-muted/80 flex justify-between items-center">
-                  <span className="text-xs font-black uppercase text-muted-foreground">Current balance</span>
-                  <span className={`font-mono font-black ${(summary.find((s) => s.customer_id === selectedCustomerId)?.balance ?? 0) > 0 ? 'text-amber-600' : 'text-foreground'}`}>
+                  <span className="text-xs font-semibold uppercase text-muted-foreground">Current balance</span>
+                  <span className={`font-mono font-semibold ${(summary.find((s) => s.customer_id === selectedCustomerId)?.balance ?? 0) > 0 ? 'text-amber-600' : 'text-foreground'}`}>
                     {CURRENCY} {(summary.find((s) => s.customer_id === selectedCustomerId)?.balance ?? 0).toLocaleString()}
                   </span>
                 </div>
@@ -340,7 +359,7 @@ const KhataPage: React.FC = () => {
       >
         <form onSubmit={handleReceivePayment} className="space-y-5">
           <div>
-            <label className="block text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Customer</label>
+            <label className="block text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Customer</label>
             <select
               aria-label="Select customer"
               value={receiveCustomerId}
@@ -355,7 +374,31 @@ const KhataPage: React.FC = () => {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Amount ({CURRENCY})</label>
+            <label className="block text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Deposit to (chart-linked account)</label>
+            <select
+              aria-label="Deposit to cash or bank account"
+              value={receiveBankAccountId}
+              onChange={(e) => setReceiveBankAccountId(e.target.value)}
+              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 outline-none transition-colors"
+              required
+            >
+              <option value="">Select cash or bank account</option>
+              {depositAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                  {a.account_type ? ` (${a.account_type})` : ''}
+                  {a.chart_code ? ` · ${a.chart_code}` : ''}
+                </option>
+              ))}
+            </select>
+            {depositAccounts.length === 0 && (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                No chart-linked cash/bank accounts found. Add one under shop bank accounts with a chart of accounts link.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Amount ({CURRENCY})</label>
             <input
               type="number"
               step="0.01"
@@ -368,7 +411,7 @@ const KhataPage: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Note (optional)</label>
+            <label className="block text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Note (optional)</label>
             <input
               type="text"
               value={receiveNote}
@@ -388,10 +431,17 @@ const KhataPage: React.FC = () => {
             </button>
             <button
               type="submit"
-              disabled={receiveSubmitting || !receiveCustomerId || !receiveAmount || parseFloat(receiveAmount) <= 0}
+              disabled={
+                receiveSubmitting ||
+                !receiveCustomerId ||
+                !receiveBankAccountId ||
+                depositAccounts.length === 0 ||
+                !receiveAmount ||
+                parseFloat(receiveAmount) <= 0
+              }
               className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 dark:hover:bg-emerald-500 shadow-sm dark:shadow-emerald-900/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {receiveSubmitting ? 'Saving…' : 'Save as credit'}
+              {receiveSubmitting ? 'Saving…' : 'Record payment'}
             </button>
           </div>
         </form>
@@ -411,7 +461,7 @@ const KhataPage: React.FC = () => {
               </p>
             )}
             <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Type</label>
+              <label className="block text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Type</label>
               <select
                 aria-label="Entry type"
                 value={editType}
@@ -423,11 +473,12 @@ const KhataPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Amount ({CURRENCY})</label>
+              <label className="block text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Amount ({CURRENCY})</label>
               <input
                 type="number"
                 step="0.01"
                 min="0.01"
+                aria-label={`Amount (${CURRENCY})`}
                 value={editAmount}
                 onChange={(e) => setEditAmount(e.target.value)}
                 className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -435,7 +486,7 @@ const KhataPage: React.FC = () => {
               />
             </div>
             <div>
-              <label className="block text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Note</label>
+              <label className="block text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Note</label>
               <input
                 type="text"
                 aria-label="Note"

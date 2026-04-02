@@ -126,7 +126,7 @@ export default function MobileAppBranding() {
                         <h3 className="text-lg font-bold text-foreground mb-4 tracking-tight">Color Theme</h3>
                         <div className="grid grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Primary Color</label>
+                                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Primary Color</label>
                                 <div className="flex items-center gap-3">
                                     <input
                                         type="color"
@@ -142,7 +142,7 @@ export default function MobileAppBranding() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Secondary Color</label>
+                                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Secondary Color</label>
                                 <div className="flex items-center gap-3">
                                     <input
                                         type="color"
@@ -158,7 +158,7 @@ export default function MobileAppBranding() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Accent Color</label>
+                                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Accent Color</label>
                                 <div className="flex items-center gap-3">
                                     <input
                                         type="color"
@@ -174,7 +174,7 @@ export default function MobileAppBranding() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Theme Mode</label>
+                                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Theme Mode</label>
                                 <select
                                     className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground outline-none focus:border-indigo-500 transition-all appearance-none"
                                     value={branding.theme_mode}
@@ -225,7 +225,7 @@ export default function MobileAppBranding() {
                                 {/* Banner */}
                                 <div className="rounded-2xl p-6 text-white text-center shadow-lg relative overflow-hidden"
                                     style={{ background: `linear-gradient(135deg, ${branding.primary_color}, ${branding.secondary_color})` }}>
-                                    <h2 className="text-2xl font-black mb-1 relative z-10">Welcome Back!</h2>
+                                    <h2 className="text-2xl font-semibold mb-1 relative z-10">Welcome Back!</h2>
                                     <p className="text-white/80 text-sm font-medium relative z-10">Ready to shop today?</p>
                                 </div>
 

@@ -10,15 +10,15 @@ const ExecutiveOverview: React.FC = () => {
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
             {/* KPI Executive Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
                 {kpis.map((kpi, i) => (
                     <Card key={i} className="p-6 border-none shadow-sm dark:shadow-none dark:bg-slate-900/90 dark:border dark:border-slate-600 flex flex-col gap-4 relative overflow-hidden group hover:shadow-xl transition-all bg-card">
                         <div className="flex justify-between items-start">
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">{kpi.label}</p>
-                                <p className="text-3xl font-black text-foreground dark:text-slate-100 tracking-tighter mt-1">{kpi.value}</p>
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{kpi.label}</p>
+                                <p className="text-3xl font-semibold text-foreground dark:text-slate-100 tracking-tighter mt-1">{kpi.value}</p>
                             </div>
-                            <div className={`flex items-center gap-1 text-[10px] font-black p-1.5 rounded-lg ${kpi.status === 'up' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'
+                            <div className={`flex items-center gap-1 text-xs font-semibold p-1.5 rounded-lg ${kpi.status === 'up' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'
                                 }`}>
                                 {kpi.status === 'up' ? ICONS.trendingUp : ICONS.trendingDown}
                                 {Math.abs(kpi.trend)}%
@@ -45,10 +45,10 @@ const ExecutiveOverview: React.FC = () => {
                     <div className="flex justify-between items-center">
                         <h3 className="font-bold text-foreground text-lg">Intraday Sales Velocity</h3>
                         <div className="flex gap-4">
-                            <span className="flex items-center gap-2 text-[10px] font-bold text-indigo-600">
+                            <span className="flex items-center gap-2 text-xs font-bold text-indigo-600">
                                 <span className="w-2 h-2 bg-indigo-600 rounded-full"></span> Revenue
                             </span>
-                            <span className="flex items-center gap-2 text-[10px] font-bold text-slate-300">
+                            <span className="flex items-center gap-2 text-xs font-bold text-slate-300">
                                 <span className="w-2 h-2 bg-slate-200 rounded-full"></span> Target
                             </span>
                         </div>
@@ -65,7 +65,7 @@ const ExecutiveOverview: React.FC = () => {
                                     >
                                         <div className="absolute inset-0 bg-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     </div>
-                                    <span className="text-[9px] font-black text-muted-foreground uppercase tracking-tighter">{data.timestamp}</span>
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-tighter">{data.timestamp}</span>
                                 </div>
                             );
                         })}
@@ -79,24 +79,24 @@ const ExecutiveOverview: React.FC = () => {
                         {storeRankings.map((store, i) => (
                             <div key={i} className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-muted/80 dark:bg-slate-800 flex items-center justify-center text-[10px] font-black text-muted-foreground border border-border dark:border-slate-600">
+                                    <div className="w-8 h-8 rounded-full bg-muted/80 dark:bg-slate-800 flex items-center justify-center text-xs font-semibold text-muted-foreground border border-border dark:border-slate-600">
                                         0{i + 1}
                                     </div>
                                     <div>
                                         <p className="text-sm font-bold text-foreground leading-none">{store.storeName}</p>
-                                        <p className="text-[10px] text-emerald-500 dark:text-emerald-400 font-bold mt-1">+{store.growth}% Growth</p>
+                                        <p className="text-xs text-emerald-500 dark:text-emerald-400 font-bold mt-1">+{store.growth}% Growth</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-sm font-black text-foreground font-mono tracking-tighter">
+                                    <p className="text-sm font-semibold text-foreground font-mono tracking-tighter">
                                         {CURRENCY} {(store.revenue / 1000000).toFixed(1)}M
                                     </p>
-                                    <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest">Rev</p>
+                                    <p className="text-xs text-muted-foreground uppercase font-semibold tracking-widest">Rev</p>
                                 </div>
                             </div>
                         ))}
                     </div>
-                    <button className="w-full py-4 bg-muted/80 dark:bg-slate-800/80 text-muted-foreground rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border border-dashed border-border dark:border-slate-600 hover:bg-muted dark:hover:bg-slate-700/80 transition-all">
+                    <button className="w-full py-4 bg-muted/80 dark:bg-slate-800/80 text-muted-foreground rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] border border-dashed border-border dark:border-slate-600 hover:bg-muted dark:hover:bg-slate-700/80 transition-all">
                         Full Performance Audit
                     </button>
                 </Card>

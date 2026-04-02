@@ -302,21 +302,18 @@ const POSSalesContent: React.FC = () => {
 
     return (
         <div
-            className={`flex flex-col bg-[#f7f9fc] dark:bg-[#020617] overflow-hidden pos-font select-none animate-fade-in relative ${isFullScreen ? 'fixed inset-0 z-[9999] h-screen w-screen' : 'h-full min-h-0 w-full'}`}
+            className={`pos-page-root flex flex-col overflow-hidden pos-font select-none animate-fade-in relative bg-[var(--pos-bg)] dark:bg-[#020617] ${isFullScreen ? 'fixed inset-0 z-[9999] h-screen w-screen' : 'h-full min-h-0 w-full'}`}
             ref={mainRef}
             style={isFullScreen ? { height: '100vh', width: '100vw' } : { minHeight: 0, flex: 1 } as React.CSSProperties}
         >
-            {/* Background Decorative Elements - Subtle */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-                <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-white dark:from-slate-900 to-transparent opacity-50"></div>
-            </div>
+            <div className="absolute inset-0 pointer-events-none z-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgba(255,255,255,0.9),transparent)] dark:opacity-30" aria-hidden />
 
             {/* Top Status Bar */}
             <POSHeader />
 
             <div
                 ref={layoutRowRef}
-                className={`flex flex-1 min-h-0 w-full min-w-0 relative z-10 p-4 md:p-6 ${
+                className={`flex flex-1 min-h-0 w-full min-w-0 relative z-10 p-3 md:p-4 ${
                     useStackedLayout
                         ? 'flex-col gap-3 overflow-y-auto overflow-x-hidden'
                         : 'flex-row gap-0 overflow-x-auto overflow-y-hidden'
@@ -324,7 +321,7 @@ const POSSalesContent: React.FC = () => {
             >
                 {/* Left: category tree + product grid */}
                 <div
-                    className={`flex flex-col bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-w-0 ${
+                    className={`flex flex-col rounded-[var(--pos-radius)] border border-[var(--pos-border)] bg-[var(--pos-card-bg)] shadow-[var(--pos-shadow)] overflow-hidden z-20 min-w-0 ${
                         useStackedLayout ? 'w-full min-h-[min(40vh,420px)] flex-1 shrink-0' : 'flex-shrink-0'
                     }`}
                     style={
@@ -345,7 +342,7 @@ const POSSalesContent: React.FC = () => {
 
                 {/* Center: line items (bill grid) — grows with remaining space */}
                 <div
-                    className={`flex-1 flex flex-col bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden min-h-0 min-w-0 ${
+                    className={`flex-1 flex flex-col rounded-[var(--pos-radius)] border border-[var(--pos-border)] bg-[var(--pos-card-bg)] shadow-[var(--pos-shadow)] overflow-hidden min-h-0 min-w-0 ${
                         useStackedLayout ? 'min-h-[min(32vh,360px)] shrink-0' : 'min-w-[120px]'
                     }`}
                 >
@@ -361,7 +358,7 @@ const POSSalesContent: React.FC = () => {
 
                 {/* Right: customer, totals, payment */}
                 <div
-                    className={`flex flex-col bg-card dark:bg-slate-900 rounded-3xl border border-[#e2e8f0] dark:border-slate-700 shadow-sm overflow-hidden z-20 min-h-0 min-w-0 ${
+                    className={`flex flex-col rounded-[var(--pos-radius)] border border-[var(--pos-border)] bg-[var(--pos-card-bg)] shadow-[var(--pos-shadow)] overflow-hidden z-20 min-h-0 min-w-0 ${
                         useStackedLayout ? 'w-full shrink-0 max-w-full' : 'flex-shrink-0'
                     }`}
                     style={

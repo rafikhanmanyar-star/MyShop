@@ -33,7 +33,7 @@ const InventoryIntelligence: React.FC = () => {
     return (
         <div className="space-y-8 animate-in zoom-in duration-700">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-black text-foreground dark:text-slate-200 tracking-tight flex items-center gap-2">
+                <h3 className="text-xl font-semibold text-foreground dark:text-slate-200 tracking-tight flex items-center gap-2">
                     {ICONS.package} Supply Chain & Inventory IQ
                 </h3>
             </div>
@@ -45,8 +45,8 @@ const InventoryIntelligence: React.FC = () => {
                             {React.cloneElement(stat.icon as React.ReactElement<any>, { width: 24, height: 24 })}
                         </div>
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
-                            <p className="text-xl font-black text-foreground tracking-tight">{stat.value}</p>
+                            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                            <p className="text-xl font-semibold text-foreground tracking-tight">{stat.value}</p>
                         </div>
                     </Card>
                 ))}
@@ -55,7 +55,7 @@ const InventoryIntelligence: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Category Distribution */}
                 <Card className="lg:col-span-2 border-none shadow-sm dark:shadow-none dark:bg-slate-900/90 dark:border dark:border-slate-600 p-8 bg-card space-y-8">
-                    <h4 className="font-bold text-foreground dark:text-slate-200 uppercase tracking-widest text-[10px]">Category Distribution</h4>
+                    <h4 className="font-bold text-foreground dark:text-slate-200 uppercase tracking-widest text-xs">Category Distribution</h4>
                     {hasData ? (
                         <div className="flex gap-4 h-64 items-end justify-between px-4">
                             {categoryPerformance.slice(0, 6).map((cat: any, i: number) => {
@@ -64,12 +64,12 @@ const InventoryIntelligence: React.FC = () => {
                                 const colors = ['bg-emerald-500', 'bg-indigo-500', 'bg-amber-500', 'bg-rose-500', 'bg-purple-500', 'bg-sky-500'];
                                 return (
                                     <div key={i} className="flex-1 flex flex-col items-center gap-4">
-                                        <div className="text-xs font-black text-foreground">{Number(cat.unitsSold) || 0}</div>
+                                        <div className="text-xs font-semibold text-foreground">{Number(cat.unitsSold) || 0}</div>
                                         <div
                                             className={`w-full ${colors[i % colors.length]} rounded-t-xl transition-all duration-1000 shadow-lg`}
                                             style={{ height: `${Math.max(percent * 2, 4)}px` }}
                                         ></div>
-                                        <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest text-center leading-tight">{cat.category}</span>
+                                        <span className="text-xs font-semibold uppercase text-muted-foreground tracking-widest text-center leading-tight">{cat.category}</span>
                                     </div>
                                 );
                             })}
@@ -83,7 +83,7 @@ const InventoryIntelligence: React.FC = () => {
 
                 {/* Movement IQ */}
                 <Card className="border-none shadow-sm dark:shadow-none dark:bg-slate-900/90 dark:border dark:border-slate-600 p-8 bg-card space-y-6">
-                    <h4 className="font-bold text-foreground dark:text-slate-200 uppercase tracking-widest text-[10px]">Movement IQ</h4>
+                    <h4 className="font-bold text-foreground dark:text-slate-200 uppercase tracking-widest text-xs">Movement IQ</h4>
                     {hasData ? (
                         <div className="space-y-6">
                             {topCategory && (
@@ -91,9 +91,9 @@ const InventoryIntelligence: React.FC = () => {
                                     <div className="absolute right-0 top-0 opacity-10 p-2 transform rotate-12 group-hover:scale-125 transition-transform">
                                         {ICONS.trendingUp}
                                     </div>
-                                    <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Top Seller</p>
-                                    <p className="text-sm font-black text-emerald-900 dark:text-emerald-200 mt-1">{topCategory.category}</p>
-                                    <p className="text-[10px] text-emerald-700 dark:text-emerald-300/90 mt-1">{Number(topCategory.unitsSold).toLocaleString()} units sold</p>
+                                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Top Seller</p>
+                                    <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200 mt-1">{topCategory.category}</p>
+                                    <p className="text-xs text-emerald-700 dark:text-emerald-300/90 mt-1">{Number(topCategory.unitsSold).toLocaleString()} units sold</p>
                                 </div>
                             )}
                             {slowCategory && slowCategory.category !== topCategory?.category && (
@@ -101,9 +101,9 @@ const InventoryIntelligence: React.FC = () => {
                                     <div className="absolute right-0 top-0 opacity-10 p-2 transform -rotate-12 group-hover:scale-125 transition-transform">
                                         {ICONS.trendingDown}
                                     </div>
-                                    <p className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest">Slowest Category</p>
-                                    <p className="text-sm font-black text-rose-900 dark:text-rose-200 mt-1">{slowCategory.category}</p>
-                                    <p className="text-[10px] text-rose-700 dark:text-rose-300/90 mt-1">{Number(slowCategory.unitsSold).toLocaleString()} units sold</p>
+                                    <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-widest">Slowest Category</p>
+                                    <p className="text-sm font-semibold text-rose-900 dark:text-rose-200 mt-1">{slowCategory.category}</p>
+                                    <p className="text-xs text-rose-700 dark:text-rose-300/90 mt-1">{Number(slowCategory.unitsSold).toLocaleString()} units sold</p>
                                 </div>
                             )}
                         </div>
@@ -114,7 +114,7 @@ const InventoryIntelligence: React.FC = () => {
                     )}
                     <button
                         onClick={() => setIsAuditWizardOpen(true)}
-                        className="w-full py-4 bg-slate-900 dark:bg-slate-950 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-black dark:hover:bg-slate-800 transition-all border border-transparent dark:border-slate-700"
+                        className="w-full py-4 bg-slate-900 dark:bg-slate-950 text-white rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-black dark:hover:bg-slate-800 transition-all border border-transparent dark:border-slate-700"
                     >
                         Inventory Audit Wizard
                     </button>

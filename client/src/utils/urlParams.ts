@@ -8,29 +8,36 @@ export interface QrParams {
   branch_id: string;
 }
 
-export function getQrParamsFromUrl(): QrParams | null {
-  if (typeof window === 'undefined') return null;
-
-  const href = window.location.href;
-  let search = '';
+function getSearchFromLocation(): string {
+  if (typeof window === 'undefined') return '';
 
   // HashRouter: query can be in hash, e.g. #/login?org=ORG001&branch=BR001
   if (window.location.hash && window.location.hash.includes('?')) {
     const hashPart = window.location.hash;
     const qIndex = hashPart.indexOf('?');
-    search = hashPart.slice(qIndex);
-  } else {
-    search = window.location.search;
+    return hashPart.slice(qIndex);
   }
+  return window.location.search;
+}
 
-  if (!search) return null;
+/** Organization and optional branch from URL (org alone is enough to show which tenant you're signing into). */
+export function getLoginOrgParamsFromUrl(): { org_id: string | null; branch_id: string | null } {
+  if (typeof window === 'undefined') return { org_id: null, branch_id: null };
+
+  const search = getSearchFromLocation();
+  if (!search) return { org_id: null, branch_id: null };
 
   const params = new URLSearchParams(search);
-  const org_id = params.get('org') || params.get('org_id') || '';
-  const branch_id = params.get('branch') || params.get('branch_id') || '';
+  const org_id = (params.get('org') || params.get('org_id') || '').trim() || null;
+  const branch_id = (params.get('branch') || params.get('branch_id') || '').trim() || null;
 
-  if (org_id.trim() && branch_id.trim()) {
-    return { org_id: org_id.trim(), branch_id: branch_id.trim() };
+  return { org_id, branch_id };
+}
+
+export function getQrParamsFromUrl(): QrParams | null {
+  const { org_id, branch_id } = getLoginOrgParamsFromUrl();
+  if (org_id && branch_id) {
+    return { org_id, branch_id };
   }
   return null;
 }

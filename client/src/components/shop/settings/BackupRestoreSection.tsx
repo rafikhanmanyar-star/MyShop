@@ -81,7 +81,7 @@ export default function BackupRestoreSection() {
   return (
     <>
       <Card className="border-none shadow-sm p-6">
-        <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-2">Backup and restore</h3>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Backup and restore</h3>
         <p className="text-muted-foreground text-sm mb-4">
           Create a full database backup. Restore overwrites all current data with the selected backup—no merging.
         </p>
@@ -111,7 +111,7 @@ export default function BackupRestoreSection() {
             </div>
           ) : (
             <table className="w-full text-left">
-              <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
+              <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Size</th>

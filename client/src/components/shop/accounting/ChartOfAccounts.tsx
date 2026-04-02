@@ -157,7 +157,7 @@ const ChartOfAccounts: React.FC = () => {
             <Card className="border-none dark:border dark:border-slate-700/80 shadow-sm overflow-hidden flex-1 flex flex-col dark:bg-slate-900/40">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-muted/80 dark:bg-slate-800 text-[10px] font-black uppercase text-muted-foreground">
+                        <thead className="bg-muted/80 dark:bg-slate-800 text-xs font-semibold uppercase text-muted-foreground">
                             <tr>
                                 <th className="px-6 py-4">Account Code</th>
                                 <th className="px-6 py-4">Account Name</th>
@@ -176,11 +176,11 @@ const ChartOfAccounts: React.FC = () => {
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-foreground text-sm">{acc.name}</div>
                                         {acc.isControlAccount && (
-                                            <div className="text-[10px] text-indigo-500 dark:text-indigo-400 font-black uppercase tracking-tighter">Control Account</div>
+                                            <div className="text-xs text-indigo-500 dark:text-indigo-400 font-semibold uppercase tracking-tighter">Control Account</div>
                                         )}
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${acc.type === 'Asset' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400' :
+                                        <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${acc.type === 'Asset' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400' :
                                             acc.type === 'Liability' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' :
                                                 acc.type === 'Income' ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400' :
                                                     'bg-muted dark:bg-slate-800 text-muted-foreground'
@@ -189,14 +189,14 @@ const ChartOfAccounts: React.FC = () => {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <span className="text-sm font-black text-foreground font-mono">
+                                        <span className="text-sm font-semibold text-foreground font-mono">
                                             {acc.balance.toLocaleString()}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Active</span>
+                                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase">Active</span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">

@@ -1,4 +1,6 @@
 import { getDatabaseService } from './databaseService.js';
+import { getAccountingService } from './accountingService.js';
+import { COA } from '../constants/accountCodes.js';
 
 export interface KhataLedgerEntry {
   id: string;
@@ -40,16 +42,81 @@ export class KhataService {
     return res[0].id;
   }
 
-  async addCredit(tenantId: string, customerId: string, amount: number, note?: string): Promise<string> {
-    const res = await this.db.query(
-      `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note)
-       VALUES ($1, $2, NULL, 'credit', $3, $4)
-       RETURNING id`,
-      [tenantId, customerId, amount, note || null]
-    );
+  /**
+   * Record khata payment: credit khata ledger, increase bank/cash (shop_bank_accounts + GL),
+   * credit Trade Receivables so GL matches khata collections.
+   */
+  async receivePayment(
+    tenantId: string,
+    params: { customerId: string; amount: number; note?: string; bankAccountId: string }
+  ): Promise<string> {
+    const accounting = getAccountingService();
+    const getAcc = (code: string, name: string, type: 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense', client: any) =>
+      accounting.getOrCreateAccountByCode(tenantId, code, name, type, client);
+
+    const ledgerId = await this.db.transaction(async (client) => {
+      const banks = await client.query(
+        `SELECT id, chart_account_id, name FROM shop_bank_accounts
+         WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE`,
+        [params.bankAccountId, tenantId]
+      );
+      if (banks.length === 0) {
+        throw new Error('Deposit account not found or inactive');
+      }
+      const bankRow = banks[0] as { id: string; chart_account_id: string | null; name: string };
+      if (!bankRow.chart_account_id) {
+        throw new Error('Deposit account must be linked to the chart of accounts');
+      }
+
+      const ins = await client.query(
+        `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note)
+         VALUES ($1, $2, NULL, 'credit', $3, $4)
+         RETURNING id`,
+        [tenantId, params.customerId, params.amount, params.note ?? null]
+      );
+      const kId = ins[0].id as string;
+
+      await client.query(
+        `UPDATE shop_bank_accounts
+         SET balance = COALESCE(balance, 0) + $1, updated_at = NOW()
+         WHERE id = $2 AND tenant_id = $3`,
+        [params.amount, params.bankAccountId, tenantId]
+      );
+
+      const assetAccId = bankRow.chart_account_id;
+      const arAcc = await getAcc(COA.TRADE_RECEIVABLES, 'Trade Receivables', 'Asset', client);
+
+      const reference = `KHATA-PAY-${kId}`;
+      const description =
+        params.note?.trim() || `Khata payment received (${bankRow.name || 'deposit'})`;
+
+      const jRes = await client.query(
+        `INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+         VALUES ($1, NOW(), $2, $3, 'Khata', $4, 'Posted')
+         RETURNING id`,
+        [tenantId, reference, description, kId]
+      );
+      const journalId = jRes[0].id as string;
+
+      await client.query(
+        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+         VALUES ($1, $2, $3, $4, 0)`,
+        [tenantId, journalId, assetAccId, params.amount]
+      );
+      await client.query(
+        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+         VALUES ($1, $2, $3, 0, $4)`,
+        [tenantId, journalId, arAcc, params.amount]
+      );
+
+      await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+
+      return kId;
+    });
+
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});
-    return res[0].id;
+    return ledgerId;
   }
 
   async getLedger(tenantId: string, customerId?: string): Promise<KhataLedgerEntry[]> {

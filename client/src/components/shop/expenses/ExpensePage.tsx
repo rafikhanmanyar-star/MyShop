@@ -39,7 +39,7 @@ const ExpensePage: React.FC = () => {
     <div className="flex flex-col h-full bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
       <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
         <div className="mb-6">
-          <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Expense Management</h1>
+          <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Expense Management</h1>
           <p className="text-muted-foreground dark:text-slate-400 text-sm font-medium">Record, manage, and analyze shop expenses with full accounting integration.</p>
         </div>
         <div className="flex gap-6">

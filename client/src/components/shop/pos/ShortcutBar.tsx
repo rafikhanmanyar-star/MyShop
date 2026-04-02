@@ -28,69 +28,67 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
         : 'No shift';
 
     const shortcuts = [
-        { key: 'F1', label: 'Clear', action: clearCart, icon: ICONS.trash, color: 'text-rose-500' },
-        { key: 'F2', label: 'Hold', action: () => holdSale(`Hold-${new Date().toLocaleTimeString()}`), icon: ICONS.pause, color: 'text-amber-500' },
-        { key: 'F3', label: 'Recall', action: () => setIsHeldSalesModalOpen(true), icon: ICONS.refresh, color: 'text-indigo-500' },
-        { key: 'F6', label: 'Customer', action: () => setIsCustomerModalOpen(true), icon: ICONS.user, color: 'text-blue-500' },
-        { key: 'F9', label: 'History', action: () => setIsSalesHistoryModalOpen(true), icon: ICONS.clock, color: 'text-slate-500' },
-        { key: 'F7', label: isFullScreen ? 'Exit Full' : 'Fullscreen', action: onToggleFullScreen, icon: isFullScreen ? ICONS.minimize : ICONS.maximize, color: 'text-slate-500' },
-        { key: 'Alt+D', label: isDenseMode ? 'Normal' : 'Dense', action: () => setIsDenseMode(!isDenseMode), icon: ICONS.grid, color: 'text-slate-500' },
+        { key: 'F1', label: 'Clear', action: clearCart, icon: ICONS.trash },
+        { key: 'F2', label: 'Hold', action: () => holdSale(`Hold-${new Date().toLocaleTimeString()}`), icon: ICONS.pause },
+        { key: 'F3', label: 'Recall', action: () => setIsHeldSalesModalOpen(true), icon: ICONS.refresh },
+        { key: 'F6', label: 'Cust', action: () => setIsCustomerModalOpen(true), icon: ICONS.user },
+        { key: 'F9', label: 'Hist', action: () => setIsSalesHistoryModalOpen(true), icon: ICONS.clock },
+        { key: 'F7', label: isFullScreen ? 'Exit' : 'Full', action: onToggleFullScreen, icon: isFullScreen ? ICONS.minimize : ICONS.maximize },
+        { key: 'Alt+D', label: isDenseMode ? 'Normal' : 'Dense', action: () => setIsDenseMode(!isDenseMode), icon: ICONS.grid },
     ];
 
     return (
-        <div className="bg-[#0f172a] dark:bg-slate-800 px-6 py-4 flex items-center justify-between border-t border-slate-800 dark:border-slate-700 shadow-xl">
-            <div className="flex items-center gap-1">
+        <div className="bg-[#0a1628] dark:bg-[#020617] px-3 md:px-6 py-3 flex flex-wrap items-center justify-between gap-y-2 border-t border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.2)]">
+            <div className="flex items-center gap-0.5 md:gap-1 flex-wrap min-w-0">
                 {shortcuts.map((s) => (
                     <button
                         key={s.key}
                         type="button"
-                        onClick={(e) => { e.preventDefault(); s.action(); }}
-                        className="flex flex-col items-center justify-center w-24 h-16 rounded-xl hover:bg-white/10 transition-all group"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            s.action();
+                        }}
+                        className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-2 rounded-[8px] hover:bg-white/8 text-slate-300 transition-colors min-w-0"
                     >
-                        <div className={`${s.color} mb-1.5 transition-transform group-hover:scale-110`}>
-                            {React.cloneElement(s.icon as React.ReactElement, { size: 20 })}
-                        </div>
-                        <span className="text-[10px] font-bold text-white/90 uppercase tracking-wider">{s.label}</span>
-                        <span className="text-[9px] font-medium text-white/30">{s.key}</span>
+                        <span className="text-slate-500 flex-shrink-0 hidden sm:block opacity-90">
+                            {React.cloneElement(s.icon as React.ReactElement, { size: 16 })}
+                        </span>
+                        <span className="text-xs md:text-xs font-semibold text-white/95 uppercase tracking-wide truncate">{s.label}</span>
+                        <span className="text-xs font-bold text-slate-500 tabular-nums">{s.key}</span>
                     </button>
                 ))}
             </div>
 
-            <div className="flex items-center gap-6">
-                {/* Status Pill */}
-                <div className="flex items-center gap-3 px-4 py-2 bg-slate-800/50 rounded-full border border-slate-700/50">
-                    <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${currentShift ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></div>
-                        <span className={`text-[10px] font-bold capitalize tracking-wide ${currentShift ? 'text-emerald-400' : 'text-amber-400'}`}>
-                            {terminalName}
-                        </span>
-                    </div>
+            <div className="flex items-center gap-3 md:gap-5 flex-shrink-0 ml-auto">
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+                    <div className={`w-2 h-2 rounded-full ${currentShift ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    <span className={`text-xs font-semibold tracking-wide max-w-[120px] truncate ${currentShift ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        {terminalName}
+                    </span>
                 </div>
 
-                <div className="flex items-center gap-4 ml-2">
-                    <button
-                        onClick={() => {
-                            if (balanceDue <= 0) {
-                                completeSale();
-                            } else {
-                                setIsPaymentModalOpen(true);
-                            }
-                        }}
-                        className="flex items-center gap-4 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl transition-all active:scale-[0.98] group"
-                    >
-                        <div className="flex flex-col text-left">
-                            <span className="text-[9px] font-bold uppercase tracking-widest opacity-80 leading-none mb-1">Quick Pay</span>
-                            <span className="text-xs font-black uppercase tracking-wider">Finalize (F12)</span>
-                        </div>
-                        <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center transition-transform group-hover:translate-x-1">
-                            {React.cloneElement(ICONS.chevronRight as React.ReactElement, { size: 16 })}
-                        </div>
-                    </button>
-                </div>
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (balanceDue <= 0) {
+                            completeSale();
+                        } else {
+                            setIsPaymentModalOpen(true);
+                        }
+                    }}
+                    className="flex items-center gap-3 pl-4 pr-5 py-2.5 rounded-[10px] bg-[#0056b3] hover:bg-[#004494] text-white transition-all active:scale-[0.99] shadow-md shadow-[#0056b3]/30"
+                >
+                    <span className="text-slate-200/90 flex-shrink-0" aria-hidden>
+                        {React.cloneElement(ICONS.dollarSign as React.ReactElement, { size: 18 })}
+                    </span>
+                    <div className="flex flex-col text-left leading-tight">
+                        <span className="text-xs font-bold uppercase tracking-widest opacity-90">Finalize</span>
+                        <span className="text-xs font-bold">F12</span>
+                    </div>
+                </button>
             </div>
         </div>
     );
 };
-
 
 export default ShortcutBar;

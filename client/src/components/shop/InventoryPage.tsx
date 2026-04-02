@@ -244,7 +244,7 @@ const InventoryContent: React.FC = () => {
             <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Inventory Management</h1>
+                        <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Inventory Management</h1>
                         <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">Enterprise-level stock control and logistics.</p>
                     </div>
                     <div className="flex gap-3">
@@ -501,7 +501,7 @@ const InventoryContent: React.FC = () => {
                                 >
                                     {imagePreview ? 'Change Image' : 'Upload Image'}
                                 </label>
-                                <p className="text-[10px] text-muted-foreground dark:text-muted-foreground mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
+                                <p className="text-xs text-muted-foreground dark:text-muted-foreground mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
                             </div>
                         </div>
                     </div>

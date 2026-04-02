@@ -7,7 +7,7 @@ import {
     ChevronRight, WifiOff, Wifi, QrCode, Settings as SettingsIcon,
     Filter, Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
     Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
-    Banknote, Building2, Wallet, KeyRound,
+    Banknote, Building2, Wallet,
 } from 'lucide-react';
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
@@ -378,7 +378,7 @@ function MobileOrdersPageContent() {
                         <div className="p-6 space-y-5">
                             <div className="p-4 bg-muted rounded-xl flex justify-between items-center">
                                 <span className="text-sm text-muted-foreground font-medium">Amount Due</span>
-                                <span className="text-xl font-black text-foreground">{formatPrice(paymentModal.grandTotal)}</span>
+                                <span className="text-xl font-semibold text-foreground">{formatPrice(paymentModal.grandTotal)}</span>
                             </div>
 
                             <div>
@@ -411,7 +411,7 @@ function MobileOrdersPageContent() {
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-sm font-bold text-foreground truncate">{acc.name}</p>
-                                                    <p className="text-[10px] text-muted-foreground uppercase">{acc.account_type} {acc.chart_code ? `• ${acc.chart_code}` : acc.code ? `• ${acc.code}` : ''}</p>
+                                                    <p className="text-xs text-muted-foreground uppercase">{acc.account_type} {acc.chart_code ? `• ${acc.chart_code}` : acc.code ? `• ${acc.code}` : ''}</p>
                                                 </div>
                                                 <span className="text-xs font-mono font-bold text-muted-foreground">
                                                     PKR {(parseFloat(acc.balance) || 0).toLocaleString()}
@@ -471,11 +471,6 @@ function OrderDetailPanel({
     formatPrice: (p: any) => string;
     formatDate: (d: string) => string;
 }) {
-    const [pwResetOpen, setPwResetOpen] = useState(false);
-    const [newPw, setNewPw] = useState('');
-    const [confirmPw, setConfirmPw] = useState('');
-    const [pwResetLoading, setPwResetLoading] = useState(false);
-
     const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Pending;
     const nextStatus = getNextMobileOrderStatus(order);
     const isUnpaid = order.status === 'Delivered' && order.payment_status !== 'Paid';
@@ -515,20 +510,6 @@ function OrderDetailPanel({
                         <div className="flex items-center gap-2 text-foreground">
                             <Phone className="w-4 h-4 text-muted-foreground" />{order.customer_phone}
                         </div>
-                        {order.customer_id && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setPwResetOpen(true);
-                                    setNewPw('');
-                                    setConfirmPw('');
-                                }}
-                                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-300"
-                            >
-                                <KeyRound className="w-3.5 h-3.5" />
-                                Reset app password
-                            </button>
-                        )}
                     </div>
                 </div>
 
@@ -654,94 +635,6 @@ function OrderDetailPanel({
                 </div>
             )}
 
-            {pwResetOpen && order.customer_id && (
-                <div
-                    className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50"
-                    onClick={() => !pwResetLoading && setPwResetOpen(false)}
-                >
-                    <div
-                        className="bg-card dark:bg-slate-900 rounded-2xl shadow-2xl w-[400px] overflow-hidden border border-border dark:border-slate-600"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <div className="p-5 bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-indigo-950/70 dark:to-violet-950/50 border-b border-indigo-100 dark:border-indigo-900/60">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-950/80 rounded-xl flex items-center justify-center">
-                                    <KeyRound className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-foreground">Reset mobile app password</h3>
-                                    <p className="text-xs text-muted-foreground">{order.customer_phone}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-5 space-y-4">
-                            <p className="text-sm text-muted-foreground">
-                                Set a new password for this customer. They will use it to sign in to the mobile ordering app for your shop.
-                            </p>
-                            <div>
-                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">New password</label>
-                                <input
-                                    type="password"
-                                    autoComplete="new-password"
-                                    value={newPw}
-                                    onChange={e => setNewPw(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                    placeholder="At least 6 characters"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Confirm password</label>
-                                <input
-                                    type="password"
-                                    autoComplete="new-password"
-                                    value={confirmPw}
-                                    onChange={e => setConfirmPw(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                />
-                            </div>
-                        </div>
-                        <div className="p-4 border-t border-border dark:border-slate-600 flex gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setPwResetOpen(false)}
-                                disabled={pwResetLoading}
-                                className="flex-1 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors disabled:opacity-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                onClick={async () => {
-                                    if (newPw.length < 6) {
-                                        alert('Password must be at least 6 characters.');
-                                        return;
-                                    }
-                                    if (newPw !== confirmPw) {
-                                        alert('Passwords do not match.');
-                                        return;
-                                    }
-                                    setPwResetLoading(true);
-                                    try {
-                                        await mobileOrdersApi.resetCustomerPassword(order.customer_id!, newPw);
-                                        setPwResetOpen(false);
-                                        setNewPw('');
-                                        setConfirmPw('');
-                                        alert('Password updated. The customer can sign in with the new password.');
-                                    } catch (err: any) {
-                                        alert(err.error || err.message || 'Failed to reset password');
-                                    }
-                                    setPwResetLoading(false);
-                                }}
-                                disabled={pwResetLoading}
-                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                            >
-                                {pwResetLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
-                                Save password
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
@@ -1027,7 +920,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         <option key={b.id} value={b.id}>{b.name} {b.code ? `(${b.code})` : ''}</option>
                                     ))}
                                 </select>
-                                <p className="text-[10px] text-muted-foreground mt-1">
+                                <p className="text-xs text-muted-foreground mt-1">
                                     Select the branch whose door QR and URL you are configuring. Orders from that URL will go to this branch&apos;s POS.
                                 </p>
                                 {(localBranding.branch_name || localBranding.branch_location) && (
@@ -1049,7 +942,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         className="flex-1 px-3 py-2 border border-border dark:border-slate-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-indigo-600 dark:text-indigo-400 bg-background dark:bg-slate-800/80"
                                     />
                                 </div>
-                                <p className="text-[10px] text-muted-foreground mt-1">This determines your shop address: {qrData?.url}</p>
+                                <p className="text-xs text-muted-foreground mt-1">This determines your shop address: {qrData?.url}</p>
                             </div>
 
                             {/* Shop Address & Coordinates */}
@@ -1088,7 +981,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         />
                                     </div>
                                 </div>
-                                <p className="text-[10px] text-muted-foreground">These coordinates will help the mobile app find your nearest branch automatically.</p>
+                                <p className="text-xs text-muted-foreground">These coordinates will help the mobile app find your nearest branch automatically.</p>
                             </div>
 
                             {/* Logo Upload */}
@@ -1180,7 +1073,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
 
                             {/* Live Preview (Mini) */}
                             <div className="pt-4 border-t border-border/60">
-                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3">Mobile Preview</label>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">Mobile Preview</label>
                                 <div className="w-full aspect-[9/16] max-w-[200px] mx-auto border-4 border-gray-800 dark:border-slate-600 rounded-[2rem] overflow-hidden bg-card shadow-lg flex flex-col"
                                     style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#1e293b' : 'white' }}>
                                     <div className="h-8 flex items-center px-4 justify-between border-b border-border/60"

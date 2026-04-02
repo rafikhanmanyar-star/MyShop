@@ -36,7 +36,7 @@ export default function AppHeader({ className = '' }: { className?: string }) {
           </div>
           <div className="min-w-0 text-left">
             <p className="truncate text-sm font-semibold text-foreground">{user.name}</p>
-            <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{roleLabel}</p>
+            <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">{roleLabel}</p>
           </div>
         </div>
       )}

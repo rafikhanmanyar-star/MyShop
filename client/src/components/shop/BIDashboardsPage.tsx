@@ -33,7 +33,7 @@ const BIContent: React.FC = () => {
                             <div className="p-2 bg-indigo-500 dark:bg-indigo-600 rounded-lg text-white shadow-lg shadow-indigo-500/20">
                                 {ICONS.globe}
                             </div>
-                            <h1 className="text-2xl font-black text-white tracking-tight">Intelligence Engine</h1>
+                            <h1 className="text-2xl font-semibold text-white tracking-tight">Intelligence Engine</h1>
                         </div>
                         <p className="text-slate-400 text-sm font-medium mt-1">Enterprise Analytics & Predictive Decision Support.</p>
                     </div>
@@ -43,7 +43,7 @@ const BIContent: React.FC = () => {
                                 <button
                                     key={range}
                                     onClick={() => setDateRange(range)}
-                                    className={`px-4 py-2 rounded-lg text-xs font-black transition-all ${dateRange === range
+                                    className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${dateRange === range
                                         ? 'bg-indigo-600 text-white shadow-lg'
                                         : 'text-slate-400 hover:text-white dark:text-slate-500 dark:hover:text-slate-200'
                                         }`}
@@ -67,7 +67,7 @@ const BIContent: React.FC = () => {
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
-                            className={`pb-4 text-[0.7875rem] tracking-wide transition-all duration-300 relative flex items-center gap-2 shrink-0 ${activeTab === tab.id
+                            className={`pb-4 text-sm tracking-wide transition-all duration-300 relative flex items-center gap-2 shrink-0 ${activeTab === tab.id
                                 ? 'text-primary font-semibold'
                                 : 'font-medium text-slate-400 hover:text-white dark:text-slate-500 dark:hover:text-slate-200'
                                 }`}

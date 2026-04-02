@@ -365,7 +365,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                             </div>
                                         </div>
                                         {!item.barcode && (
-                                            <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded">Add barcode</span>
+                                            <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded">Add barcode</span>
                                         )}
                                         {React.cloneElement(ICONS.chevronRight as React.ReactElement<any>, { size: 16, className: 'text-slate-400 flex-shrink-0' })}
                                     </button>
@@ -443,7 +443,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     rows={3}
                                     className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                 />
-                                <p className="text-[10px] text-slate-500">Shown in the mobile app when the user opens this product.</p>
+                                <p className="text-xs text-slate-500">Shown in the mobile app when the user opens this product.</p>
                             </div>
                             {nameConflictItems.length > 0 && (
                                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
@@ -565,10 +565,10 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                 </div>
                                                 <span className="text-slate-600 font-medium flex-shrink-0">%</span>
                                             </div>
-                                            <p className="text-[10px] text-slate-500 mt-0.5">% added to cost price</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">% added to cost price</p>
                                         </div>
                                         <div className="flex flex-col justify-end pb-1">
-                                            <p className="text-[10px] font-bold uppercase opacity-80">Sale price</p>
+                                            <p className="text-xs font-bold uppercase opacity-80">Sale price</p>
                                             <p className="text-lg font-semibold text-slate-800">
                                                 {Number(formData.retailPrice).toFixed(2)}
                                             </p>
@@ -641,7 +641,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                     <span className="text-slate-500 ml-1">· Barcode: {item.barcode}</span>
                                                 )}
                                             </div>
-                                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-200 text-rose-800 flex-shrink-0">
+                                            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-200 text-rose-800 flex-shrink-0">
                                                 Same {reason}
                                             </span>
                                         </li>

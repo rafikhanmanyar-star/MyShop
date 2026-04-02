@@ -76,7 +76,7 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettin
 
     return (
         <Card className="border-none shadow-sm p-6 bg-muted flex flex-col items-center overflow-hidden">
-            <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4 self-start">Live Preview</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 self-start">Live Preview</h3>
             <div className="bg-card shadow-xl border border-border transition-all overflow-hidden relative" style={{ width: containerWidth }}>
                 <iframe srcDoc={html} style={{ width: '100%', height: '500px', border: 'none', backgroundColor: '#fff' }} title="Receipt Preview" />
             </div>
@@ -383,7 +383,7 @@ const SettingsContent: React.FC = () => {
         <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
             <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
                 <div className="mb-6">
-                    <h1 className="text-2xl font-black text-foreground tracking-tight">Settings</h1>
+                    <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
                     <p className="text-muted-foreground text-sm font-medium">
                         {isCashier ? 'Check for app updates and install new versions.' : 'Chart of accounts, vendor management, and team roles.'}
                     </p>
@@ -419,7 +419,7 @@ const SettingsContent: React.FC = () => {
                         <DataExportImportSection />
                         <BackupRestoreSection />
                         <Card className="border-none shadow-sm p-6">
-                            <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4">Clear all transactions</h3>
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Clear all transactions</h3>
                             <p className="text-muted-foreground text-sm mb-4">
                                 Remove all sales transactions, orders, journal entries, transaction history, purchase bills, and bill payments. Settings, chart of accounts, bank accounts, users, vendors, products, and inventories (stock levels and movement history) are kept.
                             </p>
@@ -438,7 +438,7 @@ const SettingsContent: React.FC = () => {
                 {activeTab === 'app' && (
                     <div className="space-y-6 max-w-xl">
                         <Card className="border-none shadow-sm p-6">
-                            <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4">Desktop app</h3>
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Desktop app</h3>
                             {appVersion != null && (
                                 <p className="text-muted-foreground text-sm mb-4">Current version: <span className="font-bold text-foreground">{appVersion}</span></p>
                             )}
@@ -512,7 +512,7 @@ const SettingsContent: React.FC = () => {
                             ) : (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
-                                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
+                                        <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground">
                                             <tr>
                                                 <th className="px-6 py-4">Name</th>
                                                 <th className="px-6 py-4">Company</th>
@@ -537,7 +537,7 @@ const SettingsContent: React.FC = () => {
                                                         <td className="px-6 py-4 text-muted-foreground">{v.contact_no || '—'}</td>
                                                         <td className="px-6 py-4 text-muted-foreground">{v.email || '—'}</td>
                                                         <td className="px-6 py-4">
-                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${v.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+                                                            <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${v.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
                                                                 {v.is_active ? 'Active' : 'Inactive'}
                                                             </span>
                                                         </td>
@@ -589,7 +589,7 @@ const SettingsContent: React.FC = () => {
                             ) : (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
-                                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
+                                        <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground">
                                             <tr>
                                                 <th className="px-6 py-4">Name / Username</th>
                                                 <th className="px-6 py-4">Role</th>
@@ -610,10 +610,10 @@ const SettingsContent: React.FC = () => {
                                                     <tr key={u.id} className="hover:bg-muted/50 transition-colors">
                                                         <td className="px-6 py-4">
                                                             <div className="font-bold text-foreground">{u.name}</div>
-                                                            <div className="text-[10px] text-muted-foreground font-mono">@{u.username}</div>
+                                                            <div className="text-xs text-muted-foreground font-mono">@{u.username}</div>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded shadow-sm ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' :
+                                                            <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded shadow-sm ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' :
                                                                 u.role === 'accountant' ? 'bg-amber-100 text-amber-700' :
                                                                     'bg-muted text-foreground'
                                                                 }`}>
@@ -622,7 +622,7 @@ const SettingsContent: React.FC = () => {
                                                         </td>
                                                         <td className="px-6 py-4 text-muted-foreground">{u.email || '—'}</td>
                                                         <td className="px-6 py-4">
-                                                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${u.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+                                                            <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${u.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
                                                                 {u.is_active ? 'Active' : 'Inactive'}
                                                             </span>
                                                         </td>
@@ -659,7 +659,7 @@ const SettingsContent: React.FC = () => {
                     <div className="flex flex-col lg:flex-row gap-8 max-w-6xl w-full">
                         <div className="space-y-6 flex-1 max-w-xl">
                             <Card className="border-none shadow-sm p-6">
-                                <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4">Print Settings</h3>
+                                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Print Settings</h3>
                                 {posSettingsLoading ? (
                                     <p className="text-muted-foreground text-sm">Loading...</p>
                                 ) : (
@@ -702,13 +702,13 @@ const SettingsContent: React.FC = () => {
                                 )}
                             </Card>
                             <Card className="border-none shadow-sm p-6">
-                                <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-4">Receipt Template</h3>
+                                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Receipt Template</h3>
                                 {receiptSettingsLoading ? (
                                     <p className="text-muted-foreground text-sm">Loading...</p>
                                 ) : (
                                     <div className="space-y-4">
                                         <div className="pb-4 border-b border-border">
-                                            <h4 className="text-xs font-black text-muted-foreground uppercase tracking-wider mb-3">Shop information (on receipt)</h4>
+                                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Shop information (on receipt)</h4>
                                             <p className="text-muted-foreground text-xs mb-3">This appears at the top of every printed receipt.</p>
                                             <div className="grid gap-3">
                                                 <Input label="Shop name" placeholder="e.g. My Store" value={receiptSettings.shop_name || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_name: e.target.value })} />
@@ -723,7 +723,7 @@ const SettingsContent: React.FC = () => {
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-1">Receipt width</label>
+                                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Receipt width</label>
                                             <select className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground" value={receiptSettings.receipt_width || '80mm'} onChange={e => setReceiptSettings({ ...receiptSettings, receipt_width: e.target.value })}>
                                                 <option value="80mm">80mm (standard)</option>
                                                 <option value="58mm">58mm (narrow)</option>
@@ -738,7 +738,7 @@ const SettingsContent: React.FC = () => {
                                             <span className="font-bold text-foreground">Show barcode on receipt</span>
                                         </label>
                                         <div>
-                                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-1">Barcode type</label>
+                                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Barcode type</label>
                                             <select className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground" value={receiptSettings.barcode_type || 'CODE128'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_type: e.target.value })}>
                                                 <option value="CODE128">CODE128</option>
                                                 <option value="CODE39">CODE39</option>
@@ -746,7 +746,7 @@ const SettingsContent: React.FC = () => {
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-1">Barcode size</label>
+                                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Barcode size</label>
                                             <select className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground" value={receiptSettings.barcode_size || 'medium'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_size: e.target.value })}>
                                                 <option value="small">Small</option>
                                                 <option value="medium">Medium</option>
@@ -754,7 +754,7 @@ const SettingsContent: React.FC = () => {
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-1">Barcode position</label>
+                                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Barcode position</label>
                                             <select className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground" value={receiptSettings.barcode_position || 'footer'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_position: e.target.value })}>
                                                 <option value="header">Header</option>
                                                 <option value="footer">Footer</option>
@@ -821,7 +821,7 @@ const SettingsContent: React.FC = () => {
                             onChange={e => setUserForm({ ...userForm, email: e.target.value })}
                         />
                         <div>
-                            <label className="block text-xs font-black text-muted-foreground uppercase tracking-wider mb-2">Role</label>
+                            <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Role</label>
                             <select
                                 className="w-full h-11 px-4 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground outline-none focus:border-indigo-500 transition-all appearance-none"
                                 value={userForm.role}

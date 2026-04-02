@@ -43,7 +43,7 @@ function useDailyReportStream(onUpdate: () => void) {
                   if (line.startsWith('data: ')) {
                     try {
                       const payload = JSON.parse(line.slice(6));
-                      if (payload.type === 'daily_report_updated') {
+                      if (payload.type === 'daily_report_updated' || payload.type === 'sales_return_created') {
                         onUpdate();
                       }
                     } catch {
@@ -81,7 +81,7 @@ function formatQty(n: number) {
 const ReportShell: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
   <div className="flex flex-col h-full bg-muted/50 dark:bg-slate-800 -m-4 md:-m-8">
     <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
-      <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">{title}</h1>
+      <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">{title}</h1>
       <p className="text-muted-foreground dark:text-slate-400 text-sm font-medium mt-1">
         Single source of truth — POS, mobile, inventory, expenses, khata.
       </p>
@@ -190,23 +190,41 @@ const DailyReportDashboard: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <button type="button" className={cardClass} onClick={() => {}} aria-label="POS sales">
             <div className="text-2xl mb-1">🧾</div>
-            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">POS sales</div>
-            <div className="text-2xl font-black text-foreground mt-1">
+            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">POS sales (gross)</div>
+            <div className="text-2xl font-semibold text-foreground mt-1">
               {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.posSales ?? 0)}`}
             </div>
-            <div className="text-[11px] text-muted-foreground mt-2">shop_sales (branch POS)</div>
+            <div className="text-xs text-muted-foreground mt-2">shop_sales (branch POS)</div>
+          </button>
+
+          <button type="button" className={cardClass} onClick={() => {}} aria-label="POS returns">
+            <div className="text-2xl mb-1">↩️</div>
+            <div className="text-xs font-bold uppercase text-rose-600 dark:text-rose-400 tracking-wider">POS returns</div>
+            <div className="text-2xl font-semibold text-foreground mt-1">
+              {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.posReturns ?? 0)}`}
+            </div>
+            <div className="text-xs text-muted-foreground mt-2">shop_sales_returns</div>
+          </button>
+
+          <button type="button" className={cardClass} onClick={() => {}} aria-label="Net POS sales">
+            <div className="text-2xl mb-1">📊</div>
+            <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Net POS sales</div>
+            <div className="text-2xl font-semibold text-foreground mt-1">
+              {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.netPosSales ?? 0)}`}
+            </div>
+            <div className="text-xs text-muted-foreground mt-2">Gross POS − returns</div>
           </button>
 
           <button type="button" className={cardClass} onClick={() => {}} aria-label="Mobile sales">
             <div className="text-2xl mb-1">📱</div>
             <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Mobile sales</div>
-            <div className="text-2xl font-black text-foreground mt-1">
+            <div className="text-2xl font-semibold text-foreground mt-1">
               {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.mobileSales ?? 0)}`}
             </div>
-            <div className="text-[11px] text-muted-foreground mt-2">mobile_orders (non-cancelled)</div>
+            <div className="text-xs text-muted-foreground mt-2">mobile_orders (non-cancelled)</div>
           </button>
 
           <button
@@ -217,10 +235,10 @@ const DailyReportDashboard: React.FC = () => {
           >
             <div className="text-2xl mb-1">📦</div>
             <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Inventory out</div>
-            <div className="text-2xl font-black text-foreground mt-1">
+            <div className="text-2xl font-semibold text-foreground mt-1">
               {loading ? '—' : formatQty(summary?.inventoryOutQty ?? 0)}
             </div>
-            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
+            <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
           </button>
 
           <button
@@ -231,10 +249,10 @@ const DailyReportDashboard: React.FC = () => {
           >
             <div className="text-2xl mb-1">📥</div>
             <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Inventory in (procurement)</div>
-            <div className="text-2xl font-black text-foreground mt-1">
+            <div className="text-2xl font-semibold text-foreground mt-1">
               {loading ? '—' : formatQty(summary?.inventoryInQty ?? 0)}
             </div>
-            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
+            <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
           </button>
 
           <button
@@ -245,10 +263,10 @@ const DailyReportDashboard: React.FC = () => {
           >
             <div className="text-2xl mb-1">💸</div>
             <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Total expenses</div>
-            <div className="text-2xl font-black text-foreground mt-1">
+            <div className="text-2xl font-semibold text-foreground mt-1">
               {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.totalExpenses ?? 0)}`}
             </div>
-            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
+            <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
           </button>
 
           <button
@@ -259,10 +277,10 @@ const DailyReportDashboard: React.FC = () => {
           >
             <div className="text-2xl mb-1">🏷️</div>
             <div className="text-xs font-bold uppercase text-muted-foreground tracking-wider">New products</div>
-            <div className="text-2xl font-black text-foreground mt-1">
+            <div className="text-2xl font-semibold text-foreground mt-1">
               {loading ? '—' : summary?.newProductsCount ?? 0}
             </div>
-            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
+            <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
           </button>
 
           <button
@@ -287,19 +305,19 @@ const DailyReportDashboard: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div className="text-lg font-black text-foreground mt-2">
+            <div className="text-lg font-semibold text-foreground mt-2">
               Net {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.khataNetChange ?? 0)}`}
             </div>
-            <div className="text-[11px] text-muted-foreground mt-1">
+            <div className="text-xs text-muted-foreground mt-1">
               {loading ? '—' : `${summary?.khataEntryCount ?? 0} entries · all locations`}
             </div>
-            <div className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
+            <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-2 font-semibold">Click for detail →</div>
           </button>
         </div>
 
         <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/80 dark:bg-emerald-950/40 p-5">
           <div className="text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">Net profit (daily)</div>
-          <div className="text-2xl font-black text-emerald-900 dark:text-emerald-200 mt-1">
+          <div className="text-2xl font-semibold text-emerald-900 dark:text-emerald-200 mt-1">
             {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.netProfitDaily ?? 0)}`}
           </div>
           <div className="text-xs text-emerald-800/80 dark:text-emerald-300/90 mt-1">POS + Mobile sales − expenses (same day)</div>
@@ -359,7 +377,7 @@ const InventoryOutDrill: React.FC = () => {
         </p>
         <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
           <table className="w-full text-sm">
-            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
+            <thead className="bg-muted dark:bg-slate-800 text-xs uppercase font-semibold text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Item</th>
                 <th className="text-left px-4 py-3">SKU</th>
@@ -439,7 +457,7 @@ const InventoryInDrill: React.FC = () => {
         </button>
         <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
           <table className="w-full text-sm">
-            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
+            <thead className="bg-muted dark:bg-slate-800 text-xs uppercase font-semibold text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Item</th>
                 <th className="text-left px-4 py-3">SKU</th>
@@ -521,7 +539,7 @@ const ExpensesDrill: React.FC = () => {
         </button>
         <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
           <table className="w-full text-sm">
-            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
+            <thead className="bg-muted dark:bg-slate-800 text-xs uppercase font-semibold text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Date</th>
                 <th className="text-left px-4 py-3">Category</th>
@@ -603,7 +621,7 @@ const ProductsCreatedDrill: React.FC = () => {
         </button>
         <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
           <table className="w-full text-sm">
-            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
+            <thead className="bg-muted dark:bg-slate-800 text-xs uppercase font-semibold text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">SKU</th>
                 <th className="text-left px-4 py-3">Product</th>
@@ -684,7 +702,7 @@ const KhataDrill: React.FC = () => {
         </p>
         <div className="rounded-xl border border-border dark:border-slate-700 overflow-hidden bg-card dark:bg-slate-900/50">
           <table className="w-full text-sm">
-            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
+            <thead className="bg-muted dark:bg-slate-800 text-xs uppercase font-semibold text-muted-foreground">
               <tr>
                 <th className="text-left px-4 py-3">Time</th>
                 <th className="text-left px-4 py-3">Customer</th>

@@ -1,9 +1,10 @@
 {
   "name": "myshop-client",
   "private": true,
-  "version": "1.0.95",
+  "version": "1.0.96",
   "type": "module",
   "scripts": {
+    "check:typography": "node scripts/check-typography.mjs",
     "dev": "vite",
     "dev:cloud": "vite --mode local",
     "build": "tsc && vite build",

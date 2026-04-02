@@ -129,7 +129,7 @@ const BranchDirectory: React.FC = () => {
             <Card className="border-none shadow-sm dark:shadow-none dark:bg-slate-900/90 dark:border dark:border-slate-600 overflow-hidden flex-1">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-muted/80 dark:bg-slate-800/90 text-[10px] font-black uppercase text-muted-foreground">
+                        <thead className="bg-muted/80 dark:bg-slate-800/90 text-xs font-semibold uppercase text-muted-foreground">
                             <tr>
                                 <th className="px-6 py-4">Branch Detail</th>
                                 <th className="px-6 py-4">Type</th>
@@ -149,12 +149,12 @@ const BranchDirectory: React.FC = () => {
                                             </div>
                                             <div>
                                                 <div className="font-bold text-foreground text-sm">{store.name}</div>
-                                                <div className="text-[10px] text-muted-foreground font-mono italic">{store.location}, {store.region}</div>
+                                                <div className="text-xs text-muted-foreground font-mono italic">{store.location}, {store.region}</div>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${store.type === 'Flagship' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40' :
+                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-widest ${store.type === 'Flagship' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40' :
                                             store.type === 'Warehouse' ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300' :
                                                 'bg-muted text-muted-foreground dark:bg-slate-800'
                                             }`}>
@@ -163,18 +163,18 @@ const BranchDirectory: React.FC = () => {
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="text-xs font-bold text-foreground">{store.manager}</div>
-                                        <div className="text-[10px] text-muted-foreground">{store.contact}</div>
+                                        <div className="text-xs text-muted-foreground">{store.contact}</div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="text-xs font-mono font-bold text-muted-foreground">
                                             {store.openTime} - {store.closeTime}
                                         </div>
-                                        <div className="text-[9px] text-muted-foreground italic">({store.timezone})</div>
+                                        <div className="text-xs text-muted-foreground italic">({store.timezone})</div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <div className={`w-2 h-2 rounded-full ${store.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></div>
-                                            <span className={`text-[10px] font-black uppercase ${store.status === 'Active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                            <span className={`text-xs font-semibold uppercase ${store.status === 'Active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                                 {store.status}
                                             </span>
                                         </div>

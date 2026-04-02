@@ -156,8 +156,8 @@ const ExpenseReports: React.FC = () => {
             <h3 className="text-lg font-bold text-foreground dark:text-slate-200 mb-4">Top categories (Bar)</h3>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={barData} layout="vertical" margin={{ left: 20, right: 20 }}>
-                <XAxis type="number" tickFormatter={(v) => CURRENCY + ' ' + (v / 1000).toFixed(0) + 'k'} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} />
-                <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} />
+                <XAxis type="number" tickFormatter={(v) => CURRENCY + ' ' + (v / 1000).toFixed(0) + 'k'} tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} />
+                <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} />
                 <Tooltip formatter={(v: number) => [CURRENCY + ' ' + v.toLocaleString(), 'Total']} contentStyle={tooltipStyle} />
                 <Bar dataKey="total" fill="#6366f1" radius={[0, 4, 4, 0]} name="Expense" />
               </BarChart>

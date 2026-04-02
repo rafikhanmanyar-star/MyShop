@@ -41,8 +41,8 @@ const AccountingDashboard: React.FC = () => {
                             {React.cloneElement(m.icon as React.ReactElement<any>, { width: 28, height: 28 })}
                         </div>
                         <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{m.label}</p>
-                            <p className="text-2xl font-black text-foreground tracking-tight">
+                            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{m.label}</p>
+                            <p className="text-2xl font-semibold text-foreground tracking-tight">
                                 {m.isString ? m.value : `${CURRENCY} ${Number(m.value || 0).toLocaleString()}`}
                             </p>
                         </div>
@@ -56,10 +56,10 @@ const AccountingDashboard: React.FC = () => {
                     <div className="flex justify-between items-center">
                         <h3 className="font-bold text-foreground">Revenue by Source</h3>
                         <div className="flex gap-4">
-                            <span className="flex items-center gap-2 text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                            <span className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
                                 <span className="w-2 h-2 bg-indigo-600 dark:bg-indigo-500 rounded-full"></span> POS Sales
                             </span>
-                            <span className="flex items-center gap-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <span className="flex items-center gap-2 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                                 <span className="w-2 h-2 bg-emerald-500 dark:bg-emerald-400 rounded-full"></span> Mobile App Orders
                             </span>
                         </div>
@@ -71,12 +71,12 @@ const AccountingDashboard: React.FC = () => {
                             <div className="space-y-2">
                                 <div className="flex justify-between items-end">
                                     <div>
-                                        <p className="text-sm font-black text-foreground">POS Sales</p>
-                                        <p className="text-[10px] text-muted-foreground font-bold">{salesBySource?.pos?.totalOrders || 0} transactions</p>
+                                        <p className="text-sm font-semibold text-foreground">POS Sales</p>
+                                        <p className="text-xs text-muted-foreground font-bold">{salesBySource?.pos?.totalOrders || 0} transactions</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {posRevenue.toLocaleString()}</p>
-                                        <p className="text-[10px] text-indigo-500 font-black">{posPercent.toFixed(1)}%</p>
+                                        <p className="text-lg font-semibold text-foreground font-mono">{CURRENCY} {posRevenue.toLocaleString()}</p>
+                                        <p className="text-xs text-indigo-500 font-semibold">{posPercent.toFixed(1)}%</p>
                                     </div>
                                 </div>
                                 <div className="h-3 bg-muted/80 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -88,12 +88,12 @@ const AccountingDashboard: React.FC = () => {
                             <div className="space-y-2">
                                 <div className="flex justify-between items-end">
                                     <div>
-                                        <p className="text-sm font-black text-foreground">Mobile App Orders</p>
-                                        <p className="text-[10px] text-muted-foreground font-bold">{salesBySource?.mobile?.totalOrders || 0} orders</p>
+                                        <p className="text-sm font-semibold text-foreground">Mobile App Orders</p>
+                                        <p className="text-xs text-muted-foreground font-bold">{salesBySource?.mobile?.totalOrders || 0} orders</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {mobileRevenue.toLocaleString()}</p>
-                                        <p className="text-[10px] text-emerald-500 font-black">{mobilePercent.toFixed(1)}%</p>
+                                        <p className="text-lg font-semibold text-foreground font-mono">{CURRENCY} {mobileRevenue.toLocaleString()}</p>
+                                        <p className="text-xs text-emerald-500 font-semibold">{mobilePercent.toFixed(1)}%</p>
                                     </div>
                                 </div>
                                 <div className="h-3 bg-muted/80 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -101,7 +101,7 @@ const AccountingDashboard: React.FC = () => {
                                 </div>
                                 {(salesBySource?.mobile?.unpaidCount || 0) > 0 && (
                                     <div className="flex items-center gap-2 mt-1 px-3 py-1.5 bg-orange-50 dark:bg-orange-950/40 rounded-lg border border-orange-100 dark:border-orange-800/50">
-                                        <span className="text-[10px] font-bold text-orange-600 dark:text-orange-300">
+                                        <span className="text-xs font-bold text-orange-600 dark:text-orange-300">
                                             {salesBySource?.mobile?.unpaidCount} unpaid — {CURRENCY} {(salesBySource?.mobile?.unpaidTotal || 0).toLocaleString()} receivable
                                         </span>
                                     </div>
@@ -111,12 +111,12 @@ const AccountingDashboard: React.FC = () => {
                             {/* Avg Order Value Comparison */}
                             <div className="flex gap-4 pt-4 border-t border-border dark:border-slate-700">
                                 <div className="flex-1 p-4 bg-indigo-50 dark:bg-indigo-950/40 dark:border dark:border-indigo-800/40 rounded-xl">
-                                    <p className="text-[10px] font-black text-indigo-400 dark:text-indigo-500 uppercase tracking-widest">POS Avg. Order</p>
-                                    <p className="text-lg font-black text-indigo-900 dark:text-indigo-200 font-mono">{CURRENCY} {(salesBySource?.pos?.avgOrderValue || 0).toFixed(0)}</p>
+                                    <p className="text-xs font-semibold text-indigo-400 dark:text-indigo-500 uppercase tracking-widest">POS Avg. Order</p>
+                                    <p className="text-lg font-semibold text-indigo-900 dark:text-indigo-200 font-mono">{CURRENCY} {(salesBySource?.pos?.avgOrderValue || 0).toFixed(0)}</p>
                                 </div>
                                 <div className="flex-1 p-4 bg-emerald-50 dark:bg-emerald-950/40 dark:border dark:border-emerald-800/40 rounded-xl">
-                                    <p className="text-[10px] font-black text-emerald-400 dark:text-emerald-500 uppercase tracking-widest">Mobile Avg. Order</p>
-                                    <p className="text-lg font-black text-emerald-900 dark:text-emerald-200 font-mono">{CURRENCY} {(salesBySource?.mobile?.avgOrderValue || 0).toFixed(0)}</p>
+                                    <p className="text-xs font-semibold text-emerald-400 dark:text-emerald-500 uppercase tracking-widest">Mobile Avg. Order</p>
+                                    <p className="text-lg font-semibold text-emerald-900 dark:text-emerald-200 font-mono">{CURRENCY} {(salesBySource?.mobile?.avgOrderValue || 0).toFixed(0)}</p>
                                 </div>
                             </div>
                         </div>
@@ -147,10 +147,10 @@ const AccountingDashboard: React.FC = () => {
                                         </div>
                                         <div className="min-w-0">
                                             <p className="text-sm font-bold text-foreground truncate">{acc.name}</p>
-                                            <p className="text-[10px] text-muted-foreground font-medium uppercase">{acc.code || acc.account_type}</p>
+                                            <p className="text-xs text-muted-foreground font-medium uppercase">{acc.code || acc.account_type}</p>
                                         </div>
                                     </div>
-                                    <div className="text-sm font-black text-foreground font-mono">
+                                    <div className="text-sm font-semibold text-foreground font-mono">
                                         {CURRENCY} {(parseFloat(acc.balance) || 0).toLocaleString()}
                                     </div>
                                 </div>
@@ -161,7 +161,7 @@ const AccountingDashboard: React.FC = () => {
                     {/* Account Ledger Balances */}
                     {accounts.filter(a => a.type === 'Asset').length > 0 && (
                         <div className="border-t border-border dark:border-slate-700 pt-4">
-                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Ledger Account Balances</p>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Ledger Account Balances</p>
                             <div className="space-y-2">
                                 {accounts.filter(a => a.type === 'Asset' || a.type === 'Income').slice(0, 5).map((acc: any, i: number) => (
                                     <div key={i} className="flex justify-between text-xs">

@@ -160,7 +160,7 @@ export default function DataExportImportSection() {
   return (
     <div className="space-y-6 max-w-3xl">
       <Card className="border-none shadow-sm p-6">
-        <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider mb-2">Export / Import data</h3>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Export / Import data</h3>
         <p className="text-muted-foreground text-sm mb-6">
           Download a template, fill it in Excel, then import. If any row has errors, the system will show the Excel row number so you can correct and re-import.
         </p>

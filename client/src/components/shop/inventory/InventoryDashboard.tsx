@@ -167,8 +167,8 @@ const InventoryDashboard: React.FC = () => {
                             {React.cloneElement(stat.icon as React.ReactElement<any>, { width: 28, height: 28 })}
                         </div>
                         <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
-                            <p className="text-2xl font-black text-foreground tracking-tight">{stat.value}</p>
+                            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                            <p className="text-2xl font-semibold text-foreground tracking-tight">{stat.value}</p>
                         </div>
                     </Card>
                 ))}
@@ -195,12 +195,12 @@ const InventoryDashboard: React.FC = () => {
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
-                            <span className="px-2 py-1 bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300 text-[10px] font-black rounded uppercase">Immediate Action Needed</span>
+                            <span className="px-2 py-1 bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300 text-xs font-semibold rounded uppercase">Immediate Action Needed</span>
                         </div>
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
                         <table className="w-full table-fixed text-left">
-                            <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground sticky top-0 z-10">
+                            <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground sticky top-0 z-10">
                                 <tr>
                                     <th
                                         style={{ width: colWidths.item, minWidth: MIN_COL_PX }}
@@ -307,15 +307,15 @@ const InventoryDashboard: React.FC = () => {
                                     <tr key={item.id} className="hover:bg-muted/50 transition-colors">
                                         <td className="min-w-0 px-6 py-4">
                                             <div className="truncate font-bold text-foreground text-sm" title={item.name}>{item.name}</div>
-                                            <div className="truncate text-[10px] text-muted-foreground font-mono italic" title={item.sku}>{item.sku}</div>
+                                            <div className="truncate text-xs text-muted-foreground font-mono italic" title={item.sku}>{item.sku}</div>
                                         </td>
                                         <td className="min-w-0 px-6 py-4">
                                             <span className="text-sm font-medium text-muted-foreground">{getCategoryDisplayName(item.category)}</span>
                                         </td>
-                                        <td className="min-w-0 px-6 py-4 text-sm font-black font-mono">{item.onHand} {item.unit}</td>
+                                        <td className="min-w-0 px-6 py-4 text-sm font-semibold font-mono">{item.onHand} {item.unit}</td>
                                         <td className="min-w-0 px-6 py-4 text-sm font-medium text-muted-foreground font-mono">{item.reorderPoint}</td>
                                         <td className="min-w-0 px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-[10px] font-bold ${item.onHand <= 0 ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'
+                                            <span className={`px-2 py-1 rounded text-xs font-bold ${item.onHand <= 0 ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'
                                                 }`}>
                                                 {item.onHand <= 0 ? 'OUT OF STOCK' : 'LOW STOCK'}
                                             </span>

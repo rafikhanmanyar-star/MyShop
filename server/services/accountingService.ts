@@ -307,8 +307,13 @@ export class AccountingService {
         COALESCE(AVG(grand_total), 0) as avg_order_value,
         'POS' as source
       FROM shop_sales
-      WHERE tenant_id = $1 AND status = 'Completed'
+      WHERE tenant_id = $1 AND status IN ('Completed', 'Refunded')
     `, [tenantId]);
+
+    const posReturnsAgg = await this.db.query(
+      `SELECT COALESCE(SUM(total_return_amount), 0) as total_returns FROM shop_sales_returns WHERE tenant_id = $1`,
+      [tenantId]
+    );
 
     // Mobile: all completed statuses (not Pending/Cancelled) so dashboard count matches revenue set
     const mobileStatusList = ['Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
@@ -371,12 +376,20 @@ export class AccountingService {
       WHERE tenant_id = $1 AND status = 'Delivered' AND payment_status = 'Unpaid'
     `, [tenantId]);
     const unpaidRow = unpaidRes[0] ?? {};
+    const totalReturnsPos = toNum((posReturnsAgg[0] as any)?.total_returns ?? (posReturnsAgg[0] as any)?.totalReturns);
+    const posGross = toNum(posRow.total_revenue ?? posRow.totalRevenue);
+    const posNet = Math.max(0, posGross - totalReturnsPos);
+    const posOrders = Math.max(0, parseInt(String(posRow.total_orders ?? posRow.totalOrders), 10) || 0);
+    const posAvgNet = posOrders > 0 ? posNet / posOrders : 0;
 
     return {
       pos: {
-        totalOrders: Math.max(0, parseInt(String(posRow.total_orders ?? posRow.totalOrders), 10) || 0),
-        totalRevenue: toNum(posRow.total_revenue ?? posRow.totalRevenue),
+        totalOrders: posOrders,
+        totalRevenue: posGross,
+        totalReturns: totalReturnsPos,
+        netRevenue: posNet,
         avgOrderValue: toNum(posRow.avg_order_value ?? posRow.avgOrderValue),
+        avgNetOrderValue: posAvgNet,
       },
       mobile: {
         totalOrders: mobileOrders,
@@ -392,6 +405,7 @@ export class AccountingService {
    * Daily revenue trend for the last N days, broken down by source.
    */
   async getDailyRevenueTrend(tenantId: string, days = 30) {
+    const toNum = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
     const cutoffStr = cutoffDate.toISOString();
@@ -402,11 +416,28 @@ export class AccountingService {
         COUNT(*) as order_count,
         COALESCE(SUM(grand_total), 0) as revenue
       FROM shop_sales
-      WHERE tenant_id = $1 AND status = 'Completed'
+      WHERE tenant_id = $1 AND status IN ('Completed', 'Refunded')
         AND created_at >= $2
       GROUP BY DATE(created_at)
       ORDER BY day ASC
     `, [tenantId, cutoffStr]);
+
+    const returnsByDay = await this.db.query(`
+      SELECT DATE(return_date) as day, COALESCE(SUM(total_return_amount), 0) as returns_amt
+      FROM shop_sales_returns
+      WHERE tenant_id = $1 AND return_date >= $2
+      GROUP BY DATE(return_date)
+    `, [tenantId, cutoffStr]);
+    const retMap = new Map<string, number>();
+    for (const r of returnsByDay as any[]) {
+      const k = r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10);
+      retMap.set(k, toNum(r.returns_amt));
+    }
+    for (const row of posTrend as any[]) {
+      const k = row.day instanceof Date ? row.day.toISOString().slice(0, 10) : String(row.day).slice(0, 10);
+      const sub = retMap.get(k) || 0;
+      row.revenue = Math.max(0, toNum(row.revenue) - sub);
+    }
 
     const mobileStatusList = ['Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
     const mobileTrendPlaceholders = mobileStatusList.map((_, i) => `$${i + 3}`).join(', ');

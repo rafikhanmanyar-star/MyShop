@@ -99,13 +99,13 @@ const AccountingContent: React.FC = () => {
             <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Financial Engine</h1>
+                        <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Financial Engine</h1>
                         <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">POS source-of-truth automated accounting.</p>
                     </div>
                     <div className="flex gap-3 flex-wrap">
                         <button
                             onClick={() => setIsJournalModalOpen(true)}
-                            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-slate-200 dark:shadow-slate-900 hover:bg-black dark:hover:bg-indigo-700 transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"
+                            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-slate-200 dark:shadow-slate-900 hover:bg-black dark:hover:bg-indigo-700 transition-all flex items-center gap-2 uppercase tracking-widest text-xs"
                         >
                             {ICONS.plus} Manual Journal
                         </button>
@@ -169,7 +169,7 @@ const AccountingContent: React.FC = () => {
 
                     <div className="bg-muted/80 dark:bg-slate-800 border border-border dark:border-slate-700 rounded-xl overflow-hidden">
                         <table className="w-full text-left">
-                            <thead className="bg-muted dark:bg-slate-700 text-[10px] uppercase font-black text-muted-foreground dark:text-muted-foreground">
+                            <thead className="bg-muted dark:bg-slate-700 text-xs uppercase font-semibold text-muted-foreground dark:text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3 w-[30%]">Account</th>
                                     <th className="px-4 py-3 w-[30%]">Description</th>

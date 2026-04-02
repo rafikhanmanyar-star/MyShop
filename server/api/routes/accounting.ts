@@ -248,7 +248,7 @@ router.get('/reports/daily/stream', checkRole(['admin', 'accountant']), async (r
                 try {
                     const payload = JSON.parse(msg.payload);
                     if (payload.tenantId === tenantId) {
-                        res.write(`data: ${JSON.stringify({ type: 'daily_report_updated', ...payload })}\n\n`);
+                        res.write(`data: ${JSON.stringify({ type: payload.type || 'daily_report_updated', ...payload })}\n\n`);
                     }
                 } catch (err) {
                     console.error('SSE daily_report parse error:', err);

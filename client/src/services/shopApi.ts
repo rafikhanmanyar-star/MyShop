@@ -143,6 +143,12 @@ export const shopApi = {
 
   incrementReprintCount: (saleId: string) => apiClient.post<any>(`/shop/sales/${saleId}/reprint`),
   getSaleByInvoiceNumber: (saleNumber: string) => apiClient.get<any>(`/shop/sales/by-invoice/${encodeURIComponent(saleNumber)}`),
+
+  getSaleReturnEligibility: (saleId: string) =>
+    apiClient.get<any>(`/shop/sales/return-eligibility/${encodeURIComponent(saleId)}`),
+  getSalesReturns: () => apiClient.get<any[]>('/shop/sales-returns'),
+  getSalesReturn: (id: string) => apiClient.get<any>(`/shop/sales-returns/${encodeURIComponent(id)}`),
+  createSalesReturn: (data: Record<string, unknown>) => apiClient.post<{ id: string; returnNumber: string; totalReturnAmount: number }>('/shop/sales-returns', data),
 };
 
 // --- Khata / Customer Credit API ---
@@ -173,7 +179,7 @@ export const khataApi = {
   getSummary: () => apiClient.get<KhataSummaryRow[]>('/shop/khata/summary'),
   getCustomerSummary: (customerId: string) =>
     apiClient.get<{ totalDebit: number; totalCredit: number; balance: number }>(`/shop/khata/customer/${encodeURIComponent(customerId)}/summary`),
-  receivePayment: (data: { customerId: string; amount: number; note?: string }) =>
+  receivePayment: (data: { customerId: string; amount: number; note?: string; bankAccountId: string }) =>
     apiClient.post<{ id: string }>('/shop/khata/receive-payment', data),
   getCustomers: () => apiClient.get<{ id: string; name: string; contact_no: string | null; company_name?: string | null }[]>('/shop/khata/customers'),
   createCustomer: (data: { name: string; contactNo?: string; companyName?: string }) =>
@@ -233,6 +239,8 @@ export const accountingApi = {
       date: string;
       branchId: string | null;
       posSales: number;
+      posReturns: number;
+      netPosSales: number;
       mobileSales: number;
       inventoryOutQty: number;
       inventoryInQty: number;

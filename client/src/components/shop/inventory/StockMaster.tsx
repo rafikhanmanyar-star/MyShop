@@ -210,7 +210,7 @@ const StockMaster: React.FC = () => {
                 <Card className="border-none shadow-sm flex-1 min-h-0 flex flex-col overflow-hidden">
                     <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
                         <table className="w-full text-left">
-                            <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground sticky top-0 z-10">
+                            <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground sticky top-0 z-10">
                                 <tr>
                                     <th className="px-6 py-4 bg-muted/80">Item Details</th>
                                     <th className="px-6 py-4 bg-muted/80">Barcode</th>
@@ -239,7 +239,7 @@ const StockMaster: React.FC = () => {
                                                 </div>
                                                 <div>
                                                     <div className="font-bold text-foreground text-sm">{item.name}</div>
-                                                    <div className="text-[10px] text-muted-foreground font-mono italic">SKU: {item.sku}</div>
+                                                    <div className="text-xs text-muted-foreground font-mono italic">SKU: {item.sku}</div>
                                                 </div>
                                             </div>
                                         </td>
@@ -249,17 +249,17 @@ const StockMaster: React.FC = () => {
                                                     <span className="text-xs font-mono font-bold">{item.barcode}</span>
                                                 </div>
                                             ) : (
-                                                <span className="text-slate-300 dark:text-slate-500 text-[10px] italic">No Barcode</span>
+                                                <span className="text-slate-300 dark:text-slate-500 text-xs italic">No Barcode</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-sm font-black font-mono text-foreground">{item.onHand}</td>
+                                        <td className="px-6 py-4 text-sm font-semibold font-mono text-foreground">{item.onHand}</td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${item.available > 10 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'}`}>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.available > 10 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'}`}>
                                                 {item.available} {item.unit}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-sm font-bold text-muted-foreground font-mono">{item.inTransit}</td>
-                                        <td className="px-6 py-4 text-sm font-black text-foreground font-mono">
+                                        <td className="px-6 py-4 text-sm font-semibold text-foreground font-mono">
                                             {(item.onHand * item.retailPrice).toLocaleString()}
                                         </td>
                                         <td className="px-6 py-4 text-right">
@@ -281,10 +281,10 @@ const StockMaster: React.FC = () => {
                     <Card className="h-full min-h-0 border-none shadow-xl flex flex-col p-8 gap-8 overflow-y-auto bg-card border-l border-indigo-100 dark:border-slate-700 rounded-none rounded-l-3xl">
                         <div className="flex justify-between items-start">
                             <div>
-                                <h2 className="text-xl font-black text-foreground">{selectedItem.name}</h2>
-                                <p className="text-[10px] font-black uppercase text-indigo-500 dark:text-indigo-400 tracking-widest mt-1">SKU ID: {selectedItem.sku}</p>
+                                <h2 className="text-xl font-semibold text-foreground">{selectedItem.name}</h2>
+                                <p className="text-xs font-semibold uppercase text-indigo-500 dark:text-indigo-400 tracking-widest mt-1">SKU ID: {selectedItem.sku}</p>
                                 {selectedItem.barcode && (
-                                    <p className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest mt-0.5">📊 BARCODE: {selectedItem.barcode}</p>
+                                    <p className="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-400 tracking-widest mt-0.5">📊 BARCODE: {selectedItem.barcode}</p>
                                 )}
                             </div>
                             <button
@@ -306,7 +306,7 @@ const StockMaster: React.FC = () => {
 
                         {/* Stock Distribution Matrix */}
                         <div className="space-y-4">
-                            <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Inventory Distribution</h3>
+                            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Inventory Distribution</h3>
                             <div className="grid grid-cols-1 gap-3">
                                 {warehouses.map(wh => (
                                     <div key={wh.id} className="flex items-center justify-between p-4 bg-muted/80 rounded-2xl border border-border group hover:border-indigo-200 dark:hover:border-indigo-500/40 transition-all">
@@ -316,10 +316,10 @@ const StockMaster: React.FC = () => {
                                             </div>
                                             <div>
                                                 <p className="text-sm font-bold text-foreground">{wh.name}</p>
-                                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-tight">{wh.code}</p>
+                                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-tight">{wh.code}</p>
                                             </div>
                                         </div>
-                                        <div className="text-xl font-black text-foreground font-mono">
+                                        <div className="text-xl font-semibold text-foreground font-mono">
                                             {selectedItem.warehouseStock[wh.id] || 0}
                                         </div>
                                     </div>
@@ -330,12 +330,12 @@ const StockMaster: React.FC = () => {
                         {/* Financial Metrics */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="p-4 rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40">
-                                <p className="text-[10px] font-bold uppercase opacity-80">Retail Price</p>
-                                <p className="text-xl font-black font-mono mt-1">{CURRENCY} {selectedItem.retailPrice}</p>
+                                <p className="text-xs font-bold uppercase opacity-80">Retail Price</p>
+                                <p className="text-xl font-semibold font-mono mt-1">{CURRENCY} {selectedItem.retailPrice}</p>
                             </div>
                             <div className="p-4 rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-100 dark:bg-slate-800 dark:shadow-black/40">
-                                <p className="text-[10px] font-bold uppercase opacity-80">Cost Price</p>
-                                <p className="text-xl font-black font-mono mt-1">{CURRENCY} {selectedItem.costPrice}</p>
+                                <p className="text-xs font-bold uppercase opacity-80">Cost Price</p>
+                                <p className="text-xl font-semibold font-mono mt-1">{CURRENCY} {selectedItem.costPrice}</p>
                             </div>
                         </div>
 
@@ -344,26 +344,26 @@ const StockMaster: React.FC = () => {
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => setIsTransferModalOpen(true)}
-                                    className="flex-1 py-4 bg-card border-2 border-border text-foreground rounded-2xl font-black text-xs hover:border-indigo-600 hover:text-indigo-600 dark:hover:border-indigo-400 dark:hover:text-indigo-400 transition-all uppercase tracking-widest shadow-sm"
+                                    className="flex-1 py-4 bg-card border-2 border-border text-foreground rounded-2xl font-semibold text-xs hover:border-indigo-600 hover:text-indigo-600 dark:hover:border-indigo-400 dark:hover:text-indigo-400 transition-all uppercase tracking-widest shadow-sm"
                                 >
                                     Transfer
                                 </button>
                                 <button
                                     onClick={() => setIsAdjustModalOpen(true)}
-                                    className="flex-1 py-4 bg-card border-2 border-border text-foreground rounded-2xl font-black text-xs hover:border-indigo-600 hover:text-indigo-600 dark:hover:border-indigo-400 dark:hover:text-indigo-400 transition-all uppercase tracking-widest shadow-sm"
+                                    className="flex-1 py-4 bg-card border-2 border-border text-foreground rounded-2xl font-semibold text-xs hover:border-indigo-600 hover:text-indigo-600 dark:hover:border-indigo-400 dark:hover:text-indigo-400 transition-all uppercase tracking-widest shadow-sm"
                                 >
                                     Adjust
                                 </button>
                             </div>
                             <button
                                 onClick={() => setIsEditModalOpen(true)}
-                                className="w-full py-4 bg-indigo-50 text-indigo-600 rounded-2xl font-black text-xs hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/60 dark:border-indigo-800/50 transition-all uppercase tracking-widest shadow-sm border border-indigo-100 dark:border-indigo-800/50 mb-3"
+                                className="w-full py-4 bg-indigo-50 text-indigo-600 rounded-2xl font-semibold text-xs hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/60 dark:border-indigo-800/50 transition-all uppercase tracking-widest shadow-sm border border-indigo-100 dark:border-indigo-800/50 mb-3"
                             >
                                 Edit Product Details
                             </button>
                             <button
                                 onClick={() => setIsHistoryModalOpen(true)}
-                                className="w-full py-4 bg-muted/80 text-muted-foreground rounded-2xl font-black text-xs uppercase tracking-[0.2em] border border-dashed border-border hover:bg-muted transition-all"
+                                className="w-full py-4 bg-muted/80 text-muted-foreground rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] border border-dashed border-border hover:bg-muted transition-all"
                             >
                                 View Full Card History
                             </button>
@@ -372,7 +372,7 @@ const StockMaster: React.FC = () => {
                                     type="button"
                                     onClick={handleDeleteSku}
                                     disabled={deleting}
-                                    className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-xs uppercase tracking-widest border border-red-200 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800/60 dark:hover:bg-red-950/60 transition-all disabled:opacity-50"
+                                    className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-semibold text-xs uppercase tracking-widest border border-red-200 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800/60 dark:hover:bg-red-950/60 transition-all disabled:opacity-50"
                                 >
                                     {deleting ? 'Deleting...' : 'Delete SKU'}
                                 </button>
@@ -392,18 +392,18 @@ const StockMaster: React.FC = () => {
                 <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
                     <div className="flex justify-between items-center">
                         <div>
-                            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Bin Card History</p>
+                            <p className="text-xs font-semibold uppercase text-muted-foreground tracking-widest">Bin Card History</p>
                             <h4 className="text-sm font-bold text-muted-foreground mt-1">Audit Trail for {selectedItem?.sku}</h4>
                         </div>
                         <div className="text-right">
-                            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Current Balance</p>
-                            <p className="text-lg font-black text-indigo-600 dark:text-indigo-400 font-mono italic">{selectedItem?.onHand} {selectedItem?.unit}</p>
+                            <p className="text-xs font-semibold uppercase text-muted-foreground tracking-widest">Current Balance</p>
+                            <p className="text-lg font-semibold text-indigo-600 dark:text-indigo-400 font-mono italic">{selectedItem?.onHand} {selectedItem?.unit}</p>
                         </div>
                     </div>
 
                     <div className="border border-border rounded-2xl overflow-hidden shadow-sm">
                         <table className="w-full text-left">
-                            <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground">
+                            <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground">
                                 <tr>
                                     <th className="px-6 py-4">Date</th>
                                     <th className="px-6 py-4">Event</th>
@@ -419,12 +419,12 @@ const StockMaster: React.FC = () => {
                                             <div className="text-xs font-bold text-foreground">
                                                 {new Date(move.timestamp).toLocaleDateString()}
                                             </div>
-                                            <div className="text-[10px] text-muted-foreground font-mono">
+                                            <div className="text-xs text-muted-foreground font-mono">
                                                 {new Date(move.timestamp).toLocaleTimeString()}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${getMovementStyle(move.type)}`}>
+                                            <span className={`px-2 py-1 rounded text-xs font-semibold uppercase tracking-wider ${getMovementStyle(move.type)}`}>
                                                 {move.type}
                                             </span>
                                         </td>
@@ -432,12 +432,12 @@ const StockMaster: React.FC = () => {
                                             {warehouses.find(w => w.id === move.warehouseId)?.name || '---'}
                                         </td>
                                         <td className="px-6 py-4 text-center">
-                                            <span className={`text-sm font-black font-mono ${move.quantity > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                                            <span className={`text-sm font-semibold font-mono ${move.quantity > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                                                 {move.quantity > 0 ? '+' : ''}{move.quantity}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="text-[10px] font-mono font-bold bg-muted text-muted-foreground p-1 rounded uppercase">
+                                            <span className="text-xs font-mono font-bold bg-muted text-muted-foreground p-1 rounded uppercase">
                                                 {move.referenceId.slice(0, 8)}
                                             </span>
                                         </td>
@@ -646,7 +646,7 @@ const StockMaster: React.FC = () => {
                                     >
                                         {imagePreview ? 'Change Image' : 'Upload Image'}
                                     </label>
-                                    <p className="text-[10px] text-muted-foreground mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
+                                    <p className="text-xs text-muted-foreground mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
                                 </div>
                             </div>
                         </div>

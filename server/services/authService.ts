@@ -114,6 +114,42 @@ export class AuthService {
     await this.db.execute('UPDATE users SET login_status = FALSE WHERE id = $1 AND tenant_id = $2', [userId, tenantId]);
   }
 
+  /**
+   * Public metadata for login screen (no auth). Resolves tenant by id or slug.
+   * Optional branchId must belong to the tenant or it is ignored.
+   */
+  async getPublicOrganizationInfo(identifier: string, branchId?: string | null) {
+    const trimmed = (identifier || '').trim();
+    if (!trimmed) return null;
+
+    const tenants = await this.db.query(
+      `SELECT id, name, company_name, slug FROM tenants WHERE id = $1 OR slug = $1 LIMIT 1`,
+      [trimmed]
+    );
+    if (tenants.length === 0) return null;
+
+    const row = tenants[0] as { id: string; name: string; company_name: string | null; slug: string | null };
+    let branch_name: string | null = null;
+    const bid = (branchId || '').trim();
+    if (bid) {
+      const branches = await this.db.query(
+        `SELECT name FROM shop_branches WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+        [bid, row.id]
+      );
+      if (branches.length > 0) {
+        branch_name = (branches[0] as { name: string }).name;
+      }
+    }
+
+    return {
+      id: row.id,
+      name: row.name,
+      company_name: row.company_name || '',
+      slug: row.slug,
+      branch_name,
+    };
+  }
+
   private generateToken(userId: string, tenantId: string, username: string, role: string): string {
     return jwt.sign(
       { userId, tenantId, username, role },

@@ -11,7 +11,23 @@ export interface LoginResponse {
 
 export interface RegisterResponse extends LoginResponse {}
 
+export interface PublicOrganizationInfo {
+  id: string;
+  name: string;
+  company_name: string;
+  slug: string | null;
+  branch_name: string | null;
+}
+
 export const authApi = {
+  /** Public: resolve tenant (and optional branch) for login UI */
+  getPublicOrganization: (orgId: string, branchId?: string | null) => {
+    const q = new URLSearchParams();
+    q.set('org_id', orgId);
+    if (branchId) q.set('branch_id', branchId);
+    return apiClient.get<PublicOrganizationInfo>(`/auth/organization?${q.toString()}`);
+  },
+
   login: (data: { username: string; password: string; org_id?: string }) =>
     apiClient.post<LoginResponse>('/auth/login', data),
 

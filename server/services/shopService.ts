@@ -671,6 +671,7 @@ export class ShopService {
       accounting.getOrCreateAccountByCode(tenantId, code, name, type, client);
 
     const isCredit = saleData.paymentMethod === 'Credit';
+    const isKhata = (saleData.paymentMethod || '').toLowerCase().includes('khata');
 
     // Revenue Ledger (Credit) – 41001 Retail Sales
     const revenueAcc = await getAcc(COA.RETAIL_SALES, 'Retail Sales', 'Income');
@@ -680,18 +681,20 @@ export class ShopService {
     );
 
     // Asset/Cash Ledger (Debit)
-    if (isCredit) {
+    if (isCredit || isKhata) {
       if (!saleData.customerId) throw new Error('Customer required for credit sale');
       const arAcc = await getAcc(COA.TRADE_RECEIVABLES, 'Trade Receivables', 'Asset');
       await client.query(
         'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, 0)',
         [tenantId, journalId, arAcc, saleData.grandTotal]
       );
-      // Update customer balance
-      await client.query(`
+      // customer_balance: legacy POS "Credit" only (khata uses khata_ledger for customer balance)
+      if (isCredit && !isKhata) {
+        await client.query(`
         INSERT INTO customer_balance (tenant_id, customer_id, balance) VALUES ($1, $2, $3)
         ON CONFLICT (tenant_id, customer_id) DO UPDATE SET balance = customer_balance.balance + $3, updated_at = NOW()
       `, [tenantId, saleData.customerId, saleData.grandTotal]);
+      }
     } else {
       const payments = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [{ method: 'Cash', amount: saleData.grandTotal }];
       let remainingToAllocate = saleData.grandTotal;

@@ -109,10 +109,10 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                     {ICONS.user}
                 </div>
                 <div>
-                    <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 leading-none tracking-tight">Customer Directory</h2>
+                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 leading-none tracking-tight">Customer Directory</h2>
                     <div className="flex items-center gap-2 mt-2">
                         <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Global Database Access</span>
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest leading-none">Global Database Access</span>
                     </div>
                 </div>
             </div>}
@@ -130,7 +130,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                             >
                                 {ICONS.chevronRight && React.cloneElement(ICONS.chevronRight as React.ReactElement, { className: 'rotate-180' })}
                             </button>
-                            <span className="text-sm font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">New Customer</span>
+                            <span className="text-sm font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400">New Customer</span>
                         </div>
                         <form onSubmit={handleRegisterNewAccount} className="space-y-5">
                             {registerError && (
@@ -139,36 +139,36 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                 </div>
                             )}
                             <div>
-                                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Name *</label>
+                                <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Name *</label>
                                 <input
                                     type="text"
                                     value={registerForm.name}
                                     onChange={(e) => setRegisterForm(f => ({ ...f, name: e.target.value }))}
                                     placeholder="Full name"
-                                    className="w-full px-5 py-4 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-2xl focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-black text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
+                                    className="w-full px-5 py-4 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-2xl focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-semibold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                                     autoFocus
                                     disabled={registerSubmitting}
                                 />
                             </div>
                             <div>
-                                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Phone</label>
+                                <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Phone</label>
                                 <input
                                     type="tel"
                                     value={registerForm.contactNo}
                                     onChange={(e) => setRegisterForm(f => ({ ...f, contactNo: e.target.value }))}
                                     placeholder="Contact number"
-                                    className="w-full px-5 py-4 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-2xl focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-black text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
+                                    className="w-full px-5 py-4 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-2xl focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-semibold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                                     disabled={registerSubmitting}
                                 />
                             </div>
                             <div>
-                                <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Company (optional)</label>
+                                <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Company (optional)</label>
                                 <input
                                     type="text"
                                     value={registerForm.companyName}
                                     onChange={(e) => setRegisterForm(f => ({ ...f, companyName: e.target.value }))}
                                     placeholder="Company name"
-                                    className="w-full px-5 py-4 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-2xl focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-black text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
+                                    className="w-full px-5 py-4 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-2xl focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-semibold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                                     disabled={registerSubmitting}
                                 />
                             </div>
@@ -176,14 +176,14 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                 <button
                                     type="button"
                                     onClick={() => setShowRegisterForm(false)}
-                                    className="flex-1 py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-black text-[11px] uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                    className="flex-1 py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 font-semibold text-xs uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={registerSubmitting || !registerForm.name.trim()}
-                                    className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-black text-[11px] uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-semibold text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {registerSubmitting ? (
                                         <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -204,7 +204,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                             <input
                                 type="text"
                                 placeholder="Live search by name, contact or loyalty ID..."
-                                className="w-full pl-14 pr-6 py-5 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-[1.5rem] focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 outline-none transition-all text-sm font-black text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 shadow-none"
+                                className="w-full pl-14 pr-6 py-5 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-[1.5rem] focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 outline-none transition-all text-sm font-semibold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 shadow-none"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 autoFocus
@@ -215,15 +215,15 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                             {loading ? (
                                 <div className="py-24 flex flex-col items-center gap-5 text-slate-300 dark:text-slate-600">
                                     <div className="w-12 h-12 border-[6px] border-indigo-100 dark:border-indigo-900 border-t-indigo-600 dark:border-t-indigo-400 rounded-full animate-spin"></div>
-                                    <span className="font-black text-[10px] uppercase tracking-[0.3em]">Querying Database...</span>
+                                    <span className="font-semibold text-xs uppercase tracking-[0.3em]">Querying Database...</span>
                                 </div>
                             ) : filteredContacts.length === 0 ? (
                                 <div className="py-24 text-center text-slate-400 dark:text-slate-500 animate-fade-in">
                                     <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
                                         {React.cloneElement(ICONS.user as React.ReactElement, { size: 32, className: "opacity-20" })}
                                     </div>
-                                    <h4 className="text-sm font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">No Records Found</h4>
-                                    <p className="text-[11px] font-bold mt-2 opacity-60">Refine your search parameters and try again.</p>
+                                    <h4 className="text-sm font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400">No Records Found</h4>
+                                    <p className="text-xs font-bold mt-2 opacity-60">Refine your search parameters and try again.</p>
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -236,18 +236,18 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                                 className="flex items-center gap-5 p-5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[2rem] hover:border-indigo-200 dark:hover:border-indigo-700 transition-all text-left group relative overflow-hidden"
                                             >
                                                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/[0.02] dark:bg-indigo-400/[0.04] rounded-full translate-x-10 -translate-y-10 group-hover:scale-150 transition-transform"></div>
-                                                <div className="w-14 h-14 rounded-2xl bg-[#f8fafc] dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 font-black text-xl group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-none">
+                                                <div className="w-14 h-14 rounded-2xl bg-[#f8fafc] dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 font-semibold text-xl group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-none">
                                                     {contact.name.charAt(0)}
                                                 </div>
                                                 <div className="flex-1 min-w-0 relative z-10">
-                                                    <div className="font-black text-slate-900 dark:text-slate-100 truncate tracking-tight text-base mb-1">{contact.name}</div>
-                                                    <div className="text-[11px] text-slate-500 dark:text-slate-400 font-bold tracking-tight">{contact.contactNo || 'Anonymous Phone'}</div>
+                                                    <div className="font-semibold text-slate-900 dark:text-slate-100 truncate tracking-tight text-base mb-1">{contact.name}</div>
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400 font-bold tracking-tight">{contact.contactNo || 'Anonymous Phone'}</div>
                                                     {loyaltyMember && (
                                                         <div className="mt-3 flex items-center gap-2">
-                                                            <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest border border-indigo-100">
+                                                            <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-xl text-xs font-semibold uppercase tracking-widest border border-indigo-100">
                                                                 {loyaltyMember.tier}
                                                             </span>
-                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+                                                            <span className="text-xs font-semibold text-slate-400 uppercase tracking-tighter">
                                                                 {loyaltyMember.pointsBalance} <span className="opacity-60">POINTS</span>
                                                             </span>
                                                         </div>
@@ -267,7 +267,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                             <button
                                 type="button"
                                 onClick={() => setShowRegisterForm(true)}
-                                className="text-[11px] font-black uppercase tracking-widest text-white bg-indigo-600 px-6 py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-none shadow-none-200 flex items-center gap-3 active:scale-95"
+                                className="text-xs font-semibold uppercase tracking-widest text-white bg-indigo-600 px-6 py-4 rounded-2xl hover:bg-indigo-700 transition-all shadow-none shadow-none-200 flex items-center gap-3 active:scale-95"
                             >
                                 {ICONS.plus} Register New Account
                             </button>
@@ -284,7 +284,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                     });
                                     onClose();
                                 }}
-                                className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors uppercase"
+                                className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-colors uppercase"
                             >
                                 Skip Selection
                             </button>

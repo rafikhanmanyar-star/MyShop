@@ -24,8 +24,8 @@ const LoyaltyDashboard: React.FC = () => {
                             {React.cloneElement(stat.icon as React.ReactElement<any>, { width: 28, height: 28 })}
                         </div>
                         <div>
-                            <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
-                            <p className="text-2xl font-black text-foreground tracking-tight">{stat.value}</p>
+                            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                            <p className="text-2xl font-semibold text-foreground tracking-tight">{stat.value}</p>
                         </div>
                     </Card>
                 ))}
@@ -37,7 +37,7 @@ const LoyaltyDashboard: React.FC = () => {
                     <div className="flex justify-between items-center mb-8">
                         <h3 className="font-bold text-foreground text-lg">Retention & Engagement Funnel</h3>
                         <div className="flex gap-2">
-                            <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
+                            <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
                                 <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400"></span> Repeat Buyers
                             </div>
                         </div>
@@ -46,13 +46,13 @@ const LoyaltyDashboard: React.FC = () => {
                     <div className="h-64 flex items-end gap-4 px-4 pb-4 border-b border-border dark:border-slate-600">
                         {[45, 62, 85, 30, 95, 70, 55].map((val, i) => (
                             <div key={i} className="flex-1 bg-rose-50 dark:bg-rose-950/40 rounded-t-xl relative group transition-all hover:bg-rose-500 dark:hover:bg-rose-600 h-[20%] hover:h-[90%]" style={{ height: `${val}%` }}>
-                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 text-[10px] font-black text-rose-600 dark:text-rose-300 bg-card dark:bg-slate-800 shadow-sm px-2 py-1 rounded border border-rose-100 dark:border-rose-800 whitespace-nowrap">
+                                <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 text-xs font-semibold text-rose-600 dark:text-rose-300 bg-card dark:bg-slate-800 shadow-sm px-2 py-1 rounded border border-rose-100 dark:border-rose-800 whitespace-nowrap">
                                     {val}% Retention
                                 </div>
                             </div>
                         ))}
                     </div>
-                    <div className="flex justify-between mt-4 px-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+                    <div className="flex justify-between mt-4 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
                         <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
                     </div>
                 </Card>
@@ -67,22 +67,22 @@ const LoyaltyDashboard: React.FC = () => {
                                 <circle cx="80" cy="80" r="70" fill="none" stroke="#e11d48" strokeWidth="12" strokeDasharray="440" strokeDashoffset="110" strokeLinecap="round" />
                             </svg>
                             <div className="absolute text-center">
-                                <p className="text-3xl font-black text-foreground tracking-tighter">75%</p>
-                                <p className="text-[10px] font-black uppercase text-muted-foreground leading-tight">Burn Rate</p>
+                                <p className="text-3xl font-semibold text-foreground tracking-tighter">75%</p>
+                                <p className="text-xs font-semibold uppercase text-muted-foreground leading-tight">Burn Rate</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 w-full">
                             <div className="p-3 bg-muted/80 dark:bg-slate-800/80 rounded-xl border border-border dark:border-slate-600">
-                                <p className="text-[10px] font-black text-muted-foreground uppercase">Outstanding</p>
-                                <p className="text-sm font-black text-foreground mt-1">1.2M Pts</p>
+                                <p className="text-xs font-semibold text-muted-foreground uppercase">Outstanding</p>
+                                <p className="text-sm font-semibold text-foreground mt-1">1.2M Pts</p>
                             </div>
                             <div className="p-3 bg-muted/80 dark:bg-slate-800/80 rounded-xl border border-border dark:border-slate-600">
-                                <p className="text-[10px] font-black text-muted-foreground uppercase">Valuation</p>
-                                <p className="text-sm font-black text-rose-600 dark:text-rose-400 mt-1">$12,400</p>
+                                <p className="text-xs font-semibold text-muted-foreground uppercase">Valuation</p>
+                                <p className="text-sm font-semibold text-rose-600 dark:text-rose-400 mt-1">$12,400</p>
                             </div>
                         </div>
                     </div>
-                    <button className="w-full py-4 bg-slate-900 dark:bg-slate-950 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-black dark:hover:bg-slate-800 transition-all border border-transparent dark:border-slate-700">
+                    <button className="w-full py-4 bg-slate-900 dark:bg-slate-950 text-white rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-black dark:hover:bg-slate-800 transition-all border border-transparent dark:border-slate-700">
                         Financial Audit Log
                     </button>
                 </Card>

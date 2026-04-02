@@ -1,6 +1,6 @@
 {
   "name": "myshop-api",
-  "version": "1.0.95",
+  "version": "1.0.96",
   "description": "MyShop API Server - Standalone Shop & POS Application",
   "type": "module",
   "main": "dist/api/index.js",
@@ -8,7 +8,8 @@
     "dev": "tsx watch api/index.ts",
     "build": "tsc && node scripts/copy-migrations.cjs",
     "start": "node dist/api/index.js",
-    "migrate": "tsx scripts/run-migrations.ts"
+    "migrate": "tsx scripts/run-migrations.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@types/multer": "^2.0.0",
@@ -32,6 +33,7 @@
     "@types/node": "^22.13.4",
     "@types/pg": "^8.10.9",
     "tsx": "^4.7.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.5"
   }
 }

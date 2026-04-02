@@ -37,13 +37,13 @@ const GeneralLedger: React.FC = () => {
     const getSourceBadge = (source: string) => {
         switch (source) {
             case 'POS':
-                return <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded text-[9px] font-black uppercase">POS Sale</span>;
+                return <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded text-xs font-semibold uppercase">POS Sale</span>;
             case 'MobileApp':
-                return <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded text-[9px] font-black uppercase">Mobile App</span>;
+                return <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded text-xs font-semibold uppercase">Mobile App</span>;
             case 'Manual':
-                return <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded text-[9px] font-black uppercase">Manual</span>;
+                return <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded text-xs font-semibold uppercase">Manual</span>;
             default:
-                return <span className="px-2 py-0.5 bg-muted dark:bg-slate-800 text-muted-foreground rounded text-[9px] font-black uppercase">{source || 'System'}</span>;
+                return <span className="px-2 py-0.5 bg-muted dark:bg-slate-800 text-muted-foreground rounded text-xs font-semibold uppercase">{source || 'System'}</span>;
         }
     };
 
@@ -155,7 +155,7 @@ const GeneralLedger: React.FC = () => {
                             <button
                                 key={filter}
                                 onClick={() => setSourceFilter(filter)}
-                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${sourceFilter === filter
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-widest transition-all ${sourceFilter === filter
                                     ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow'
                                     : 'text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                     }`}
@@ -167,7 +167,7 @@ const GeneralLedger: React.FC = () => {
                 </div>
 
                 <div className="flex gap-2 items-center">
-                    <span className="text-[10px] font-bold text-muted-foreground">{filteredEntries.length} entries</span>
+                    <span className="text-xs font-bold text-muted-foreground">{filteredEntries.length} entries</span>
                     <button className="px-4 py-2 bg-card dark:bg-slate-900 border border-border dark:border-slate-700 rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 dark:hover:bg-slate-800 transition-all flex items-center gap-2">
                         {ICONS.export} Export CSV
                     </button>
@@ -182,7 +182,7 @@ const GeneralLedger: React.FC = () => {
                     </div>
                 ) : (
                     <table className="w-full text-left">
-                        <thead className="bg-muted/80 dark:bg-slate-800 text-[10px] font-black uppercase text-muted-foreground sticky top-0 z-20">
+                        <thead className="bg-muted/80 dark:bg-slate-800 text-xs font-semibold uppercase text-muted-foreground sticky top-0 z-20">
                             <tr>
                                 <th className="px-6 py-4">Date</th>
                                 <th className="px-6 py-4">Reference</th>
@@ -201,14 +201,14 @@ const GeneralLedger: React.FC = () => {
                                             {new Date(entry.date).toLocaleDateString()}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="font-mono text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded uppercase tracking-tighter">
+                                            <span className="font-mono text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded uppercase tracking-tighter">
                                                 {entry.reference}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="text-xs font-black text-foreground">{entry.description}</div>
+                                            <div className="text-xs font-semibold text-foreground">{entry.description}</div>
                                         </td>
-                                        <td className="px-6 py-4 text-right font-mono font-black text-sm text-foreground border-t border-border" colSpan={2}>
+                                        <td className="px-6 py-4 text-right font-mono font-semibold text-sm text-foreground border-t border-border" colSpan={2}>
                                             {/* Entry level total */}
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -262,8 +262,8 @@ const GeneralLedger: React.FC = () => {
                                         <div className="w-16 h-16 bg-muted/80 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
                                             {React.cloneElement(ICONS.clipboard as React.ReactElement<any>, { width: 32, height: 32 })}
                                         </div>
-                                        <p className="font-bold uppercase tracking-[0.2em] text-[10px] text-muted-foreground dark:text-slate-400">No ledger entries found</p>
-                                        <p className="text-[10px] text-slate-300 dark:text-slate-500 mt-1">Complete a sale to generate automatic journal entries</p>
+                                        <p className="font-bold uppercase tracking-[0.2em] text-xs text-muted-foreground dark:text-slate-400">No ledger entries found</p>
+                                        <p className="text-xs text-slate-300 dark:text-slate-500 mt-1">Complete a sale to generate automatic journal entries</p>
                                     </td>
                                 </tr>
                             )}
@@ -303,7 +303,7 @@ const GeneralLedger: React.FC = () => {
 
                     <div className="bg-muted/80 dark:bg-slate-800 border border-border dark:border-slate-700 rounded-xl overflow-hidden">
                         <table className="w-full text-left">
-                            <thead className="bg-muted dark:bg-slate-800 text-[10px] uppercase font-black text-muted-foreground">
+                            <thead className="bg-muted dark:bg-slate-800 text-xs uppercase font-semibold text-muted-foreground">
                                 <tr>
                                     <th className="px-4 py-3 w-[30%]">Account</th>
                                     <th className="px-4 py-3 w-[30%]">Description</th>

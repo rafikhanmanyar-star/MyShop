@@ -1,5 +1,6 @@
 import express from 'express';
 import { getShopService } from '../../services/shopService.js';
+import { getSalesReturnService } from '../../services/salesReturnService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
 import * as fs from 'fs';
 import multer from 'multer';
@@ -393,6 +394,36 @@ router.post('/sales', checkRole(['admin', 'pos_cashier']), async (req: any, res)
   }
 });
 
+router.get('/sales-returns', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const rows = await getSalesReturnService().listReturns(req.tenantId);
+    res.json(rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/sales-returns/:id', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const row = await getSalesReturnService().getReturnById(req.tenantId, req.params.id);
+    if (!row) return res.status(404).json({ error: 'Return not found' });
+    res.json(row);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/sales-returns', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+  try {
+    const body = { ...req.body, userId: req.userId ?? req.body?.userId };
+    const result = await getSalesReturnService().createReturn(req.tenantId, body);
+    res.status(201).json(result);
+  } catch (error: any) {
+    const status = /not found|void|already|exceeds|required|Invalid/i.test(String(error.message)) ? 400 : 500;
+    res.status(status).json({ error: error.message || 'Failed to create return' });
+  }
+});
+
 // --- Loyalty ---
 router.get('/loyalty/members', async (req: any, res) => {
   try {
@@ -655,6 +686,60 @@ router.get('/sales/by-invoice/:saleNumber', checkRole(['admin', 'pos_cashier']),
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
+});
+
+router.get('/sales/return-eligibility/:saleId', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const data = await getSalesReturnService().getReturnEligibility(req.tenantId, req.params.saleId);
+    if (!data) return res.status(404).json({ error: 'Sale not found' });
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Realtime (SSE): same pg_notify channel as accounting daily stream — for POS/cashier refresh on returns, etc.
+router.get('/realtime/stream', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  const tenantId = req.tenantId;
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write(`data: ${JSON.stringify({ type: 'connected', tenantId })}\n\n`);
+  const heartbeat = setInterval(() => {
+    res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+  }, 30000);
+  const { getDatabaseService } = await import('../../services/databaseService.js');
+  const db = getDatabaseService();
+  const pool = db.getPool();
+  let pgClient: any = null;
+  if (pool) {
+    try {
+      pgClient = await pool.connect();
+      await pgClient.query('LISTEN daily_report_updated');
+      pgClient.on('notification', (msg: any) => {
+        try {
+          const payload = JSON.parse(msg.payload);
+          if (payload.tenantId === tenantId) {
+            res.write(`data: ${JSON.stringify({ type: payload.type || 'daily_report_updated', ...payload })}\n\n`);
+          }
+        } catch (err) {
+          console.error('SSE shop realtime parse error:', err);
+        }
+      });
+    } catch (err) {
+      console.error('SSE shop realtime LISTEN error:', err);
+    }
+  }
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    if (pgClient) {
+      pgClient.query('UNLISTEN daily_report_updated').catch(() => {});
+      pgClient.release();
+    }
+  });
 });
 
 export default router;

@@ -20,7 +20,7 @@ const StockMovements: React.FC = () => {
     return (
         <div className="flex flex-col h-full min-h-0 overflow-hidden animate-fade-in">
             <div className="flex justify-between items-center mb-4 flex-shrink-0">
-                <h3 className="text-lg font-black text-foreground tracking-tight">Immutable Transaction Ledger</h3>
+                <h3 className="text-lg font-semibold text-foreground tracking-tight">Immutable Transaction Ledger</h3>
                 <div className="flex gap-2">
                     <button className="px-4 py-2 bg-card border border-border rounded-xl text-xs font-bold text-muted-foreground hover:bg-muted/50 dark:border-slate-600 transition-all flex items-center gap-2">
                         {ICONS.calendar} Date Filter
@@ -34,7 +34,7 @@ const StockMovements: React.FC = () => {
             <Card className="border-none shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
                 <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
                     <table className="w-full text-left">
-                        <thead className="bg-muted/80 text-[10px] font-black uppercase text-muted-foreground sticky top-0 z-10">
+                        <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground sticky top-0 z-10">
                             <tr>
                                 <th className="px-6 py-4 bg-muted/80">Timestamp</th>
                                 <th className="px-6 py-4 bg-muted/80">Item Detail</th>
@@ -52,16 +52,16 @@ const StockMovements: React.FC = () => {
                                         <div className="text-xs font-bold text-foreground">
                                             {new Date(move.timestamp).toLocaleDateString()}
                                         </div>
-                                        <div className="text-[10px] text-muted-foreground font-mono">
+                                        <div className="text-xs text-muted-foreground font-mono">
                                             {new Date(move.timestamp).toLocaleTimeString()}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="text-sm font-bold text-foreground">{move.itemName}</div>
-                                        <div className="text-[10px] text-muted-foreground">ID: {move.itemId.slice(0, 8)}</div>
+                                        <div className="text-xs text-muted-foreground">ID: {move.itemId.slice(0, 8)}</div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${getMovementStyle(move.type)}`}>
+                                        <span className={`px-2 py-1 rounded text-xs font-semibold uppercase tracking-wider ${getMovementStyle(move.type)}`}>
                                             {move.type}
                                         </span>
                                     </td>
@@ -69,21 +69,21 @@ const StockMovements: React.FC = () => {
                                         {warehouses.find(w => w.id === move.warehouseId)?.code || '---'}
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <span className={`text-sm font-black font-mono ${move.quantity > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+                                        <span className={`text-sm font-semibold font-mono ${move.quantity > 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                                             {move.quantity > 0 ? '+' : ''}{move.quantity}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="text-muted-foreground text-[10px] font-mono">{move.beforeQty}</span>
+                                        <span className="text-muted-foreground text-xs font-mono">{move.beforeQty}</span>
                                         <span className="mx-2 text-slate-300 dark:text-slate-600">→</span>
-                                        <span className="text-foreground text-sm font-black font-mono">{move.afterQty}</span>
+                                        <span className="text-foreground text-sm font-semibold font-mono">{move.afterQty}</span>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-[10px] font-mono font-bold bg-muted text-muted-foreground p-1 rounded uppercase">
+                                            <span className="text-xs font-mono font-bold bg-muted text-muted-foreground p-1 rounded uppercase">
                                                 {move.referenceId.slice(0, 10)}
                                             </span>
-                                            {move.notes && <div className="text-[10px] text-muted-foreground italic truncate max-w-[100px]">{move.notes}</div>}
+                                            {move.notes && <div className="text-xs text-muted-foreground italic truncate max-w-[100px]">{move.notes}</div>}
                                         </div>
                                     </td>
                                 </tr>

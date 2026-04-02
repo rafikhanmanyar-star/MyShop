@@ -22,6 +22,7 @@ import {
   Smartphone,
   ArrowRight,
   Store,
+  Undo2,
 } from 'lucide-react';
 
 function getTodayStart() {
@@ -35,6 +36,8 @@ export default function DashboardPage() {
     totalProducts: 0,
     totalSales: 0,
     totalRevenue: 0,
+    totalReturns: 0,
+    netRevenue: 0,
     totalCustomers: 0,
     lowStockItems: 0,
     outOfStockItems: 0,
@@ -67,6 +70,7 @@ export default function DashboardPage() {
             categories,
             vendors,
             mobileOrders,
+            salesReturns,
           ] = await Promise.all([
             shopApi.getProducts().catch(() => []),
             shopApi.getSales().catch(() => []),
@@ -77,6 +81,7 @@ export default function DashboardPage() {
             getShopCategoriesOfflineFirst().catch(() => []),
             shopApi.getVendors().catch(() => []),
             mobileOrdersApi.getOrders().catch(() => []),
+            shopApi.getSalesReturns().catch(() => []),
           ]);
 
           const salesList = (sales as any[]) || [];
@@ -84,6 +89,12 @@ export default function DashboardPage() {
             (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
             0
           );
+          const retList = (salesReturns as any[]) || [];
+          const totalReturns = retList.reduce(
+            (sum: number, r: any) => sum + parseFloat(r.totalReturnAmount ?? r.total_return_amount ?? 0),
+            0
+          );
+          const netRevenue = Math.max(0, totalRevenue - totalReturns);
           const invList = (inventory as any[]) || [];
           const lowStockItems = invList.filter(
             (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 10
@@ -114,6 +125,8 @@ export default function DashboardPage() {
             totalProducts: (products as any[]).length,
             totalSales: totalSalesCount,
             totalRevenue,
+            totalReturns,
+            netRevenue,
             totalCustomers: (loyaltyMembers as any[]).length,
             lowStockItems,
             outOfStockItems,
@@ -178,11 +191,27 @@ export default function DashboardPage() {
       bg: 'bg-emerald-50 dark:bg-emerald-900/30',
     },
     {
-      label: 'Revenue',
+      label: 'Gross revenue',
       value: `${CURRENCY} ${stats.totalRevenue.toLocaleString()}`,
       icon: TrendingUp,
       color: 'text-purple-600',
       bg: 'bg-purple-50 dark:bg-purple-900/30',
+      isString: true,
+    },
+    {
+      label: 'Total returns',
+      value: `${CURRENCY} ${(stats.totalReturns ?? 0).toLocaleString()}`,
+      icon: Undo2,
+      color: 'text-rose-600',
+      bg: 'bg-rose-50 dark:bg-rose-900/30',
+      isString: true,
+    },
+    {
+      label: 'Net sales',
+      value: `${CURRENCY} ${(stats.netRevenue ?? stats.totalRevenue).toLocaleString()}`,
+      icon: DollarSign,
+      color: 'text-emerald-700',
+      bg: 'bg-emerald-50 dark:bg-emerald-900/30',
       isString: true,
     },
     {
@@ -253,10 +282,10 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap justify-between items-start gap-4">
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <h1 className="page-title">Dashboard</h1>
         <Link
           to="/accounting/reports/daily"
-          className="px-4 py-2 bg-card dark:bg-slate-800 border border-border dark:border-slate-700 text-foreground dark:text-slate-200 rounded-xl text-sm font-bold shadow-sm hover:border-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-400 transition-all flex items-center gap-2 uppercase tracking-widest text-[10px]"
+          className="px-4 py-2 bg-card dark:bg-slate-800 border border-border dark:border-slate-700 text-foreground dark:text-slate-200 rounded-xl text-sm font-medium shadow-sm hover:border-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-400 transition-all flex items-center gap-2 uppercase tracking-widest"
         >
           {ICONS.barChart} Daily Report
         </Link>
@@ -269,7 +298,7 @@ export default function DashboardPage() {
       )}
 
       {/* Primary KPI row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {kpiCards.map((card) => (
           <Card
             key={card.label}

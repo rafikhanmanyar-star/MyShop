@@ -50,7 +50,7 @@ const LoyaltyContent: React.FC = () => {
             <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Customer Retention Engine</h1>
+                        <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Customer Retention Engine</h1>
                         <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">Enterprise Loyalty & Reward Lifecycle Management.</p>
                     </div>
                     <div className="flex gap-3">

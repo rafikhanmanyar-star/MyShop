@@ -149,8 +149,8 @@ const CategoryTreeBranch: React.FC<{
                         )}
                         <button
                             type="button"
-                            className={`flex-1 min-w-0 text-left py-1.5 px-2 rounded-lg text-[11px] font-semibold truncate transition-colors ${isSelected
-                                ? 'bg-blue-600 text-white shadow-sm'
+                            className={`flex-1 min-w-0 text-left py-1.5 px-2 rounded-[8px] text-xs font-semibold truncate transition-colors ${isSelected
+                                ? 'bg-[#0056b3] text-white shadow-sm'
                                 : 'text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-700/60'
                                 }`}
                             onClick={() => onSelect(node.id)}
@@ -555,6 +555,8 @@ const ProductSearch: React.FC = () => {
     const rowCount = Math.ceil(filteredProducts.length / columnCount);
     const rowHeight = isDenseMode ? 156 : 200;
 
+    const pastelBgs = ['bg-[#eef2ff]', 'bg-[#fef3c7]', 'bg-[#e0f2fe]', 'bg-[#fce7f3]'];
+
     const ProductRow = ({ index, style }: { index: number; style: React.CSSProperties }) => {
         const rowItems: any[] = [];
         const cellClass = columnCount === 2 ? 'flex-[0_0_50%] min-w-0 max-w-[50%]' : 'flex-[0_0_33.333%] min-w-0 max-w-[33.333%]';
@@ -563,39 +565,40 @@ const ProductSearch: React.FC = () => {
             if (itemIndex < filteredProducts.length) {
                 const product = filteredProducts[itemIndex];
                 const isSelected = keyboardIndex === itemIndex;
+                const bgClass = pastelBgs[itemIndex % pastelBgs.length];
                 rowItems.push(
                     <div key={product.id} className={`p-2 ${cellClass}`}>
                         <button
                             onClick={() => product.stockLevel > 0 && addToCart(product)}
                             disabled={product.stockLevel <= 0}
-                            className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white dark:bg-slate-800 border rounded-2xl text-left transition-all overflow-hidden ${product.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed border-slate-100 dark:border-slate-700' : 'hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 active:scale-95'} ${isSelected ? 'border-blue-600 ring-2 ring-blue-500/20' : 'border-slate-100 dark:border-slate-700'
+                            className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white dark:bg-slate-800 border rounded-[10px] text-left transition-all overflow-hidden shadow-sm ${product.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed border-slate-100 dark:border-slate-700' : 'hover:border-[#0056b3]/40 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]'} ${isSelected ? 'border-[#0056b3] ring-2 ring-[#0056b3]/15' : 'border-slate-200/90 dark:border-slate-700'
                                 }`}
                         >
-                            <div className={`w-full flex-shrink-0 bg-slate-50 dark:bg-slate-700 rounded-xl flex items-center justify-center border border-slate-50 dark:border-slate-600 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
+                            <div className={`w-full flex-shrink-0 ${bgClass} dark:bg-slate-700/80 rounded-[8px] flex items-center justify-center border border-white/50 dark:border-slate-600 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
                                 {product.imageUrl ? (
                                     <CachedImage path={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
                                 ) : (
-                                    <div className="text-slate-200 dark:text-slate-500">
+                                    <div className="text-slate-300 dark:text-slate-500">
                                         {React.cloneElement(ICONS.package as any, { size: isDenseMode ? 24 : 40 })}
                                     </div>
                                 )}
                                 {product.stockLevel <= (product.reorderPoint || 10) && (
-                                    <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-rose-500 text-white rounded text-[8px] font-bold uppercase tracking-wider shadow-sm">
-                                        {product.stockLevel <= 0 ? 'Out of Stock' : 'Low Stock'}
+                                    <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-[6px] text-xs font-bold uppercase tracking-wider shadow-sm ${product.stockLevel <= 0 ? 'bg-slate-800 text-white' : 'bg-[#fee2e2] text-[#991b1b] dark:bg-rose-950/80 dark:text-rose-200'}`}>
+                                        {product.stockLevel <= 0 ? 'Out' : `Low: ${product.stockLevel}`}
                                     </div>
                                 )}
                             </div>
 
-                            <div className={`flex-shrink-0 font-bold text-slate-800 dark:text-slate-200 line-clamp-2 leading-tight mt-2 min-h-0 ${isDenseMode ? 'text-[11px] h-[1.75rem]' : 'text-[13px] h-[2.5rem]'}`}>
+                            <div className={`flex-shrink-0 font-semibold text-slate-900 dark:text-slate-200 line-clamp-2 leading-tight mt-2 min-h-0 ${isDenseMode ? 'text-xs h-[1.75rem]' : 'text-sm h-[2.5rem]'}`}>
                                 {product.name}
                             </div>
 
                             <div className="flex flex-shrink-0 items-center justify-between mt-1">
-                                <span className={`font-black text-blue-600 dark:text-blue-400 truncate ${isDenseMode ? 'text-xs' : 'text-sm'}`}>
+                                <span className={`font-bold text-[#0056b3] dark:text-blue-400 truncate ${isDenseMode ? 'text-xs' : 'text-sm'}`}>
                                     {CURRENCY}{product.price.toLocaleString()}
                                 </span>
-                                <span className="text-[10px] text-slate-400 dark:text-slate-500 flex-shrink-0">
-                                    Qty: {product.stockLevel}
+                                <span className="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
+                                    Stock: {product.stockLevel}
                                 </span>
                             </div>
                         </button>
@@ -609,14 +612,14 @@ const ProductSearch: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-row h-full min-h-0 bg-white dark:bg-slate-900 relative overflow-hidden">
+        <div className="flex flex-row h-full min-h-0 bg-[#f8fafc] dark:bg-slate-900 relative overflow-hidden">
             {categoryTreeVisible ? (
                 <aside
-                    className="shrink-0 flex flex-col border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 min-h-0"
+                    className="shrink-0 flex flex-col border-r border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800/50 min-h-0"
                     style={{ width: categoryTreeWidthPx, minWidth: MIN_TREE_W, maxWidth: MAX_TREE_W }}
                 >
-                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 shrink-0">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">Categories</span>
+                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-700 bg-[#eef2ff]/50 dark:bg-slate-800/90 shrink-0">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-[#0056b3] dark:text-blue-400">Categories</span>
                         <button
                             type="button"
                             className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-500 transition-colors"
@@ -631,12 +634,12 @@ const ProductSearch: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => setSelectedCategory('all')}
-                            className={`w-full text-left px-3 py-2 rounded-xl text-[11px] font-bold transition-all mb-1 ${selectedCategory === 'all'
-                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25'
-                                : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-600 hover:border-slate-200 dark:hover:border-slate-500'
+                            className={`w-full text-left px-3 py-2.5 rounded-[10px] text-xs font-bold transition-all mb-1 ${selectedCategory === 'all'
+                                ? 'bg-[#0056b3] text-white shadow-md shadow-[#0056b3]/25'
+                                : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:border-[#0056b3]/25 dark:hover:border-slate-500'
                                 }`}
                         >
-                            All products
+                            All
                         </button>
                         {categoryTree.length > 0 ? (
                             <CategoryTreeBranch
@@ -648,7 +651,7 @@ const ProductSearch: React.FC = () => {
                                 onSelect={setSelectedCategory}
                             />
                         ) : (
-                            <p className="text-[10px] text-slate-400 dark:text-slate-500 px-2 py-3">No categories yet. Add categories in inventory settings.</p>
+                            <p className="text-xs text-slate-400 dark:text-slate-500 px-2 py-3">No categories yet. Add categories in inventory settings.</p>
                         )}
                     </div>
                 </aside>
@@ -674,17 +677,17 @@ const ProductSearch: React.FC = () => {
 
             <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
                 {/* Search Bar - Premium Fixed Header */}
-                <div className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-700 p-4">
+                <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-700 p-4">
                     <div className="relative group">
-                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 dark:text-slate-500 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 transition-colors">
+                        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-slate-400 dark:text-slate-500 group-focus-within:text-[#0056b3] dark:group-focus-within:text-blue-400 transition-colors">
                             {React.cloneElement(ICONS.search as any, { size: 18 })}
                         </div>
                         <input
                             ref={searchInputRef}
                             id="pos-product-search"
                             type="text"
-                            className="w-full pl-11 pr-24 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-2xl text-sm font-semibold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:bg-white dark:focus:bg-slate-700 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 transition-all select-text"
-                            placeholder="Search Products (Ctrl+F)"
+                            className="w-full pl-11 pr-24 py-3 bg-slate-100/80 dark:bg-slate-800 border border-slate-200/90 dark:border-slate-600 rounded-[10px] text-sm font-medium text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-[#0056b3]/20 focus:border-[#0056b3] transition-all select-text"
+                            placeholder="Search by name, category, or scan SKU… (Ctrl+F)"
                             value={localQuery}
                             onChange={(e) => handleSearchChange(e.target.value)}
                         />
@@ -701,10 +704,10 @@ const ProductSearch: React.FC = () => {
 
             {/* Popular / Frequent Items Section */}
             {!localQuery && selectedCategory === 'all' && popularProductsWithStock.length > 0 && (
-                <div className="px-4 py-3 bg-indigo-50/50 dark:bg-indigo-950/30 border-b border-indigo-100/50 dark:border-indigo-900/30">
+                <div className="px-4 py-3 bg-[#eef2ff]/60 dark:bg-slate-800/40 border-b border-slate-200/80 dark:border-slate-700">
                     <div className="flex items-center gap-2 mb-3 px-1">
-                        <div className="w-1 h-4 bg-indigo-500 rounded-full"></div>
-                        <h3 className="text-[11px] font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-wider">Fast Moving Items</h3>
+                        <div className="w-1 h-4 bg-[#0056b3] rounded-full" />
+                        <h3 className="text-xs font-bold text-[#0056b3] dark:text-blue-400 uppercase tracking-wider">Fast moving items</h3>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         {popularProductsWithStock.map(p => (
@@ -712,18 +715,18 @@ const ProductSearch: React.FC = () => {
                                 key={p.id}
                                 onClick={() => p.stockLevel > 0 && addToCart(p)}
                                 disabled={p.stockLevel <= 0}
-                                className={`flex flex-col items-center p-2 rounded-xl border transition-all ${p.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700' : 'bg-white dark:bg-slate-800 border-indigo-100 dark:border-indigo-800 hover:border-indigo-400 hover:shadow-md active:scale-95'}`}
+                                className={`flex flex-col items-center p-2 rounded-[10px] border transition-all ${p.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700' : 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 hover:border-[#0056b3]/35 hover:shadow-sm active:scale-95'}`}
                             >
-                                <div className="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 flex items-center justify-center mb-1 overflow-hidden">
+                                <div className="w-10 h-10 rounded-[8px] bg-[#eef2ff] dark:bg-slate-700/80 flex items-center justify-center mb-1 overflow-hidden">
                                     {p.imageUrl ? (
                                         <CachedImage path={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
                                     ) : (
-                                        <div className="text-indigo-200 dark:text-indigo-600">
+                                        <div className="text-[#0056b3]/40 dark:text-slate-500">
                                             {React.cloneElement(ICONS.package as any, { size: 16 })}
                                         </div>
                                     )}
                                 </div>
-                                <span className="text-[9px] font-bold text-slate-700 dark:text-slate-300 truncate w-full text-center">{p.name}</span>
+                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate w-full text-center">{p.name}</span>
                             </button>
                         ))}
                     </div>
@@ -735,7 +738,7 @@ const ProductSearch: React.FC = () => {
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-300 dark:text-slate-600">
                         <div className="w-10 h-10 border-4 border-slate-100 dark:border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
-                        <span className="text-[11px] font-bold uppercase tracking-widest">Loading Catalog...</span>
+                        <span className="text-xs font-bold uppercase tracking-widest">Loading Catalog...</span>
                     </div>
                 ) : filteredProducts.length > 0 ? (
                     <FixedSizeList
@@ -763,7 +766,7 @@ const ProductSearch: React.FC = () => {
                             {localQuery.trim() && (
                                 <button
                                     onClick={() => setIsAddSkuModalOpen(true)}
-                                    className="px-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
+                                    className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold uppercase tracking-widest rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
                                 >
                                     {React.cloneElement(ICONS.plus as any, { size: 14 })}
                                     Add SKU to inventory
@@ -771,7 +774,7 @@ const ProductSearch: React.FC = () => {
                             )}
                             <button
                                 onClick={() => { setLocalQuery(''); setSearchQuery(''); setSelectedCategory('all'); }}
-                                className="px-4 py-2 bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-slate-800 dark:hover:bg-slate-600 transition-all shadow-lg"
+                                className="px-4 py-2 bg-slate-900 dark:bg-slate-700 text-white text-xs font-semibold uppercase tracking-widest rounded-lg hover:bg-slate-800 dark:hover:bg-slate-600 transition-all shadow-lg"
                             >
                                 Reset Catalog
                             </button>
@@ -781,9 +784,9 @@ const ProductSearch: React.FC = () => {
             </div>
 
                 {/* Bottom Status / Mode Toggle */}
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <div className="p-3 bg-white dark:bg-slate-800/50 border-t border-slate-200/80 dark:border-slate-700 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">Items: <span className="text-slate-900 dark:text-slate-100">{filteredProducts.length}</span></span>
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Showing: <span className="text-slate-900 dark:text-slate-100">{filteredProducts.length}</span></span>
                     </div>
                     {/* Dense Mode Toggle is handled by ShortcutBar, but we can add minor UI here if needed */}
                 </div>

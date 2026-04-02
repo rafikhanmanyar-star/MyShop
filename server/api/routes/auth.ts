@@ -3,6 +3,36 @@ import { getAuthService } from '../../services/authService.js';
 
 const router = express.Router();
 
+/** Public: organization (and optional branch) label for login page */
+router.get('/organization', async (req, res) => {
+  try {
+    const orgId =
+      (typeof req.query.org_id === 'string' && req.query.org_id) ||
+      (typeof req.query.org === 'string' && req.query.org) ||
+      '';
+    const branchId =
+      typeof req.query.branch_id === 'string'
+        ? req.query.branch_id
+        : typeof req.query.branch === 'string'
+          ? req.query.branch
+          : '';
+
+    const trimmed = orgId.trim();
+    if (!trimmed) {
+      return res.status(400).json({ error: 'org_id or org query parameter is required' });
+    }
+
+    const info = await getAuthService().getPublicOrganizationInfo(trimmed, branchId.trim() || null);
+    if (!info) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+    res.json(info);
+  } catch (error: any) {
+    console.error('[Auth] Public organization error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/register', async (req, res) => {
   try {
     const { name, email, username, password, companyName } = req.body;

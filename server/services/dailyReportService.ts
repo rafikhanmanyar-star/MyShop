@@ -4,6 +4,10 @@ export interface DailyReportSummary {
   date: string;
   branchId: string | null;
   posSales: number;
+  /** Sum of POS sales returns (shop_sales_returns) for the day */
+  posReturns: number;
+  /** posSales - posReturns */
+  netPosSales: number;
   mobileSales: number;
   inventoryOutQty: number;
   inventoryInQty: number;
@@ -37,6 +41,14 @@ export class DailyReportService {
       branchId ? [tenantId, start, end, branchId] : [tenantId, start, end]
     );
 
+    const posReturns = await db.query<{ s: string }>(
+      `SELECT COALESCE(SUM(total_return_amount::numeric), 0)::text AS s
+       FROM shop_sales_returns
+       WHERE tenant_id = $1 AND return_date >= $2::timestamptz AND return_date < $3::timestamptz
+       ${branchId ? 'AND branch_id = $4' : ''}`,
+      branchId ? [tenantId, start, end, branchId] : [tenantId, start, end]
+    );
+
     const mobile = await db.query<{ s: string }>(
       `SELECT COALESCE(SUM(grand_total::numeric), 0)::text AS s
        FROM mobile_orders
@@ -59,7 +71,7 @@ export class DailyReportService {
       `SELECT COALESCE(SUM(quantity), 0)::text AS s
        FROM shop_inventory_movements
        WHERE tenant_id = $1 AND created_at >= $2::timestamptz AND created_at < $3::timestamptz
-       AND type = 'Purchase' AND quantity > 0
+       AND quantity > 0 AND (type = 'Purchase' OR type = 'SaleReturn')
        ${branchId ? 'AND warehouse_id = $4' : ''}`,
       branchId ? [tenantId, start, end, branchId] : [tenantId, start, end]
     );
@@ -89,6 +101,8 @@ export class DailyReportService {
     );
 
     const posSales = parseFloat(pos[0]?.s || '0') || 0;
+    const posReturnsAmt = parseFloat(posReturns[0]?.s || '0') || 0;
+    const netPosSales = Math.max(0, posSales - posReturnsAmt);
     const mobileSales = parseFloat(mobile[0]?.s || '0') || 0;
     const inventoryOutQty = parseFloat(outQ[0]?.s || '0') || 0;
     const inventoryInQty = parseFloat(inQ[0]?.s || '0') || 0;
@@ -103,6 +117,8 @@ export class DailyReportService {
       date: dateStr,
       branchId,
       posSales,
+      posReturns: posReturnsAmt,
+      netPosSales,
       mobileSales,
       inventoryOutQty,
       inventoryInQty,
@@ -112,7 +128,7 @@ export class DailyReportService {
       khataCreditTotal,
       khataNetChange,
       khataEntryCount,
-      netProfitDaily: posSales + mobileSales - totalExpenses,
+      netProfitDaily: netPosSales + mobileSales - totalExpenses,
     };
   }
 
@@ -171,7 +187,7 @@ export class DailyReportService {
        LEFT JOIN purchase_bills pb ON pb.id = m.reference_id AND pb.tenant_id = m.tenant_id
        LEFT JOIN shop_vendors sv ON sv.id = pb.supplier_id AND sv.tenant_id = m.tenant_id
        WHERE m.tenant_id = $1 AND m.created_at >= $2::timestamptz AND m.created_at < $3::timestamptz
-         AND m.type = 'Purchase' AND m.quantity > 0
+         AND m.quantity > 0 AND (m.type = 'Purchase' OR m.type = 'SaleReturn')
          ${branchId ? 'AND m.warehouse_id = $4' : ''}
        GROUP BY m.product_id, p.name, p.sku, p.unit
        ORDER BY total_qty_in DESC, p.name`,

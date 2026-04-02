@@ -4,7 +4,6 @@ import { usePOS } from '../../../context/POSContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import { POSPaymentMethod } from '../../../types/pos';
 import { shopApi, ShopBankAccount } from '../../../services/shopApi';
-import Button from '../../ui/Button';
 import CustomerSelectionModal from './CustomerSelectionModal';
 
 const CheckoutPanel: React.FC = () => {
@@ -23,10 +22,7 @@ const CheckoutPanel: React.FC = () => {
         setLastCompletedSale,
         printReceipt,
         posSettings,
-        balanceDue,
-        changeDue,
-        addPayment,
-        payments
+        addPayment
     } = usePOS();
 
     const [isDiscountOpen, setIsDiscountOpen] = useState(false);
@@ -73,6 +69,10 @@ const CheckoutPanel: React.FC = () => {
 
     const isKhata = selectedMethod === POSPaymentMethod.KHATA;
     const khataRequiresCustomer = isKhata && (!customer || customer.id === 'walk-in');
+
+    const tenderNum = parseFloat(tenderAmount) || 0;
+    const changeReturn =
+        !isKhata && tenderNum > grandTotal ? Math.max(0, tenderNum - grandTotal) : 0;
 
     const handleComplete = async () => {
         if (isProcessing) return;
@@ -129,15 +129,15 @@ const CheckoutPanel: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full min-h-0 bg-white dark:bg-slate-900 relative overflow-hidden">
+        <div className="flex flex-col h-full min-h-0 bg-[#f8fafc] dark:bg-slate-900 relative overflow-hidden">
             {/* Customer Information Area */}
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Customer Details</h3>
+            <div className="p-4 md:p-5 border-b border-slate-200/80 dark:border-slate-700 bg-white dark:bg-slate-900">
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Customer</h3>
                     {customer && (
                         <button
                             onClick={() => setCustomer(null)}
-                            className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                            className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
                         >
                             Change
                         </button>
@@ -145,48 +145,49 @@ const CheckoutPanel: React.FC = () => {
                 </div>
 
                 {customer ? (
-                    <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-100 dark:border-slate-700 transition-all">
-                        <div className="w-12 h-12 rounded-lg bg-slate-900 dark:bg-slate-700 flex items-center justify-center text-white font-bold text-lg">
+                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-3 rounded-[10px] border border-slate-200/90 dark:border-slate-700 shadow-sm transition-all">
+                        <div className="w-11 h-11 rounded-[8px] bg-[#0056b3] dark:bg-slate-700 flex items-center justify-center text-white font-bold text-lg shrink-0">
                             {customer.name.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <div className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate uppercase">{customer.name}</div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">{customer.phone}</div>
+                            <div className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{customer.name}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">{customer.phone}</div>
                         </div>
-                        <div className="text-right">
-                            <div className="inline-block px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-[9px] font-bold rounded uppercase tracking-wider">
+                        <div className="text-right flex flex-col items-end gap-1 shrink-0">
+                            <div className="inline-block px-1.5 py-0.5 bg-[#eef2ff] dark:bg-blue-900/40 text-[#0056b3] dark:text-blue-400 text-xs font-bold rounded uppercase tracking-wider">
                                 {customer.tier}
                             </div>
-                            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-1">{customer.points} <span className="opacity-60">PTS</span></div>
+                            <div className="text-xs font-bold text-slate-400 dark:text-slate-500">{customer.points} <span className="opacity-60">PTS</span></div>
                         </div>
                     </div>
                 ) : (
                     <button
-                        className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 border-dashed rounded-xl text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-blue-950/30 transition-all group"
+                        type="button"
+                        className="w-full flex items-center justify-between px-3 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-[10px] text-slate-600 dark:text-slate-400 hover:border-[#0056b3]/40 hover:bg-[#eef2ff]/30 dark:hover:bg-blue-950/30 transition-all group shadow-sm"
                         onClick={() => setIsCustomerModalOpen(true)}
                     >
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-600 flex items-center justify-center group-hover:bg-white dark:group-hover:bg-slate-700 transition-all text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 shrink-0">
-                                {React.cloneElement(ICONS.plus as React.ReactElement, { size: 14 })}
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-[8px] bg-[#eef2ff] dark:bg-slate-700 flex items-center justify-center text-[#0056b3] dark:text-slate-300 shrink-0">
+                                {React.cloneElement(ICONS.user as React.ReactElement, { size: 18 })}
                             </div>
                             <div className="text-left min-w-0">
-                                <span className="text-xs font-bold block">Walk-in Customer</span>
-                                <span className="text-[10px] font-medium opacity-60">Add customer profile (F6)</span>
+                                <span className="text-xs font-bold block text-slate-900 dark:text-slate-100">Walk-in customer</span>
+                                <span className="text-xs font-medium text-slate-500">Tap to select (F6)</span>
                             </div>
                         </div>
-                        <div className="text-slate-300 dark:text-slate-600 group-hover:text-blue-400 transition-transform group-hover:translate-x-1 shrink-0">
-                            {React.cloneElement(ICONS.chevronRight as React.ReactElement, { size: 14 })}
+                        <div className="text-slate-400 group-hover:text-[#0056b3] transition-colors shrink-0">
+                            {React.cloneElement(ICONS.edit as React.ReactElement, { size: 16 })}
                         </div>
                     </button>
                 )}
             </div>
 
             {/* Bill Summary Section */}
-            <div className="flex-1 p-6 space-y-4 overflow-y-auto pos-scrollbar bg-slate-50/20 dark:bg-slate-800/20">
+            <div className="flex-1 p-4 md:p-5 space-y-4 overflow-y-auto pos-scrollbar bg-[#f8fafc] dark:bg-slate-800/20">
                 {/* Line items in customer summary (shows held/recalled items) */}
                 {cart.length > 0 && (
                     <div className="mb-4 pb-4 border-b border-slate-100 dark:border-slate-700">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Items</div>
+                        <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Items</div>
                         <div className="space-y-1.5 max-h-32 overflow-y-auto pos-scrollbar">
                             {cart.map((item) => (
                                 <div key={item.id} className="flex justify-between items-center text-xs gap-2">
@@ -211,7 +212,7 @@ const CheckoutPanel: React.FC = () => {
                                 onClick={() => setIsDiscountOpen(!isDiscountOpen)}
                             >
                                 Discount Applied
-                                <span className={`text-[10px] transition-transform duration-300 ${isDiscountOpen ? 'rotate-180' : ''}`}>{ICONS.chevronDown}</span>
+                                <span className={`text-xs transition-transform duration-300 ${isDiscountOpen ? 'rotate-180' : ''}`}>{ICONS.chevronDown}</span>
                             </button>
                             <span className="text-sm font-semibold text-rose-500 dark:text-rose-400 font-mono">-{CURRENCY}{discountTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </div>
@@ -223,7 +224,7 @@ const CheckoutPanel: React.FC = () => {
                                         <button
                                             key={pct}
                                             onClick={() => applyGlobalDiscount(pct)}
-                                            className={`py-1.5 rounded-md text-[10px] font-bold transition-all ${discountTotal > 0 && Math.round(discountTotal / (subtotal || 1) * 100) === pct ? 'bg-blue-600 text-white' : 'bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
+                                            className={`py-1.5 rounded-md text-xs font-bold transition-all ${discountTotal > 0 && Math.round(discountTotal / (subtotal || 1) * 100) === pct ? 'bg-[#0056b3] text-white' : 'bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
                                         >
                                             {pct}%
                                         </button>
@@ -239,12 +240,12 @@ const CheckoutPanel: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="pt-2">
-                    <div className="flex flex-col bg-white dark:bg-slate-800 p-5 rounded-2xl border border-blue-50 dark:border-blue-900/30 shadow-sm shadow-blue-500/5">
-                        <span className="text-[11px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1">Payable Amount</span>
+                <div className="pt-1">
+                    <div className="flex flex-col bg-white dark:bg-slate-800 p-4 rounded-[10px] border border-slate-200/90 dark:border-slate-700 shadow-sm">
+                        <span className="text-xs font-bold uppercase tracking-widest text-[#0056b3] dark:text-blue-400 mb-1">Payable amount</span>
                         <div className="flex items-baseline gap-2">
-                            <span className="text-xl font-bold text-slate-400 dark:text-slate-500">{CURRENCY}</span>
-                            <div className="text-[42px] font-black text-slate-900 dark:text-slate-100 tracking-tighter tabular-nums">
+                            <span className="text-lg font-bold text-slate-400 dark:text-slate-500">{CURRENCY}</span>
+                            <div className="text-4xl font-bold text-slate-900 dark:text-slate-100 tracking-tight tabular-nums leading-none">
                                 {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </div>
                         </div>
@@ -254,70 +255,76 @@ const CheckoutPanel: React.FC = () => {
 
             {/* Transaction Controls or Post-Sale */
                 lastCompletedSale ? (
-                    <div className="p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 space-y-4">
-                        <div className="flex flex-col items-center justify-center p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-100 dark:border-emerald-800 text-center mb-4">
-                            <div className="w-12 h-12 bg-emerald-500 text-white rounded-full flex items-center justify-center mb-2">
+                    <div className="p-5 bg-white dark:bg-slate-900 border-t border-slate-200/80 dark:border-slate-700 space-y-4">
+                        <div className="flex flex-col items-center justify-center p-4 bg-[#bbf7d0]/40 dark:bg-emerald-950/40 rounded-[10px] border border-emerald-200/80 dark:border-emerald-800 text-center mb-2">
+                            <div className="w-12 h-12 bg-emerald-600 text-white rounded-full flex items-center justify-center mb-2">
                                 {ICONS.checkCircle}
                             </div>
-                            <h3 className="text-lg font-bold text-emerald-700 dark:text-emerald-400">Sale Complete</h3>
-                            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-1">Refund: {CURRENCY}{(lastCompletedSale.changeDue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                            <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-400">Sale complete</h3>
+                            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-400 mt-1">Change: {CURRENCY}{(lastCompletedSale.changeDue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <button
+                                type="button"
                                 onClick={() => printReceipt(lastCompletedSale)}
-                                className="py-4 flex items-center justify-center gap-2 bg-slate-800 dark:bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-700 dark:hover:bg-slate-600 transition-all"
+                                className="py-3.5 flex items-center justify-center gap-2 bg-slate-800 dark:bg-slate-700 text-white font-bold rounded-[10px] hover:bg-slate-700 dark:hover:bg-slate-600 transition-all text-sm"
                             >
-                                {ICONS.print} Print Receipt
+                                {ICONS.print} Print receipt
                             </button>
                             <button
+                                type="button"
                                 onClick={() => setLastCompletedSale(null)}
-                                className="py-4 flex items-center justify-center gap-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all"
+                                className="py-3.5 flex items-center justify-center gap-2 bg-[#0056b3] text-white font-bold rounded-[10px] hover:bg-[#004494] transition-all text-sm"
                             >
-                                {ICONS.refresh} New Sale
+                                {ICONS.refresh} New sale
                             </button>
                         </div>
                     </div>
                 ) : (
-                    <div className="p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 space-y-4 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.05)] dark:shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.3)] z-10 relative">
+                    <div className="p-4 md:p-5 bg-white dark:bg-slate-900 border-t border-slate-200/80 dark:border-slate-700 space-y-4 shadow-[0_-8px_32px_-12px_rgba(0,86,179,0.08)] dark:shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.3)] z-10 relative">
                         {cart.length > 0 ? (
                             <div className="space-y-4 animate-slide-up">
                                 <div className="flex gap-2">
                                     <button
+                                        type="button"
                                         onClick={() => handleMethodSelect(POSPaymentMethod.CASH)}
-                                        className={`flex-1 py-2 px-3 rounded-xl font-bold flex flex-col items-center gap-0.5 transition-all border-2 text-sm ${selectedMethod === POSPaymentMethod.CASH ? 'border-blue-600 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400' : 'border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                        className={`flex-1 py-2.5 px-2 rounded-[10px] font-bold flex flex-col items-center gap-0.5 transition-all border-2 text-xs ${selectedMethod === POSPaymentMethod.CASH ? 'border-[#0056b3] bg-[#0056b3] text-white shadow-sm' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 hover:border-slate-300'}`}
                                     >
                                         {ICONS.dollarSign} CASH
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => handleMethodSelect(POSPaymentMethod.ONLINE)}
-                                        className={`flex-1 py-2 px-3 rounded-xl font-bold flex flex-col items-center gap-0.5 transition-all border-2 text-sm ${selectedMethod === POSPaymentMethod.ONLINE ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400' : 'border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                        className={`flex-1 py-2.5 px-2 rounded-[10px] font-bold flex flex-col items-center gap-0.5 transition-all border-2 text-xs ${selectedMethod === POSPaymentMethod.ONLINE ? 'border-[#0056b3] bg-[#eef2ff] dark:bg-blue-950/50 text-[#0056b3] dark:text-blue-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 hover:border-slate-300'}`}
                                     >
                                         {ICONS.creditCard} ONLINE
                                     </button>
                                     <button
+                                        type="button"
                                         onClick={() => handleMethodSelect(POSPaymentMethod.KHATA)}
-                                        className={`flex-1 py-2 px-3 rounded-xl font-bold flex flex-col items-center gap-0.5 transition-all border-2 text-sm ${selectedMethod === POSPaymentMethod.KHATA ? 'border-amber-600 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400' : 'border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
+                                        className={`flex-1 py-2.5 px-2 rounded-[10px] font-bold flex flex-col items-center gap-0.5 transition-all border-2 text-xs ${selectedMethod === POSPaymentMethod.KHATA ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 hover:border-slate-300'}`}
                                         title="Customer required"
                                     >
                                         {ICONS.user} KHATA
                                     </button>
                                 </div>
                                 {isKhata && (
-                                    <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+                                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-[8px] px-3 py-2">
                                         Customer required for Khata. Select a customer above to complete.
                                     </p>
                                 )}
 
                                 <div>
-                                    <div className="flex bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-xl overflow-hidden focus-within:border-blue-500 transition-colors">
-                                        <span className="flex items-center justify-center px-4 font-bold text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800/80">
+                                    <p className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-1.5">Amount received</p>
+                                    <div className="flex bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-[10px] overflow-hidden focus-within:border-[#0056b3] transition-colors shadow-sm">
+                                        <span className="flex items-center justify-center px-3 font-bold text-slate-500 dark:text-slate-400 text-sm bg-slate-50 dark:bg-slate-800/80">
                                             {CURRENCY}
                                         </span>
                                         <input
                                             id="tender-amount-input"
                                             type="number"
                                             aria-label="Amount tendered"
-                                            className="flex-1 py-3 px-2 bg-transparent text-xl font-black text-slate-900 dark:text-slate-100 outline-none select-text"
+                                            className="flex-1 py-3.5 px-2 bg-transparent text-2xl font-bold text-slate-900 dark:text-slate-100 outline-none select-text"
                                             value={tenderAmount}
                                             onChange={e => setTenderAmount(e.target.value)}
                                             onFocus={e => e.target.select()}
@@ -329,44 +336,67 @@ const CheckoutPanel: React.FC = () => {
                                                 }
                                             }}
                                         />
-                                        <button onClick={() => setTenderAmount(grandTotal.toString())} className="px-4 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40">
-                                            EXACT
+                                        <button
+                                            type="button"
+                                            onClick={() => setTenderAmount(grandTotal.toString())}
+                                            className="px-3 text-xs font-bold text-[#0056b3] dark:text-blue-400 hover:bg-[#eef2ff] dark:hover:bg-blue-950/40 uppercase"
+                                        >
+                                            Exact
                                         </button>
                                     </div>
 
-                                    <div className="flex flex-wrap gap-2 mt-3">
-                                        {[100, 500, 1000, 5000].map((note) => (
+                                    <div className="grid grid-cols-4 gap-2 mt-3">
+                                        {[100, 500, 1000, 5000].map((note) => {
+                                            const active = String(tenderAmount) === String(note) || tenderNum === note;
+                                            return (
                                             <button
                                                 key={note}
                                                 type="button"
                                                 onClick={() => setTenderAmount(String(note))}
-                                                className="px-4 py-2 rounded-lg font-bold text-sm border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-500 transition-all"
+                                                className={`py-2.5 rounded-[8px] font-bold text-xs border-2 transition-all ${active ? 'border-[#0056b3] bg-[#0056b3] text-white' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-[#0056b3]/40'}`}
                                             >
-                                                {CURRENCY}{note}
+                                                {note}
                                             </button>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3 pt-5 mt-2">
-                                    <button
-                                        onClick={handleHold}
-                                        className="py-4 flex flex-col items-center justify-center border-2 border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-500 transition-all"
-                                    >
-                                        <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">Save / Hold</span>
-                                    </button>
-                                    <button
-                                        disabled={isProcessing || (!isKhata && parseFloat(tenderAmount) < grandTotal) || khataRequiresCustomer}
-                                        onClick={handleComplete}
-                                        className={`py-4 flex flex-col items-center justify-center rounded-xl transition-all font-black text-lg ${!isProcessing && ((isKhata && !khataRequiresCustomer) || parseFloat(tenderAmount) >= grandTotal) ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-700' : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500'}`}
-                                    >
-                                        {isProcessing ? 'PROCESSING...' : khataRequiresCustomer ? 'SELECT CUSTOMER' : 'COMPLETE SALE'}
-                                    </button>
-                                </div>
+                                {changeReturn > 0 && !isKhata && (
+                                    <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-[10px] bg-[#bbf7d0] dark:bg-emerald-950/50 border border-emerald-200/80 dark:border-emerald-800">
+                                        <div>
+                                            <span className="text-xs font-bold uppercase tracking-widest text-emerald-900 dark:text-emerald-300">Change return</span>
+                                            <div className="text-lg font-bold text-emerald-900 dark:text-emerald-200 tabular-nums">
+                                                {CURRENCY}{changeReturn.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </div>
+                                        </div>
+                                        <span className="text-emerald-700 dark:text-emerald-400 opacity-80" aria-hidden>
+                                            {React.cloneElement(ICONS.refresh as React.ReactElement, { size: 20 })}
+                                        </span>
+                                    </div>
+                                )}
+
+                                <button
+                                    type="button"
+                                    disabled={isProcessing || (!isKhata && parseFloat(tenderAmount) < grandTotal) || khataRequiresCustomer}
+                                    onClick={handleComplete}
+                                    className={`w-full py-4 flex items-center justify-center gap-2 rounded-[10px] transition-all font-bold text-base ${!isProcessing && ((isKhata && !khataRequiresCustomer) || parseFloat(tenderAmount) >= grandTotal) ? 'bg-[#0056b3] text-white shadow-md shadow-[#0056b3]/25 hover:bg-[#004494]' : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}
+                                >
+                                    {React.cloneElement(ICONS.check as React.ReactElement, { size: 22 })}
+                                    {isProcessing ? 'Processing…' : khataRequiresCustomer ? 'Select customer' : 'Complete sale'}
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={handleHold}
+                                    className="w-full py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-[#0056b3] transition-colors"
+                                >
+                                    Hold sale (F2)
+                                </button>
                             </div>
                         ) : (
-                            <div className="py-4 text-center border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl bg-slate-50/50 dark:bg-slate-800/30">
-                                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Cart is empty</span>
+                            <div className="py-6 text-center border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-[10px] bg-slate-50/50 dark:bg-slate-800/30">
+                                <span className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">Cart is empty</span>
                             </div>
                         )}
                     </div>

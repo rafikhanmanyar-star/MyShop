@@ -1,11 +1,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { KeyRound, RefreshCw } from 'lucide-react';
 import { useLoyalty } from '../../../context/LoyaltyContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
 import Modal from '../../ui/Modal';
 import { LoyaltyMember, LoyaltyTier } from '../../../types/loyalty';
 import { khataApi } from '../../../services/shopApi';
+import { mobileOrdersApi } from '../../../services/mobileOrdersApi';
 
 const MemberDirectory: React.FC = () => {
     const { members, deleteMember, updateMember, transactions } = useLoyalty();
@@ -14,6 +16,17 @@ const MemberDirectory: React.FC = () => {
     const [selectedMember, setSelectedMember] = useState<LoyaltyMember | null>(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [khataSummary, setKhataSummary] = useState<{ totalDebit: number; totalCredit: number; balance: number } | null | undefined>(undefined);
+    const [pwResetOpen, setPwResetOpen] = useState(false);
+    const [newPw, setNewPw] = useState('');
+    const [confirmPw, setConfirmPw] = useState('');
+    const [pwResetLoading, setPwResetLoading] = useState(false);
+
+    const closeDetailModal = () => {
+        setIsDetailModalOpen(false);
+        setPwResetOpen(false);
+        setNewPw('');
+        setConfirmPw('');
+    };
 
     useEffect(() => {
         if (!selectedMember?.customerId) {
@@ -89,8 +102,8 @@ const MemberDirectory: React.FC = () => {
                         className={`p-4 rounded-2xl transition-all shadow-sm flex flex-col items-start gap-1 border-2 ${activeTierFilter === stat.tier ? 'border-rose-500 dark:border-rose-400 ring-2 ring-rose-100 dark:ring-rose-900/50 shadow-lg scale-[1.02]' : 'border-transparent bg-card dark:bg-slate-900/90 hover:border-border dark:hover:border-slate-600'}`}
                     >
                         <div className={`w-2 h-2 rounded-full ${stat.color} mb-1`}></div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
-                        <p className="text-xl font-black text-foreground">{stat.count}</p>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                        <p className="text-xl font-semibold text-foreground">{stat.count}</p>
                     </button>
                 ))}
             </div>
@@ -111,7 +124,7 @@ const MemberDirectory: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button className="px-4 py-3 bg-card dark:bg-slate-800 border border-border dark:border-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:bg-muted/50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
+                    <button className="px-4 py-3 bg-card dark:bg-slate-800 border border-border dark:border-slate-600 rounded-xl text-xs font-semibold uppercase tracking-widest text-muted-foreground hover:bg-muted/50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
                         {ICONS.download} Export
                     </button>
                 </div>
@@ -120,7 +133,7 @@ const MemberDirectory: React.FC = () => {
             <Card className="border-none shadow-sm overflow-hidden flex-1 flex flex-col bg-card">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                        <thead className="bg-muted/80/80 backdrop-blur-sm sticky top-0 z-10 text-[10px] font-black uppercase text-muted-foreground">
+                        <thead className="bg-muted/80/80 backdrop-blur-sm sticky top-0 z-10 text-xs font-semibold uppercase text-muted-foreground">
                             <tr>
                                 <th className="px-8 py-5">Card / Member</th>
                                 <th className="px-6 py-5">Tier Segment</th>
@@ -140,7 +153,7 @@ const MemberDirectory: React.FC = () => {
                                 >
                                     <td className="px-8 py-5 whitespace-nowrap">
                                         <div className="flex items-center gap-4">
-                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-sm transition-all group-hover:scale-110 shadow-sm ${m.tier === 'Platinum' ? 'bg-slate-900 text-rose-500 dark:bg-slate-950 dark:text-rose-400' :
+                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-semibold text-sm transition-all group-hover:scale-110 shadow-sm ${m.tier === 'Platinum' ? 'bg-slate-900 text-rose-500 dark:bg-slate-950 dark:text-rose-400' :
                                                 m.tier === 'Gold' ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300' :
                                                     'bg-muted text-muted-foreground dark:bg-slate-800'
                                                 }`}>
@@ -148,36 +161,36 @@ const MemberDirectory: React.FC = () => {
                                             </div>
                                             <div>
                                                 <div className="font-bold text-foreground text-sm group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">{m.customerName}</div>
-                                                <div className="text-[10px] text-muted-foreground font-mono italic tracking-tighter">ID: {m.cardNumber}</div>
+                                                <div className="text-xs text-muted-foreground font-mono italic tracking-tighter">ID: {m.cardNumber}</div>
                                             </div>
                                         </div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex flex-col">
-                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block w-fit shadow-sm ${m.tier === 'Platinum' ? 'bg-rose-600 text-white dark:bg-rose-700' :
+                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold uppercase tracking-wider inline-block w-fit shadow-sm ${m.tier === 'Platinum' ? 'bg-rose-600 text-white dark:bg-rose-700' :
                                                 m.tier === 'Gold' ? 'bg-amber-400 text-amber-900 dark:bg-amber-600 dark:text-amber-950' :
                                                     'bg-slate-200 text-muted-foreground dark:bg-slate-700 dark:text-slate-300'
                                                 }`}>
                                                 {m.tier} Member
                                             </span>
-                                            <span className="text-[9px] text-muted-foreground italic mt-1 font-medium">Joined {new Date(m.joinDate).toLocaleDateString()}</span>
+                                            <span className="text-xs text-muted-foreground italic mt-1 font-medium">Joined {new Date(m.joinDate).toLocaleDateString()}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5 text-center font-black text-muted-foreground font-mono text-sm">
+                                    <td className="px-6 py-5 text-center font-semibold text-muted-foreground font-mono text-sm">
                                         {m.visitCount}
                                     </td>
                                     <td className="px-6 py-5 text-right">
-                                        <div className="text-sm font-black text-foreground font-mono tracking-tighter">{m.pointsBalance.toLocaleString()}</div>
-                                        <div className="text-[9px] text-rose-500 dark:text-rose-400 font-bold uppercase tracking-widest mt-0.5 animate-pulse">Available</div>
+                                        <div className="text-sm font-semibold text-foreground font-mono tracking-tighter">{m.pointsBalance.toLocaleString()}</div>
+                                        <div className="text-xs text-rose-500 dark:text-rose-400 font-bold uppercase tracking-widest mt-0.5 animate-pulse">Available</div>
                                     </td>
                                     <td className="px-6 py-5 text-right font-mono">
-                                        <div className="text-sm font-black text-foreground tracking-tighter">${m.totalSpend.toLocaleString()}</div>
-                                        <div className="text-[9px] text-muted-foreground uppercase font-medium">Gross Value</div>
+                                        <div className="text-sm font-semibold text-foreground tracking-tighter">${m.totalSpend.toLocaleString()}</div>
+                                        <div className="text-xs text-muted-foreground uppercase font-medium">Gross Value</div>
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex items-center gap-1.5 focus:ring-2">
                                             <div className={`w-2 h-2 rounded-full ${m.status === 'Active' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] dark:shadow-emerald-500/30' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
-                                            <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{m.status}</span>
+                                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">{m.status}</span>
                                         </div>
                                     </td>
                                     <td className="px-8 py-5 text-right">
@@ -202,12 +215,12 @@ const MemberDirectory: React.FC = () => {
                                                 {React.cloneElement(ICONS.users as React.ReactElement<any>, { width: 48, height: 48 })}
                                             </div>
                                             <div className="space-y-1">
-                                                <p className="text-foreground font-black tracking-tight text-lg">No Members Found</p>
+                                                <p className="text-foreground font-semibold tracking-tight text-lg">No Members Found</p>
                                                 <p className="text-muted-foreground text-xs font-medium">Try adjusting your filters or search terms.</p>
                                             </div>
                                             <button
                                                 onClick={() => { setSearchQuery(''); setActiveTierFilter('All'); }}
-                                                className="mt-4 px-6 py-2 bg-slate-900 dark:bg-slate-700 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 dark:hover:bg-slate-600"
+                                                className="mt-4 px-6 py-2 bg-slate-900 dark:bg-slate-700 text-white rounded-xl text-xs font-semibold uppercase tracking-widest hover:bg-slate-800 dark:hover:bg-slate-600"
                                             >
                                                 Reset Filters
                                             </button>
@@ -223,7 +236,7 @@ const MemberDirectory: React.FC = () => {
             {/* Member Details Modal */}
             <Modal
                 isOpen={isDetailModalOpen}
-                onClose={() => setIsDetailModalOpen(false)}
+                onClose={closeDetailModal}
                 title="Member Profile Insights"
                 size="xl"
             >
@@ -233,37 +246,50 @@ const MemberDirectory: React.FC = () => {
                             {/* Left Side: Basic Info Card */}
                             <div className="w-full md:w-1/3 space-y-4">
                                 <div className="p-8 bg-muted/80 dark:bg-slate-800/80 rounded-[32px] border border-border dark:border-slate-600 flex flex-col items-center text-center">
-                                    <div className={`w-28 h-28 rounded-[40px] flex items-center justify-center font-black text-4xl mb-6 shadow-xl ${selectedMember.tier === 'Platinum' ? 'bg-slate-900 text-rose-600 dark:bg-slate-950 dark:text-rose-400' :
+                                    <div className={`w-28 h-28 rounded-[40px] flex items-center justify-center font-semibold text-4xl mb-6 shadow-xl ${selectedMember.tier === 'Platinum' ? 'bg-slate-900 text-rose-600 dark:bg-slate-950 dark:text-rose-400' :
                                         selectedMember.tier === 'Gold' ? 'bg-amber-400 text-amber-900 dark:bg-amber-600 dark:text-amber-950' :
                                             'bg-card text-slate-300 border-2 border-border dark:bg-slate-800 dark:text-slate-400 dark:border-slate-600'
                                         }`}>
                                         {(selectedMember.customerName || 'U').charAt(0)}
                                     </div>
-                                    <h4 className="text-2xl font-black text-foreground tracking-tight">{selectedMember.customerName || 'Unnamed Member'}</h4>
-                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rose-600 dark:text-rose-400 mt-1">{selectedMember.tier} Elite Member</p>
+                                    <h4 className="text-2xl font-semibold text-foreground tracking-tight">{selectedMember.customerName || 'Unnamed Member'}</h4>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-rose-600 dark:text-rose-400 mt-1">{selectedMember.tier} Elite Member</p>
 
                                     <div className="w-full mt-8 pt-8 border-t border-border dark:border-slate-600 space-y-4">
                                         <div className="flex justify-between items-center text-xs">
-                                            <span className="font-bold text-muted-foreground uppercase tracking-widest text-[9px]">Card Number</span>
-                                            <span className="font-mono text-foreground font-black">{selectedMember.cardNumber}</span>
+                                            <span className="font-bold text-muted-foreground uppercase tracking-widest text-xs">Card Number</span>
+                                            <span className="font-mono text-foreground font-semibold">{selectedMember.cardNumber}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-xs">
-                                            <span className="font-bold text-muted-foreground uppercase tracking-widest text-[9px]">Mobile No</span>
-                                            <span className="font-mono text-foreground font-black">{selectedMember.phone || 'Not Provided'}</span>
+                                            <span className="font-bold text-muted-foreground uppercase tracking-widest text-xs">Mobile No</span>
+                                            <span className="font-mono text-foreground font-semibold">{selectedMember.phone || 'Not Provided'}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-xs">
-                                            <span className="font-bold text-muted-foreground uppercase tracking-widest text-[9px]">Enrollment</span>
-                                            <span className="text-foreground font-black">{new Date(selectedMember.joinDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
+                                            <span className="font-bold text-muted-foreground uppercase tracking-widest text-xs">Enrollment</span>
+                                            <span className="text-foreground font-semibold">{new Date(selectedMember.joinDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 <button
-                                    className="w-full py-4 bg-muted dark:bg-slate-800 text-muted-foreground rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition-all border border-transparent dark:border-slate-600 hover:border-rose-100 dark:hover:border-rose-800"
+                                    type="button"
+                                    onClick={() => {
+                                        setPwResetOpen(true);
+                                        setNewPw('');
+                                        setConfirmPw('');
+                                    }}
+                                    className="w-full inline-flex items-center justify-center gap-2 py-3 text-xs font-semibold uppercase tracking-widest text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 border border-rose-200/80 dark:border-rose-800/80 rounded-2xl bg-card hover:bg-rose-50/50 dark:hover:bg-rose-950/30 transition-all"
+                                >
+                                    <KeyRound className="w-3.5 h-3.5 shrink-0" />
+                                    Reset app password
+                                </button>
+
+                                <button
+                                    className="w-full py-4 bg-muted dark:bg-slate-800 text-muted-foreground rounded-2xl font-semibold text-xs uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition-all border border-transparent dark:border-slate-600 hover:border-rose-100 dark:hover:border-rose-800"
                                     onClick={() => {
                                         if (window.confirm('Deactivate this member?')) {
                                             updateMember(selectedMember.id, { status: selectedMember.status === 'Active' ? 'Inactive' : 'Active' });
-                                            setIsDetailModalOpen(false);
+                                            closeDetailModal();
                                         }
                                     }}
                                 >
@@ -275,34 +301,34 @@ const MemberDirectory: React.FC = () => {
                             <div className="flex-1 space-y-8">
                                 <div className="grid grid-cols-3 gap-4">
                                     <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Points</p>
-                                        <p className="text-2xl font-black text-rose-600 dark:text-rose-400 font-mono tracking-tighter">{selectedMember.pointsBalance.toLocaleString()}</p>
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Points</p>
+                                        <p className="text-2xl font-semibold text-rose-600 dark:text-rose-400 font-mono tracking-tighter">{selectedMember.pointsBalance.toLocaleString()}</p>
                                     </div>
                                     <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Total LTV</p>
-                                        <p className="text-2xl font-black text-foreground font-mono tracking-tighter">${selectedMember.totalSpend.toLocaleString()}</p>
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Total LTV</p>
+                                        <p className="text-2xl font-semibold text-foreground font-mono tracking-tighter">${selectedMember.totalSpend.toLocaleString()}</p>
                                     </div>
                                     <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Visit Count</p>
-                                        <p className="text-2xl font-black text-foreground font-mono tracking-tighter">{selectedMember.visitCount}</p>
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Visit Count</p>
+                                        <p className="text-2xl font-semibold text-foreground font-mono tracking-tighter">{selectedMember.visitCount}</p>
                                     </div>
                                 </div>
 
                                 {showKhataSummary && (
                                     <div className="p-6 bg-amber-50/80 border border-amber-100 rounded-3xl">
-                                        <h5 className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-3 flex items-center gap-2">Khata Summary</h5>
+                                        <h5 className="text-xs font-semibold uppercase tracking-widest text-amber-800 mb-3 flex items-center gap-2">Khata Summary</h5>
                                         <div className="grid grid-cols-3 gap-4">
                                             <div>
-                                                <p className="text-[9px] font-bold text-amber-700 uppercase tracking-widest">Total Debit</p>
-                                                <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {(khataSummary ?? { totalDebit: 0 }).totalDebit.toLocaleString()}</p>
+                                                <p className="text-xs font-bold text-amber-700 uppercase tracking-widest">Total Debit</p>
+                                                <p className="text-lg font-semibold text-foreground font-mono">{CURRENCY} {(khataSummary ?? { totalDebit: 0 }).totalDebit.toLocaleString()}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[9px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest">Total Credit</p>
-                                                <p className="text-lg font-black text-foreground font-mono">{CURRENCY} {(khataSummary ?? { totalCredit: 0 }).totalCredit.toLocaleString()}</p>
+                                                <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest">Total Credit</p>
+                                                <p className="text-lg font-semibold text-foreground font-mono">{CURRENCY} {(khataSummary ?? { totalCredit: 0 }).totalCredit.toLocaleString()}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[9px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest">Current Balance</p>
-                                                <p className={`text-lg font-black font-mono ${(khataSummary?.balance ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>{CURRENCY} {(khataSummary ?? { balance: 0 }).balance.toLocaleString()}</p>
+                                                <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest">Current Balance</p>
+                                                <p className={`text-lg font-semibold font-mono ${(khataSummary?.balance ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground'}`}>{CURRENCY} {(khataSummary ?? { balance: 0 }).balance.toLocaleString()}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -310,10 +336,10 @@ const MemberDirectory: React.FC = () => {
 
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <h5 className="text-sm font-black text-foreground tracking-tight flex items-center gap-2 uppercase">
+                                        <h5 className="text-sm font-semibold text-foreground tracking-tight flex items-center gap-2 uppercase">
                                             {ICONS.barChart} Transaction History
                                         </h5>
-                                        <button className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest">Full Ledger</button>
+                                        <button className="text-xs font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-widest">Full Ledger</button>
                                     </div>
 
                                     <div className="bg-muted/80/50 dark:bg-slate-800/50 rounded-3xl border border-border dark:border-slate-600 overflow-hidden">
@@ -326,22 +352,22 @@ const MemberDirectory: React.FC = () => {
                                                                 {tx.type === 'Earn' ? ICONS.plus : ICONS.minus}
                                                             </div>
                                                             <div>
-                                                                <p className="text-[11px] font-bold text-foreground uppercase tracking-tighter">Sale Ref: #{tx.referenceId.slice(-8)}</p>
-                                                                <p className="text-[9px] text-muted-foreground font-medium italic">{new Date(tx.timestamp).toLocaleString()}</p>
+                                                                <p className="text-xs font-bold text-foreground uppercase tracking-tighter">Sale Ref: #{tx.referenceId.slice(-8)}</p>
+                                                                <p className="text-xs text-muted-foreground font-medium italic">{new Date(tx.timestamp).toLocaleString()}</p>
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <p className={`text-xs font-black font-mono ${tx.type === 'Earn' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                                            <p className={`text-xs font-semibold font-mono ${tx.type === 'Earn' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                                                 {tx.type === 'Earn' ? '+' : '-'}{tx.points} Pts
                                                             </p>
-                                                            <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-[0.1em]">Verified</p>
+                                                            <p className="text-xs text-muted-foreground font-bold uppercase tracking-[0.1em]">Verified</p>
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
                                         ) : (
                                             <div className="p-12 text-center text-slate-300">
-                                                <p className="text-xs font-black uppercase tracking-widest italic">No transactions recorded yet</p>
+                                                <p className="text-xs font-semibold uppercase tracking-widest italic">No transactions recorded yet</p>
                                             </div>
                                         )}
                                     </div>
@@ -354,8 +380,8 @@ const MemberDirectory: React.FC = () => {
                                 {ICONS.trophy}
                             </div>
                             <div className="flex-1">
-                                <p className="text-[11px] font-black text-indigo-900 dark:text-indigo-200 uppercase tracking-widest">Tier Evolution</p>
-                                <p className="text-xs text-indigo-700 dark:text-indigo-300/90 font-medium">Spending another <span className="font-black">$2,400</span> will upgrade this customer to <span className="font-black italic underline">Platinum Status</span>.</p>
+                                <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200 uppercase tracking-widest">Tier Evolution</p>
+                                <p className="text-xs text-indigo-700 dark:text-indigo-300/90 font-medium">Spending another <span className="font-semibold">$2,400</span> will upgrade this customer to <span className="font-semibold italic underline">Platinum Status</span>.</p>
                             </div>
                             <div className="w-48 h-2 bg-indigo-200 dark:bg-indigo-950 rounded-full overflow-hidden">
                                 <div className="h-full bg-indigo-600 dark:bg-indigo-500 w-3/4 rounded-full"></div>
@@ -364,6 +390,95 @@ const MemberDirectory: React.FC = () => {
                     </div>
                 )}
             </Modal>
+
+            {pwResetOpen && selectedMember && (
+                <div
+                    className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-[60]"
+                    onClick={() => !pwResetLoading && setPwResetOpen(false)}
+                >
+                    <div
+                        className="bg-card dark:bg-slate-900 rounded-2xl shadow-2xl w-[400px] max-w-[calc(100vw-2rem)] overflow-hidden border border-border dark:border-slate-600"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="p-5 bg-gradient-to-r from-rose-50 to-indigo-50 dark:from-rose-950/50 dark:to-indigo-950/50 border-b border-border dark:border-slate-600">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-rose-100 dark:bg-rose-950/80 rounded-xl flex items-center justify-center">
+                                    <KeyRound className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-foreground">Reset mobile app password</h3>
+                                    <p className="text-xs text-muted-foreground">{selectedMember.phone || '—'}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <p className="text-sm text-muted-foreground">
+                                Set a new password for this customer. They will use it to sign in to the mobile ordering app for your shop.
+                            </p>
+                            <div>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">New password</label>
+                                <input
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={newPw}
+                                    onChange={e => setNewPw(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none"
+                                    placeholder="At least 6 characters"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Confirm password</label>
+                                <input
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={confirmPw}
+                                    onChange={e => setConfirmPw(e.target.value)}
+                                    className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none"
+                                />
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-border dark:border-slate-600 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setPwResetOpen(false)}
+                                disabled={pwResetLoading}
+                                className="flex-1 py-2.5 bg-muted text-foreground rounded-xl text-sm font-semibold hover:bg-muted transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    if (newPw.length < 6) {
+                                        alert('Password must be at least 6 characters.');
+                                        return;
+                                    }
+                                    if (newPw !== confirmPw) {
+                                        alert('Passwords do not match.');
+                                        return;
+                                    }
+                                    setPwResetLoading(true);
+                                    try {
+                                        await mobileOrdersApi.resetCustomerPassword(selectedMember.customerId, newPw);
+                                        setPwResetOpen(false);
+                                        setNewPw('');
+                                        setConfirmPw('');
+                                        alert('Password updated. The customer can sign in with the new password.');
+                                    } catch (err: any) {
+                                        alert(err.error || err.message || 'Failed to reset password');
+                                    }
+                                    setPwResetLoading(false);
+                                }}
+                                disabled={pwResetLoading}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors disabled:opacity-50"
+                            >
+                                {pwResetLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                                Save password
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

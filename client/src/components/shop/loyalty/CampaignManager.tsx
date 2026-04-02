@@ -10,7 +10,7 @@ const CampaignManager: React.FC = () => {
     return (
         <div className="space-y-6 animate-fade-in shadow-inner">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-black text-foreground dark:text-slate-200 tracking-tight">Promotional Campaign Lifecycle</h3>
+                <h3 className="text-lg font-semibold text-foreground dark:text-slate-200 tracking-tight">Promotional Campaign Lifecycle</h3>
                 <button className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-rose-100 dark:shadow-rose-900/40 hover:bg-rose-700 transition-all flex items-center gap-2">
                     {ICONS.target} Launch Campaign
                 </button>
@@ -27,7 +27,7 @@ const CampaignManager: React.FC = () => {
                                 }`}>
                                 {React.cloneElement(ICONS.target as React.ReactElement<any>, { width: 24, height: 24 })}
                             </div>
-                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${camp.status === 'Active' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100 dark:shadow-emerald-900/40' :
+                            <span className={`px-2 py-1 rounded text-xs font-semibold uppercase tracking-widest ${camp.status === 'Active' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100 dark:shadow-emerald-900/40' :
                                     camp.status === 'Scheduled' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40' :
                                         'bg-slate-200 text-muted-foreground dark:bg-slate-700 dark:text-slate-300'
                                 }`}>
@@ -36,15 +36,15 @@ const CampaignManager: React.FC = () => {
                         </div>
 
                         <div className="flex-1 space-y-2">
-                            <h4 className="text-xl font-black text-foreground tracking-tight group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">{camp.name}</h4>
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">{camp.type}</p>
+                            <h4 className="text-xl font-semibold text-foreground tracking-tight group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">{camp.name}</h4>
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">{camp.type}</p>
 
                             <div className="pt-6 space-y-4">
-                                <div className="flex items-center justify-between text-[10px] font-bold">
+                                <div className="flex items-center justify-between text-xs font-bold">
                                     <span className="text-muted-foreground uppercase">Targeting Segment</span>
                                     <span className="text-foreground bg-muted dark:bg-slate-800 px-2 py-0.5 rounded italic">{camp.targetSegment}</span>
                                 </div>
-                                <div className="flex items-center justify-between text-[10px] font-bold">
+                                <div className="flex items-center justify-between text-xs font-bold">
                                     <span className="text-muted-foreground uppercase">Duration</span>
                                     <span className="text-muted-foreground">{new Date(camp.startDate).toLocaleDateString()} - {new Date(camp.endDate).toLocaleDateString()}</span>
                                 </div>
@@ -52,7 +52,7 @@ const CampaignManager: React.FC = () => {
                         </div>
 
                         <div className="pt-6 border-t border-slate-50 dark:border-slate-700 flex gap-2">
-                            <button className="flex-1 py-3 bg-muted/80 dark:bg-slate-800 text-muted-foreground rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-muted dark:hover:bg-slate-700 transition-all">
+                            <button className="flex-1 py-3 bg-muted/80 dark:bg-slate-800 text-muted-foreground rounded-xl text-xs font-semibold uppercase tracking-widest hover:bg-muted dark:hover:bg-slate-700 transition-all">
                                 Edit Campaign
                             </button>
                             <button className="px-3 bg-muted dark:bg-slate-800 text-muted-foreground rounded-xl hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition-all">
@@ -68,8 +68,8 @@ const CampaignManager: React.FC = () => {
                         {React.cloneElement(ICONS.plus as React.ReactElement<any>, { width: 32, height: 32 })}
                     </div>
                     <div className="text-center">
-                        <p className="text-xs font-black uppercase tracking-[0.2em]">New Campaign</p>
-                        <p className="text-[10px] font-medium italic mt-1 bg-muted/80 dark:bg-slate-800 px-2 py-0.5 rounded text-muted-foreground">Deploy high-ROI retention rules</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em]">New Campaign</p>
+                        <p className="text-xs font-medium italic mt-1 bg-muted/80 dark:bg-slate-800 px-2 py-0.5 rounded text-muted-foreground">Deploy high-ROI retention rules</p>
                     </div>
                 </button>
             </div>

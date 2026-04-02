@@ -10,7 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList, Receipt
+  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList, Receipt, Undo2
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
 import { SyncOnOnline } from './components/SyncOnOnline';
@@ -31,11 +31,16 @@ const ForecastPage = lazy(() => import('./components/shop/ForecastPage'));
 const CashierDashboardPage = lazy(() => import('./components/shop/cashier/CashierDashboardPage'));
 const ShiftsAdminPage = lazy(() => import('./components/shop/cashier/ShiftsAdminPage'));
 const KhataPage = lazy(() => import('./components/shop/khata/KhataPage'));
+const SalesReturnListPage = lazy(() => import('./components/shop/salesReturns/SalesReturnListPage'));
+const SalesReturnCreatePage = lazy(() => import('./components/shop/salesReturns/SalesReturnCreatePage'));
+const SalesReturnDetailPage = lazy(() => import('./components/shop/salesReturns/SalesReturnDetailPage'));
+const ShopRealtimeBridge = lazy(() => import('./components/shop/ShopRealtimeBridge'));
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant'] },
   { path: '/cashier-dashboard', label: 'Cashier Dashboard', icon: ClipboardList, roles: ['pos_cashier'] },
   { path: '/pos', label: 'Point of Sale', icon: ShoppingCart, roles: ['admin', 'pos_cashier'] },
+  { path: '/sales-returns', label: 'Sales Return', icon: Undo2, roles: ['admin', 'pos_cashier', 'accountant'] },
   { path: '/mobile-orders', label: 'Mobile Orders', icon: Smartphone, roles: ['admin', 'pos_cashier'] },
   { path: '/inventory', label: 'Inventory', icon: Package, roles: ['admin'] },
   { path: '/procurement', label: 'Procurement', icon: Truck, roles: ['admin', 'accountant'] },
@@ -72,8 +77,8 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
               <Store className="w-[1.125rem] h-[1.125rem] text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="font-extrabold text-white text-[1.0125rem] tracking-tight leading-none text-shadow-sm">MyShop</span>
-              <span className="text-[9px] text-slate-400 font-medium uppercase tracking-[0.2em]">Point of Sale</span>
+              <span className="font-extrabold text-white text-lg tracking-tight leading-none text-shadow-sm">MyShop</span>
+              <span className="text-xs text-slate-400 font-medium uppercase tracking-[0.2em]">Point of Sale</span>
             </div>
           </div>
         )}
@@ -100,7 +105,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             to={item.path}
             end={item.path === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-300 group tracking-wide text-[0.7875rem]
+              `nav-sidebar-link flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-300 group
               ${isActive
                 ? 'bg-indigo-500/15 border border-indigo-500/30 text-primary font-semibold shadow-sm'
                 : 'font-medium text-slate-400 hover:bg-slate-800/50 hover:text-white'}`
@@ -125,8 +130,8 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
                 <Users className="w-[1.125rem] h-[1.125rem] text-indigo-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[0.7875rem] font-bold text-white truncate">{user.name}</p>
-                <p className="text-[9px] text-slate-400 uppercase tracking-widest font-semibold">{user.role.replace('_', ' ')}</p>
+                <p className="text-sm font-bold text-white truncate">{user.name}</p>
+                <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">{user.role.replace('_', ' ')}</p>
               </div>
             </div>
           )}
@@ -135,10 +140,10 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
             className={`flex items-center gap-2 text-slate-400 hover:text-rose-400 transition-colors w-full group ${collapsed ? 'justify-center' : 'px-2 py-1'}`}
           >
             <LogOut className="w-[1.125rem] h-[1.125rem] group-hover:-translate-x-1 transition-transform" />
-            {!collapsed && <span className="font-semibold text-[0.675rem] tracking-wide">Sign out</span>}
+            {!collapsed && <span className="font-semibold text-xs tracking-wide">Sign out</span>}
           </button>
           {!collapsed && (
-            <p className="text-[9px] text-slate-500 text-center mt-2 pt-1.5 border-t border-slate-700/50">
+            <p className="text-xs text-slate-500 text-center mt-2 pt-1.5 border-t border-slate-700/50">
               v{__APP_VERSION__}
             </p>
           )}
@@ -150,7 +155,7 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           <button onClick={onToggle} className="mb-2 mx-auto p-2.5 bg-slate-800/50 rounded-xl text-slate-400 hover:text-white hover:bg-indigo-600 transition-all">
             <Menu className="w-5 h-5" />
           </button>
-          <p className="text-[9px] text-slate-500 text-center pb-2">v{__APP_VERSION__}</p>
+          <p className="text-xs text-slate-500 text-center pb-2">v{__APP_VERSION__}</p>
         </>
       )}
     </aside>
@@ -178,6 +183,9 @@ function AppLayout() {
       <AppProvider>
         <ShiftsProvider>
           <SyncOnOnline />
+          <Suspense fallback={null}>
+            <ShopRealtimeBridge />
+          </Suspense>
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
         <main className={`flex min-h-0 flex-1 flex-col transition-all duration-500 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'} p-6 sm:p-8`}>
@@ -199,6 +207,18 @@ function AppLayout() {
 
               <Route path="/cashier-dashboard" element={role === 'pos_cashier' ? <CashierDashboardPage /> : <Navigate to="/" replace />} />
               <Route path="/pos" element={<div className="flex-1 min-h-0 flex flex-col overflow-hidden h-full"><POSSalesPage /></div>} />
+              <Route
+                path="/sales-returns/new"
+                element={['admin', 'pos_cashier'].includes(role) ? <SalesReturnCreatePage /> : <Navigate to="/" replace />}
+              />
+              <Route
+                path="/sales-returns/:id"
+                element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <SalesReturnDetailPage /> : <Navigate to="/" replace />}
+              />
+              <Route
+                path="/sales-returns"
+                element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <SalesReturnListPage /> : <Navigate to="/" replace />}
+              />
               <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MobileOrdersPage /></div> : <Navigate to="/" replace />} />
 
               <Route path="/inventory" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><InventoryPage /></div> : <Navigate to="/" replace />} />

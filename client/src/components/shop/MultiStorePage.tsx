@@ -89,7 +89,7 @@ const MultiStoreContent: React.FC = () => {
             <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10 transition-all">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-black text-foreground dark:text-slate-200 tracking-tight">Organization & Scale</h1>
+                        <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Organization & Scale</h1>
                         <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium italic">Multi-branch orchestration and centralized policy engine.</p>
                     </div>
                     <div className="flex gap-3">
@@ -247,7 +247,7 @@ const MultiStoreContent: React.FC = () => {
                         <div className="flex items-center justify-between p-3 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-xl">
                             <div>
                                 <h4 className="text-sm font-bold text-foreground">Allow Negative Stock</h4>
-                                <p className="text-[10px] text-muted-foreground">Permit sales even if system inventory is zero.</p>
+                                <p className="text-xs text-muted-foreground">Permit sales even if system inventory is zero.</p>
                             </div>
                             <input
                                 type="checkbox"
@@ -260,7 +260,7 @@ const MultiStoreContent: React.FC = () => {
                         <div className="flex items-center justify-between p-3 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-xl">
                             <div>
                                 <h4 className="text-sm font-bold text-foreground">Universal Pricing</h4>
-                                <p className="text-[10px] text-muted-foreground">All branches use the core catalog price.</p>
+                                <p className="text-xs text-muted-foreground">All branches use the core catalog price.</p>
                             </div>
                             <input
                                 type="checkbox"
@@ -273,7 +273,7 @@ const MultiStoreContent: React.FC = () => {
                         <div className="flex items-center justify-between p-3 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-xl">
                             <div>
                                 <h4 className="text-sm font-bold text-foreground">Tax Inclusive Pricing</h4>
-                                <p className="text-[10px] text-muted-foreground">Prices displayed include all taxes.</p>
+                                <p className="text-xs text-muted-foreground">Prices displayed include all taxes.</p>
                             </div>
                             <input
                                 type="checkbox"
@@ -302,7 +302,7 @@ const MultiStoreContent: React.FC = () => {
                         <div className="flex items-center justify-between p-3 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-xl">
                             <div>
                                 <h4 className="text-sm font-bold text-foreground">Require Manager Approval</h4>
-                                <p className="text-[10px] text-muted-foreground">For discounts exceeding 20% or returns.</p>
+                                <p className="text-xs text-muted-foreground">For discounts exceeding 20% or returns.</p>
                             </div>
                             <input
                                 type="checkbox"

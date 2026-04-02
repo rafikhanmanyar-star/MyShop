@@ -92,7 +92,8 @@ export function BIProvider({ children }: { children: ReactNode }) {
       setRecentTransactions(txData || []);
 
       // Build KPIs from source data
-      const totalPosRev = sourceData?.pos?.totalRevenue || 0;
+      const totalPosRev = sourceData?.pos?.netRevenue ?? sourceData?.pos?.totalRevenue ?? 0;
+      const totalReturnsPos = sourceData?.pos?.totalReturns ?? 0;
       const totalMobileRev = sourceData?.mobile?.totalRevenue || 0;
       const totalRev = totalPosRev + totalMobileRev;
       const totalOrders = (sourceData?.pos?.totalOrders || 0) + (sourceData?.mobile?.totalOrders || 0);
@@ -100,13 +101,20 @@ export function BIProvider({ children }: { children: ReactNode }) {
 
       setKpis([
         {
-          label: 'Total Revenue',
+          label: 'Total Revenue (net POS)',
           value: `${(totalRev / 1000).toFixed(1)}K`,
           trend: 12, status: 'up',
           sparkline: mergedTrend.slice(-8).map(d => d.revenue || 1),
         },
         {
-          label: 'POS Revenue',
+          label: 'POS Returns',
+          value: `${(totalReturnsPos / 1000).toFixed(1)}K`,
+          trend: totalReturnsPos > 0 ? 4 : 0,
+          status: totalReturnsPos > 0 ? 'down' : 'up',
+          sparkline: mergedTrend.slice(-8).map(d => Math.max(0.01, (d.posRevenue || 0) * 0.02)),
+        },
+        {
+          label: 'POS Net Sales',
           value: `${(totalPosRev / 1000).toFixed(1)}K`,
           trend: 8, status: 'up',
           sparkline: mergedTrend.slice(-8).map(d => d.posRevenue || 1),

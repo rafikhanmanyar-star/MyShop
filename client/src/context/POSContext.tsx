@@ -117,6 +117,14 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { refreshItems: refreshInventory } = useInventory();
     const currentUserId = authUser?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('user_id') : null) ?? null;
 
+    useEffect(() => {
+        const onRealtime = () => {
+            refreshInventory().catch(() => {});
+        };
+        window.addEventListener('shop:realtime', onRealtime as EventListener);
+        return () => window.removeEventListener('shop:realtime', onRealtime as EventListener);
+    }, [refreshInventory]);
+
     // Totals Calculation
     const totals = useMemo(() => {
         const subtotal = cart.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
