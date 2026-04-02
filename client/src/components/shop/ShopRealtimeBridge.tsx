@@ -41,7 +41,8 @@ export default function ShopRealtimeBridge() {
                       const payload = JSON.parse(line.slice(6));
                       if (
                         payload.type === 'daily_report_updated' ||
-                        payload.type === 'sales_return_created'
+                        payload.type === 'sales_return_created' ||
+                        payload.type === 'sale_created'
                       ) {
                         window.dispatchEvent(new CustomEvent('shop:realtime', { detail: payload }));
                       }

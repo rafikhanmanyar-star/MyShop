@@ -13,11 +13,11 @@ export default function AppHeader({ className = '' }: { className?: string }) {
 
   return (
     <header
-      className={`mb-4 flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-border pb-3 sm:gap-3 ${className}`}
+      className={`mb-6 flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-gray-200 pb-4 dark:border-gray-700 sm:gap-3 ${className}`}
     >
       <button
         type="button"
-        className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600 transition-colors duration-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-gray-100 text-gray-600 transition-colors duration-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
         title="Notifications"
         aria-label="Notifications"
       >
@@ -27,9 +27,9 @@ export default function AppHeader({ className = '' }: { className?: string }) {
       <ThemeToggle />
 
       {user && (
-        <div className="flex min-w-0 max-w-[min(100%,16rem)] items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5 shadow-erp sm:max-w-xs sm:px-3">
+        <div className="flex min-w-0 max-w-[min(100%,16rem)] items-center gap-2 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 shadow-card dark:border-gray-700 dark:bg-gray-800 sm:max-w-xs sm:px-3">
           <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600 dark:bg-primary-700/25 dark:text-primary-300"
             aria-hidden
           >
             <User className="h-4 w-4" strokeWidth={2} />

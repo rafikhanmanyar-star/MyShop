@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { installElectronFocusRecovery } from './utils/electronFocusRecovery';
-import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { ShiftsProvider } from './context/ShiftsContext';
@@ -69,81 +69,87 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
   );
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-30 bg-[#0f172a] border-r border-slate-800/50 flex flex-col transition-all duration-500 ease-in-out shadow-2xl ${collapsed ? 'w-20' : 'w-72'}`}>
-      <div className="flex items-center justify-between h-20 shrink-0 px-5">
+    <aside className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-gray-800 bg-gray-900 shadow-xl transition-all duration-300 ease-in-out ${collapsed ? 'w-20' : 'w-72'}`}>
+      <div className="flex h-20 shrink-0 items-center justify-between px-5">
         {!collapsed && (
-          <div className="flex items-center gap-2.5 group cursor-pointer">
-            <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform duration-300">
-              <Store className="w-[1.125rem] h-[1.125rem] text-white" />
+          <div className="group flex cursor-pointer items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600 shadow-md shadow-primary-900/30 transition-transform duration-200 group-hover:scale-105">
+              <Store className="h-[1.125rem] w-[1.125rem] text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="font-extrabold text-white text-lg tracking-tight leading-none text-shadow-sm">MyShop</span>
-              <span className="text-xs text-slate-400 font-medium uppercase tracking-[0.2em]">Point of Sale</span>
+              <span className="text-lg font-extrabold leading-none tracking-tight text-white text-shadow-sm">MyShop</span>
+              <span className="text-xs font-medium uppercase tracking-[0.2em] text-gray-400">Point of Sale</span>
             </div>
           </div>
         )}
         {collapsed && (
           <button
             onClick={onToggle}
-            className="flex items-center justify-center w-full py-3 rounded-xl hover:bg-slate-800/80 text-slate-400 hover:text-white transition-all duration-200 group"
+            className="group flex w-full items-center justify-center rounded-lg py-3 text-gray-400 transition-colors duration-200 hover:bg-gray-800 hover:text-white"
             title="Open sidebar"
           >
-            <ChevronRight className="w-6 h-6 group-hover:translate-x-0.5 transition-transform" />
+            <ChevronRight className="h-6 w-6 transition-transform group-hover:translate-x-0.5" />
           </button>
         )}
         {!collapsed && (
-          <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-all duration-200">
-            <X className="w-[1.125rem] h-[1.125rem]" />
+          <button
+            type="button"
+            onClick={onToggle}
+            className="rounded-lg p-1.5 text-gray-400 transition-colors duration-200 hover:bg-gray-800 hover:text-white"
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+          >
+            <X className="h-[1.125rem] w-[1.125rem]" />
           </button>
         )}
       </div>
 
-      <nav className="flex-1 min-h-0 px-3 space-y-0.5 overflow-y-auto custom-scrollbar pt-2">
+      <nav className="custom-scrollbar min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pt-2">
         {filteredNavItems.map(item => (
           <NavLink
             key={item.path}
             to={item.path}
             end={item.path === '/'}
             className={({ isActive }) =>
-              `nav-sidebar-link flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-300 group
+              `nav-sidebar-link group flex items-center gap-2 rounded-lg px-3 py-2 transition-colors duration-200
               ${isActive
-                ? 'bg-indigo-500/15 border border-indigo-500/30 text-primary font-semibold shadow-sm'
-                : 'font-medium text-slate-400 hover:bg-slate-800/50 hover:text-white'}`
+                ? 'bg-primary-600 font-semibold text-white shadow-sm'
+                : 'font-medium text-gray-300 hover:bg-gray-800 hover:text-white'}`
             }
           >
-            <item.icon className={`w-[1.125rem] h-[1.125rem] flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${collapsed ? 'mx-auto' : ''}`} />
+            <item.icon className={`h-[1.125rem] w-[1.125rem] flex-shrink-0 ${collapsed ? 'mx-auto' : ''}`} />
             {!collapsed && <span>{item.label}</span>}
             {!collapsed && (
-              <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+              <div className="ml-auto opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="h-1.5 w-1.5 rounded-full bg-white/80" />
               </div>
             )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="p-3 mt-auto shrink-0">
-        <div className={`bg-slate-800/40 rounded-2xl p-3 border border-slate-700/50 transition-all duration-300 ${collapsed ? 'px-2' : ''}`}>
+      <div className="mt-auto shrink-0 p-3">
+        <div className={`rounded-lg border border-gray-700/80 bg-gray-800/50 p-3 transition-all duration-200 ${collapsed ? 'px-2' : ''}`}>
           {!collapsed && user && (
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center border-2 border-indigo-500/50 overflow-hidden">
-                <Users className="w-[1.125rem] h-[1.125rem] text-indigo-400" />
+            <div className="mb-2 flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border-2 border-primary-600/50 bg-gray-700">
+                <Users className="h-[1.125rem] w-[1.125rem] text-primary-300" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-white truncate">{user.name}</p>
-                <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold">{user.role.replace('_', ' ')}</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">{user.role.replace('_', ' ')}</p>
               </div>
             </div>
           )}
           <button
             onClick={handleLogout}
-            className={`flex items-center gap-2 text-slate-400 hover:text-rose-400 transition-colors w-full group ${collapsed ? 'justify-center' : 'px-2 py-1'}`}
+            className={`group flex w-full items-center gap-2 text-gray-400 transition-colors hover:text-red-400 ${collapsed ? 'justify-center' : 'px-2 py-1'}`}
           >
-            <LogOut className="w-[1.125rem] h-[1.125rem] group-hover:-translate-x-1 transition-transform" />
-            {!collapsed && <span className="font-semibold text-xs tracking-wide">Sign out</span>}
+            <LogOut className="h-[1.125rem] w-[1.125rem] transition-transform group-hover:-translate-x-1" />
+            {!collapsed && <span className="text-xs font-semibold tracking-wide">Sign out</span>}
           </button>
           {!collapsed && (
-            <p className="text-xs text-slate-500 text-center mt-2 pt-1.5 border-t border-slate-700/50">
+            <p className="mt-2 border-t border-gray-700/50 pt-1.5 text-center text-xs text-gray-500">
               v{__APP_VERSION__}
             </p>
           )}
@@ -152,10 +158,16 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 
       {collapsed && (
         <>
-          <button onClick={onToggle} className="mb-2 mx-auto p-2.5 bg-slate-800/50 rounded-xl text-slate-400 hover:text-white hover:bg-indigo-600 transition-all">
-            <Menu className="w-5 h-5" />
+          <button
+            type="button"
+            onClick={onToggle}
+            className="mx-auto mb-2 rounded-lg bg-gray-800/80 p-2.5 text-gray-400 transition-all hover:bg-primary-600 hover:text-white"
+            title="Open navigation menu"
+            aria-label="Open navigation menu"
+          >
+            <Menu className="h-5 w-5" />
           </button>
-          <p className="text-xs text-slate-500 text-center pb-2">v{__APP_VERSION__}</p>
+          <p className="pb-2 text-center text-xs text-gray-500">v{__APP_VERSION__}</p>
         </>
       )}
     </aside>
@@ -167,6 +179,8 @@ function AppLayout() {
   const [posFullScreen, setPosFullScreen] = useState(false);
   const { user } = useAuth();
   const role = user?.role || 'pos_cashier';
+  const location = useLocation();
+  const isPosRoute = location.pathname === '/pos';
 
   useEffect(() => {
     const handlePosFullScreen = (e: CustomEvent<{ enabled: boolean }>) => {
@@ -188,15 +202,18 @@ function AppLayout() {
           </Suspense>
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
-        <main className={`flex min-h-0 flex-1 flex-col transition-all duration-500 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'} p-6 sm:p-8`}>
+        <main className={`flex min-h-0 flex-1 flex-col transition-all duration-300 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
+          <div
+            className={`flex min-h-0 flex-1 flex-col overflow-auto ${isPosRoute ? 'w-full p-6' : 'page-container'}`}
+          >
           {!posFullScreen && <AppHeader />}
           <OfflineBanner />
-          <div className="flex-1 min-h-0 flex flex-col overflow-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-auto">
           <Suspense fallback={
-            <div className="flex items-center justify-center min-h-[60vh]">
-              <div className="relative w-12 h-12">
-                <div className="absolute inset-0 border-4 border-indigo-200 dark:border-indigo-800 rounded-full"></div>
-                <div className="absolute inset-0 border-4 border-indigo-600 rounded-full animate-spin border-t-transparent"></div>
+            <div className="flex min-h-[60vh] items-center justify-center">
+              <div className="relative h-12 w-12">
+                <div className="absolute inset-0 rounded-full border-4 border-primary-100 dark:border-gray-700"></div>
+                <div className="absolute inset-0 animate-spin rounded-full border-4 border-primary-600 border-t-transparent"></div>
               </div>
             </div>
           }>
@@ -241,6 +258,7 @@ function AppLayout() {
             </Routes>
             </div>
           </Suspense>
+          </div>
           </div>
         </main>
       </div>

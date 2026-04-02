@@ -200,8 +200,8 @@ const GeneralLedger: React.FC = () => {
                                         <td className="px-6 py-4 text-xs font-bold text-muted-foreground">
                                             {new Date(entry.date).toLocaleDateString()}
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <span className="font-mono text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded uppercase tracking-tighter">
+                                        <td className="px-6 py-4 select-text">
+                                            <span className="inline-block font-mono text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-2 py-1 rounded uppercase tracking-tighter select-text cursor-text">
                                                 {entry.reference}
                                             </span>
                                         </td>

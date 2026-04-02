@@ -255,7 +255,7 @@ const KhataPage: React.FC = () => {
       <div className="flex-1 overflow-auto p-6 md:p-8">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary-100 border-t-primary-600" />
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -276,7 +276,7 @@ const KhataPage: React.FC = () => {
                             setSelectedCustomerId(row.customer_id);
                             setSelectedCustomerName(row.customer_name);
                           }}
-                          className={`w-full text-left px-6 py-4 flex items-center justify-between hover:bg-muted/50 transition-colors ${selectedCustomerId === row.customer_id ? 'bg-indigo-50 border-l-4 border-indigo-600' : ''}`}
+                          className={`flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-muted/50 ${selectedCustomerId === row.customer_id ? 'border-l-4 border-primary-600 bg-primary-50 dark:bg-primary-950/30' : ''}`}
                         >
                           <div>
                             <span className="font-bold text-foreground">{row.customer_name}</span>
@@ -369,7 +369,7 @@ const KhataPage: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => openEditEntry(entry)}
-                                className="p-2 rounded-lg text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
+                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-950/40"
                                 title="Edit entry"
                                 aria-label="Edit entry"
                               >
@@ -436,7 +436,7 @@ const KhataPage: React.FC = () => {
               value={receiveCustomerId}
               onChange={(e) => setReceiveCustomerId(e.target.value)}
               disabled={receiveSubmitting || receiveCustomerLocked}
-              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 disabled:cursor-not-allowed disabled:opacity-70 dark:border-gray-600 dark:bg-gray-900/90"
               required
             >
               <option value="">Select customer</option>
@@ -459,7 +459,7 @@ const KhataPage: React.FC = () => {
               aria-label="Deposit to cash or bank account"
               value={receiveBankAccountId}
               onChange={(e) => setReceiveBankAccountId(e.target.value)}
-              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 outline-none transition-colors"
+              className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90"
               required
             >
               <option value="">Select cash or bank account</option>
@@ -485,7 +485,7 @@ const KhataPage: React.FC = () => {
               min="0.01"
               value={receiveAmount}
               onChange={(e) => setReceiveAmount(e.target.value)}
-              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-colors"
+              className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90 dark:placeholder:text-gray-500"
               placeholder="0.00"
               required
             />
@@ -496,7 +496,7 @@ const KhataPage: React.FC = () => {
               type="text"
               value={receiveNote}
               onChange={(e) => setReceiveNote(e.target.value)}
-              className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground placeholder:text-muted-foreground dark:placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-colors"
+              className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90 dark:placeholder:text-gray-500"
               placeholder="e.g. Cash received"
             />
           </div>
@@ -549,7 +549,7 @@ const KhataPage: React.FC = () => {
                 aria-label="Entry type"
                 value={editType}
                 onChange={(e) => setEditType(e.target.value as 'debit' | 'credit')}
-                className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90"
               >
                 <option value="debit">Debit (adds to balance)</option>
                 <option value="credit">Credit (reduces balance)</option>
@@ -564,7 +564,7 @@ const KhataPage: React.FC = () => {
                 aria-label={`Amount (${CURRENCY})`}
                 value={editAmount}
                 onChange={(e) => setEditAmount(e.target.value)}
-                className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90"
                 required
               />
             </div>
@@ -575,7 +575,7 @@ const KhataPage: React.FC = () => {
                 aria-label="Note"
                 value={editNote}
                 onChange={(e) => setEditNote(e.target.value)}
-                className="w-full px-4 py-3 border border-border dark:border-slate-600 rounded-xl bg-background dark:bg-slate-800/90 text-foreground focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90"
                 placeholder="Optional"
               />
             </div>
@@ -591,7 +591,7 @@ const KhataPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={editSubmitting || !editAmount || parseFloat(editAmount) <= 0}
-                className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:opacity-50"
+                className="flex-1 rounded-md bg-primary-600 py-3 font-medium text-white hover:bg-primary-700 disabled:opacity-50"
               >
                 {editSubmitting ? 'Saving…' : 'Save changes'}
               </button>

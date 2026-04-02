@@ -1,12 +1,12 @@
-
-import React, { useState } from 'react';
+import React, { useState, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { usePOS } from '../../../context/POSContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import { POSPaymentMethod } from '../../../types/pos';
 import { shopApi, ShopBankAccount } from '../../../services/shopApi';
 import CustomerSelectionModal from './CustomerSelectionModal';
+import type { CheckoutPanelHandle } from './usePosKeyboard';
 
-const CheckoutPanel: React.FC = () => {
+const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, ref) {
     const {
         subtotal,
         taxTotal,
@@ -74,12 +74,10 @@ const CheckoutPanel: React.FC = () => {
     const changeReturn =
         !isKhata && tenderNum > grandTotal ? Math.max(0, tenderNum - grandTotal) : 0;
 
-    const handleComplete = async () => {
+    const handleComplete = useCallback(async () => {
         if (isProcessing) return;
         setIsProcessing(true);
         try {
-            // First clear any previous payments and add the new complete payment
-            // Actually context handles this through addPayment, let's just add payment if enough
             const amount = parseFloat(tenderAmount);
             if (amount < grandTotal) {
                 alert('Tender amount is less than total');
@@ -87,7 +85,6 @@ const CheckoutPanel: React.FC = () => {
                 return;
             }
 
-            // We simulate adding the payment and immediately completing
             if (selectedMethod === POSPaymentMethod.KHATA && (!customer || customer.id === 'walk-in')) {
                 alert('Please select a customer for Khata / Credit sale.');
                 setIsProcessing(false);
@@ -103,19 +100,46 @@ const CheckoutPanel: React.FC = () => {
             };
             addPayment(selectedMethod, isKhata ? grandTotal : amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
 
-            const sale = await completeSale(directPaymentObj);
+            await completeSale(directPaymentObj);
 
-            // Check auto print
             const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
             if (!shouldAutoPrint) {
-                // Not auto-printing, leave lastCompletedSale set so we can show buttons
+                /* leave lastCompletedSale for reprint */
             }
         } catch (error) {
             console.error(error);
         } finally {
             setIsProcessing(false);
         }
-    };
+    }, [
+        isProcessing,
+        tenderAmount,
+        grandTotal,
+        selectedMethod,
+        isKhata,
+        customer,
+        bankAccounts,
+        selectedBankId,
+        addPayment,
+        completeSale,
+        posSettings,
+    ]);
+
+    useImperativeHandle(
+        ref,
+        () => ({
+            tryComplete: () => {
+                void handleComplete();
+            },
+            focusPayment: () => {
+                document.getElementById('tender-amount-input')?.focus();
+            },
+            openDiscount: () => {
+                setIsDiscountOpen(true);
+            },
+        }),
+        [handleComplete]
+    );
 
     const handleHold = () => {
         if (cart.length === 0) return;
@@ -129,7 +153,7 @@ const CheckoutPanel: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full min-h-0 bg-[#f8fafc] dark:bg-slate-900 relative overflow-hidden">
+        <div id="pos-payment-panel" className="relative flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
             {/* Customer Information Area */}
             <div className="p-4 md:p-5 border-b border-slate-200/80 dark:border-slate-700 bg-white dark:bg-slate-900">
                 <div className="flex items-center justify-between mb-3">
@@ -378,9 +402,10 @@ const CheckoutPanel: React.FC = () => {
 
                                 <button
                                     type="button"
+                                    id="pos-complete-sale-btn"
                                     disabled={isProcessing || (!isKhata && parseFloat(tenderAmount) < grandTotal) || khataRequiresCustomer}
                                     onClick={handleComplete}
-                                    className={`w-full py-4 flex items-center justify-center gap-2 rounded-[10px] transition-all font-bold text-base ${!isProcessing && ((isKhata && !khataRequiresCustomer) || parseFloat(tenderAmount) >= grandTotal) ? 'bg-[#0056b3] text-white shadow-md shadow-[#0056b3]/25 hover:bg-[#004494]' : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'}`}
+                                    className={`flex w-full items-center justify-center gap-2 rounded-lg py-4 text-base font-bold transition-all ${!isProcessing && ((isKhata && !khataRequiresCustomer) || parseFloat(tenderAmount) >= grandTotal) ? 'bg-primary-600 text-white shadow-md shadow-primary-900/20 hover:bg-primary-700' : 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'}`}
                                 >
                                     {React.cloneElement(ICONS.check as React.ReactElement, { size: 22 })}
                                     {isProcessing ? 'Processing…' : khataRequiresCustomer ? 'Select customer' : 'Complete sale'}
@@ -391,7 +416,7 @@ const CheckoutPanel: React.FC = () => {
                                     onClick={handleHold}
                                     className="w-full py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-[#0056b3] transition-colors"
                                 >
-                                    Hold sale (F2)
+                                    Hold sale (Ctrl+H)
                                 </button>
                             </div>
                         ) : (
@@ -410,7 +435,7 @@ const CheckoutPanel: React.FC = () => {
             />
         </div>
     );
-};
+});
 
 export default CheckoutPanel;
 

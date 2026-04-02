@@ -28,41 +28,43 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
         : 'No shift';
 
     const shortcuts = [
-        { key: 'F1', label: 'Clear', action: clearCart, icon: ICONS.trash },
-        { key: 'F2', label: 'Hold', action: () => holdSale(`Hold-${new Date().toLocaleTimeString()}`), icon: ICONS.pause },
-        { key: 'F3', label: 'Recall', action: () => setIsHeldSalesModalOpen(true), icon: ICONS.refresh },
+        { key: 'F1', label: 'Search', action: () => document.getElementById('pos-product-search')?.focus(), icon: ICONS.search },
+        { key: 'F2', label: 'Cart', action: () => document.getElementById('pos-cart-panel')?.focus(), icon: ICONS.shoppingCart },
+        { key: 'F3', label: 'Pay', action: () => document.getElementById('tender-amount-input')?.focus(), icon: ICONS.dollarSign },
+        { key: 'F4', label: 'Recall', action: () => setIsHeldSalesModalOpen(true), icon: ICONS.refresh },
+        { key: 'Ctrl+H', label: 'Hold', action: () => holdSale(`Hold-${new Date().toLocaleTimeString()}`), icon: ICONS.pause },
         { key: 'F6', label: 'Cust', action: () => setIsCustomerModalOpen(true), icon: ICONS.user },
         { key: 'F9', label: 'Hist', action: () => setIsSalesHistoryModalOpen(true), icon: ICONS.clock },
         { key: 'F7', label: isFullScreen ? 'Exit' : 'Full', action: onToggleFullScreen, icon: isFullScreen ? ICONS.minimize : ICONS.maximize },
-        { key: 'Alt+D', label: isDenseMode ? 'Normal' : 'Dense', action: () => setIsDenseMode(!isDenseMode), icon: ICONS.grid },
+        { key: 'Alt+D', label: isDenseMode ? 'Touch' : 'Dense', action: () => setIsDenseMode(!isDenseMode), icon: ICONS.grid },
     ];
 
     return (
-        <div className="bg-[#0a1628] dark:bg-[#020617] px-3 md:px-6 py-3 flex flex-wrap items-center justify-between gap-y-2 border-t border-slate-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.2)]">
-            <div className="flex items-center gap-0.5 md:gap-1 flex-wrap min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-gray-800/80 bg-gray-900 px-3 py-3 shadow-[0_-4px_24px_rgba(0,0,0,0.2)] dark:bg-gray-950 md:px-6">
+            <div className="flex min-w-0 flex-wrap items-center gap-0.5 md:gap-1">
                 {shortcuts.map((s) => (
                     <button
-                        key={s.key}
+                        key={s.key + s.label}
                         type="button"
                         onClick={(e) => {
                             e.preventDefault();
                             s.action();
                         }}
-                        className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-2 rounded-[8px] hover:bg-white/8 text-slate-300 transition-colors min-w-0"
+                        className="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-2 text-gray-300 transition-colors hover:bg-white/10 md:gap-2 md:px-3 touch-manipulation"
                     >
-                        <span className="text-slate-500 flex-shrink-0 hidden sm:block opacity-90">
+                        <span className="hidden flex-shrink-0 opacity-90 sm:block">
                             {React.cloneElement(s.icon as React.ReactElement, { size: 16 })}
                         </span>
-                        <span className="text-xs md:text-xs font-semibold text-white/95 uppercase tracking-wide truncate">{s.label}</span>
-                        <span className="text-xs font-bold text-slate-500 tabular-nums">{s.key}</span>
+                        <span className="truncate text-xs font-semibold uppercase tracking-wide text-white/95">{s.label}</span>
+                        <span className="font-mono text-xs font-bold tabular-nums text-gray-500">{s.key}</span>
                     </button>
                 ))}
             </div>
 
-            <div className="flex items-center gap-3 md:gap-5 flex-shrink-0 ml-auto">
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-                    <div className={`w-2 h-2 rounded-full ${currentShift ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                    <span className={`text-xs font-semibold tracking-wide max-w-[120px] truncate ${currentShift ? 'text-emerald-300' : 'text-amber-300'}`}>
+            <div className="ml-auto flex flex-shrink-0 items-center gap-3 md:gap-5">
+                <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 sm:flex">
+                    <div className={`h-2 w-2 rounded-full ${currentShift ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    <span className={`max-w-[120px] truncate text-xs font-semibold tracking-wide ${currentShift ? 'text-emerald-300' : 'text-amber-300'}`}>
                         {terminalName}
                     </span>
                 </div>
@@ -71,19 +73,19 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
                     type="button"
                     onClick={() => {
                         if (balanceDue <= 0) {
-                            completeSale();
+                            void completeSale();
                         } else {
                             setIsPaymentModalOpen(true);
                         }
                     }}
-                    className="flex items-center gap-3 pl-4 pr-5 py-2.5 rounded-[10px] bg-[#0056b3] hover:bg-[#004494] text-white transition-all active:scale-[0.99] shadow-md shadow-[#0056b3]/30"
+                    className="flex items-center gap-3 rounded-lg bg-primary-600 py-3 pl-4 pr-5 text-white shadow-md shadow-primary-900/30 transition-all hover:bg-primary-700 active:scale-[0.99] touch-manipulation"
                 >
-                    <span className="text-slate-200/90 flex-shrink-0" aria-hidden>
+                    <span className="flex-shrink-0 text-gray-200/90" aria-hidden>
                         {React.cloneElement(ICONS.dollarSign as React.ReactElement, { size: 18 })}
                     </span>
                     <div className="flex flex-col text-left leading-tight">
                         <span className="text-xs font-bold uppercase tracking-widest opacity-90">Finalize</span>
-                        <span className="text-xs font-bold">F12</span>
+                        <span className="text-xs font-bold">F12 / Enter</span>
                     </div>
                 </button>
             </div>

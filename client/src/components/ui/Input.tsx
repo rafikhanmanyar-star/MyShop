@@ -27,7 +27,7 @@ const Input: React.FC<InputProps> = ({
     `[appearance:textfield] [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`;
 
   const isNumberInput = props.type === 'number';
-  const compactPad = compact ? 'py-1 px-2 text-xs' : 'input-text px-3 py-3 sm:py-2';
+  const compactPad = compact ? 'py-1 px-2 text-xs' : 'input-text px-3 py-2';
   const baseClassName = `input block w-full tabular-nums ${compactPad} ${error ? 'border-destructive focus:ring-destructive/30' : ''}`;
 
   const finalClassName = props.className

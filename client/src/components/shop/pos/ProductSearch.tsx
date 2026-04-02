@@ -305,6 +305,11 @@ const ProductSearch: React.FC = () => {
         loadPopularProducts();
     }, [loadProducts, loadShopCategories, loadPopularProducts]);
 
+    useEffect(() => {
+        const t = window.setTimeout(() => searchInputRef.current?.focus(), 0);
+        return () => clearTimeout(t);
+    }, []);
+
     const categoryTree = useMemo(() => buildCategoryTree(shopCategories), [shopCategories]);
 
     const parentIdsWithChildren = useMemo(() => {
@@ -376,7 +381,7 @@ const ProductSearch: React.FC = () => {
 
     // Handle debounced search
     const debouncedSetGlobalSearch = useMemo(
-        () => debounce((q: string) => setSearchQuery(q), 150),
+        () => debounce((q: string) => setSearchQuery(q), 200),
         [setSearchQuery]
     );
 
@@ -541,7 +546,7 @@ const ProductSearch: React.FC = () => {
             setLocalQuery('');
             setSearchQuery('');
             setTimeout(() => { justAddedFromBarcodeRef.current = false; }, 500);
-        }, 300);
+        }, 200);
         return () => {
             if (barcodeAddTimeoutRef.current) {
                 clearTimeout(barcodeAddTimeoutRef.current);
@@ -687,7 +692,7 @@ const ProductSearch: React.FC = () => {
                             id="pos-product-search"
                             type="text"
                             className="w-full pl-11 pr-24 py-3 bg-slate-100/80 dark:bg-slate-800 border border-slate-200/90 dark:border-slate-600 rounded-[10px] text-sm font-medium text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:bg-white dark:focus:bg-slate-700 focus:ring-2 focus:ring-[#0056b3]/20 focus:border-[#0056b3] transition-all select-text"
-                            placeholder="Search by name, category, or scan SKU… (Ctrl+F)"
+                            placeholder="Search or scan barcode… (F1)"
                             value={localQuery}
                             onChange={(e) => handleSearchChange(e.target.value)}
                         />
@@ -697,7 +702,7 @@ const ProductSearch: React.FC = () => {
                                     {React.cloneElement(ICONS.x as any, { size: 14 })}
                                 </button>
                             )}
-                            <span className="kbd-tag">F4</span>
+                            <span className="kbd-tag">F1</span>
                         </div>
                     </div>
                 </div>

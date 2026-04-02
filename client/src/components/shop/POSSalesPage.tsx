@@ -1,17 +1,14 @@
 import React from 'react';
-import { POSProvider } from '../../context/POSContext';
 import { InventoryProvider } from '../../context/InventoryContext';
 import { LoyaltyProvider } from '../../context/LoyaltyContext';
-import POSSalesContent from './POSSalesContent';
+import POScreen from '../pos/POScreen';
 
 function POSSalesPage() {
     return (
-        <div className="h-full min-h-0 flex flex-col overflow-hidden">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
             <InventoryProvider>
                 <LoyaltyProvider>
-                    <POSProvider>
-                        <POSSalesContent />
-                    </POSProvider>
+                    <POScreen />
                 </LoyaltyProvider>
             </InventoryProvider>
         </div>

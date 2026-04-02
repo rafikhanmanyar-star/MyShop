@@ -180,8 +180,8 @@ export default function DashboardPage() {
       label: 'Products',
       value: stats.totalProducts,
       icon: Package,
-      color: 'text-indigo-600',
-      bg: 'bg-indigo-50 dark:bg-indigo-900/30',
+      color: 'text-primary-600',
+      bg: 'bg-primary-50 dark:bg-primary-900/30',
     },
     {
       label: 'Total Sales',
@@ -274,7 +274,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
       </div>
     );
   }
@@ -285,7 +285,7 @@ export default function DashboardPage() {
         <h1 className="page-title">Dashboard</h1>
         <Link
           to="/accounting/reports/daily"
-          className="px-4 py-2 bg-card dark:bg-slate-800 border border-border dark:border-slate-700 text-foreground dark:text-slate-200 rounded-xl text-sm font-medium shadow-sm hover:border-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-400 transition-all flex items-center gap-2 uppercase tracking-widest"
+          className="flex items-center gap-2 rounded-md border border-gray-200 bg-card px-4 py-2 text-sm font-medium uppercase tracking-widest text-foreground shadow-sm transition-all hover:border-primary-300 hover:text-primary-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:text-primary-400"
         >
           {ICONS.barChart} Daily Report
         </Link>
@@ -323,13 +323,13 @@ export default function DashboardPage() {
 
       {/* Today's performance + Average order */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-6 border-none shadow-sm bg-gradient-to-br from-indigo-50 to-card dark:from-indigo-900/20 dark:to-card">
+        <Card className="border-none bg-gradient-to-br from-primary-50 to-card p-6 shadow-sm dark:from-primary-900/20 dark:to-card">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 flex items-center justify-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-100 text-primary-600 dark:bg-primary-900/40">
               <Calendar className="w-7 h-7" />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary-600">
                 Today&apos;s Sales
               </p>
               <p className="text-2xl font-bold text-foreground">{stats.todaySalesCount}</p>
@@ -415,7 +415,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-6 border-none shadow-sm">
           <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Store className="w-5 h-5 text-indigo-600" />
+            <Store className="h-5 w-5 text-primary-600" />
             Getting Started
           </h2>
           <ul className="space-y-3 text-sm text-muted-foreground">
@@ -437,7 +437,7 @@ export default function DashboardPage() {
             </Link>
             <Link
               to="/inventory"
-              className="flex items-center gap-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-950/50 transition-colors text-sm font-medium"
+              className="flex items-center gap-3 rounded-lg bg-primary-50 p-3 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-100 dark:bg-primary-950/30 dark:text-primary-400 dark:hover:bg-primary-950/50"
             >
               <Package className="w-4 h-4" /> Inventory
             </Link>

@@ -5,6 +5,8 @@ import ProductSearch from './pos/ProductSearch';
 import CartGrid from './pos/CartGrid';
 import CheckoutPanel from './pos/CheckoutPanel';
 import ShortcutBar from './pos/ShortcutBar';
+import { usePosKeyboard } from './pos/usePosKeyboard';
+import type { CartGridHandle, CheckoutPanelHandle } from './pos/usePosKeyboard';
 import HeldSalesModal from './pos/HeldSalesModal';
 import CustomerSelectionModal from './pos/CustomerSelectionModal';
 import SalesHistoryModal from './pos/SalesHistoryModal';
@@ -76,12 +78,12 @@ const POSSalesContent: React.FC = () => {
         setIsSalesHistoryModalOpen,
         holdSale,
         clearCart,
-        completeSale,
-        balanceDue,
         cart,
         isDenseMode,
         setIsDenseMode
     } = usePOS();
+    const cartRef = useRef<CartGridHandle | null>(null);
+    const checkoutRef = useRef<CheckoutPanelHandle | null>(null);
     const mainRef = useRef<HTMLDivElement>(null);
     const layoutRowRef = useRef<HTMLDivElement>(null);
     const [layoutRowWidth, setLayoutRowWidth] = useState(0);
@@ -200,105 +202,20 @@ const POSSalesContent: React.FC = () => {
         }
     }, [isActive, isFullScreen, setFullScreenEnabled]);
 
-    // Global keyboard shortcuts (capture). F-keys are handled for POS; do not blanket-preventDefault
-    // on every key so we do not interfere with normal typing or IME.
-    useEffect(() => {
-        const isEditableTarget = (t: EventTarget | null) => {
-            if (!t || !(t instanceof HTMLElement)) return false;
-            const tag = t.tagName;
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-            return t.isContentEditable;
-        };
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (!isActive) return;
-
-            const inEditable = isEditableTarget(e.target);
-
-            const blockFnKey = () => {
-                if (/^F([1-9]|1[0-2])$/.test(e.key)) e.preventDefault();
-            };
-
-            switch (e.key) {
-                case 'F1':
-                    blockFnKey();
-                    clearCart();
-                    break;
-                case 'F2':
-                    blockFnKey();
-                    holdSale(`Hold-${new Date().toLocaleTimeString()}`);
-                    break;
-                case 'F3':
-                    blockFnKey();
-                    setIsHeldSalesModalOpen(!isHeldSalesModalOpen);
-                    break;
-                case 'F4': {
-                    blockFnKey();
-                    const searchInput = document.getElementById('pos-product-search');
-                    if (searchInput) searchInput.focus();
-                    break;
-                }
-                case 'F6':
-                    blockFnKey();
-                    setIsCustomerModalOpen(!isCustomerModalOpen);
-                    break;
-                case 'F9':
-                    blockFnKey();
-                    setIsSalesHistoryModalOpen(!isSalesHistoryModalOpen);
-                    break;
-                case 'F7':
-                    blockFnKey();
-                    toggleFullScreen();
-                    break;
-                case 'F12':
-                    blockFnKey();
-                    if (cart.length > 0) {
-                        const tenderInput = document.getElementById('tender-amount-input');
-                        if (tenderInput) tenderInput.focus();
-                    }
-                    break;
-                case 'd':
-                    if (e.altKey) {
-                        e.preventDefault();
-                        setIsDenseMode(!isDenseMode);
-                    }
-                    break;
-                case 'f':
-                    if (e.ctrlKey) {
-                        e.preventDefault();
-                        const searchInput = document.getElementById('pos-product-search');
-                        if (searchInput) searchInput.focus();
-                    }
-                    break;
-                case 'Escape':
-                    setIsCustomerModalOpen(false);
-                    setIsHeldSalesModalOpen(false);
-                    setIsSalesHistoryModalOpen(false);
-                    break;
-                default:
-                    if (!inEditable) blockFnKey();
-                    break;
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown, true);
-        return () => window.removeEventListener('keydown', handleKeyDown, true);
-    }, [
-        isActive,
+    usePosKeyboard({
+        enabled: isActive,
+        cartLength: cart.length,
+        cartRef,
+        checkoutRef,
         clearCart,
         holdSale,
-        isHeldSalesModalOpen,
         setIsHeldSalesModalOpen,
-        isCustomerModalOpen,
         setIsCustomerModalOpen,
-        isSalesHistoryModalOpen,
         setIsSalesHistoryModalOpen,
-        balanceDue,
-        completeSale,
         toggleFullScreen,
+        setIsDenseMode,
         isDenseMode,
-        setIsDenseMode
-    ]);
+    });
 
     return (
         <div
@@ -313,10 +230,10 @@ const POSSalesContent: React.FC = () => {
 
             <div
                 ref={layoutRowRef}
-                className={`flex flex-1 min-h-0 w-full min-w-0 relative z-10 p-3 md:p-4 ${
+                className={`relative z-10 flex min-h-0 w-full min-w-0 flex-1 gap-4 p-4 ${
                     useStackedLayout
-                        ? 'flex-col gap-3 overflow-y-auto overflow-x-hidden'
-                        : 'flex-row gap-0 overflow-x-auto overflow-y-hidden'
+                        ? 'flex-col overflow-y-auto overflow-x-hidden'
+                        : 'flex-row overflow-x-auto overflow-y-hidden'
                 }`}
             >
                 {/* Left: category tree + product grid */}
@@ -346,7 +263,7 @@ const POSSalesContent: React.FC = () => {
                         useStackedLayout ? 'min-h-[min(32vh,360px)] shrink-0' : 'min-w-[120px]'
                     }`}
                 >
-                    <CartGrid />
+                    <CartGrid ref={cartRef} />
                 </div>
 
                 {!useStackedLayout && (
@@ -367,7 +284,7 @@ const POSSalesContent: React.FC = () => {
                             : { width: displayRightW, minWidth: MIN_RIGHT_W, maxWidth: MAX_RIGHT_W }
                     }
                 >
-                    <CheckoutPanel />
+                    <CheckoutPanel ref={checkoutRef} />
                 </div>
             </div>
 

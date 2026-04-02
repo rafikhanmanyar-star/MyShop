@@ -651,6 +651,7 @@ export class ShopService {
 
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});
+    notifyDailyReportUpdated(tenantId, 'sale_created').catch(() => {});
 
     return result;
   }

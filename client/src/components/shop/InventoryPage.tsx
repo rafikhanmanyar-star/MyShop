@@ -152,7 +152,7 @@ const InventoryContent: React.FC = () => {
                     <div className="flex gap-3">
                         <button
                             onClick={() => setIsNewSkuModalOpen(true)}
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40 hover:bg-indigo-700 transition-all flex items-center gap-2"
+                            className="flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-primary-900/20 transition-all hover:bg-primary-700 dark:shadow-primary-950/40"
                         >
                             {ICONS.plus} New SKU
                         </button>
@@ -165,14 +165,14 @@ const InventoryContent: React.FC = () => {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id as any)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
-                                ? 'text-indigo-600 dark:text-indigo-400'
+                                ? 'text-primary-600 dark:text-primary-400'
                                 : 'text-muted-foreground dark:text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                 }`}
                         >
                             {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
                             {tab.label}
                             {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 dark:bg-indigo-400 rounded-t-full"></div>
+                                <div className="absolute bottom-0 left-0 right-0 h-1 rounded-t-full bg-primary-600 dark:bg-primary-400"></div>
                             )}
                         </button>
                     ))}
@@ -284,7 +284,7 @@ const InventoryContent: React.FC = () => {
                             </label>
                             <select
                                 id="inventory-create-sku-category"
-                                className="block w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-card dark:bg-slate-800 dark:text-slate-100 py-2 px-3 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                className="block w-full rounded-md border border-gray-300 bg-card px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                                 value={newItemData.category}
                                 onChange={(e) =>
                                     setNewItemData({ ...newItemData, category: e.target.value })

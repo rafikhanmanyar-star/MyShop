@@ -79,7 +79,7 @@ interface POSContextType {
     setSelectedTerminalId: (id: string | null) => void;
 
     isDenseMode: boolean;
-    setIsDenseMode: (isDense: boolean) => void;
+    setIsDenseMode: React.Dispatch<React.SetStateAction<boolean>>;
 
     posSettings: any;
 }
@@ -575,6 +575,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             // Refresh inventory so POS product grid shows updated stock
             refreshInventory().catch(() => { });
+            window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_created', saleId: saleId } }));
 
             // Auto-print: await and show toast so user knows if receipt printed
             const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;

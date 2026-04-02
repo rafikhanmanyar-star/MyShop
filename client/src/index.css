@@ -5,57 +5,75 @@
 /* Class-based dark mode: `dark` on <html> (see ThemeProvider) */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Semantic tokens — overridden in `.dark` for full-app theming */
+/* Semantic tokens — ERP design system (light + dark) */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #ffffff;
+  --foreground: #111827;
   --card: #ffffff;
-  --card-foreground: #0f172a;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #6366f1;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
+  --card-foreground: #111827;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #3b82f6;
+  --muted: #f9fafb;
+  --muted-foreground: #6b7280;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
   --primary-foreground: #ffffff;
-  --destructive: #dc2626;
-  --success: #16a34a;
-  --warning: #f59e0b;
-  --accent: rgba(79, 70, 229, 0.08);
-  --table-zebra: rgba(15, 23, 42, 0.03);
-  --table-row-hover: rgba(79, 70, 229, 0.06);
-  --shadow-erp-val: 0 1px 2px 0 rgb(15 23 42 / 0.05);
-  --shadow-erp-md-val: 0 4px 6px -1px rgb(15 23 42 / 0.07), 0 2px 4px -2px rgb(15 23 42 / 0.05);
+  --destructive: #ef4444;
+  --success: #22c55e;
+  --warning: #eab308;
+  --accent: rgba(37, 99, 235, 0.08);
+  --table-zebra: rgba(17, 24, 39, 0.03);
+  --table-row-hover: rgba(37, 99, 235, 0.06);
+  --shadow-card-val: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-soft-val: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-erp-val: var(--shadow-card-val);
+  --shadow-erp-md-val: var(--shadow-soft-val);
 }
 
 .dark {
-  --background: #020617;
-  --foreground: #e2e8f0;
-  --card: #0f172a;
-  --card-foreground: #e2e8f0;
-  --border: #1e293b;
-  --input: #1e293b;
-  --ring: #818cf8;
-  --muted: #1e293b;
-  --muted-foreground: #94a3b8;
-  --primary: #6366f1;
-  --primary-hover: #818cf8;
+  --background: #111827;
+  --foreground: #f9fafb;
+  --card: #1f2937;
+  --card-foreground: #f9fafb;
+  --border: #374151;
+  --input: #374151;
+  --ring: #3b82f6;
+  --muted: #1f2937;
+  --muted-foreground: #9ca3af;
+  --primary: #2563eb;
+  --primary-hover: #3b82f6;
   --primary-foreground: #ffffff;
-  --destructive: #f87171;
+  --destructive: #ef4444;
   --success: #22c55e;
-  --warning: #fbbf24;
-  --accent: rgba(99, 102, 241, 0.14);
-  --table-zebra: rgba(148, 163, 184, 0.06);
-  --table-row-hover: rgba(99, 102, 241, 0.1);
-  --shadow-erp-val: 0 1px 2px 0 rgb(0 0 0 / 0.25);
-  --shadow-erp-md-val: 0 4px 6px -1px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+  --warning: #eab308;
+  --accent: rgba(59, 130, 246, 0.12);
+  --table-zebra: rgba(249, 250, 251, 0.04);
+  --table-row-hover: rgba(59, 130, 246, 0.1);
+  --shadow-card-val: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-soft-val: 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-erp-val: var(--shadow-card-val);
+  --shadow-erp-md-val: var(--shadow-soft-val);
 }
 
 @theme {
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  /* Semantic text (typography utilities) */
+  /* Brand scale */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-900: #1e3a8a;
+  --color-primary-950: #172554;
+
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-danger: #ef4444;
+
   --color-text-primary: var(--foreground);
   --color-text-secondary: var(--muted-foreground);
   --color-text-muted: var(--muted-foreground);
@@ -73,16 +91,19 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--destructive);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
   --color-accent: var(--accent);
   --color-table-zebra: var(--table-zebra);
   --color-table-row-hover: var(--table-row-hover);
 
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
+  /* Layout radii (design system) */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-2xl: 1rem;
 
+  --shadow-card: var(--shadow-card-val);
+  --shadow-soft: var(--shadow-soft-val);
   --shadow-erp: var(--shadow-erp-val);
   --shadow-erp-md: var(--shadow-erp-md-val);
 }
@@ -97,7 +118,7 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   background-color: var(--background);
-  @apply text-base leading-normal text-gray-800 dark:text-gray-200;
+  @apply text-sm leading-normal text-gray-800 dark:text-gray-200;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   transition-property: color, background-color;
@@ -140,7 +161,6 @@ h6 {
 
 /* Design system — composed utilities */
 @layer components {
-  /** Unified typography aliases (use these across modules) */
   .text-heading {
     @apply text-2xl font-semibold text-gray-800 dark:text-gray-200;
   }
@@ -165,7 +185,6 @@ h6 {
     @apply text-xs text-gray-500 dark:text-gray-400;
   }
 
-  /* Typography scale (ERP / SaaS) — mirrors .text-heading / .text-subheading / … */
   .page-title {
     @apply text-2xl font-semibold tracking-tight text-gray-800 dark:text-gray-200;
   }
@@ -202,39 +221,58 @@ h6 {
     @apply text-sm font-medium;
   }
 
-  /** Sidebar navigation (main app shell) */
   .nav-sidebar-link {
     @apply text-sm font-medium tracking-wide;
   }
 
-  /** Currency, totals, stock — aligned number columns */
   .numeric-data {
     @apply font-medium tabular-nums;
   }
 
+  /** Surfaces */
   .card {
-    @apply rounded-xl border border-border bg-card text-card-foreground shadow-erp transition-all duration-200;
+    @apply rounded-lg border border-gray-200 bg-white text-gray-900 shadow-card dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100;
+  }
+
+  .page-container {
+    @apply mx-auto w-full max-w-7xl p-6;
+  }
+
+  .section {
+    @apply space-y-6;
+  }
+
+  .form-stack {
+    @apply space-y-4;
   }
 
   .input {
-    @apply w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground;
+    @apply w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500;
     @apply transition-all duration-200;
-    @apply focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/40;
+    @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
     @apply disabled:cursor-not-allowed disabled:opacity-60;
+    @apply dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-sm;
-    @apply bg-primary transition-all duration-200;
-    @apply hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
-    @apply active:scale-95 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm;
+    @apply transition-all duration-200;
+    @apply hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-background dark:focus:ring-offset-gray-900;
+    @apply active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground;
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700;
     @apply transition-all duration-200;
-    @apply hover:bg-accent hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
-    @apply active:scale-95 disabled:pointer-events-none disabled:opacity-50;
+    @apply hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400/40 focus:ring-offset-2 focus:ring-offset-background dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 dark:focus:ring-offset-gray-900;
+    @apply active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white shadow-sm;
+    @apply transition-all duration-200;
+    @apply hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500/40 focus:ring-offset-2 focus:ring-offset-background dark:focus:ring-offset-gray-900;
+    @apply active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50;
   }
 
   .badge {
@@ -246,25 +284,24 @@ h6 {
   }
 
   .table-modern thead tr {
-    @apply border-b border-border bg-muted text-left;
+    @apply border-b border-gray-200 bg-gray-50 text-left dark:border-gray-700 dark:bg-gray-800/80;
   }
 
   .table-modern thead th {
-    @apply sticky top-0 z-10 py-3 px-4 text-xs font-semibold uppercase tracking-wide text-gray-500 backdrop-blur-sm dark:text-gray-400;
+    @apply sticky top-0 z-10 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 backdrop-blur-sm dark:text-gray-400;
   }
 
   .table-modern tbody tr {
-    @apply border-b border-border transition-colors duration-200;
-    @apply hover:bg-slate-50 dark:hover:bg-slate-800/80;
+    @apply border-b border-gray-200 transition-colors duration-200 dark:border-gray-700;
+    @apply hover:bg-gray-50 dark:hover:bg-gray-800/50;
   }
 
   .table-modern tbody td {
-    @apply py-3 px-4 text-sm text-foreground;
+    @apply px-4 py-2 text-sm text-gray-800 dark:text-gray-200;
   }
 
-  /** Surfaces that were historically light-only; use with Tailwind semantic tokens */
   .panel-surface {
-    @apply rounded-xl border border-border bg-card text-card-foreground shadow-erp;
+    @apply rounded-lg border border-gray-200 bg-white text-gray-900 shadow-card dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100;
   }
 }
 
