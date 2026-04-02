@@ -3,6 +3,17 @@ import { getAuthService } from '../../services/authService.js';
 
 const router = express.Router();
 
+/** Public: all tenants for login company picker */
+router.get('/organizations', async (_req, res) => {
+  try {
+    const list = await getAuthService().listPublicOrganizations();
+    res.json(list);
+  } catch (error: any) {
+    console.error('[Auth] List organizations error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** Public: organization (and optional branch) label for login page */
 router.get('/organization', async (req, res) => {
   try {

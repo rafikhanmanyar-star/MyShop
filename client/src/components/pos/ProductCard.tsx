@@ -1,52 +1,34 @@
-import React, { memo } from 'react';
+import React from 'react';
 import type { InventoryItem } from '../../types/inventory';
-import { CURRENCY } from '../../constants';
 
 type Props = {
   item: InventoryItem;
   stock: number;
-  onAdd: () => void;
   touchMode: boolean;
+  onAdd: () => void;
 };
 
-function ProductCardInner({ item, stock, onAdd, touchMode }: Props) {
-  const disabled = stock <= 0;
-  const low = stock > 0 && stock <= (item.reorderPoint || 10);
-
+export default function ProductCard({ item, stock, touchMode, onAdd }: Props) {
+  const pad = touchMode ? 'p-3' : 'p-2';
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={onAdd}
-      className={`flex w-full flex-col rounded-lg border bg-white p-3 text-left transition-transform dark:bg-gray-900 ${
-        touchMode ? 'min-h-[120px] py-3' : 'min-h-[96px]'
-      } ${
-        disabled
-          ? 'cursor-not-allowed border-gray-100 opacity-50 dark:border-gray-800'
-          : 'active:scale-[0.99] border-gray-200 dark:border-gray-700'
-      } `}
+      className={`flex w-full flex-col rounded-lg border border-gray-200 bg-white text-left shadow-sm transition hover:border-primary-400 hover:shadow dark:border-gray-700 dark:bg-gray-800 ${pad}`}
     >
-      <div className="line-clamp-2 text-sm font-medium text-gray-900 dark:text-gray-100">{item.name}</div>
-      <div className="mt-auto flex items-end justify-between gap-2 pt-2">
-        <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
-          {CURRENCY}
-          {(Number(item.retailPrice) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-        </span>
-        <span
-          className={`rounded px-1.5 py-0.5 text-xs font-bold ${
-            disabled
-              ? 'bg-gray-800 text-white'
-              : low
-                ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200'
-                : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-          }`}
-        >
-          {disabled ? 'Out' : `${stock}`}
-        </span>
+      {item.imageUrl ? (
+        <img src={item.imageUrl} alt="" className="mb-2 h-16 w-full rounded object-cover" />
+      ) : null}
+      <div className={`font-semibold leading-tight text-gray-900 dark:text-gray-100 ${touchMode ? 'text-base' : 'text-sm'}`}>
+        {item.name}
+      </div>
+      <div className="mt-1 flex items-baseline justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <span className="truncate">{item.sku}</span>
+        <span className="shrink-0 font-mono text-gray-700 dark:text-gray-300">Stock {stock}</span>
+      </div>
+      <div className="mt-2 font-mono text-sm font-bold text-primary-700 dark:text-primary-400">
+        {item.retailPrice.toFixed(2)}
       </div>
     </button>
   );
 }
-
-const ProductCard = memo(ProductCardInner);
-export default ProductCard;

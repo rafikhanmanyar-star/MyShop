@@ -19,6 +19,8 @@ const KhataPage: React.FC = () => {
   /** When true, customer was chosen from a ledger row — field stays fixed to that customer */
   const [receiveCustomerLocked, setReceiveCustomerLocked] = useState(false);
   const [receiveSubmitting, setReceiveSubmitting] = useState(false);
+  /** When set, the payment credit is linked to this debit row so the line shows Paid / hides Receive */
+  const [receiveApplyToLedgerId, setReceiveApplyToLedgerId] = useState<string | null>(null);
   const [customers, setCustomers] = useState<{ id: string; name: string; contact_no: string | null }[]>([]);
   const [editingEntry, setEditingEntry] = useState<KhataLedgerEntry | null>(null);
   const [editType, setEditType] = useState<'debit' | 'credit'>('debit');
@@ -89,6 +91,7 @@ const KhataPage: React.FC = () => {
 
   const openReceiveModal = () => {
     setReceiveCustomerLocked(false);
+    setReceiveApplyToLedgerId(null);
     setReceiveCustomerId('');
     setReceiveAmount('');
     setReceiveNote('');
@@ -100,6 +103,7 @@ const KhataPage: React.FC = () => {
   const openReceiveModalForCurrentCustomer = () => {
     if (!selectedCustomerId) return;
     setReceiveCustomerLocked(true);
+    setReceiveApplyToLedgerId(null);
     setReceiveCustomerId(selectedCustomerId);
     setReceiveAmount('');
     setReceiveNote('');
@@ -119,8 +123,13 @@ const KhataPage: React.FC = () => {
     if (entry.type !== 'debit') return;
     const cid = selectedCustomerId || entry.customer_id;
     setReceiveCustomerLocked(true);
+    setReceiveApplyToLedgerId(entry.id);
     setReceiveCustomerId(cid);
-    setReceiveAmount(String(entry.amount));
+    const due =
+      typeof entry.remaining_debit === 'number' && Number.isFinite(entry.remaining_debit)
+        ? Math.max(0, entry.remaining_debit)
+        : entry.amount;
+    setReceiveAmount(String(due));
     setReceiveNote(noteFromLedgerEntry(entry));
     setReceiveBankAccountId('');
     setReceiveModalOpen(true);
@@ -201,6 +210,7 @@ const KhataPage: React.FC = () => {
         amount,
         bankAccountId: receiveBankAccountId,
         note: receiveNote.trim() || undefined,
+        ...(receiveApplyToLedgerId ? { applyToLedgerId: receiveApplyToLedgerId } : {}),
       });
       setReceiveModalOpen(false);
       setReceiveCustomerId('');
@@ -208,6 +218,7 @@ const KhataPage: React.FC = () => {
       setReceiveNote('');
       setReceiveBankAccountId('');
       setReceiveCustomerLocked(false);
+      setReceiveApplyToLedgerId(null);
       await refreshSummaryAndLedger();
     } catch (err) {
       console.error('Receive payment failed', err);
@@ -218,6 +229,13 @@ const KhataPage: React.FC = () => {
   };
 
   const totalBalance = summary.reduce((s, r) => s + r.balance, 0);
+
+  const debitRemaining = (entry: KhataLedgerEntry): number => {
+    if (entry.type !== 'debit') return 0;
+    const r = entry.remaining_debit;
+    if (typeof r === 'number' && Number.isFinite(r)) return Math.max(0, r);
+    return entry.amount;
+  };
 
   return (
     <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
@@ -350,18 +368,32 @@ const KhataPage: React.FC = () => {
                               {entry.type === 'debit' ? 'Debit' : 'Credit'}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-muted-foreground">{entry.note || entry.sale_number || '—'}</td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            <div>{entry.note || entry.sale_number || '—'}</div>
+                            {entry.type === 'credit' && entry.linked_debit_id && (
+                              <div className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-0.5">Applied to debit line</div>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-right font-mono font-bold">
                             {entry.type === 'debit' ? '+' : '-'}{CURRENCY} {entry.amount.toLocaleString()}
+                            {entry.type === 'debit' && (
+                              <div className="text-[10px] font-normal text-muted-foreground mt-0.5">
+                                {debitRemaining(entry) <= 0.009 ? (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Paid</span>
+                                ) : (
+                                  <>Due {CURRENCY} {debitRemaining(entry).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="inline-flex flex-wrap items-center justify-end gap-1">
-                              {entry.type === 'debit' && (
+                              {entry.type === 'debit' && debitRemaining(entry) > 0.009 && (
                                 <button
                                   type="button"
                                   onClick={() => openReceiveModalFromEntry(entry)}
                                   className="mr-1 rounded-lg bg-emerald-600/90 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm hover:bg-emerald-700"
-                                  title="Receive payment for this amount"
+                                  title="Receive payment for the remaining amount on this line"
                                 >
                                   Receive
                                 </button>
@@ -411,6 +443,7 @@ const KhataPage: React.FC = () => {
           if (receiveSubmitting) return;
           setReceiveModalOpen(false);
           setReceiveCustomerLocked(false);
+          setReceiveApplyToLedgerId(null);
         }}
         title="Receive Payment"
         size="md"
@@ -419,10 +452,16 @@ const KhataPage: React.FC = () => {
           {receiveCustomerLocked && selectedCustomerName && (
             <p className="text-xs text-muted-foreground rounded-lg bg-muted/80 px-3 py-2 border border-border">
               Ledger: <span className="font-bold text-foreground">{selectedCustomerName}</span>
+              {receiveApplyToLedgerId ? (
+                <span className="block mt-1 text-emerald-700 dark:text-emerald-400 font-semibold">
+                  This payment will settle the selected debit line (partial or full).
+                </span>
+              ) : null}
               {receiveAmount ? (
                 <>
                   {' · '}
-                  Amount from this debit line: {CURRENCY} {receiveAmount}
+                  {receiveApplyToLedgerId ? 'Amount (due on line): ' : 'Amount: '}
+                  {CURRENCY} {receiveAmount}
                 </>
               ) : (
                 ' — choose deposit account and amount below.'

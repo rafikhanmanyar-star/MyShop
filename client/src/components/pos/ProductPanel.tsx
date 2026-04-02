@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import { FixedSizeList, ListChildComponentProps } from 'react-window';
+import { FixedSizeList as List } from 'react-window';
 import type { InventoryItem } from '../../types/inventory';
 import ProductCard from './ProductCard';
 
@@ -32,7 +32,7 @@ export default function ProductPanel({ items, categories, categoryId, onCategory
   }, []);
 
   const Row = useCallback(
-    ({ index, style }: ListChildComponentProps) => {
+    ({ index, style }: { index: number; style: React.CSSProperties }) => {
       const cells: React.ReactNode[] = [];
       for (let c = 0; c < COLS; c++) {
         const i = index * COLS + c;
@@ -94,7 +94,7 @@ export default function ProductPanel({ items, categories, categoryId, onCategory
         {items.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-gray-500">No products match</div>
         ) : (
-          <FixedSizeList
+          <List
             key={listKey}
             height={height}
             itemCount={rowCount}
@@ -103,7 +103,7 @@ export default function ProductPanel({ items, categories, categoryId, onCategory
             className="pos-scrollbar"
           >
             {Row}
-          </FixedSizeList>
+          </List>
         )}
       </div>
     </div>

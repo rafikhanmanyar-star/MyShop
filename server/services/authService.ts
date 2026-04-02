@@ -114,6 +114,24 @@ export class AuthService {
     await this.db.execute('UPDATE users SET login_status = FALSE WHERE id = $1 AND tenant_id = $2', [userId, tenantId]);
   }
 
+  /** Public list of tenants for login company picker (no auth). */
+  async listPublicOrganizations(): Promise<
+    { id: string; name: string; company_name: string; slug: string | null }[]
+  > {
+    const rows = await this.db.query(
+      `SELECT id, name, company_name, slug FROM tenants
+       ORDER BY COALESCE(NULLIF(TRIM(company_name), ''), name) ASC`
+    );
+    return (rows as { id: string; name: string; company_name: string | null; slug: string | null }[]).map(
+      (r) => ({
+        id: r.id,
+        name: r.name,
+        company_name: r.company_name?.trim() || '',
+        slug: r.slug,
+      })
+    );
+  }
+
   /**
    * Public metadata for login screen (no auth). Resolves tenant by id or slug.
    * Optional branchId must belong to the tenant or it is ignored.

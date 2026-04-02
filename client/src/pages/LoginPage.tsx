@@ -4,8 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { Store, Eye, EyeOff, Building2 } from 'lucide-react';
 import { getLoginOrgParamsFromUrl } from '../utils/urlParams';
 import { setAppContext, getAppContext } from '../services/appContext';
-import { authApi, type PublicOrganizationInfo } from '../services/authApi';
+import { authApi, type PublicOrganizationInfo, type PublicOrganizationListItem } from '../services/authApi';
 import ThemeToggle from '../components/ui/ThemeToggle';
+
+function orgOptionLabel(row: PublicOrganizationListItem): string {
+  const company = row.company_name?.trim();
+  if (company) return company;
+  return row.name?.trim() || row.id;
+}
 
 export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: () => void }) {
   const { login } = useAuth();
@@ -19,6 +25,21 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
   const [orgLoading, setOrgLoading] = useState(false);
   const [orgLookupFailed, setOrgLookupFailed] = useState(false);
 
+  const [organizations, setOrganizations] = useState<PublicOrganizationListItem[]>([]);
+  const [orgsLoading, setOrgsLoading] = useState(true);
+  const [orgsLoadFailed, setOrgsLoadFailed] = useState(false);
+
+  const [effectiveOrgId, setEffectiveOrgId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const { org_id } = getLoginOrgParamsFromUrl();
+    return org_id?.trim() || getAppContext().organization_id;
+  });
+  const [branchForDisplay, setBranchForDisplay] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const { branch_id } = getLoginOrgParamsFromUrl();
+    return branch_id?.trim() || getAppContext().branch_id;
+  });
+
   useEffect(() => {
     const { org_id, branch_id } = getLoginOrgParamsFromUrl();
     if (org_id) {
@@ -27,16 +48,44 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
       } else {
         setAppContext({ organization_id: org_id });
       }
+      setEffectiveOrgId(org_id);
+      setBranchForDisplay(branch_id);
+    } else {
+      const ctx = getAppContext();
+      setEffectiveOrgId(ctx.organization_id);
+      setBranchForDisplay(ctx.branch_id);
     }
   }, [location.pathname, location.search]);
 
   useEffect(() => {
-    const { org_id: urlOrg, branch_id: urlBranch } = getLoginOrgParamsFromUrl();
-    const ctx = getAppContext();
-    const orgId = urlOrg || ctx.organization_id;
-    const branchId = urlBranch || ctx.branch_id || null;
+    let cancelled = false;
+    setOrgsLoading(true);
+    setOrgsLoadFailed(false);
+    authApi
+      .listPublicOrganizations()
+      .then((list) => {
+        if (!cancelled) setOrganizations(list);
+      })
+      .catch(() => {
+        if (!cancelled) setOrgsLoadFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setOrgsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-    if (!orgId) {
+  useEffect(() => {
+    if (orgsLoading || organizations.length !== 1 || effectiveOrgId) return;
+    const id = organizations[0].id;
+    setEffectiveOrgId(id);
+    setAppContext({ organization_id: id });
+  }, [orgsLoading, organizations, effectiveOrgId]);
+
+  useEffect(() => {
+    if (!effectiveOrgId) {
       setOrgInfo(null);
       setOrgLookupFailed(false);
       setOrgLoading(false);
@@ -48,7 +97,7 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
     setOrgLookupFailed(false);
 
     authApi
-      .getPublicOrganization(orgId, branchId)
+      .getPublicOrganization(effectiveOrgId, branchForDisplay)
       .then((data) => {
         if (!cancelled) {
           setOrgInfo(data);
@@ -68,11 +117,27 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
     return () => {
       cancelled = true;
     };
-  }, [location.pathname, location.search]);
+  }, [effectiveOrgId, branchForDisplay]);
+
+  const handleOrgSelect = (value: string) => {
+    if (!value) {
+      setEffectiveOrgId(null);
+      setBranchForDisplay(null);
+      setAppContext({ organization_id: null, branch_id: null });
+      return;
+    }
+    setEffectiveOrgId(value);
+    setBranchForDisplay(null);
+    setAppContext({ organization_id: value, branch_id: null });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (organizations.length > 0 && !effectiveOrgId) {
+      setError('Please select a company to sign in to.');
+      return;
+    }
     setLoading(true);
     try {
       const ctx = getAppContext();
@@ -85,7 +150,7 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
   };
 
   const displayOrgName = orgInfo
-    ? (orgInfo.company_name?.trim() || orgInfo.name || 'Organization')
+    ? orgInfo.company_name?.trim() || orgInfo.name || 'Organization'
     : null;
 
   return (
@@ -105,6 +170,42 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
 
         <div className="rounded-2xl border border-border bg-card p-8 text-card-foreground shadow-erp-md">
           <h2 className="mb-2 text-xl font-semibold text-foreground">Sign in to your account</h2>
+
+          <div className="mb-4">
+            <label className="mb-1 block text-sm font-medium text-foreground">Company</label>
+            {orgsLoading && (
+              <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+                <span className="inline-block h-4 w-4 animate-pulse rounded-full bg-muted-foreground/30" />
+                Loading companies…
+              </div>
+            )}
+            {!orgsLoading && orgsLoadFailed && (
+              <p className="text-sm text-muted-foreground">
+                Could not load the company list. You can still sign in if your administrator gave you a link with{' '}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">?org=…</code> in the URL.
+              </p>
+            )}
+            {!orgsLoading && !orgsLoadFailed && organizations.length > 0 && (
+              <select
+                value={effectiveOrgId ?? ''}
+                onChange={(e) => handleOrgSelect(e.target.value)}
+                className="input w-full"
+                aria-label="Select company"
+              >
+                <option value="">Select a company…</option>
+                {organizations.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {orgOptionLabel(row)}
+                  </option>
+                ))}
+              </select>
+            )}
+            {!orgsLoading && !orgsLoadFailed && organizations.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No companies are registered yet. Use registration or a sign-in link from your administrator.
+              </p>
+            )}
+          </div>
 
           {orgLoading && (
             <div className="mb-4 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
@@ -135,20 +236,11 @@ export default function LoginPage({ onSwitchToRegister }: { onSwitchToRegister: 
             </div>
           )}
 
-          {!orgLoading && orgLookupFailed && (
+          {!orgLoading && orgLookupFailed && effectiveOrgId && (
             <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-800 dark:text-amber-200">
-              Could not load organization details. Check that your link includes the correct{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">org</code> value, or ask your administrator for
-              the right sign-in URL.
+              Could not load details for this company. Check the selection or ask your administrator for the correct
+              sign-in link.
             </div>
-          )}
-
-          {!orgLoading && !orgInfo && !orgLookupFailed && (
-            <p className="mb-4 text-sm text-muted-foreground">
-              Open the sign-in link from your organization (or add{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-xs">?org=…</code> to the address bar) so we can show
-              which store you are signing in to.
-            </p>
           )}
 
           {error && (

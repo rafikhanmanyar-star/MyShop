@@ -77,7 +77,7 @@ router.delete('/ledger/:entryId', checkRole(['admin', 'pos_cashier', 'accountant
 
 router.post('/receive-payment', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
-    const { customerId, amount, note, bankAccountId } = req.body || {};
+    const { customerId, amount, note, bankAccountId, applyToLedgerId } = req.body || {};
     if (!customerId || amount == null || Number(amount) <= 0) {
       return res.status(400).json({ error: 'customerId and positive amount are required' });
     }
@@ -89,10 +89,13 @@ router.post('/receive-payment', checkRole(['admin', 'pos_cashier', 'accountant']
       amount: Number(amount),
       note: note === undefined || note === null || String(note).trim() === '' ? undefined : String(note).trim(),
       bankAccountId,
+      applyToLedgerId: typeof applyToLedgerId === 'string' && applyToLedgerId.trim() ? applyToLedgerId.trim() : null,
     });
     res.status(201).json({ id, message: 'Payment recorded' });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const msg = String(error?.message || '');
+    const bad = /exceeds|already fully|not found|does not belong|only be applied/i.test(msg);
+    res.status(bad ? 400 : 500).json({ error: error.message });
   }
 });
 

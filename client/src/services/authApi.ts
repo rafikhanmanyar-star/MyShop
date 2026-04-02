@@ -19,7 +19,18 @@ export interface PublicOrganizationInfo {
   branch_name: string | null;
 }
 
+/** One row from GET /auth/organizations (login picker) */
+export interface PublicOrganizationListItem {
+  id: string;
+  name: string;
+  company_name: string;
+  slug: string | null;
+}
+
 export const authApi = {
+  /** Public: all companies/tenants for login picker */
+  listPublicOrganizations: () => apiClient.get<PublicOrganizationListItem[]>('/auth/organizations'),
+
   /** Public: resolve tenant (and optional branch) for login UI */
   getPublicOrganization: (orgId: string, branchId?: string | null) => {
     const q = new URLSearchParams();

@@ -12,6 +12,10 @@ export interface KhataLedgerEntry {
   created_at: string;
   customer_name?: string;
   sale_number?: string;
+  /** For debits: amount not yet covered by linked credits */
+  remaining_debit?: number;
+  /** For credits: which debit line this payment applies to */
+  linked_debit_id?: string | null;
 }
 
 export interface KhataSummaryRow {
@@ -48,13 +52,44 @@ export class KhataService {
    */
   async receivePayment(
     tenantId: string,
-    params: { customerId: string; amount: number; note?: string; bankAccountId: string }
+    params: {
+      customerId: string;
+      amount: number;
+      note?: string;
+      bankAccountId: string;
+      /** When set, this credit settles (fully or partially) this debit row */
+      applyToLedgerId?: string | null;
+    }
   ): Promise<string> {
     const accounting = getAccountingService();
     const getAcc = (code: string, name: string, type: 'Asset' | 'Liability' | 'Equity' | 'Income' | 'Expense', client: any) =>
       accounting.getOrCreateAccountByCode(tenantId, code, name, type, client);
 
     const ledgerId = await this.db.transaction(async (client) => {
+      let linkedDebitId: string | null = params.applyToLedgerId?.trim() || null;
+      if (linkedDebitId) {
+        const deb = await client.query(
+          `SELECT id, type, amount, customer_id FROM khata_ledger WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+          [linkedDebitId, tenantId]
+        );
+        if (deb.length === 0) throw new Error('Debit ledger line not found');
+        const row = deb[0] as { type: string; amount: unknown; customer_id: string };
+        if (row.type !== 'debit') throw new Error('Payment can only be applied to a debit line');
+        if (row.customer_id !== params.customerId) throw new Error('Debit line does not belong to this customer');
+        const debitAmt = Number(row.amount);
+        const paid = await client.query(
+          `SELECT COALESCE(SUM(amount), 0)::numeric AS s FROM khata_ledger
+           WHERE tenant_id = $1 AND linked_debit_id = $2 AND type = 'credit'`,
+          [tenantId, linkedDebitId]
+        );
+        const alreadyPaid = Number((paid[0] as any)?.s ?? 0);
+        const remaining = Math.round((debitAmt - alreadyPaid) * 100) / 100;
+        if (remaining <= 0) throw new Error('This debit is already fully paid');
+        if (params.amount > remaining + 0.01) {
+          throw new Error(`Amount exceeds remaining balance for this line (${remaining.toFixed(2)})`);
+        }
+      }
+
       const banks = await client.query(
         `SELECT id, chart_account_id, name FROM shop_bank_accounts
          WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE`,
@@ -69,10 +104,10 @@ export class KhataService {
       }
 
       const ins = await client.query(
-        `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note)
-         VALUES ($1, $2, NULL, 'credit', $3, $4)
+        `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note, linked_debit_id)
+         VALUES ($1, $2, NULL, 'credit', $3, $4, $5)
          RETURNING id`,
-        [tenantId, params.customerId, params.amount, params.note ?? null]
+        [tenantId, params.customerId, params.amount, params.note ?? null, linkedDebitId]
       );
       const kId = ins[0].id as string;
 
@@ -123,7 +158,14 @@ export class KhataService {
     if (customerId) {
       const rows = await this.db.query(
         `SELECT k.id, k.customer_id, k.order_id, k.type, k.amount, k.note, k.created_at,
-                c.name AS customer_name, s.sale_number
+                k.linked_debit_id,
+                c.name AS customer_name, s.sale_number,
+                CASE WHEN k.type = 'debit' THEN
+                  ROUND((k.amount::numeric - COALESCE((
+                    SELECT SUM(c2.amount::numeric) FROM khata_ledger c2
+                    WHERE c2.tenant_id = k.tenant_id AND c2.linked_debit_id = k.id AND c2.type = 'credit'
+                  ), 0))::numeric, 2)
+                ELSE NULL END AS remaining_debit
          FROM khata_ledger k
          LEFT JOIN contacts c ON c.id = k.customer_id AND c.tenant_id = k.tenant_id
          LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
@@ -141,11 +183,20 @@ export class KhataService {
         created_at: r.created_at,
         customer_name: r.customer_name,
         sale_number: r.sale_number,
+        linked_debit_id: r.linked_debit_id ?? null,
+        remaining_debit: r.type === 'debit' && r.remaining_debit != null ? Math.max(0, Number(r.remaining_debit)) : undefined,
       }));
     }
     const rows = await this.db.query(
       `SELECT k.id, k.customer_id, k.order_id, k.type, k.amount, k.note, k.created_at,
-              c.name AS customer_name, s.sale_number
+              k.linked_debit_id,
+              c.name AS customer_name, s.sale_number,
+              CASE WHEN k.type = 'debit' THEN
+                ROUND((k.amount::numeric - COALESCE((
+                  SELECT SUM(c2.amount::numeric) FROM khata_ledger c2
+                  WHERE c2.tenant_id = k.tenant_id AND c2.linked_debit_id = k.id AND c2.type = 'credit'
+                ), 0))::numeric, 2)
+              ELSE NULL END AS remaining_debit
        FROM khata_ledger k
        LEFT JOIN contacts c ON c.id = k.customer_id AND c.tenant_id = k.tenant_id
        LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
@@ -163,6 +214,8 @@ export class KhataService {
       created_at: r.created_at,
       customer_name: r.customer_name,
       sale_number: r.sale_number,
+      linked_debit_id: r.linked_debit_id ?? null,
+      remaining_debit: r.type === 'debit' && r.remaining_debit != null ? Math.max(0, Number(r.remaining_debit)) : undefined,
     }));
   }
 

@@ -164,6 +164,9 @@ export interface KhataLedgerEntry {
   created_at: string;
   customer_name?: string;
   sale_number?: string;
+  /** Debit rows: amount still owed on this line (after linked credits) */
+  remaining_debit?: number;
+  linked_debit_id?: string | null;
 }
 
 export interface KhataSummaryRow {
@@ -181,8 +184,14 @@ export const khataApi = {
   getSummary: () => apiClient.get<KhataSummaryRow[]>('/shop/khata/summary'),
   getCustomerSummary: (customerId: string) =>
     apiClient.get<{ totalDebit: number; totalCredit: number; balance: number }>(`/shop/khata/customer/${encodeURIComponent(customerId)}/summary`),
-  receivePayment: (data: { customerId: string; amount: number; note?: string; bankAccountId: string }) =>
-    apiClient.post<{ id: string }>('/shop/khata/receive-payment', data),
+  receivePayment: (data: {
+    customerId: string;
+    amount: number;
+    note?: string;
+    bankAccountId: string;
+    /** Settles this debit row (partial or full); omit for unallocated payment */
+    applyToLedgerId?: string;
+  }) => apiClient.post<{ id: string }>('/shop/khata/receive-payment', data),
   getCustomers: () => apiClient.get<{ id: string; name: string; contact_no: string | null; company_name?: string | null }[]>('/shop/khata/customers'),
   createCustomer: (data: { name: string; contactNo?: string; companyName?: string }) =>
     apiClient.post<{ id: string; name: string; contact_no: string | null; company_name?: string | null }>('/shop/khata/customers', {

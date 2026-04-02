@@ -1,6 +1,5 @@
-import React, { memo } from 'react';
+import React from 'react';
 import type { CartLine } from './posReducer';
-import { CURRENCY } from '../../constants';
 
 type Props = {
   line: CartLine;
@@ -11,53 +10,54 @@ type Props = {
   onSelect: (lineId: string) => void;
 };
 
-function CartItemRowInner({ line, selected, flash, onQty, onRemove, onSelect }: Props) {
-  const lineTotal = line.unitPrice * line.quantity - line.discountAmount + line.taxAmount;
-
+export default function CartItemRow({
+  line,
+  selected,
+  flash,
+  onQty,
+  onRemove,
+  onSelect,
+}: Props) {
+  const total = line.qty * line.unitPrice;
   return (
     <tr
-      className={`border-b border-gray-200 transition-colors dark:border-gray-700 ${
-        selected ? 'bg-primary-50 dark:bg-primary-950/30' : 'bg-white dark:bg-gray-900'
-      } ${flash ? 'animate-pulse bg-emerald-50/80 dark:bg-emerald-950/20' : ''}`}
+      className={`border-t border-gray-100 dark:border-gray-800 ${
+        selected ? 'bg-primary-50 dark:bg-primary-950/30' : ''
+      } ${flash ? 'animate-pulse bg-amber-50 dark:bg-amber-950/20' : ''}`}
       onClick={() => onSelect(line.id)}
     >
-      <td className="p-3 text-sm text-gray-900 dark:text-gray-100">{line.name}</td>
-      <td className="p-3">
+      <td className="p-3 align-top">
+        <div className="font-medium text-gray-900 dark:text-gray-100">{line.name}</div>
+        {line.sku ? <div className="text-xs text-gray-500">{line.sku}</div> : null}
+      </td>
+      <td className="p-3 align-top">
         <input
           type="number"
-          inputMode="numeric"
           min={1}
-          className="w-16 rounded border border-gray-300 bg-white px-2 py-2 text-center text-sm dark:border-gray-600 dark:bg-gray-800"
-          value={line.quantity}
+          step={1}
+          className="w-16 rounded border border-gray-300 bg-white px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+          value={line.qty}
           onChange={(e) => {
-            const v = parseInt(e.target.value, 10);
-            if (!Number.isNaN(v)) onQty(line.id, v);
+            const q = Math.max(1, Math.floor(Number(e.target.value) || 1));
+            onQty(line.id, q);
           }}
           onClick={(e) => e.stopPropagation()}
         />
       </td>
-      <td className="p-3 text-right text-sm font-medium tabular-nums text-gray-800 dark:text-gray-200">
-        {line.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-      </td>
-      <td className="p-3 text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-        {CURRENCY}
-        {lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-      </td>
-      <td className="p-3 text-right">
+      <td className="p-3 text-right align-top font-mono text-sm">{line.unitPrice.toFixed(2)}</td>
+      <td className="p-3 text-right align-top font-mono text-sm font-semibold">{total.toFixed(2)}</td>
+      <td className="p-3 align-top">
         <button
           type="button"
-          className="rounded-lg px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+          className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
           onClick={(e) => {
             e.stopPropagation();
             onRemove(line.id);
           }}
         >
-          ×
+          Remove
         </button>
       </td>
     </tr>
   );
 }
-
-const CartItemRow = memo(CartItemRowInner);
-export default CartItemRow;
