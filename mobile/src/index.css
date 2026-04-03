@@ -492,6 +492,115 @@ img {
   gap: 12px;
 }
 
+/* Shop home: 3 columns, denser cards */
+.product-grid--compact {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.product-grid--compact .product-card {
+  border-radius: var(--radius);
+}
+
+.product-grid--compact .product-card .info {
+  padding: 6px 8px;
+}
+
+.product-grid--compact .product-card .info .name {
+  font-size: 11px;
+  margin-bottom: 2px;
+  line-height: 1.25;
+}
+
+.product-grid--compact .product-card .info .price {
+  font-size: 13px;
+}
+
+.product-grid--compact .product-card .info .stock {
+  font-size: 9px;
+  margin-top: 1px;
+}
+
+.page.page--home {
+  padding: 12px 12px calc(80px + var(--safe-bottom));
+}
+
+.page--home .home-hero {
+  border-radius: var(--radius-lg);
+  padding: 18px 14px;
+  margin-bottom: 14px;
+  color: white;
+}
+
+.page--home .home-hero h1 {
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+
+.page--home .home-hero .home-hero-sub {
+  opacity: 0.85;
+  font-size: 13px;
+}
+
+.page--home .home-hero .home-hero-delivery {
+  opacity: 0.7;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.page--home .home-hero-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-full);
+  padding: 8px 14px;
+  margin-top: 12px;
+  color: white;
+  font-size: 13px;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.page--home .home-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.page--home .home-categories {
+  margin-bottom: 16px;
+}
+
+.page--home .home-products-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.page--home .home-products-head h2 {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.page--home .home-products-head a {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.page--home .category-pills {
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+}
+
+.page--home .category-pill {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
 .product-card {
   background: var(--bg-card);
   border-radius: var(--radius-lg);

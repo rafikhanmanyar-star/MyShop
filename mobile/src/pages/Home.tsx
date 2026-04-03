@@ -15,7 +15,7 @@ export default function Home() {
         if (!shopSlug) return;
         Promise.all([
             publicApi.getCategories(shopSlug),
-            publicApi.getProducts(shopSlug, { limit: '6' }),
+            publicApi.getProducts(shopSlug, { limit: '18' }),
         ]).then(([cats, prods]) => {
             setCategories(cats);
             setFeatured(prods.items || []);
@@ -30,43 +30,37 @@ export default function Home() {
     };
 
     return (
-        <div className="page fade-in">
+        <div className="page page--home fade-in">
             {/* Hero / Shop Header */}
-            <div style={{
-                background: `linear-gradient(135deg, var(--primary) 0%, ${state.shop?.brand_color || '#4F46E5'}dd 100%)`,
-                borderRadius: 'var(--radius-xl)',
-                padding: '28px 20px',
-                marginBottom: 20,
-                color: 'white',
-            }}>
-                <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4 }}>
+            <div
+                className="home-hero"
+                style={{
+                    background: `linear-gradient(135deg, var(--primary) 0%, ${state.shop?.brand_color || '#4F46E5'}dd 100%)`,
+                }}
+            >
+                <h1>
                     {state.shop?.company_name || state.shop?.name}
                 </h1>
-                <p style={{ opacity: 0.85, fontSize: 14 }}>
+                <p className="home-hero-sub">
                     Order online • {state.settings?.estimated_delivery_minutes || 60} min delivery
                 </p>
                 {state.settings && state.settings.delivery_fee > 0 && (
-                    <p style={{ opacity: 0.7, fontSize: 13, marginTop: 4 }}>
+                    <p className="home-hero-delivery">
                         Delivery: Rs. {state.settings.delivery_fee}
                         {state.settings.free_delivery_above && ` (free above Rs. ${state.settings.free_delivery_above})`}
                     </p>
                 )}
 
-                <Link to={`/${shopSlug}/products`} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    background: 'rgba(255,255,255,0.2)', borderRadius: 'var(--radius-full)',
-                    padding: '10px 16px', marginTop: 16, color: 'white', fontSize: 14,
-                    backdropFilter: 'blur(10px)',
-                }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                <Link to={`/${shopSlug}/products`} className="home-hero-search">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
                     Search products...
                 </Link>
             </div>
 
             {/* Categories */}
             {categories.length > 0 && (
-                <section style={{ marginBottom: 24 }}>
-                    <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Categories</h2>
+                <section className="home-categories">
+                    <h2 className="home-section-title">Categories</h2>
                     <div className="category-pills">
                         {categories.map((c: any) => (
                             <Link key={c.id} to={`/${shopSlug}/products?category=${c.id}`} className="category-pill">
@@ -79,27 +73,27 @@ export default function Home() {
 
             {/* Featured Products */}
             <section>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <h2 style={{ fontSize: 18, fontWeight: 700 }}>Products</h2>
-                    <Link to={`/${shopSlug}/products`} style={{ color: 'var(--primary)', fontSize: 14, fontWeight: 600 }}>
+                <div className="home-products-head">
+                    <h2>Products</h2>
+                    <Link to={`/${shopSlug}/products`}>
                         View All →
                     </Link>
                 </div>
 
                 {loading ? (
-                    <div className="product-grid">
-                        {[1, 2, 3, 4].map(i => (
+                    <div className="product-grid product-grid--compact">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (
                             <div key={i} className="product-card">
                                 <div className="skeleton" style={{ aspectRatio: '1', width: '100%' }} />
-                                <div style={{ padding: 12 }}>
-                                    <div className="skeleton" style={{ height: 14, width: '80%', marginBottom: 8 }} />
-                                    <div className="skeleton" style={{ height: 18, width: '50%' }} />
+                                <div style={{ padding: 8 }}>
+                                    <div className="skeleton" style={{ height: 11, width: '80%', marginBottom: 6 }} />
+                                    <div className="skeleton" style={{ height: 13, width: '50%' }} />
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <div className="product-grid">
+                    <div className="product-grid product-grid--compact">
                         {featured.map((p: any) => (
                             <Link key={p.id} to={`/${shopSlug}/products/${p.id}`} className="product-card">
                                 <div className="image-wrap">
