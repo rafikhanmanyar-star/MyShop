@@ -492,7 +492,7 @@ img {
   gap: 12px;
 }
 
-/* Shop home: 3 columns, denser cards */
+/* 3 columns, denser cards (shop home + browse) */
 .product-grid--compact {
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
@@ -519,6 +519,28 @@ img {
 .product-grid--compact .product-card .info .stock {
   font-size: 9px;
   margin-top: 1px;
+}
+
+.product-grid--compact .product-card .add-btn {
+  padding: 5px 4px;
+  font-size: 10px;
+}
+
+.product-grid--compact .product-card .discount-badge {
+  top: 4px;
+  right: 4px;
+  padding: 2px 5px;
+  font-size: 9px;
+}
+
+.product-grid--compact .product-card .rating-stars {
+  margin-top: 0;
+  gap: 1px;
+}
+
+.product-grid--compact .product-card .rating-stars svg {
+  width: 9px;
+  height: 9px;
 }
 
 .page.page--home {
@@ -599,6 +621,40 @@ img {
 .page--home .category-pill {
   padding: 6px 12px;
   font-size: 12px;
+}
+
+/* Browse / all products: tighter chrome */
+.page.page--browse {
+  padding: 12px 12px calc(80px + var(--safe-bottom));
+}
+
+.page--browse .search-bar {
+  margin-bottom: 10px;
+}
+
+.page--browse .search-bar input {
+  padding: 10px 14px 10px 40px;
+  font-size: 14px;
+}
+
+.page--browse .search-bar .search-icon {
+  left: 12px;
+}
+
+.page--browse .filter-controls {
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.page--browse .filter-btn,
+.page--browse .sort-btn {
+  padding: 8px;
+  font-size: 13px;
+}
+
+.page--browse .active-filters {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
 }
 
 .product-card {

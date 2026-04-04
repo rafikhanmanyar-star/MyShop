@@ -10,7 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList, Receipt, Undo2
+  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList, Receipt, Undo2, Tag
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
 import { SyncOnOnline } from './components/SyncOnOnline';
@@ -27,6 +27,7 @@ const AccountingPage = lazy(() => import('./components/shop/AccountingPage'));
 const DailyReportPage = lazy(() => import('./components/shop/accounting/DailyReportPage'));
 const ExpensePage = lazy(() => import('./components/shop/expenses/ExpensePage'));
 const MobileOrdersPage = lazy(() => import('./components/shop/MobileOrdersPage'));
+const OffersPage = lazy(() => import('./components/shop/OffersPage'));
 const ForecastPage = lazy(() => import('./components/shop/ForecastPage'));
 const CashierDashboardPage = lazy(() => import('./components/shop/cashier/CashierDashboardPage'));
 const ShiftsAdminPage = lazy(() => import('./components/shop/cashier/ShiftsAdminPage'));
@@ -42,6 +43,7 @@ const navItems = [
   { path: '/pos', label: 'Point of Sale', icon: ShoppingCart, roles: ['admin', 'pos_cashier'] },
   { path: '/sales-returns', label: 'Sales Return', icon: Undo2, roles: ['admin', 'pos_cashier', 'accountant'] },
   { path: '/mobile-orders', label: 'Mobile Orders', icon: Smartphone, roles: ['admin', 'pos_cashier'] },
+  { path: '/offers', label: 'Offers', icon: Tag, roles: ['admin'] },
   { path: '/inventory', label: 'Inventory', icon: Package, roles: ['admin'] },
   { path: '/procurement', label: 'Procurement', icon: Truck, roles: ['admin', 'accountant'] },
   { path: '/loyalty', label: 'Loyalty', icon: Users, roles: ['admin'] },
@@ -237,6 +239,7 @@ function AppLayout() {
                 element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <SalesReturnListPage /> : <Navigate to="/" replace />}
               />
               <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MobileOrdersPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/offers" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><OffersPage /></div> : <Navigate to="/" replace />} />
 
               <Route path="/inventory" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><InventoryPage /></div> : <Navigate to="/" replace />} />
               <Route path="/procurement" element={['admin', 'accountant'].includes(role) ? <ProcurementPage /> : <Navigate to="/" replace />} />

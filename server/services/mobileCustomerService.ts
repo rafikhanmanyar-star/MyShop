@@ -250,6 +250,18 @@ export class MobileCustomerService {
             throw new Error('Invalid password. Please try again.');
         }
 
+        // Ensure loyalty directory + password reset from shop (idempotent)
+        try {
+            const { getShopService } = await import('./shopService.js');
+            await getShopService().ensureLoyaltyMemberForMobileUser(tenantId, {
+                phone,
+                name: customer.name || 'Customer',
+                email: null,
+            });
+        } catch (_loyaltyErr) {
+            // best-effort
+        }
+
         // Generate JWT
         const token = jwt.sign(
             {
@@ -317,21 +329,41 @@ export class MobileCustomerService {
     }
 
     /** Set a new login password for a mobile customer (shop staff, in-person support). */
+    /** Accepts mobile_customers.id or contacts.id (loyalty member customer_id) when phones match. */
     async resetPasswordByShop(tenantId: string, customerId: string, newPassword: string) {
         if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
             throw new Error('Password must be at least 6 characters.');
         }
-        const rows = await this.db.query(
+        let rows = await this.db.query(
             'SELECT id FROM mobile_customers WHERE tenant_id = $1 AND id = $2',
             [tenantId, customerId]
         );
         if (rows.length === 0) {
+            rows = await this.db.query(
+                `SELECT mc.id FROM mobile_customers mc
+         INNER JOIN contacts c ON c.tenant_id = mc.tenant_id AND c.contact_no = mc.phone
+         WHERE mc.tenant_id = $1 AND c.id = $2`,
+                [tenantId, customerId]
+            );
+        }
+        if (rows.length === 0) {
+            rows = await this.db.query(
+                `SELECT mc.id FROM mobile_customers mc
+         INNER JOIN contacts c ON c.tenant_id = mc.tenant_id
+           AND regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+           AND length(regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g')) > 0
+         WHERE mc.tenant_id = $1 AND c.id = $2`,
+                [tenantId, customerId]
+            );
+        }
+        if (rows.length === 0) {
             throw new Error('Customer not found.');
         }
+        const mobileCustomerId = rows[0].id;
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         await this.db.execute(
             'UPDATE mobile_customers SET password = $1, updated_at = NOW() WHERE tenant_id = $2 AND id = $3',
-            [hashedPassword, tenantId, customerId]
+            [hashedPassword, tenantId, mobileCustomerId]
         );
         return { success: true };
     }

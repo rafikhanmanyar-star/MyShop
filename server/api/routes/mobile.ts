@@ -5,6 +5,7 @@ import multer from 'multer';
 import { getDatabaseService } from '../../services/databaseService.js';
 import { getMobileCustomerService } from '../../services/mobileCustomerService.js';
 import { getMobileOrderService } from '../../services/mobileOrderService.js';
+import { getOfferService } from '../../services/offerService.js';
 import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/mobileMiddleware.js';
 
 const router = express.Router();
@@ -130,6 +131,7 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
                 estimated_delivery_minutes: settings.estimated_delivery_minutes,
                 order_acceptance_start: settings.order_acceptance_start,
                 order_acceptance_end: settings.order_acceptance_end,
+                offer_stacking_mode: settings.offer_stacking_mode === 'stack' ? 'stack' : 'best',
             },
         });
     } catch (error: any) {
@@ -201,6 +203,26 @@ router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, r
             sortBy: sortBy as string,
         });
         res.json(result);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Offers (active promotions)
+router.get('/:shopSlug/offers', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const offers = await getOfferService().listActiveOffersForMobile(req.tenantId);
+        res.json(offers);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/:shopSlug/offers/:id', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const offer = await getOfferService().getOfferDetailForMobile(req.tenantId, req.params.id);
+        if (!offer) return res.status(404).json({ error: 'Offer not found' });
+        res.json(offer);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -315,6 +337,7 @@ router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
             customerId: req.customerId,
             branchId: req.body.branchId, // optional; when omitted, tenant's first branch is used (shop = branch)
             items: req.body.items,
+            offerBundles: req.body.offerBundles,
             deliveryAddress: req.body.deliveryAddress,
             deliveryLat: req.body.deliveryLat,
             deliveryLng: req.body.deliveryLng,

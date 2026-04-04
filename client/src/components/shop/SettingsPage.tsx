@@ -15,6 +15,7 @@ import { MobileOrdersProvider } from '../../context/MobileOrdersContext';
 import { MobileSettingsPanel } from './MobileOrdersPage';
 import DataExportImportSection from './settings/DataExportImportSection';
 import BackupRestoreSection from './settings/BackupRestoreSection';
+import { useSettingsEditLock } from '../../hooks/useSettingsEditLock';
 
 function toState(v: ShopVendor) {
     return {
@@ -87,6 +88,7 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettin
 
 const SettingsContent: React.FC = () => {
     const { user } = useAuth();
+    const settingsLock = useSettingsEditLock(user?.userId, user?.name || user?.username || 'User');
     const { dispatch } = useAppContext();
     const isCashier = user?.role === 'pos_cashier';
     const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'mobileBranding' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
@@ -379,8 +381,14 @@ const SettingsContent: React.FC = () => {
     ];
     const tabs = isCashier ? allTabs.filter(t => t.id === 'app') : allTabs;
 
+    const settingsLockedOut =
+        settingsLock.mode === 'loading' ||
+        settingsLock.mode === 'blocked' ||
+        settingsLock.lostLock;
+
     return (
-        <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
+        <div className="relative flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
+            <div className={settingsLockedOut ? 'pointer-events-none opacity-40 min-h-0 flex flex-col flex-1' : 'min-h-0 flex flex-col flex-1'}>
             <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
                 <div className="mb-6">
                     <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
@@ -929,6 +937,29 @@ const SettingsContent: React.FC = () => {
                     </div>
                 </div>
             </Modal>
+            </div>
+            {settingsLock.mode === 'loading' && (
+                <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/85 backdrop-blur-[2px] pointer-events-auto">
+                    <p className="text-muted-foreground text-sm font-medium">Preparing Settings…</p>
+                </div>
+            )}
+            {(settingsLock.mode === 'blocked' || settingsLock.lostLock) && (
+                <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-sm p-4 pointer-events-auto">
+                    <Card className="max-w-md w-full p-6 space-y-4 shadow-lg border-border">
+                        <h2 className="text-lg font-semibold text-foreground">Another user is editing Settings</h2>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                            {settingsLock.blockedByName ||
+                                'Someone else is editing Settings on this organization. Stop editing until they finish so changes are not lost.'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                            This page will try again automatically when the other user leaves Settings. You can also use Try again after they close the tab.
+                        </p>
+                        <Button type="button" onClick={() => void settingsLock.retryAcquire()} className="w-full sm:w-auto">
+                            Try again
+                        </Button>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 };

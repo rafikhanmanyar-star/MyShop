@@ -56,7 +56,7 @@ const AccountingContent: React.FC = () => {
         }
 
         try {
-            await postJournalEntry({
+            const ret = await postJournalEntry({
                 date: journalData.date,
                 reference: journalData.reference,
                 description: journalData.description,
@@ -72,6 +72,7 @@ const AccountingContent: React.FC = () => {
                 }),
                 sourceModule: 'Manual'
             });
+            if (ret && typeof ret === 'object' && 'synced' in ret && !ret.synced) return;
             setIsJournalModalOpen(false);
             setJournalData({
                 date: new Date().toISOString().split('T')[0],

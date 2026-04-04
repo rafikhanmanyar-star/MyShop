@@ -1,6 +1,7 @@
 import express from 'express';
 import { getShopService } from '../../services/shopService.js';
 import { getSalesReturnService } from '../../services/salesReturnService.js';
+import { getOfferService } from '../../services/offerService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
 import * as fs from 'fs';
 import multer from 'multer';
@@ -726,6 +727,102 @@ router.get('/sales/return-eligibility/:saleId', checkRole(['admin', 'pos_cashier
     res.json(data);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Settings edit lock (multi-user: one editor at a time for Settings module) ---
+router.get('/settings/edit-lock', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const status = await getShopService().getSettingsEditLock(req.tenantId);
+    res.json(status);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/settings/edit-lock', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const action = req.body?.action as string | undefined;
+    const userId = req.userId;
+    const userName = (req.body?.userName as string | undefined)?.trim() || req.user?.username || null;
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing user context' });
+    }
+    if (action === 'acquire') {
+      const result = await getShopService().acquireSettingsEditLock(req.tenantId, userId, userName);
+      if (!result.acquired) {
+        return res.status(409).json({
+          error: 'Settings are being edited by another user',
+          message: `${result.lockedBy.userName || 'Another user'} is currently editing Settings. Please wait until they finish.`,
+          lockedBy: result.lockedBy,
+        });
+      }
+      return res.json({ acquired: true, expiresAt: result.expiresAt });
+    }
+    if (action === 'heartbeat') {
+      const result = await getShopService().heartbeatSettingsEditLock(req.tenantId, userId);
+      if (!result.ok) {
+        return res.status(409).json({
+          error: 'Settings edit lock lost',
+          message: 'Your edit session expired or another user is editing Settings. Please refresh the page.',
+        });
+      }
+      return res.json({ ok: true, expiresAt: result.expiresAt });
+    }
+    if (action === 'release') {
+      await getShopService().releaseSettingsEditLock(req.tenantId, userId);
+      return res.json({ released: true });
+    }
+    return res.status(400).json({ error: 'Invalid action. Use acquire, heartbeat, or release.' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Offers (promotions for mobile) ---
+router.get('/offers', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const offers = await getOfferService().listOffers(req.tenantId);
+    res.json(offers);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/offers', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const id = await getOfferService().createOffer(req.tenantId, req.body);
+    res.status(201).json({ id, message: 'Offer created' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.get('/offers/:id', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const offer = await getOfferService().getOfferById(req.tenantId, req.params.id);
+    if (!offer) return res.status(404).json({ error: 'Offer not found' });
+    res.json(offer);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/offers/:id', checkRole(['admin']), async (req: any, res) => {
+  try {
+    await getOfferService().updateOffer(req.tenantId, req.params.id, req.body);
+    res.json({ success: true, message: 'Offer updated' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.delete('/offers/:id', checkRole(['admin']), async (req: any, res) => {
+  try {
+    await getOfferService().softDeleteOffer(req.tenantId, req.params.id);
+    res.json({ success: true, message: 'Offer deactivated' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
   }
 });
 

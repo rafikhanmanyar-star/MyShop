@@ -2,6 +2,7 @@ import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
+import { aggregateQuantitiesFromOfferLines, prepareOfferBundlesForOrder } from './mobileOfferCheckout.js';
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -39,6 +40,8 @@ export interface PlaceOrderInput {
         productId: string;
         quantity: number;
     }[];
+    /** Promotional bundles (validated server-side) */
+    offerBundles?: { offerId: string; quantity: number }[];
     deliveryAddress?: string;
     deliveryLat?: number;
     deliveryLng?: number;
@@ -288,17 +291,43 @@ export class MobileOrderService {
         }
 
         const placed = await this.db.transaction(async (client: any) => {
-            // 1. Get all products and lock inventory rows for order products (for consistent stock check)
-            const productIds = [...new Set(input.items.map((i: any) => i.productId))];
-            const invRows = productIds.length > 0
-                ? await client.query(
-                    `SELECT product_id, warehouse_id, quantity_on_hand, quantity_reserved
-             FROM shop_inventory
-             WHERE tenant_id = $1 AND product_id = ANY($2)
-             FOR UPDATE`,
-                    [tenantId, productIds]
-                )
-                : [];
+            const regularItems = input.items || [];
+            const { merged: offerMerged, flatLines: offerLines } = await prepareOfferBundlesForOrder(
+                client,
+                tenantId,
+                input.customerId,
+                input.offerBundles
+            );
+
+            const aggOffer = aggregateQuantitiesFromOfferLines(offerLines);
+            for (const it of regularItems) {
+                if (aggOffer.has(it.productId)) {
+                    throw new Error(
+                        'A product cannot be in your cart both as a regular item and inside a promotion. Remove one or the other.'
+                    );
+                }
+            }
+
+            const demand = new Map<string, number>();
+            for (const it of regularItems) {
+                demand.set(it.productId, (demand.get(it.productId) || 0) + Number(it.quantity));
+            }
+            for (const [pid, q] of aggOffer) {
+                demand.set(pid, (demand.get(pid) || 0) + q);
+            }
+            if (demand.size === 0) {
+                throw new Error('Cart is empty');
+            }
+
+            // 1. Lock inventory rows for all products in the order
+            const productIds = [...demand.keys()];
+            const invRows = await client.query(
+                `SELECT product_id, warehouse_id, quantity_on_hand, quantity_reserved
+           FROM shop_inventory
+           WHERE tenant_id = $1 AND product_id = ANY($2)
+           FOR UPDATE`,
+                [tenantId, productIds]
+            );
 
             // 2. Resolve warehouse: use effective branch (shop = branch) so one that has enough stock for ALL items
             let warehouseId: string | null = null;
@@ -308,7 +337,6 @@ export class MobileOrderService {
                     [effectiveBranchId, tenantId]
                 );
                 if (whRes.length > 0) warehouseId = whRes[0].id;
-                // Shop = branch: do not fall back to other warehouses; this shop is one entity
                 if (!warehouseId) {
                     throw new Error(
                         'This shop cannot fulfill your order from its current location. Try different items or quantities.'
@@ -316,7 +344,6 @@ export class MobileOrderService {
                 }
             }
             if (!warehouseId) {
-                // No branch specified and no default: find first warehouse that can fulfill every line item
                 const warehouses = await client.query(
                     'SELECT id FROM shop_warehouses WHERE tenant_id = $1 ORDER BY id',
                     [tenantId]
@@ -324,14 +351,14 @@ export class MobileOrderService {
                 for (const wh of warehouses) {
                     const wid = wh.id;
                     let canFulfill = true;
-                    for (const item of input.items) {
-                        const productRows = invRows.filter((r: any) => r.product_id === item.productId);
-                        if (productRows.length === 0) continue; // stock not tracked for this product
+                    for (const [productId, qty] of demand) {
+                        const productRows = invRows.filter((r: any) => r.product_id === productId);
+                        if (productRows.length === 0) continue;
                         const row = productRows.find((r: any) => r.warehouse_id === wid);
                         const available = row
                             ? Math.max(0, parseFloat(row.quantity_on_hand) - parseFloat(row.quantity_reserved))
                             : 0;
-                        if (available < item.quantity) {
+                        if (available < qty) {
                             canFulfill = false;
                             break;
                         }
@@ -343,12 +370,37 @@ export class MobileOrderService {
                 }
             }
 
-            // 3. Validate & price each item; check stock using TOTAL across warehouses (matches catalog)
-            let subtotal = 0;
-            let taxTotal = 0;
             const resolvedItems: any[] = [];
+            let subtotalGross = 0;
+            let discountTotal = 0;
+            let taxTotal = 0;
 
-            for (const item of input.items) {
+            const validateStock = (productName: string, productId: string, qty: number) => {
+                const productInvRows = invRows.filter((r: any) => r.product_id === productId);
+                const totalAvailable = productInvRows.reduce(
+                    (sum: number, r: any) =>
+                        sum + Math.max(0, parseFloat(r.quantity_on_hand) - parseFloat(r.quantity_reserved)),
+                    0
+                );
+                if (productInvRows.length > 0 && totalAvailable < qty) {
+                    throw new Error(
+                        `Insufficient stock for "${productName}". Available: ${Math.max(0, Math.round(totalAvailable * 100) / 100)}, Requested: ${qty}`
+                    );
+                }
+                if (warehouseId && productInvRows.length > 0) {
+                    const atWh = productInvRows.find((r: any) => r.warehouse_id === warehouseId);
+                    const availableAtWh = atWh
+                        ? Math.max(0, parseFloat(atWh.quantity_on_hand) - parseFloat(atWh.quantity_reserved))
+                        : 0;
+                    if (availableAtWh < qty) {
+                        throw new Error(
+                            `Insufficient stock for "${productName}" at selected branch. Available at branch: ${Math.max(0, availableAtWh)}, Requested: ${qty}. Try another branch or leave branch unselected.`
+                        );
+                    }
+                }
+            };
+
+            for (const item of regularItems) {
                 const prodRes = await client.query(
                     `SELECT id, name, sku, retail_price, mobile_price, tax_rate
            FROM shop_products
@@ -369,50 +421,43 @@ export class MobileOrderService {
                     );
                 }
                 const taxRate = parseFloat(product.tax_rate) || 0;
+                const qty = Number(item.quantity);
+                validateStock(product.name, item.productId, qty);
 
-                // Total available across all warehouses (same as mobile catalog)
-                const productInvRows = invRows.filter((r: any) => r.product_id === item.productId);
-                const totalAvailable = productInvRows.reduce(
-                    (sum: number, r: any) =>
-                        sum + Math.max(0, parseFloat(r.quantity_on_hand) - parseFloat(r.quantity_reserved)),
-                    0
-                );
-
-                if (productInvRows.length > 0 && totalAvailable < item.quantity) {
-                    throw new Error(
-                        `Insufficient stock for "${product.name}". Available: ${Math.max(0, Math.round(totalAvailable * 100) / 100)}, Requested: ${item.quantity}`
-                    );
-                }
-
-                // If a specific warehouse was chosen, ensure it has enough (we reserve from one warehouse)
-                if (warehouseId && productInvRows.length > 0) {
-                    const atWh = productInvRows.find((r: any) => r.warehouse_id === warehouseId);
-                    const availableAtWh = atWh
-                        ? Math.max(0, parseFloat(atWh.quantity_on_hand) - parseFloat(atWh.quantity_reserved))
-                        : 0;
-                    if (availableAtWh < item.quantity) {
-                        throw new Error(
-                            `Insufficient stock for "${product.name}" at selected branch. Available at branch: ${Math.max(0, availableAtWh)}, Requested: ${item.quantity}. Try another branch or leave branch unselected.`
-                        );
-                    }
-                }
-
-                const itemTax = unitPrice * item.quantity * (taxRate / 100);
-                const itemSubtotal = unitPrice * item.quantity;
+                const itemGross = unitPrice * qty;
+                const itemTax = Math.round(itemGross * (taxRate / 100) * 100) / 100;
 
                 resolvedItems.push({
                     productId: product.id,
                     productName: product.name,
                     productSku: product.sku,
-                    quantity: item.quantity,
+                    quantity: qty,
                     unitPrice,
-                    taxAmount: Math.round(itemTax * 100) / 100,
+                    taxAmount: itemTax,
                     discountAmount: 0,
-                    subtotal: Math.round(itemSubtotal * 100) / 100,
+                    subtotal: Math.round(itemGross * 100) / 100,
+                    offerId: null,
                 });
-
-                subtotal += itemSubtotal;
+                subtotalGross += itemGross;
                 taxTotal += itemTax;
+            }
+
+            for (const line of offerLines) {
+                validateStock(line.productName, line.productId, line.quantity);
+                resolvedItems.push({
+                    productId: line.productId,
+                    productName: line.productName,
+                    productSku: line.productSku,
+                    quantity: line.quantity,
+                    unitPrice: line.unitPrice,
+                    taxAmount: line.taxAmount,
+                    discountAmount: line.discountAmount,
+                    subtotal: line.grossSubtotal,
+                    offerId: line.offerId,
+                });
+                subtotalGross += line.grossSubtotal;
+                discountTotal += line.discountAmount;
+                taxTotal += line.taxAmount;
             }
 
             if (!warehouseId && invRows.length > 0) {
@@ -421,7 +466,6 @@ export class MobileOrderService {
                 );
             }
 
-            // 3. Get delivery fee from settings
             const rawPm = (input.paymentMethod || 'COD').trim();
             const paymentMethod = rawPm === 'SelfCollection' ? 'SelfCollection' : 'COD';
 
@@ -430,25 +474,26 @@ export class MobileOrderService {
                 [tenantId]
             );
             let deliveryFee = 0;
+            const netMerchandise = Math.round((subtotalGross - discountTotal) * 100) / 100;
             if (settingsRes.length > 0) {
                 const s = settingsRes[0];
                 deliveryFee = parseFloat(s.delivery_fee) || 0;
-                if (s.free_delivery_above && subtotal >= parseFloat(s.free_delivery_above)) {
+                if (s.free_delivery_above && netMerchandise >= parseFloat(s.free_delivery_above)) {
                     deliveryFee = 0;
                 }
-                if (s.minimum_order_amount && subtotal < parseFloat(s.minimum_order_amount)) {
-                    throw new Error(`Minimum order amount is ${s.minimum_order_amount}. Your cart total is ${subtotal.toFixed(2)}.`);
+                if (s.minimum_order_amount && netMerchandise < parseFloat(s.minimum_order_amount)) {
+                    throw new Error(`Minimum order amount is ${s.minimum_order_amount}. Your cart total is ${netMerchandise.toFixed(2)}.`);
                 }
             }
             if (paymentMethod === 'SelfCollection') {
                 deliveryFee = 0;
             }
 
-            subtotal = Math.round(subtotal * 100) / 100;
+            subtotalGross = Math.round(subtotalGross * 100) / 100;
+            discountTotal = Math.round(discountTotal * 100) / 100;
             taxTotal = Math.round(taxTotal * 100) / 100;
-            const grandTotal = Math.round((subtotal + taxTotal + deliveryFee) * 100) / 100;
+            const grandTotal = Math.round((subtotalGross - discountTotal + taxTotal + deliveryFee) * 100) / 100;
 
-            // 4. Create order
             const orderId = generateId('mord');
             const orderNumber = generateOrderNumber();
 
@@ -459,10 +504,10 @@ export class MobileOrderService {
           payment_method, payment_status,
           delivery_address, delivery_lat, delivery_lng, delivery_notes,
           idempotency_key, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,'Pending',$6,$7,0,$8,$9,$10,'Unpaid',$11,$12,$13,$14,$15,NOW(),NOW())`,
+        ) VALUES ($1,$2,$3,$4,$5,'Pending',$6,$7,$8,$9,$10,$11,'Unpaid',$12,$13,$14,$15,$16,NOW(),NOW())`,
                 [
                     orderId, tenantId, input.customerId, effectiveBranchId,
-                    orderNumber, subtotal, taxTotal, deliveryFee, grandTotal,
+                    orderNumber, subtotalGross, taxTotal, discountTotal, deliveryFee, grandTotal,
                     paymentMethod,
                     input.deliveryAddress || null, input.deliveryLat || null,
                     input.deliveryLng || null, input.deliveryNotes || null,
@@ -470,22 +515,21 @@ export class MobileOrderService {
                 ]
             );
 
-            // 5. Insert order items
             for (const item of resolvedItems) {
                 await client.query(
                     `INSERT INTO mobile_order_items (
             id, tenant_id, order_id, product_id, product_name, product_sku,
-            quantity, unit_price, tax_amount, discount_amount, subtotal
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            quantity, unit_price, tax_amount, discount_amount, subtotal, offer_id
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
                     [
                         generateId('moi'), tenantId, orderId,
                         item.productId, item.productName, item.productSku,
                         item.quantity, item.unitPrice, item.taxAmount,
                         item.discountAmount, item.subtotal,
+                        item.offerId || null,
                     ]
                 );
 
-                // 6. Reserve stock
                 if (warehouseId) {
                     await client.query(
                         `UPDATE shop_inventory
@@ -503,7 +547,22 @@ export class MobileOrderService {
                 }
             }
 
-            // 7. Status history entry
+            for (const [offerId, qty] of offerMerged) {
+                await client.query(
+                    `UPDATE offers SET usage_count = usage_count + $1, updated_at = NOW()
+           WHERE id = $2 AND tenant_id = $3`,
+                    [qty, offerId, tenantId]
+                );
+                await client.query(
+                    `INSERT INTO mobile_customer_offer_usage (id, tenant_id, customer_id, offer_id, usage_count, updated_at)
+           VALUES ($1,$2,$3,$4,$5,NOW())
+           ON CONFLICT (tenant_id, customer_id, offer_id) DO UPDATE SET
+             usage_count = mobile_customer_offer_usage.usage_count + EXCLUDED.usage_count,
+             updated_at = NOW()`,
+                    [generateId('mcou'), tenantId, input.customerId, offerId, qty]
+                );
+            }
+
             await client.query(
                 `INSERT INTO mobile_order_status_history (id, tenant_id, order_id, from_status, to_status, changed_by, changed_by_type)
          VALUES ($1, $2, $3, NULL, 'Pending', 'system', 'system')`,
@@ -515,8 +574,9 @@ export class MobileOrderService {
                     id: orderId,
                     order_number: orderNumber,
                     status: 'Pending',
-                    subtotal,
+                    subtotal: subtotalGross,
                     tax_total: taxTotal,
+                    discount_total: discountTotal,
                     delivery_fee: deliveryFee,
                     grand_total: grandTotal,
                     items: resolvedItems,

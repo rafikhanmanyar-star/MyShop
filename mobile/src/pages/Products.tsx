@@ -44,7 +44,7 @@ export default function Products() {
 
         const currentFilters = customParams || filters;
         const params: Record<string, any> = {
-            limit: '20',
+            limit: '24',
             ...currentFilters,
             search: searchTerm
         };
@@ -272,7 +272,7 @@ export default function Products() {
     };
 
     return (
-        <div className="page fade-in">
+        <div className="page page--browse fade-in">
             {/* Search */}
             <div className="search-bar">
                 <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
@@ -341,13 +341,14 @@ export default function Products() {
 
             {/* Products Grid */}
             {loading ? (
-                <div className="product-grid">
-                    {[1, 2, 3, 4, 5, 6].map(i => (
+                <div className="product-grid product-grid--compact">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (
                         <div key={i} className="product-card">
                             <div className="skeleton" style={{ aspectRatio: '1' }} />
-                            <div style={{ padding: 12 }}>
-                                <div className="skeleton" style={{ height: 14, width: '80%', marginBottom: 8 }} />
-                                <div className="skeleton" style={{ height: 18, width: '50%' }} />
+                            <div style={{ padding: 8 }}>
+                                <div className="skeleton" style={{ height: 11, width: '80%', marginBottom: 6 }} />
+                                <div className="skeleton" style={{ height: 13, width: '50%', marginBottom: 6 }} />
+                                <div className="skeleton" style={{ height: 22, width: '100%' }} />
                             </div>
                         </div>
                     ))}
@@ -367,7 +368,7 @@ export default function Products() {
                 </div>
             ) : (
                 <>
-                    <div className="product-grid">
+                    <div className="product-grid product-grid--compact">
                         {displayedProducts.map((p: any) => (
                             <Link key={p.id} to={`/${shopSlug}/products/${p.id}`} className="product-card">
                                 {p.is_on_sale && p.discount_percentage > 0 && (

@@ -13,6 +13,17 @@ export interface CartItem {
     tax_rate: number;
 }
 
+/** One promotional bundle line (server recalculates on checkout). */
+export interface OfferCartItem {
+    offerId: string;
+    title: string;
+    quantity: number;
+    merchandisePerBundle: number;
+    taxPerBundle: number;
+    productIds: string[];
+    discountBadge: string;
+}
+
 export interface ShopInfo {
     name: string;
     company_name: string;
@@ -43,6 +54,7 @@ export interface ShopSettings {
     estimated_delivery_minutes: number;
     order_acceptance_start: string;
     order_acceptance_end: string;
+    offer_stacking_mode?: 'best' | 'stack';
 }
 
 interface AppState {
@@ -52,6 +64,7 @@ interface AppState {
     settings: ShopSettings | null;
     branding: TenantBranding | null;
     cart: CartItem[];
+    offerBundles: OfferCartItem[];
     isLoggedIn: boolean;
     customerId: string | null;
     customerPhone: string | null;
@@ -65,6 +78,9 @@ type Action =
     | { type: 'UPDATE_QTY'; productId: string; quantity: number }
     | { type: 'REMOVE_FROM_CART'; productId: string }
     | { type: 'CLEAR_CART' }
+    | { type: 'ADD_OFFER_BUNDLE'; item: OfferCartItem }
+    | { type: 'UPDATE_OFFER_QTY'; offerId: string; quantity: number }
+    | { type: 'REMOVE_OFFER_BUNDLE'; offerId: string }
     | { type: 'LOGIN'; customerId: string; phone: string; name: string | null; token: string }
     | { type: 'LOGOUT' }
     | { type: 'UPDATE_CUSTOMER_PROFILE'; name: string | null }
@@ -72,6 +88,7 @@ type Action =
     | { type: 'HIDE_TOAST' };
 
 const CART_KEY = 'myshop_cart';
+const OFFER_CART_KEY = 'myshop_offer_bundles';
 const AUTH_KEY = 'mobile_token';
 const CUSTOMER_KEY = 'mobile_customer';
 const LAST_SHOP_SLUG_KEY = 'myshop_last_shop_slug';
@@ -85,6 +102,17 @@ function loadCart(): CartItem[] {
 
 function saveCart(cart: CartItem[]) {
     localStorage.setItem(CART_KEY, JSON.stringify(cart));
+}
+
+function loadOfferCart(): OfferCartItem[] {
+    try {
+        const data = localStorage.getItem(OFFER_CART_KEY);
+        return data ? JSON.parse(data) : [];
+    } catch { return []; }
+}
+
+function saveOfferCart(items: OfferCartItem[]) {
+    localStorage.setItem(OFFER_CART_KEY, JSON.stringify(items));
 }
 
 function loadAuth(): { isLoggedIn: boolean; customerId: string | null; phone: string | null; name: string | null } {
@@ -108,6 +136,7 @@ const initialState: AppState = {
     settings: null,
     branding: null,
     cart: loadCart(),
+    offerBundles: loadOfferCart(),
     isLoggedIn: initialAuth.isLoggedIn,
     customerId: initialAuth.customerId,
     customerPhone: initialAuth.phone,
@@ -121,6 +150,12 @@ function reducer(state: AppState, action: Action): AppState {
             try {
                 localStorage.setItem(LAST_SHOP_SLUG_KEY, action.slug);
             } catch { /* ignore */ }
+            const prevSlug = state.shopSlug;
+            const shopChanged = prevSlug != null && prevSlug !== action.slug;
+            if (shopChanged) {
+                saveCart([]);
+                saveOfferCart([]);
+            }
             return {
                 ...state,
                 shopSlug: action.slug,
@@ -128,15 +163,19 @@ function reducer(state: AppState, action: Action): AppState {
                 branchId: action.shop?.branchId ?? null,
                 settings: action.settings,
                 branding: action.branding,
+                cart: shopChanged ? [] : state.cart,
+                offerBundles: shopChanged ? [] : state.offerBundles,
             };
         }
 
         case 'ADD_TO_CART': {
-            const existing = state.cart.find(i => i.productId === action.item.productId);
+            const pid = action.item.productId;
+            const newOffers = state.offerBundles.filter(o => !o.productIds.includes(pid));
+            const existing = state.cart.find(i => i.productId === pid);
             let newCart: CartItem[];
             if (existing) {
                 newCart = state.cart.map(i =>
-                    i.productId === action.item.productId
+                    i.productId === pid
                         ? { ...i, quantity: i.quantity + action.item.quantity }
                         : i
                 );
@@ -144,7 +183,8 @@ function reducer(state: AppState, action: Action): AppState {
                 newCart = [...state.cart, action.item];
             }
             saveCart(newCart);
-            return { ...state, cart: newCart };
+            saveOfferCart(newOffers);
+            return { ...state, cart: newCart, offerBundles: newOffers };
         }
 
         case 'UPDATE_QTY': {
@@ -163,7 +203,51 @@ function reducer(state: AppState, action: Action): AppState {
 
         case 'CLEAR_CART':
             saveCart([]);
-            return { ...state, cart: [] };
+            saveOfferCart([]);
+            return { ...state, cart: [], offerBundles: [] };
+
+        case 'ADD_OFFER_BUNDLE': {
+            const pids = new Set(action.item.productIds);
+            const newCart = state.cart.filter(i => !pids.has(i.productId));
+            const mode = state.settings?.offer_stacking_mode ?? 'best';
+            let newOffers: OfferCartItem[];
+            if (mode === 'best') {
+                const same = state.offerBundles.find(o => o.offerId === action.item.offerId);
+                if (same) {
+                    newOffers = [{ ...same, quantity: same.quantity + action.item.quantity }];
+                } else {
+                    newOffers = [action.item];
+                }
+            } else {
+                const existing = state.offerBundles.find(o => o.offerId === action.item.offerId);
+                if (existing) {
+                    newOffers = state.offerBundles.map(o =>
+                        o.offerId === action.item.offerId
+                            ? { ...o, quantity: o.quantity + action.item.quantity }
+                            : o
+                    );
+                } else {
+                    newOffers = [...state.offerBundles, action.item];
+                }
+            }
+            saveCart(newCart);
+            saveOfferCart(newOffers);
+            return { ...state, cart: newCart, offerBundles: newOffers };
+        }
+
+        case 'UPDATE_OFFER_QTY': {
+            const newOffers = state.offerBundles
+                .map(o => (o.offerId === action.offerId ? { ...o, quantity: action.quantity } : o))
+                .filter(o => o.quantity > 0);
+            saveOfferCart(newOffers);
+            return { ...state, offerBundles: newOffers };
+        }
+
+        case 'REMOVE_OFFER_BUNDLE': {
+            const newOffers = state.offerBundles.filter(o => o.offerId !== action.offerId);
+            saveOfferCart(newOffers);
+            return { ...state, offerBundles: newOffers };
+        }
 
         case 'LOGIN':
             localStorage.setItem(AUTH_KEY, action.token);
@@ -203,6 +287,7 @@ interface AppContextType {
     state: AppState;
     dispatch: React.Dispatch<Action>;
     cartTotal: number;
+    cartTax: number;
     cartCount: number;
     showToast: (message: string) => void;
 }
@@ -212,8 +297,20 @@ const AppContext = createContext<AppContextType>(null!);
 export function AppProvider({ children }: { children: React.ReactNode }) {
     const [state, dispatch] = useReducer(reducer, initialState);
 
-    const cartTotal = state.cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const cartCount = state.cart.reduce((sum, i) => sum + i.quantity, 0);
+    const cartMerch =
+        state.cart.reduce((sum, i) => sum + i.price * i.quantity, 0) +
+        state.offerBundles.reduce((sum, o) => sum + o.merchandisePerBundle * o.quantity, 0);
+
+    const cartTax =
+        state.cart.reduce((sum, i) => sum + i.price * i.quantity * (i.tax_rate / 100), 0) +
+        state.offerBundles.reduce((sum, o) => sum + o.taxPerBundle * o.quantity, 0);
+
+    const cartTotal = Math.round(cartMerch * 100) / 100;
+    const cartTaxRounded = Math.round(cartTax * 100) / 100;
+
+    const cartCount =
+        state.cart.reduce((sum, i) => sum + i.quantity, 0) +
+        state.offerBundles.reduce((sum, o) => sum + o.quantity, 0);
 
     const showToast = useCallback((message: string) => {
         dispatch({ type: 'SHOW_TOAST', message });
@@ -221,7 +318,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     return (
-        <AppContext.Provider value={{ state, dispatch, cartTotal, cartCount, showToast }}>
+        <AppContext.Provider value={{ state, dispatch, cartTotal, cartTax: cartTaxRounded, cartCount, showToast }}>
             {children}
             {state.toast && <div className="toast">{state.toast}</div>}
         </AppContext.Provider>

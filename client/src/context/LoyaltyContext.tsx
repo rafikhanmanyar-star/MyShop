@@ -62,6 +62,7 @@ export const LoyaltyProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     const mappedMembers: LoyaltyMember[] = data.map((m: any) => ({
                         id: m.id,
                         customerId: m.customer_id,
+                        mobileCustomerId: m.mobile_customer_id ?? null,
                         customerName: m.customer_name || 'Unnamed Member',
                         cardNumber: m.card_number,
                         phone: m.contact_no,

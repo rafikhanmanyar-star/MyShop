@@ -13,6 +13,7 @@ const DB_VERSION = 1;
 
 export interface PendingOrderPayload {
     items: Array<{ productId: string; quantity: number }>;
+    offerBundles?: Array<{ offerId: string; quantity: number }>;
     deliveryAddress: string;
     deliveryNotes?: string;
     paymentMethod: string;

@@ -10,7 +10,7 @@ type PaymentChoice = 'COD' | 'SelfCollection';
 export default function Checkout() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
-    const { state, dispatch, cartTotal, showToast } = useApp();
+    const { state, dispatch, cartTotal, cartTax, showToast } = useApp();
     const online = useOnline();
 
     const [address, setAddress] = useState('');
@@ -43,7 +43,7 @@ export default function Checkout() {
     const actualDelivery = isPickup
         ? 0
         : (freeAbove && cartTotal >= freeAbove ? 0 : deliveryFee);
-    const tax = state.cart.reduce((sum, i) => sum + i.price * i.quantity * (i.tax_rate / 100), 0);
+    const tax = cartTax;
     const grandTotal = cartTotal + tax + actualDelivery;
 
     const formatPrice = (p: number | string | null | undefined) => {
@@ -70,6 +70,7 @@ export default function Checkout() {
             const deliveryAddress = isPickup ? selfCollectionAddress() : address.trim();
             const payload = {
                 items: state.cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
+                offerBundles: state.offerBundles.map(o => ({ offerId: o.offerId, quantity: o.quantity })),
                 deliveryAddress,
                 deliveryNotes: notes || undefined,
                 paymentMethod,
@@ -99,7 +100,7 @@ export default function Checkout() {
 
     const canSubmit = isPickup || address.trim().length > 0;
 
-    if (state.cart.length === 0) {
+    if (state.cart.length === 0 && state.offerBundles.length === 0) {
         navigate(`/${shopSlug}/cart`, { replace: true });
         return null;
     }

@@ -94,6 +94,8 @@ export const publicApi = {
         return request(`${API_BASE}/${slug}/products${qs ? `?${qs}` : ''}`);
     },
     getProduct: (slug: string, id: string) => request(`${API_BASE}/${slug}/products/${id}`),
+    getOffers: (slug: string) => request(`${API_BASE}/${slug}/offers`),
+    getOffer: (slug: string, offerId: string) => request(`${API_BASE}/${slug}/offers/${offerId}`),
     getBrands: (slug: string) => request(`${API_BASE}/${slug}/brands`),
     getBranding: (slug: string) => request(`${API_BASE}/${slug}/branding`),
     /** Create product/SKU (used when syncing offline-created products; requires backend POST /api/mobile/:shopSlug/products) */

@@ -255,39 +255,43 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const offlineQueueMessage =
+    'Could not save to the server right now. Changes were saved only on this device and will sync when the connection is stable. If another user is editing Settings at the same time, wait until they finish and try again.';
+
   const createAccount = async (data: any) => {
     const result = await createAccountOfflineFirst(data);
     if (result.synced) await refreshAll();
     else if (result.localId) {
-      console.warn('Account saved offline. Will sync when back online.');
+      alert(offlineQueueMessage);
     }
-    return result.result ?? result;
+    return { synced: !!result.synced, localId: result.localId, value: result.result };
   };
 
   const updateAccount = async (id: string, data: any) => {
     const result = await updateAccountOfflineFirst(id, data);
     if (result.synced) await refreshAll();
     else if (result.localId) {
-      console.warn('Update saved offline. Will sync when back online.');
+      alert(offlineQueueMessage);
     }
-    return result.result ?? result;
+    return { synced: !!result.synced, localId: result.localId, value: result.result };
   };
 
   const deleteAccount = async (id: string) => {
     const result = await deleteAccountOfflineFirst(id);
     if (result.synced) await refreshAll();
     else if (result.localId) {
-      console.warn('Delete saved offline. Will sync when back online.');
+      alert(offlineQueueMessage);
     }
+    return { synced: !!result.synced, localId: result.localId };
   };
 
   const postJournalEntry = async (data: any) => {
     const result = await postJournalEntryOfflineFirst(data);
     if (result.synced) await refreshAll();
     else if (result.localId) {
-      console.warn('Journal entry saved offline. Will sync when back online.');
+      alert(offlineQueueMessage);
     }
-    return result.result ?? result;
+    return { synced: !!result.synced, localId: result.localId, value: result.result };
   };
 
   const updateJournalEntry = async (id: string, data: any) => {

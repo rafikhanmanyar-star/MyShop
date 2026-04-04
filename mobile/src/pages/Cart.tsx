@@ -5,7 +5,7 @@ import CachedImage from '../components/CachedImage';
 export default function Cart() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
-    const { state, dispatch, cartTotal, cartCount } = useApp();
+    const { state, dispatch, cartTotal, cartTax, cartCount } = useApp();
 
     const formatPrice = (p: number | string | null | undefined) => {
         if (p === null || p === undefined) return 'Rs. 0';
@@ -16,7 +16,7 @@ export default function Cart() {
     const deliveryFee = state.settings?.delivery_fee || 0;
     const freeAbove = state.settings?.free_delivery_above;
     const actualDelivery = freeAbove && cartTotal >= freeAbove ? 0 : deliveryFee;
-    const tax = state.cart.reduce((sum, i) => sum + i.price * i.quantity * (i.tax_rate / 100), 0);
+    const tax = cartTax;
     const grandTotal = cartTotal + tax + actualDelivery;
 
     const handleCheckout = () => {
@@ -34,7 +34,9 @@ export default function Cart() {
         dispatch({ type: 'REMOVE_FROM_CART', productId });
     };
 
-    if (state.cart.length === 0) {
+    const isEmpty = state.cart.length === 0 && state.offerBundles.length === 0;
+
+    if (isEmpty) {
         return (
             <div className="page fade-in">
                 <div className="empty-state">
@@ -55,11 +57,53 @@ export default function Cart() {
                 <h1>Cart ({cartCount})</h1>
             </div>
 
-            {/* Cart Items */}
             <div style={{
                 background: 'white', borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-light)', padding: '4px 16px', marginBottom: 16,
             }}>
+                {state.offerBundles.map(o => {
+                    const line = (o.merchandisePerBundle + o.taxPerBundle) * o.quantity;
+                    return (
+                        <div key={o.offerId} className="cart-item" style={{ borderLeft: '3px solid var(--primary)' }}>
+                            <div className="item-image" style={{
+                                background: 'linear-gradient(135deg, var(--primary), var(--accent))',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 12,
+                            }}>
+                                %
+                            </div>
+                            <div className="item-details">
+                                <div className="item-name">{o.title}</div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginTop: 4 }}>
+                                    Offer applied · {o.discountBadge}
+                                </div>
+                                <div className="item-price">{formatPrice(line)}</div>
+                                <button
+                                    type="button"
+                                    className="cart-item-remove"
+                                    onClick={() => dispatch({ type: 'REMOVE_OFFER_BUNDLE', offerId: o.offerId })}
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                            <div className="qty-controls">
+                                <button
+                                    type="button"
+                                    onClick={() => o.quantity === 1
+                                        ? dispatch({ type: 'REMOVE_OFFER_BUNDLE', offerId: o.offerId })
+                                        : dispatch({ type: 'UPDATE_OFFER_QTY', offerId: o.offerId, quantity: o.quantity - 1 })
+                                    }
+                                >
+                                    {o.quantity === 1 ? '🗑' : '−'}
+                                </button>
+                                <span>{o.quantity}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => dispatch({ type: 'UPDATE_OFFER_QTY', offerId: o.offerId, quantity: o.quantity + 1 })}
+                                >+</button>
+                            </div>
+                        </div>
+                    );
+                })}
                 {state.cart.map(item => (
                     <div key={item.productId} className="cart-item">
                         <div className="item-image">
@@ -98,7 +142,6 @@ export default function Cart() {
                 ))}
             </div>
 
-            {/* Summary */}
             <div style={{
                 background: 'white', borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-light)', padding: 16, marginBottom: 16,
@@ -128,7 +171,6 @@ export default function Cart() {
                 </div>
             </div>
 
-            {/* Minimum order warning */}
             {state.settings?.minimum_order_amount && cartTotal < state.settings.minimum_order_amount && (
                 <p style={{
                     textAlign: 'center', fontSize: 13, color: 'var(--warning)',
@@ -138,7 +180,6 @@ export default function Cart() {
                 </p>
             )}
 
-            {/* Checkout Button */}
             <button
                 className="btn btn-primary btn-full"
                 onClick={handleCheckout}

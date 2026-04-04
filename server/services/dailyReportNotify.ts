@@ -1,6 +1,10 @@
 import { getDatabaseService } from './databaseService.js';
 
-export type RealtimeNotifyType = 'daily_report_updated' | 'sales_return_created' | 'sale_created';
+export type RealtimeNotifyType =
+  | 'daily_report_updated'
+  | 'sales_return_created'
+  | 'sale_created'
+  | 'settings_edit_lock_changed';
 
 /** PostgreSQL NOTIFY for multi-user daily report refresh and realtime shop events (SSE clients LISTEN). */
 export async function notifyDailyReportUpdated(

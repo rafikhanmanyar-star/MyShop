@@ -66,13 +66,14 @@ const ChartOfAccounts: React.FC = () => {
 
         setCreating(true);
         try {
-            await createAccount({
+            const ret = await createAccount({
                 ...newAccount,
                 name: newAccount.name.trim(),
                 code: newAccount.code.trim(),
                 balance: 0,
                 isActive: true
             });
+            if (ret && typeof ret === 'object' && 'synced' in ret && !ret.synced) return;
             closeModal();
         } catch (e: any) {
             const msg = e?.error || e?.message || 'Failed to create account';
@@ -90,13 +91,14 @@ const ChartOfAccounts: React.FC = () => {
 
         setSaving(true);
         try {
-            await updateAccount(editingAccount.id, {
+            const ret = await updateAccount(editingAccount.id, {
                 name: newAccount.name.trim(),
                 code: newAccount.code.trim(),
                 type: newAccount.type,
                 description: newAccount.description || undefined,
                 isActive: true
             });
+            if (ret && typeof ret === 'object' && 'synced' in ret && !ret.synced) return;
             closeModal();
         } catch (e: any) {
             const msg = e?.error || e?.message || 'Failed to update account';
@@ -112,7 +114,8 @@ const ChartOfAccounts: React.FC = () => {
         setFormError('');
         setDeleting(true);
         try {
-            await deleteAccount(editingAccount.id);
+            const ret = await deleteAccount(editingAccount.id);
+            if (ret && typeof ret === 'object' && 'synced' in ret && !ret.synced) return;
             closeModal();
         } catch (e: any) {
             const msg = e?.error || e?.message || 'Failed to delete account';

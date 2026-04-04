@@ -459,7 +459,10 @@ const MemberDirectory: React.FC = () => {
                                     }
                                     setPwResetLoading(true);
                                     try {
-                                        await mobileOrdersApi.resetCustomerPassword(selectedMember.customerId, newPw);
+                                        await mobileOrdersApi.resetCustomerPassword(
+                                            selectedMember.mobileCustomerId || selectedMember.customerId,
+                                            newPw
+                                        );
                                         setPwResetOpen(false);
                                         setNewPw('');
                                         setConfirmPw('');

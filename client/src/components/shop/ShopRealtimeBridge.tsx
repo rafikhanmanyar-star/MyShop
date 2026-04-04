@@ -46,6 +46,9 @@ export default function ShopRealtimeBridge() {
                       ) {
                         window.dispatchEvent(new CustomEvent('shop:realtime', { detail: payload }));
                       }
+                      if (payload.type === 'settings_edit_lock_changed') {
+                        window.dispatchEvent(new CustomEvent('shop:settings-lock-changed', { detail: payload }));
+                      }
                     } catch {
                       /* ignore */
                     }

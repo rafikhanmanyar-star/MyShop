@@ -124,7 +124,12 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        throw { error: responseData.error || 'Request failed', message: responseData.message, status: response.status };
+        throw {
+          error: responseData.error || 'Request failed',
+          message: responseData.message,
+          status: response.status,
+          lockedBy: responseData.lockedBy,
+        };
       }
 
       return responseData as T;

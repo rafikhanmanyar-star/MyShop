@@ -14,6 +14,8 @@ export interface LoyaltyProgram {
 export interface LoyaltyMember {
     id: string;
     customerId: string;
+    /** Present when this member is linked to a mobile app account (same phone as contact). */
+    mobileCustomerId?: string | null;
     customerName: string;
     cardNumber: string;
     email?: string;

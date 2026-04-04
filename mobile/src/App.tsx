@@ -12,6 +12,8 @@ import OrderConfirm from './pages/OrderConfirm';
 import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
 import LandingPage from './pages/LandingPage';
+import Offers from './pages/Offers';
+import OfferDetail from './pages/OfferDetail';
 import BudgetDashboard from './pages/BudgetDashboard';
 import BudgetCreation from './pages/BudgetCreation';
 import BudgetDetail from './pages/BudgetDetail';
@@ -63,6 +65,8 @@ export default function App() {
           <Route index element={<Home />} />
           <Route path="products" element={<Products />} />
           <Route path="products/:id" element={<ProductDetail />} />
+          <Route path="offers" element={<Offers />} />
+          <Route path="offers/:id" element={<OfferDetail />} />
           <Route path="cart" element={<Cart />} />
           <Route path="login" element={<Login />} />
           <Route path="checkout" element={<Checkout />} />

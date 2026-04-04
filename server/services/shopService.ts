@@ -1,5 +1,6 @@
 import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
+import { notifyDailyReportUpdated } from './dailyReportNotify.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct, resolveUnitCostFromProductRow } from '../utils/productUnitCost.js';
 
@@ -844,13 +845,53 @@ export class ShopService {
   }
 
   // --- Loyalty Methods ---
+  /**
+   * Lists loyalty members joined to contacts, with optional mobile app account id (same phone).
+   * Ensures every mobile_customers row has a matching loyalty + contact row (backfill for users who
+   * registered without ordering or before auto-enrollment existed).
+   */
   async getLoyaltyMembers(tenantId: string) {
-    return this.db.query(`
-      SELECT m.*, c.name as customer_name, c.contact_no, c.address as email
+    const needsEnrollment = await this.db.query(
+      `SELECT mc.phone, mc.name
+       FROM mobile_customers mc
+       WHERE mc.tenant_id = $1
+         AND NULLIF(trim(mc.phone), '') IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1
+           FROM shop_loyalty_members m
+           INNER JOIN contacts c ON c.id = m.customer_id AND c.tenant_id = mc.tenant_id
+           WHERE m.tenant_id = mc.tenant_id
+             AND regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+             AND length(regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g')) > 0
+         )`,
+      [tenantId]
+    );
+    for (const row of needsEnrollment) {
+      try {
+        await this.ensureLoyaltyMemberForMobileUser(tenantId, {
+          phone: row.phone,
+          name: row.name || 'Customer',
+          email: null,
+        });
+      } catch {
+        // Best-effort; list still loads for other members
+      }
+    }
+
+    return this.db.query(
+      `
+      SELECT m.*, c.name AS customer_name, c.contact_no, c.address AS email,
+             mc.id AS mobile_customer_id
       FROM shop_loyalty_members m
-      JOIN contacts c ON m.customer_id = c.id AND c.tenant_id = $1
+      INNER JOIN contacts c ON m.customer_id = c.id AND c.tenant_id = $1
+      LEFT JOIN mobile_customers mc ON mc.tenant_id = $1
+        AND regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+        AND length(regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g')) > 0
       WHERE m.tenant_id = $1
-    `, [tenantId]);
+      ORDER BY c.name ASC
+    `,
+      [tenantId]
+    );
   }
 
   async createLoyaltyMember(tenantId: string, data: any) {
@@ -896,10 +937,19 @@ export class ShopService {
     return this.db.transaction(async (client: any) => {
       let customerId: string;
 
-      const existing = await client.query(
+      let existing = await client.query(
         'SELECT id FROM contacts WHERE tenant_id = $1 AND contact_no = $2 LIMIT 1',
         [tenantId, phone]
       );
+      if (existing.length === 0) {
+        existing = await client.query(
+          `SELECT id FROM contacts WHERE tenant_id = $1 AND contact_no IS NOT NULL
+           AND regexp_replace(COALESCE(contact_no, ''), '[^0-9]', '', 'g') = regexp_replace($2, '[^0-9]', '', 'g')
+           AND length(regexp_replace($2, '[^0-9]', '', 'g')) > 0
+           LIMIT 1`,
+          [tenantId, phone]
+        );
+      }
       if (existing.length > 0) {
         customerId = existing[0].id;
       } else {
@@ -1473,6 +1523,87 @@ export class ShopService {
     } catch (_) {
       // non-blocking
     }
+  }
+
+  private static readonly SETTINGS_LOCK_TTL_MS = 90_000;
+
+  /** Remove stale settings edit locks (call before acquire/heartbeat). */
+  async purgeExpiredSettingsEditLocks(tenantId: string) {
+    await this.db.execute(
+      `DELETE FROM settings_edit_locks WHERE tenant_id = $1 AND expires_at < NOW()`,
+      [tenantId]
+    );
+  }
+
+  async getSettingsEditLock(tenantId: string) {
+    await this.purgeExpiredSettingsEditLocks(tenantId);
+    const rows = await this.db.query(
+      `SELECT tenant_id, user_id, user_name, acquired_at, expires_at
+       FROM settings_edit_locks WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    if (!rows.length) return { locked: false as const };
+    const r = rows[0] as any;
+    return {
+      locked: true as const,
+      lockedBy: { userId: r.user_id, userName: r.user_name || 'Another user' },
+      expiresAt: r.expires_at,
+    };
+  }
+
+  /**
+   * Try to take or extend the settings edit lock for this user.
+   * Returns { acquired: false, lockedBy } if another user holds a non-expired lock.
+   */
+  async acquireSettingsEditLock(tenantId: string, userId: string, userName: string | null) {
+    await this.purgeExpiredSettingsEditLocks(tenantId);
+    const expiresAt = new Date(Date.now() + ShopService.SETTINGS_LOCK_TTL_MS);
+    const rows = await this.db.query(
+      `SELECT user_id, user_name FROM settings_edit_locks WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    if (!rows.length) {
+      await this.db.execute(
+        `INSERT INTO settings_edit_locks (tenant_id, user_id, user_name, acquired_at, expires_at)
+         VALUES ($1, $2, $3, NOW(), $4)`,
+        [tenantId, userId, userName || null, expiresAt]
+      );
+      await notifyDailyReportUpdated(tenantId, 'settings_edit_lock_changed');
+      return { acquired: true as const, expiresAt: expiresAt.toISOString() };
+    }
+    const row = rows[0] as any;
+    if (row.user_id === userId) {
+      await this.db.execute(
+        `UPDATE settings_edit_locks SET expires_at = $1, user_name = COALESCE($2, user_name) WHERE tenant_id = $3`,
+        [expiresAt, userName || null, tenantId]
+      );
+      return { acquired: true as const, expiresAt: expiresAt.toISOString() };
+    }
+    return {
+      acquired: false as const,
+      lockedBy: { userId: row.user_id, userName: row.user_name || 'Another user' },
+    };
+  }
+
+  async heartbeatSettingsEditLock(tenantId: string, userId: string) {
+    await this.purgeExpiredSettingsEditLocks(tenantId);
+    const expiresAt = new Date(Date.now() + ShopService.SETTINGS_LOCK_TTL_MS);
+    const res = await this.db.query(
+      `UPDATE settings_edit_locks SET expires_at = $1 WHERE tenant_id = $2 AND user_id = $3 RETURNING tenant_id`,
+      [expiresAt, tenantId, userId]
+    );
+    if (!res.length) {
+      return { ok: false as const, reason: 'no_lock' as const };
+    }
+    return { ok: true as const, expiresAt: expiresAt.toISOString() };
+  }
+
+  async releaseSettingsEditLock(tenantId: string, userId: string) {
+    await this.db.execute(
+      `DELETE FROM settings_edit_locks WHERE tenant_id = $1 AND user_id = $2`,
+      [tenantId, userId]
+    );
+    await notifyDailyReportUpdated(tenantId, 'settings_edit_lock_changed');
   }
 }
 

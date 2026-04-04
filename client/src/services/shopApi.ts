@@ -141,6 +141,20 @@ export const shopApi = {
   getReceiptSettings: () => apiClient.get<any>('/shop/receipt-settings'),
   updateReceiptSettings: (data: any) => apiClient.post<any>('/shop/receipt-settings', data),
 
+  getSettingsEditLock: () =>
+    apiClient.get<{ locked: boolean; lockedBy?: { userId: string; userName: string }; expiresAt?: string }>(
+      '/shop/settings/edit-lock'
+    ),
+  acquireSettingsEditLock: (userName: string) =>
+    apiClient.post<{ acquired: boolean; expiresAt: string }>('/shop/settings/edit-lock', {
+      action: 'acquire',
+      userName,
+    }),
+  heartbeatSettingsEditLock: () =>
+    apiClient.post<{ ok: boolean; expiresAt: string }>('/shop/settings/edit-lock', { action: 'heartbeat' }),
+  releaseSettingsEditLock: () =>
+    apiClient.post<{ released: boolean }>('/shop/settings/edit-lock', { action: 'release' }),
+
   incrementReprintCount: (saleId: string) => apiClient.post<any>(`/shop/sales/${saleId}/reprint`),
   getSaleByInvoiceNumber: (saleNumber: string) => apiClient.get<any>(`/shop/sales/by-invoice/${encodeURIComponent(saleNumber)}`),
 
@@ -151,6 +165,12 @@ export const shopApi = {
   getSalesReturn: (id: string) => apiClient.get<any>(`/shop/sales/returns/${encodeURIComponent(id)}`),
   createSalesReturn: (data: Record<string, unknown>) =>
     apiClient.post<{ id: string; returnNumber: string; totalReturnAmount: number }>('/shop/sales/returns', data),
+
+  getOffers: () => apiClient.get<any[]>('/shop/offers'),
+  getOffer: (id: string) => apiClient.get<any>(`/shop/offers/${id}`),
+  createOffer: (data: Record<string, unknown>) => apiClient.post<{ id: string }>('/shop/offers', data),
+  updateOffer: (id: string, data: Record<string, unknown>) => apiClient.put(`/shop/offers/${id}`, data),
+  deleteOffer: (id: string) => apiClient.delete(`/shop/offers/${id}`),
 };
 
 // --- Khata / Customer Credit API ---
