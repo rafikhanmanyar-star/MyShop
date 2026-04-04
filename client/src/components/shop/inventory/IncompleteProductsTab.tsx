@@ -73,6 +73,33 @@ const IncompleteProductsTab: React.FC = () => {
 
     const incomplete = useMemo(() => items.filter(isIncompleteServerProduct), [items]);
 
+    const issueStats = useMemo(() => {
+        let missingImage = 0;
+        let missingBarcode = 0;
+        let missingName = 0;
+        let missingSku = 0;
+        let missingUnit = 0;
+        let totalIssueFlags = 0;
+        for (const item of incomplete) {
+            const m = missingLabels(item);
+            totalIssueFlags += m.length;
+            if (m.includes('Image')) missingImage += 1;
+            if (m.includes('Barcode')) missingBarcode += 1;
+            if (m.includes('Name')) missingName += 1;
+            if (m.includes('SKU')) missingSku += 1;
+            if (m.includes('Unit')) missingUnit += 1;
+        }
+        return {
+            totalSkus: incomplete.length,
+            missingImage,
+            missingBarcode,
+            missingName,
+            missingSku,
+            missingUnit,
+            totalIssueFlags,
+        };
+    }, [incomplete]);
+
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
         if (!q) return incomplete;
@@ -217,6 +244,55 @@ const IncompleteProductsTab: React.FC = () => {
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-4">
+            <div className="grid flex-shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="rounded-xl border border-border bg-card p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/50">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">SKUs to fix</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{issueStats.totalSkus}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        {issueStats.totalIssueFlags > 0
+                            ? `${issueStats.totalIssueFlags} issue${issueStats.totalIssueFlags === 1 ? '' : 's'} total`
+                            : 'All clear'}
+                    </p>
+                </div>
+                <div className="rounded-xl border border-amber-200/80 bg-amber-50/80 p-4 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-200/90">No image</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-950 dark:text-amber-100">
+                        {issueStats.missingImage}
+                    </p>
+                    <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/70">Products affected</p>
+                </div>
+                <div className="rounded-xl border border-sky-200/80 bg-sky-50/80 p-4 shadow-sm dark:border-sky-900/50 dark:bg-sky-950/30">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-sky-800 dark:text-sky-200/90">No barcode</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-sky-950 dark:text-sky-100">
+                        {issueStats.missingBarcode}
+                    </p>
+                    <p className="mt-1 text-xs text-sky-800/80 dark:text-sky-200/70">Products affected</p>
+                </div>
+                <div className="rounded-xl border border-violet-200/80 bg-violet-50/80 p-4 shadow-sm dark:border-violet-900/50 dark:bg-violet-950/30">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-violet-800 dark:text-violet-200/90">No name</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-violet-950 dark:text-violet-100">
+                        {issueStats.missingName}
+                    </p>
+                    <p className="mt-1 text-xs text-violet-800/80 dark:text-violet-200/70">Products affected</p>
+                </div>
+                <div className="rounded-xl border border-rose-200/80 bg-rose-50/80 p-4 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/30">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-rose-800 dark:text-rose-200/90">No SKU</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-rose-950 dark:text-rose-100">
+                        {issueStats.missingSku}
+                    </p>
+                    <p className="mt-1 text-xs text-rose-800/80 dark:text-rose-200/70">Products affected</p>
+                </div>
+                <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/80 p-4 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-200/90">No unit</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-950 dark:text-emerald-100">
+                        {issueStats.missingUnit}
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-200/70">Products affected</p>
+                </div>
+            </div>
+            <p className="flex-shrink-0 text-xs text-muted-foreground">
+                Per-issue counts can add up to more than “SKUs to fix” because one product may have several gaps at once.
+            </p>
             <div className="flex flex-shrink-0 flex-wrap items-start gap-4">
                 <p className="max-w-2xl text-sm text-muted-foreground">
                     SKUs that are saved in the catalog but still need data: missing product image, barcode, name, SKU code, or

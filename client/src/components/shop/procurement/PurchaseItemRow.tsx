@@ -11,6 +11,8 @@ export interface LineItem {
 
 export interface PurchaseItemRowProps {
   line: LineItem;
+  /** 1-based line number for cross-checking with supplier invoices */
+  serialNumber: number;
   productName: string;
   currencyLabel: string;
   stock: number | null;
@@ -23,6 +25,7 @@ export interface PurchaseItemRowProps {
 
 export default function PurchaseItemRow({
   line,
+  serialNumber,
   productName,
   currencyLabel,
   stock,
@@ -43,6 +46,9 @@ export default function PurchaseItemRow({
           zebra ? 'bg-table-zebra' : ''
         } hover:bg-table-row-hover`}
       >
+        <td className="numeric-data w-12 px-3 py-3 text-center tabular-nums text-muted-foreground">
+          {serialNumber}
+        </td>
         <td className="body-text px-4 py-3 font-medium">{productName}</td>
         <td className="px-4 py-3">
           {stock != null ? (
@@ -112,13 +118,18 @@ export default function PurchaseItemRow({
       </tr>
 
       <tr className="md:hidden">
-        <td colSpan={6} className="border-b border-border p-0">
+        <td colSpan={7} className="border-b border-border p-0">
           <div
             className={`rounded-xl border border-border bg-card p-4 shadow-erp ${zebra ? 'bg-table-zebra' : ''}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="body-text font-semibold">{productName}</p>
+                <p className="body-text font-semibold">
+                  <span className="mr-2 inline-block min-w-[1.75rem] tabular-nums text-muted-foreground">
+                    {serialNumber}.
+                  </span>
+                  {productName}
+                </p>
                 {stock != null && (
                   <span
                     className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${

@@ -585,9 +585,12 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               {form.items.length > 0 && (
                 <div className="overflow-hidden rounded-xl border border-border bg-card">
                   <div className="overflow-x-auto">
-                    <table className="table-modern min-w-[640px]">
+                    <table className="table-modern min-w-[680px]">
                       <thead className="sticky top-0 z-10 hidden border-b border-border bg-card shadow-erp md:table-header-group">
                         <tr>
+                          <th className="table-header w-12 whitespace-nowrap text-center" title="Serial number">
+                            S.No
+                          </th>
                           <th className="table-header whitespace-nowrap">Product name</th>
                           <th className="table-header whitespace-nowrap">Stock</th>
                           <th className="table-header whitespace-nowrap">Quantity</th>
@@ -605,6 +608,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                             <PurchaseItemRow
                               key={i.productId}
                               line={i}
+                              serialNumber={idx + 1}
                               productName={p?.name || i.productId}
                               currencyLabel={CURRENCY}
                               stock={existingStock}
