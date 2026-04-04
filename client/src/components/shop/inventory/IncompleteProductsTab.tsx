@@ -32,9 +32,46 @@ function missingLabels(item: InventoryItem): string[] {
     return m;
 }
 
+/** Gross margin on retail: (retail − cost) / retail × 100 when retail > 0. */
+function grossMarginPercentOnRetail(retail: number, cost: number): number {
+    if (retail <= 0) return 0;
+    return ((retail - cost) / retail) * 100;
+}
+
+/**
+ * Cost and retail are both set (non-trivial) but pricing is weak: retail at/below cost,
+ * or margin on retail is strictly under 5%.
+ */
+function pricingIssueLabels(item: InventoryItem): string[] {
+    const retail = item.retailPrice;
+    const cost = item.costPrice;
+    if (!Number.isFinite(retail) || !Number.isFinite(cost)) return [];
+    if (retail < 0 || cost < 0) return [];
+    if (retail === 0 && cost === 0) return [];
+
+    if (retail <= cost) {
+        return ['Retail ≤ cost'];
+    }
+    if (retail > 0) {
+        const marginPct = grossMarginPercentOnRetail(retail, cost);
+        if (marginPct < 5) {
+            return ['Margin < 5%'];
+        }
+    }
+    return [];
+}
+
+function allIssueLabels(item: InventoryItem): string[] {
+    return [...missingLabels(item), ...pricingIssueLabels(item)];
+}
+
+function isPricingIssueLabel(label: string): boolean {
+    return label === 'Retail ≤ cost' || label === 'Margin < 5%';
+}
+
 function isIncompleteServerProduct(item: InventoryItem): boolean {
     if (item.id.startsWith('pending-')) return false;
-    return missingLabels(item).length > 0;
+    return allIssueLabels(item).length > 0;
 }
 
 function categoryLabel(categories: { id: string; name: string }[], category: string): string {
@@ -79,15 +116,20 @@ const IncompleteProductsTab: React.FC = () => {
         let missingName = 0;
         let missingSku = 0;
         let missingUnit = 0;
+        let pricingRetailLteCost = 0;
+        let pricingLowMargin = 0;
         let totalIssueFlags = 0;
         for (const item of incomplete) {
-            const m = missingLabels(item);
-            totalIssueFlags += m.length;
-            if (m.includes('Image')) missingImage += 1;
-            if (m.includes('Barcode')) missingBarcode += 1;
-            if (m.includes('Name')) missingName += 1;
-            if (m.includes('SKU')) missingSku += 1;
-            if (m.includes('Unit')) missingUnit += 1;
+            const field = missingLabels(item);
+            const pricing = pricingIssueLabels(item);
+            totalIssueFlags += field.length + pricing.length;
+            if (field.includes('Image')) missingImage += 1;
+            if (field.includes('Barcode')) missingBarcode += 1;
+            if (field.includes('Name')) missingName += 1;
+            if (field.includes('SKU')) missingSku += 1;
+            if (field.includes('Unit')) missingUnit += 1;
+            if (pricing.includes('Retail ≤ cost')) pricingRetailLteCost += 1;
+            if (pricing.includes('Margin < 5%')) pricingLowMargin += 1;
         }
         return {
             totalSkus: incomplete.length,
@@ -96,6 +138,9 @@ const IncompleteProductsTab: React.FC = () => {
             missingName,
             missingSku,
             missingUnit,
+            pricingRetailLteCost,
+            pricingLowMargin,
+            pricingSkus: pricingRetailLteCost + pricingLowMargin,
             totalIssueFlags,
         };
     }, [incomplete]);
@@ -146,7 +191,7 @@ const IncompleteProductsTab: React.FC = () => {
                 case 'onHand':
                     return num(a.onHand, b.onHand);
                 case 'missing':
-                    return missingLabels(a).join(', ').localeCompare(missingLabels(b).join(', '), undefined, {
+                    return allIssueLabels(a).join(', ').localeCompare(allIssueLabels(b).join(', '), undefined, {
                         sensitivity: 'base',
                     }) * dir;
                 default:
@@ -244,7 +289,7 @@ const IncompleteProductsTab: React.FC = () => {
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-4">
-            <div className="grid flex-shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid flex-shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
                 <div className="rounded-xl border border-border bg-card p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/50">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">SKUs to fix</p>
                     <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{issueStats.totalSkus}</p>
@@ -289,14 +334,29 @@ const IncompleteProductsTab: React.FC = () => {
                     </p>
                     <p className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-200/70">Products affected</p>
                 </div>
+                <div className="rounded-xl border border-orange-200/80 bg-orange-50/80 p-4 shadow-sm dark:border-orange-900/50 dark:bg-orange-950/30">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-orange-800 dark:text-orange-200/90">
+                        Weak pricing
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-orange-950 dark:text-orange-100">
+                        {issueStats.pricingSkus}
+                    </p>
+                    <p className="mt-1 text-xs leading-snug text-orange-800/85 dark:text-orange-200/75">
+                        {issueStats.pricingSkus === 0
+                            ? 'Retail above cost, margin at least 5%'
+                            : `${issueStats.pricingRetailLteCost} retail ≤ cost · ${issueStats.pricingLowMargin} margin under 5%`}
+                    </p>
+                </div>
             </div>
             <p className="flex-shrink-0 text-xs text-muted-foreground">
-                Per-issue counts can add up to more than “SKUs to fix” because one product may have several gaps at once.
+                Per-issue counts can add up to more than “SKUs to fix” because one product may have several gaps at once. Weak
+                pricing applies when cost and retail are set: retail at or below cost, or gross margin on retail is under 5%.
             </p>
             <div className="flex flex-shrink-0 flex-wrap items-start gap-4">
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                    SKUs that are saved in the catalog but still need data: missing product image, barcode, name, SKU code, or
-                    unit. Sort any column, edit a row, then save. Rows disappear here once everything required is filled in.
+                    Lists SKUs with missing catalog fields (image, barcode, name, SKU, unit) or weak pricing (retail at/below
+                    cost, or gross margin on retail under 5%). Sort any column, edit a row, then save — rows drop off when
+                    issues are resolved.
                 </p>
                 <div className="relative ml-auto min-w-[200px] max-w-md flex-1">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
@@ -327,7 +387,7 @@ const IncompleteProductsTab: React.FC = () => {
                                 <SortTh label={`Retail (${CURRENCY})`} field="retailPrice" />
                                 <SortTh label="Reorder" field="reorderPoint" />
                                 <SortTh label="On hand" field="onHand" />
-                                <SortTh label="Missing" field="missing" />
+                                <SortTh label="Issues" field="missing" />
                                 <th className="sticky top-0 z-10 bg-muted/80 px-3 py-3 text-right text-xs font-semibold uppercase text-muted-foreground">
                                     Actions
                                 </th>
@@ -338,14 +398,14 @@ const IncompleteProductsTab: React.FC = () => {
                                 <tr>
                                     <td colSpan={12} className="px-6 py-16 text-center text-sm text-muted-foreground">
                                         {incomplete.length === 0
-                                            ? 'No incomplete SKUs — every product has an image, barcode, name, SKU, and unit.'
+                                            ? 'No issues — field data is complete and retail is above cost with at least 5% gross margin on retail (where prices apply).'
                                             : 'No rows match your search.'}
                                     </td>
                                 </tr>
                             ) : (
                                 sorted.map((item) => {
                                     const editing = editingId === item.id && draft;
-                                    const missing = missingLabels(item);
+                                    const issues = allIssueLabels(item);
                                     return (
                                         <tr key={item.id} className="align-top hover:bg-muted/30">
                                             <td className="px-3 py-3">
@@ -501,11 +561,15 @@ const IncompleteProductsTab: React.FC = () => {
                                             </td>
                                             <td className="px-3 py-3 font-mono text-sm text-muted-foreground">{item.onHand}</td>
                                             <td className="px-3 py-3">
-                                                <div className="flex max-w-[200px] flex-wrap gap-1">
-                                                    {missing.map((label) => (
+                                                <div className="flex max-w-[220px] flex-wrap gap-1">
+                                                    {issues.map((label) => (
                                                         <span
                                                             key={label}
-                                                            className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
+                                                            className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                                                                isPricingIssueLabel(label)
+                                                                    ? 'bg-orange-100 text-orange-900 dark:bg-orange-950/60 dark:text-orange-200'
+                                                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200'
+                                                            }`}
                                                         >
                                                             {label}
                                                         </span>
