@@ -5,6 +5,7 @@ import StockMaster from './inventory/StockMaster';
 import StockMovements from './inventory/StockMovements';
 import StockAdjustments from './inventory/StockAdjustments';
 import InventoryCategories from './inventory/InventoryCategories';
+import IncompleteProductsTab from './inventory/IncompleteProductsTab';
 import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
@@ -14,7 +15,7 @@ import { getShopCategoriesOfflineFirst } from '../../services/categoriesOfflineC
 import { getFullImageUrl } from '../../config/apiUrl';
 const InventoryContent: React.FC = () => {
     const { items, addItem, refreshItems } = useInventory();
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'stock' | 'movements' | 'adjustments' | 'categories'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'stock' | 'movements' | 'adjustments' | 'categories' | 'incomplete'>('dashboard');
     const [isNewSkuModalOpen, setIsNewSkuModalOpen] = useState(false);
     const [shopCategories, setShopCategories] = useState<ShopProductCategory[]>([]);
     const [newItemData, setNewItemData] = useState({
@@ -138,6 +139,7 @@ const InventoryContent: React.FC = () => {
         { id: 'movements', label: 'Movements', icon: ICONS.trendingUp },
         { id: 'adjustments', label: 'Adjustments', icon: ICONS.settings },
         { id: 'categories', label: 'Categories', icon: ICONS.folder },
+        { id: 'incomplete', label: 'Incomplete SKUs', icon: ICONS.alertTriangle },
     ];
 
     return (
@@ -181,7 +183,7 @@ const InventoryContent: React.FC = () => {
 
             {/* Content area: flex so Stock Master / Dashboard / Movements can fill and scroll internally; other tabs can scroll here */}
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden p-8">
-                <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${['stock', 'dashboard', 'movements', 'categories'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+                <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${['stock', 'dashboard', 'movements', 'categories', 'incomplete'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                     {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col"><InventoryDashboard /></div>}
                     {activeTab === 'stock' && <div className="flex-1 min-h-0 flex flex-col"><StockMaster /></div>}
                     {activeTab === 'movements' && <div className="flex-1 min-h-0 flex flex-col"><StockMovements /></div>}
@@ -189,6 +191,11 @@ const InventoryContent: React.FC = () => {
                     {activeTab === 'categories' && (
                         <div className="flex-1 min-h-0 flex flex-col min-w-0">
                             <InventoryCategories />
+                        </div>
+                    )}
+                    {activeTab === 'incomplete' && (
+                        <div className="flex min-h-0 flex-1 flex-col">
+                            <IncompleteProductsTab />
                         </div>
                     )}
                 </div>

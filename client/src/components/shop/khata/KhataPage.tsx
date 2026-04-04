@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { khataApi, KhataLedgerEntry, KhataSummaryRow, shopApi, ShopBankAccount } from '../../../services/shopApi';
 import { ICONS, CURRENCY } from '../../../constants';
 import Modal from '../../ui/Modal';
 import Card from '../../ui/Card';
 
 const KhataPage: React.FC = () => {
+  const location = useLocation();
   const [summary, setSummary] = useState<KhataSummaryRow[]>([]);
   const [ledger, setLedger] = useState<KhataLedgerEntry[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -77,6 +79,15 @@ const KhataPage: React.FC = () => {
   useEffect(() => {
     loadSummary();
   }, [loadSummary]);
+
+  /** Open ledger for a customer when navigated from Loyalty member profile (Full Ledger). */
+  useEffect(() => {
+    const st = location.state as { customerId?: string; customerName?: string } | undefined;
+    if (st?.customerId) {
+      setSelectedCustomerId(st.customerId);
+      setSelectedCustomerName(st.customerName ?? '');
+    }
+  }, [location.state]);
 
   useEffect(() => {
     loadLedger(selectedCustomerId);

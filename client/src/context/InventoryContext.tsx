@@ -477,8 +477,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const updateItem = useCallback(async (id: string, updates: Partial<InventoryItem>) => {
         try {
             const payload: any = {};
-            if (updates.name) payload.name = updates.name;
-            if (updates.sku) payload.sku = updates.sku;
+            if (updates.name !== undefined) payload.name = updates.name;
+            if (updates.sku !== undefined) payload.sku = updates.sku;
             if (updates.barcode !== undefined) payload.barcode = updates.barcode;
             if (updates.category) payload.category_id = updates.category === 'General' ? null : updates.category;
             if (updates.retailPrice !== undefined) payload.retail_price = updates.retailPrice;

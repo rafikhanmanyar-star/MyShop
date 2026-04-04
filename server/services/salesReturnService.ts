@@ -1,7 +1,6 @@
 import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
 import { COA } from '../constants/accountCodes.js';
-import { fetchUnitCostForProduct, resolveUnitCostFromProductRow } from '../utils/productUnitCost.js';
 
 export type RefundMethod = 'CASH' | 'BANK' | 'WALLET' | 'ADJUSTMENT';
 export type ReturnType = 'FULL' | 'PARTIAL';
@@ -50,6 +49,33 @@ async function getReturnedQtyByLine(client: any, tenantId: string, saleId: strin
     map.set(String(r.line_id), parseFloat(String(r.q)) || 0);
   }
   return map;
+}
+
+/**
+ * Unit cost for returns/restock and COGS reversal: sale line snapshot, else the original sale inventory movement — never current product master.
+ */
+async function resolveUnitCostForReturnLine(
+  client: any,
+  tenantId: string,
+  saleId: string,
+  line: { unit_cost_at_sale?: unknown; product_id: string }
+): Promise<number> {
+  const raw = line.unit_cost_at_sale;
+  if (raw != null && raw !== '') {
+    const p = parseFloat(String(raw));
+    if (Number.isFinite(p) && p >= 0) return p;
+  }
+  const mov = await client.query(
+    `SELECT unit_cost FROM shop_inventory_movements
+     WHERE tenant_id = $1 AND reference_id = $2 AND product_id = $3 AND type = 'Sale'
+     ORDER BY created_at ASC NULLS LAST LIMIT 1`,
+    [tenantId, saleId, line.product_id]
+  );
+  if (mov.length > 0 && mov[0].unit_cost != null && mov[0].unit_cost !== '') {
+    const u = parseFloat(String(mov[0].unit_cost));
+    if (Number.isFinite(u) && u >= 0) return u;
+  }
+  return 0;
 }
 
 async function resolveWarehouseId(
@@ -231,11 +257,7 @@ export class SalesReturnService {
         const lineTotal = roundMoney((lineSub / sold) * q);
         totalReturnAmount += lineTotal;
 
-        let unitCost = typeof line.unit_cost_at_sale === 'number' ? line.unit_cost_at_sale : parseFloat(String(line.unit_cost_at_sale));
-        if (!Number.isFinite(unitCost) || unitCost < 0) {
-          unitCost = await fetchUnitCostForProduct(client, tenantId, line.product_id);
-        }
-        if (!Number.isFinite(unitCost) || unitCost < 0) unitCost = 0;
+        const unitCost = await resolveUnitCostForReturnLine(client, tenantId, originalSaleId, line);
 
         resolvedLines.push({
           saleLine: line,

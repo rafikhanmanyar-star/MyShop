@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { KeyRound, RefreshCw } from 'lucide-react';
 import { useLoyalty } from '../../../context/LoyaltyContext';
 import { ICONS, CURRENCY } from '../../../constants';
@@ -10,6 +11,7 @@ import { khataApi } from '../../../services/shopApi';
 import { mobileOrdersApi } from '../../../services/mobileOrdersApi';
 
 const MemberDirectory: React.FC = () => {
+    const navigate = useNavigate();
     const { members, deleteMember, updateMember, transactions } = useLoyalty();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTierFilter, setActiveTierFilter] = useState<LoyaltyTier | 'All'>('All');
@@ -339,7 +341,23 @@ const MemberDirectory: React.FC = () => {
                                         <h5 className="text-sm font-semibold text-foreground tracking-tight flex items-center gap-2 uppercase">
                                             {ICONS.barChart} Transaction History
                                         </h5>
-                                        <button className="text-xs font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-widest">Full Ledger</button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (!selectedMember.customerId) return;
+                                                closeDetailModal();
+                                                navigate('/khata', {
+                                                    state: {
+                                                        customerId: selectedMember.customerId,
+                                                        customerName: selectedMember.customerName,
+                                                    },
+                                                });
+                                            }}
+                                            className="text-xs font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-widest hover:underline disabled:opacity-40 disabled:no-underline"
+                                            disabled={!selectedMember.customerId}
+                                        >
+                                            Full Ledger
+                                        </button>
                                     </div>
 
                                     <div className="bg-muted/80/50 dark:bg-slate-800/50 rounded-3xl border border-border dark:border-slate-600 overflow-hidden">
@@ -391,53 +409,55 @@ const MemberDirectory: React.FC = () => {
                 )}
             </Modal>
 
-            {pwResetOpen && selectedMember && (
-                <div
-                    className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-[60]"
-                    onClick={() => !pwResetLoading && setPwResetOpen(false)}
-                >
-                    <div
-                        className="bg-card dark:bg-slate-900 rounded-2xl shadow-2xl w-[400px] max-w-[calc(100vw-2rem)] overflow-hidden border border-border dark:border-slate-600"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <div className="p-5 bg-gradient-to-r from-rose-50 to-indigo-50 dark:from-rose-950/50 dark:to-indigo-950/50 border-b border-border dark:border-slate-600">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-rose-100 dark:bg-rose-950/80 rounded-xl flex items-center justify-center">
-                                    <KeyRound className="w-5 h-5 text-rose-600 dark:text-rose-400" />
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-foreground">Reset mobile app password</h3>
-                                    <p className="text-xs text-muted-foreground">{selectedMember.phone || '—'}</p>
-                                </div>
-                            </div>
+            {/* Must use the same Modal portal as Member Profile — a non-portaled overlay stays under #root and below z-[9999], so it never appeared. */}
+            <Modal
+                isOpen={pwResetOpen && !!selectedMember}
+                onClose={() => {
+                    if (!pwResetLoading) setPwResetOpen(false);
+                }}
+                title={
+                    <span className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 dark:bg-rose-950/80">
+                            <KeyRound className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                        </span>
+                        <span className="flex flex-col items-start gap-0.5 min-w-0">
+                            <span className="truncate">Reset mobile app password</span>
+                            <span className="text-xs font-normal text-muted-foreground font-mono">{selectedMember?.phone || '—'}</span>
+                        </span>
+                    </span>
+                }
+                size="sm"
+            >
+                {selectedMember && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-muted-foreground">
+                            Set a new password for this customer. They will use it to sign in to the mobile ordering app for your shop.
+                        </p>
+                        <div>
+                            <label htmlFor="member-pw-new" className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">New password</label>
+                            <input
+                                id="member-pw-new"
+                                type="password"
+                                autoComplete="new-password"
+                                value={newPw}
+                                onChange={e => setNewPw(e.target.value)}
+                                className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none"
+                                placeholder="At least 6 characters"
+                            />
                         </div>
-                        <div className="p-5 space-y-4">
-                            <p className="text-sm text-muted-foreground">
-                                Set a new password for this customer. They will use it to sign in to the mobile ordering app for your shop.
-                            </p>
-                            <div>
-                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">New password</label>
-                                <input
-                                    type="password"
-                                    autoComplete="new-password"
-                                    value={newPw}
-                                    onChange={e => setNewPw(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none"
-                                    placeholder="At least 6 characters"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Confirm password</label>
-                                <input
-                                    type="password"
-                                    autoComplete="new-password"
-                                    value={confirmPw}
-                                    onChange={e => setConfirmPw(e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none"
-                                />
-                            </div>
+                        <div>
+                            <label htmlFor="member-pw-confirm" className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Confirm password</label>
+                            <input
+                                id="member-pw-confirm"
+                                type="password"
+                                autoComplete="new-password"
+                                value={confirmPw}
+                                onChange={e => setConfirmPw(e.target.value)}
+                                className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none"
+                                placeholder="Repeat new password"
+                            />
                         </div>
-                        <div className="p-4 border-t border-border dark:border-slate-600 flex gap-3">
+                        <div className="flex gap-3 pt-2">
                             <button
                                 type="button"
                                 onClick={() => setPwResetOpen(false)}
@@ -468,9 +488,11 @@ const MemberDirectory: React.FC = () => {
                                         setConfirmPw('');
                                         alert('Password updated. The customer can sign in with the new password.');
                                     } catch (err: any) {
-                                        alert(err.error || err.message || 'Failed to reset password');
+                                        const msg = err?.error ?? err?.message ?? (typeof err === 'string' ? err : 'Failed to reset password');
+                                        alert(msg);
+                                    } finally {
+                                        setPwResetLoading(false);
                                     }
-                                    setPwResetLoading(false);
                                 }}
                                 disabled={pwResetLoading}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-rose-600 text-white rounded-xl text-sm font-bold hover:bg-rose-700 transition-colors disabled:opacity-50"
@@ -480,8 +502,8 @@ const MemberDirectory: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </Modal>
         </div>
     );
 };

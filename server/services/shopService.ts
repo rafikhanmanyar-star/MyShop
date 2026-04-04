@@ -2,7 +2,7 @@ import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
 import { notifyDailyReportUpdated } from './dailyReportNotify.js';
 import { COA } from '../constants/accountCodes.js';
-import { fetchUnitCostForProduct, resolveUnitCostFromProductRow } from '../utils/productUnitCost.js';
+import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 
 /** Strip absolute URLs (e.g. http://localhost:3000/uploads/...) to relative paths for DB storage. */
 function normalizeImageUrl(url: string | null | undefined): string | null {
@@ -557,10 +557,12 @@ export class ShopService {
         const unitCostAtSale = await fetchUnitCostForProduct(client, tenantId, item.productId);
         itemsWithCost.push({ ...item, unitCostAtSale });
 
+        const costSnapshot =
+          Number.isFinite(unitCostAtSale) && unitCostAtSale >= 0 ? unitCostAtSale : null;
         await client.query(`
           INSERT INTO shop_sale_items (tenant_id, sale_id, product_id, quantity, unit_price, tax_amount, discount_amount, subtotal, unit_cost_at_sale)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [tenantId, saleId, item.productId, item.quantity, item.unitPrice, item.taxAmount, item.discountAmount, item.subtotal, unitCostAtSale > 0 ? unitCostAtSale : null]);
+        `, [tenantId, saleId, item.productId, item.quantity, item.unitPrice, item.taxAmount, item.discountAmount, item.subtotal, costSnapshot]);
 
         // Deduct from the sale's branch warehouse when branchId is set (branch id = warehouse id); otherwise first warehouse
         let warehouseId: string | null = null;
@@ -738,17 +740,11 @@ export class ShopService {
       }
     }
 
-    // COGS vs Inventory: use per-line snapshot from sale time (not current shop_products)
+    // COGS vs Inventory: only per-line snapshot at sale time (never re-read shop_products — keeps books stable if costs change later)
     let totalCogs = 0;
     for (const item of saleData.items) {
-      let unitCost = typeof item.unitCostAtSale === 'number' ? item.unitCostAtSale : NaN;
-      if (!Number.isFinite(unitCost) || unitCost < 0) {
-        const prodRes = await client.query(
-          'SELECT average_cost, cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2 LIMIT 1',
-          [item.productId, tenantId]
-        );
-        unitCost = prodRes.length > 0 ? resolveUnitCostFromProductRow(prodRes[0]) : 0;
-      }
+      const uc = typeof item.unitCostAtSale === 'number' ? item.unitCostAtSale : NaN;
+      const unitCost = Number.isFinite(uc) && uc >= 0 ? uc : 0;
       if (unitCost > 0) totalCogs += unitCost * item.quantity;
     }
 
