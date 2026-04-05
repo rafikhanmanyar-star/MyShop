@@ -132,6 +132,16 @@ class ApiClient {
         };
       }
 
+      if (
+        responseData &&
+        typeof responseData === 'object' &&
+        'success' in responseData &&
+        (responseData as { success?: boolean }).success === false
+      ) {
+        const m = (responseData as { message?: string }).message || 'Request failed';
+        throw { error: m, message: m, status: response.status };
+      }
+
       return responseData as T;
     } catch (error) {
       if (error instanceof Error) {

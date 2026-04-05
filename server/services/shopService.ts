@@ -1,6 +1,7 @@
 import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
 import { notifyDailyReportUpdated } from './dailyReportNotify.js';
+import { insertSystemLog } from './systemLogService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 
@@ -293,6 +294,15 @@ export class ShopService {
     return this.db.query('SELECT * FROM shop_products WHERE tenant_id = $1 AND is_active = TRUE ORDER BY popularity_score DESC, name ASC', [tenantId]);
   }
 
+  /** Single product by id (tenant-scoped). Used for post-save verification. */
+  async getProductById(tenantId: string, productId: string) {
+    const rows = await this.db.query(
+      'SELECT * FROM shop_products WHERE id = $1 AND tenant_id = $2',
+      [productId, tenantId]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  }
+
   async getPopularProducts(tenantId: string, limit = 10) {
     return this.db.query(`
       SELECT p.*, SUM(si.quantity) as total_sold
@@ -322,7 +332,18 @@ export class ShopService {
   }
 
   async createProduct(tenantId: string, data: any) {
-    const productId = await this.db.transaction(async (client) => {
+    const name = String(data?.name ?? '').trim();
+    if (!name) {
+      await insertSystemLog({
+        tenantId,
+        module: 'PRODUCT_CREATE',
+        payload: data,
+        error: 'Validation failed: product name is required',
+      });
+      throw new Error('Product name is required.');
+    }
+
+    const createdRow = await this.db.transaction(async (client) => {
       let categoryId = data.category_id || null;
       if (categoryId && categoryId.length < 32) {
         const catRes = await client.query(
@@ -333,7 +354,7 @@ export class ShopService {
       }
 
       try {
-        const sku = data.sku || `SKU-${Date.now()}`;
+        const sku = (data.sku && String(data.sku).trim()) || `SKU-${Date.now()}`;
 
         const mobileDesc = data.mobile_description ?? data.description ?? null;
         const createdBy = data.created_by || data.createdBy || null;
@@ -341,14 +362,18 @@ export class ShopService {
           INSERT INTO shop_products (
             tenant_id, name, sku, barcode, category_id, unit,
             cost_price, retail_price, tax_rate, reorder_point, image_url, is_active, mobile_description, created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *
         `, [
-          tenantId, data.name, sku, data.barcode || null,
+          tenantId, name, sku, data.barcode || null,
           categoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
           data.tax_rate || 0, data.reorder_point || 10, normalizeImageUrl(data.image_url), true, mobileDesc,
           createdBy,
         ]);
-        const pid = res[0].id;
+        if (!res.length) {
+          throw new Error('Database write failed — no product row returned after insert.');
+        }
+        const row = res[0];
+        const pid = row.id;
 
         let whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
         let warehouseId;
@@ -369,29 +394,36 @@ export class ShopService {
           ON CONFLICT (tenant_id, product_id, warehouse_id) DO NOTHING
         `, [tenantId, pid, warehouseId]);
 
-        return pid;
+        return row;
       } catch (err: any) {
         console.error('❌ [ShopService] createProduct failed:', err);
+        await insertSystemLog({
+          tenantId,
+          module: 'PRODUCT_CREATE',
+          payload: { name: data?.name, sku: data?.sku },
+          error: err.message || String(err),
+        });
         if (err.code === '23505') throw new Error(`SKU already exists.`);
         throw new Error(err.message || 'Unknown database error');
       }
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});
-    return productId;
+    return createdRow;
   }
 
   async updateProduct(tenantId: string, productId: string, data: any) {
     return this.db.transaction(async (client) => {
       try {
         const mobileDesc = data.mobile_description !== undefined ? data.mobile_description : (data.description !== undefined ? data.description : undefined);
-        await client.query(`
+        const res = await client.query(`
           UPDATE shop_products
           SET name = $1, sku = $2, barcode = $3, category_id = $4, unit = $5,
               cost_price = $6, retail_price = $7, tax_rate = $8, reorder_point = $9,
               image_url = $10, is_active = $11, updated_at = NOW(),
               mobile_description = COALESCE($14, mobile_description)
           WHERE id = $12 AND tenant_id = $13
+          RETURNING *
         `, [
           data.name, data.sku, data.barcode, data.category_id || data.categoryId,
           data.unit, data.cost_price || data.cost, data.retail_price || data.price,
@@ -399,8 +431,18 @@ export class ShopService {
           normalizeImageUrl(data.image_url), data.is_active !== undefined ? data.is_active : true, productId, tenantId,
           mobileDesc === undefined ? null : mobileDesc
         ]);
-        return { success: true };
+        if (!res.length) {
+          throw new Error('Product not found or could not be updated (no matching row).');
+        }
+        return res[0];
       } catch (err: any) {
+        await insertSystemLog({
+          tenantId,
+          module: 'PRODUCT_UPDATE',
+          payload: { productId, sku: data?.sku },
+          error: err.message || String(err),
+        });
+        if (err.code === '23505') throw new Error('SKU already exists.');
         throw new Error(`Failed to update product: ${err.message}`);
       }
     });

@@ -41,8 +41,18 @@ export async function processPendingProductQueue(): Promise<{ processed: number;
         image_url: imageUrl || null,
         mobile_description: rest.description ?? null,
       };
-      const result = await shopApi.createProduct(payload) as any;
-      const serverId = result?.id;
+      const result = await shopApi.createProduct(payload) as {
+        success?: boolean;
+        message?: string;
+        data?: { id?: string };
+        id?: string;
+      };
+      const serverId = result?.data?.id ?? result?.id;
+      if (!result?.success || !serverId) {
+        await setProductStatus(item.localId, 'failed', undefined, result?.message ?? 'Create rejected');
+        failed++;
+        continue;
+      }
       await setProductStatus(item.localId, 'synced', serverId);
       await removePendingProduct(item.localId);
       succeeded++;

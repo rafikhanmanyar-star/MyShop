@@ -239,24 +239,43 @@ router.get('/popular-products', async (req: any, res) => {
   }
 });
 
+router.get('/products/:id', async (req: any, res) => {
+  try {
+    if (!req.tenantId) {
+      return res.status(400).json({ success: false, message: 'Missing tenantId', code: 'MISSING_TENANT' });
+    }
+    const row = await getShopService().getProductById(req.tenantId, req.params.id);
+    if (!row) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+    res.json({ success: true, message: 'OK', data: row });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to load product' });
+  }
+});
+
 router.post('/products', async (req: any, res) => {
   try {
-    const productId = await getShopService().createProduct(req.tenantId, {
+    const data = await getShopService().createProduct(req.tenantId, {
       ...req.body,
       created_by: req.userId,
     });
-    res.status(201).json({ id: productId, message: 'Product created successfully' });
+    res.status(201).json({ success: true, message: 'Product saved successfully', data });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const msg = error.message || 'Failed to create product';
+    const status = /required|already exists/i.test(msg) ? 400 : 500;
+    res.status(status).json({ success: false, message: msg });
   }
 });
 
 router.put('/products/:id', async (req: any, res) => {
   try {
-    await getShopService().updateProduct(req.tenantId, req.params.id, req.body);
-    res.json({ success: true, message: 'Product updated successfully' });
+    const data = await getShopService().updateProduct(req.tenantId, req.params.id, req.body);
+    res.json({ success: true, message: 'Product updated successfully', data });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const msg = error.message || 'Failed to update product';
+    const status = /not found|already exists|no matching row/i.test(msg) ? 400 : 500;
+    res.status(status).json({ success: false, message: msg });
   }
 });
 

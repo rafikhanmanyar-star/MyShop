@@ -46,7 +46,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     openInAddMode = false,
     onItemReady
 }) => {
-    const { items, addItem, updateItem, deleteItem, refreshItems } = useInventory();
+    const { items, addItem, updateItem, deleteItem } = useInventory();
     const [mode, setMode] = useState<AddOrEditSkuModalMode>('choice');
     const [existingSearch, setExistingSearch] = useState('');
     const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
@@ -197,9 +197,11 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         setSaving(true);
         try {
             let imageUrl = formData.imageUrl;
+            let imageAlreadyUploaded = false;
             if (selectedImage && typeof navigator !== 'undefined' && navigator.onLine) {
                 const uploadRes = await shopApi.uploadImage(selectedImage);
                 imageUrl = uploadRes.imageUrl || '';
+                imageAlreadyUploaded = true;
             }
             const newItem = await addItem(
                 {
@@ -221,9 +223,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                     imageUrl,
                     warehouseStock: {}
                 },
-                selectedImage || undefined
+                imageAlreadyUploaded ? undefined : selectedImage || undefined
             );
-            await refreshItems();
             handleClose();
             onItemReady?.(newItem);
         } catch (e) {
@@ -231,7 +232,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         } finally {
             setSaving(false);
         }
-    }, [formData, selectedImage, addItem, refreshItems, handleClose, onItemReady, hasConflict]);
+    }, [formData, selectedImage, addItem, handleClose, onItemReady, hasConflict]);
 
     const handleUpdateExisting = useCallback(async () => {
         if (!editingItem || hasConflict) return;
@@ -254,7 +255,6 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 unit: formData.unit,
                 imageUrl
             });
-            await refreshItems();
             handleClose();
             const updated = { ...editingItem, ...formData, barcode: formData.barcode || undefined };
             onItemReady?.(updated as InventoryItem);
@@ -263,7 +263,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         } finally {
             setSaving(false);
         }
-    }, [editingItem, formData, selectedImage, updateItem, refreshItems, handleClose, onItemReady, hasConflict]);
+    }, [editingItem, formData, selectedImage, updateItem, handleClose, onItemReady, hasConflict]);
 
     const handleDeleteSku = useCallback(async () => {
         if (!editingItem || editingItem.id.startsWith('pending-')) return;

@@ -55,6 +55,13 @@ export interface ShopVendor {
   updated_at?: string;
 }
 
+/** Standard JSON shape for product create/update/get-by-id. */
+export interface ProductApiResult {
+  success: boolean;
+  message?: string;
+  data?: Record<string, unknown>;
+}
+
 export interface TenantBranding {
   id: string;
   tenant_id: string;
@@ -93,8 +100,9 @@ export const shopApi = {
 
   getProducts: () => apiClient.get<ShopProduct[]>('/shop/products'),
   getPopularProducts: (limit = 10) => apiClient.get<ShopProduct[]>(`/shop/popular-products?limit=${limit}`),
-  createProduct: (data: any) => apiClient.post('/shop/products', data),
-  updateProduct: (id: string, data: any) => apiClient.put(`/shop/products/${id}`, data),
+  getProduct: (id: string) => apiClient.get<ProductApiResult>(`/shop/products/${encodeURIComponent(id)}`),
+  createProduct: (data: any) => apiClient.post<ProductApiResult>('/shop/products', data),
+  updateProduct: (id: string, data: any) => apiClient.put<ProductApiResult>(`/shop/products/${encodeURIComponent(id)}`, data),
   getProductDeleteStatus: (id: string) => apiClient.get<{ canDelete: boolean; message?: string }>(`/shop/products/${id}/delete-status`),
   deleteProduct: (id: string) => apiClient.delete(`/shop/products/${id}`),
   uploadImage: (file: File) => {

@@ -19,6 +19,8 @@ import {
     type PendingProductPayload,
 } from '../services/productSyncStore';
 import { subscribeToOnline } from '../services/productSyncService';
+import { showAppToast } from '../utils/appToast';
+import type { ProductApiResult } from '../services/shopApi';
 
 interface InventoryContextType {
     items: InventoryItem[];
@@ -48,7 +50,43 @@ function isRetryableServerOrNetworkError(error: any): boolean {
     const status = error?.status;
     if (status === 0 || status === 502 || status === 503 || status === 504) return true;
     const msg = String(error?.error ?? error?.message ?? '').toLowerCase();
-    return /unavailable|bad gateway|network|timed out|overloaded|failed to fetch/i.test(msg);
+    return /unavailable|bad gateway|network|timed out|overloaded|failed to fetch|networkerror|no internet/i.test(msg);
+}
+
+async function withRetries<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+    let lastErr: any;
+    for (let i = 0; i <= retries; i++) {
+        try {
+            return await fn();
+        } catch (e: any) {
+            lastErr = e;
+            if (!isRetryableServerOrNetworkError(e) || i === retries) throw e;
+            await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+        }
+    }
+    throw lastErr;
+}
+
+function mapServerProductToItem(p: any): InventoryItem {
+    return {
+        id: p.id,
+        sku: p.sku,
+        barcode: p.barcode || undefined,
+        name: p.name,
+        category: p.category_id || 'General',
+        unit: p.unit || 'pcs',
+        onHand: 0,
+        available: 0,
+        reserved: 0,
+        inTransit: 0,
+        damaged: 0,
+        costPrice: parseFloat(p.cost_price || '0'),
+        retailPrice: parseFloat(p.retail_price || '0'),
+        reorderPoint: p.reorder_point || 10,
+        imageUrl: getFullImageUrl(p.image_url) || undefined,
+        description: p.mobile_description || p.description || undefined,
+        warehouseStock: {},
+    };
 }
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -441,18 +479,29 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             const imageUrlForDb = imageRelPath ?? item.imageUrl;
 
             try {
-                const response = await shopApi.createProduct({
-                    ...payload,
-                    image_url: imageUrlForDb,
-                    mobile_description: payload.description || undefined,
-                }) as any;
-                if (response && response.id) {
-                    const newItem = { ...item, id: response.id, imageUrl: imageUrlForDb ? getFullImageUrl(imageUrlForDb) : undefined };
-                    setItems(prev => [...prev, newItem]);
-                    await refreshItems();
-                    return newItem;
+                const createRes = await withRetries(() =>
+                    shopApi.createProduct({
+                        ...payload,
+                        image_url: imageUrlForDb,
+                        mobile_description: payload.description || undefined,
+                    })
+                );
+                const legacy = createRes as ProductApiResult & { id?: string };
+                const newId = (legacy.data?.id as string | undefined) ?? legacy.id;
+                if (!createRes.success || !newId) {
+                    const msg = createRes.message || 'Failed to save product';
+                    showAppToast(msg, 'error');
+                    throw new Error(msg);
                 }
-                throw new Error("Invalid response from server");
+
+                const verifyRes = await withRetries(() => shopApi.getProduct(newId));
+                if (!verifyRes.success || !verifyRes.data) {
+                    showAppToast('Data not saved. Please retry.', 'error');
+                    throw new Error('Post-save verification failed');
+                }
+
+                await refreshItems();
+                return mapServerProductToItem(verifyRes.data);
             } catch (createErr: any) {
                 if (isRetryableServerOrNetworkError(createErr)) {
                     const placeholder = await saveOfflineAndReturn();
@@ -467,8 +516,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             const msg = error?.error || error?.message || (typeof error === 'string' ? error : 'Check your SKU uniqueness or category.');
             if (status === 401 || /authentication token|session.*expired|not logged in/i.test(String(msg))) {
                 alert('Session expired or not logged in. Please log in again to create products.');
-            } else {
-                alert(`Failed to save SKU to database: ${msg}`);
+            } else if (!String(msg).includes('Post-save verification')) {
+                showAppToast(`Failed to save SKU: ${msg}`, 'error');
             }
             throw error;
         }
@@ -488,13 +537,24 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
             if (updates.description !== undefined) payload.mobile_description = updates.description;
 
-            await shopApi.updateProduct(id, payload);
+            const updateRes = await withRetries(() => shopApi.updateProduct(id, payload));
+            if (!updateRes.success) {
+                throw new Error(updateRes.message || 'Failed to update product');
+            }
 
-            // Refresh items to sync local state
+            const verifyRes = await withRetries(() => shopApi.getProduct(id));
+            if (!verifyRes.success || !verifyRes.data) {
+                showAppToast('Data not saved. Please retry.', 'error');
+                throw new Error('Post-save verification failed');
+            }
+
             await refreshItems();
         } catch (error: any) {
             console.error("Failed to update product:", error);
-            alert(`Failed to update product: ${error.message}`);
+            const msg = error?.error || error?.message || 'Update failed';
+            if (!String(msg).includes('Post-save verification')) {
+                showAppToast(String(msg), 'error');
+            }
             throw error;
         }
     }, [refreshItems]);

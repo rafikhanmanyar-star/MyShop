@@ -87,9 +87,11 @@ const InventoryContent: React.FC = () => {
         if (hasConflict) return;
         try {
             let imageUrl = '';
+            let imageAlreadyUploaded = false;
             if (selectedImage && typeof navigator !== 'undefined' && navigator.onLine) {
                 const uploadRes = await shopApi.uploadImage(selectedImage);
                 imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
+                imageAlreadyUploaded = true;
             }
 
             await addItem(
@@ -111,7 +113,7 @@ const InventoryContent: React.FC = () => {
                     imageUrl,
                     warehouseStock: {}
                 },
-                selectedImage || undefined
+                imageAlreadyUploaded ? undefined : selectedImage || undefined
             );
             setIsNewSkuModalOpen(false);
             setNewItemData({
