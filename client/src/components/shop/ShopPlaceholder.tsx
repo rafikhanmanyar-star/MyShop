@@ -11,7 +11,7 @@ interface ShopPlaceholderProps {
 
 const ShopPlaceholder: React.FC<ShopPlaceholderProps> = ({ title, description, icon }) => {
     return (
-        <div className="space-y-6 max-w-7xl mx-auto">
+        <div className="w-full min-w-0 space-y-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-foreground">{title}</h1>

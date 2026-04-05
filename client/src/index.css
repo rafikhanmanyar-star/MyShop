@@ -234,8 +234,9 @@ h6 {
     @apply rounded-lg border border-gray-200 bg-white text-gray-900 shadow-card dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100;
   }
 
+  /** Full-width main column: uses horizontal padding only (no max-width) to avoid side gutters on large displays */
   .page-container {
-    @apply mx-auto w-full max-w-7xl p-6;
+    @apply w-full min-w-0 max-w-none px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6;
   }
 
   .section {

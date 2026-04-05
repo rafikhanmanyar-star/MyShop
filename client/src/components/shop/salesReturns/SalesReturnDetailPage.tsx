@@ -38,7 +38,7 @@ export default function SalesReturnDetailPage() {
 
   if (loading && !data) {
     return (
-      <div className="max-w-3xl mx-auto py-16 text-center text-muted-foreground">
+      <div className="w-full min-w-0 py-16 text-center text-muted-foreground">
         Loading…
       </div>
     );
@@ -46,7 +46,7 @@ export default function SalesReturnDetailPage() {
 
   if (error || !data) {
     return (
-      <div className="max-w-3xl mx-auto py-8 space-y-4">
+      <div className="w-full min-w-0 py-8 space-y-4">
         <p className="text-rose-600 dark:text-rose-400">{error || 'Not found'}</p>
         <Link to="/sales-returns">
           <Button variant="secondary">Back to list</Button>
@@ -58,7 +58,7 @@ export default function SalesReturnDetailPage() {
   const items = Array.isArray(data.items) ? data.items : [];
 
   return (
-    <div className="flex flex-col gap-6 max-w-3xl mx-auto">
+    <div className="flex w-full min-w-0 flex-col gap-6">
       <div className="flex items-center gap-4">
         <Link to="/sales-returns" className="text-muted-foreground hover:text-foreground">
           <ArrowLeft className="w-5 h-5" />

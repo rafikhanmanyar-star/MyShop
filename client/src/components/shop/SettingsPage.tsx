@@ -387,7 +387,7 @@ const SettingsContent: React.FC = () => {
         settingsLock.lostLock;
 
     return (
-        <div className="relative flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
+        <div className="relative flex w-full min-w-0 flex-col h-full bg-muted/80">
             <div className={settingsLockedOut ? 'pointer-events-none opacity-40 min-h-0 flex flex-col flex-1' : 'min-h-0 flex flex-col flex-1'}>
             <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
                 <div className="mb-6">
@@ -423,7 +423,7 @@ const SettingsContent: React.FC = () => {
                 )}
 
                 {!isCashier && activeTab === 'data' && (
-                    <div className="space-y-6 max-w-4xl">
+                    <div className="w-full min-w-0 space-y-6">
                         <DataExportImportSection />
                         <BackupRestoreSection />
                         <Card className="border-none shadow-sm p-6">
@@ -444,7 +444,7 @@ const SettingsContent: React.FC = () => {
                 )}
 
                 {activeTab === 'app' && (
-                    <div className="space-y-6 max-w-xl">
+                    <div className="w-full min-w-0 space-y-6">
                         <Card className="border-none shadow-sm p-6">
                             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Desktop app</h3>
                             {appVersion != null && (
@@ -664,8 +664,8 @@ const SettingsContent: React.FC = () => {
                 )}
 
                 {activeTab === 'pos' && (
-                    <div className="flex flex-col lg:flex-row gap-8 max-w-6xl w-full">
-                        <div className="space-y-6 flex-1 max-w-xl">
+                    <div className="flex w-full min-w-0 flex-col lg:flex-row gap-8">
+                        <div className="w-full min-w-0 space-y-6 flex-1">
                             <Card className="border-none shadow-sm p-6">
                                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Print Settings</h3>
                                 {posSettingsLoading ? (

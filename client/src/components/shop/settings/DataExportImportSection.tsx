@@ -158,7 +158,7 @@ export default function DataExportImportSection() {
   const activeKind = importing || exporting;
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="w-full min-w-0 space-y-6">
       <Card className="border-none shadow-sm p-6">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Export / Import data</h3>
         <p className="text-muted-foreground text-sm mb-6">

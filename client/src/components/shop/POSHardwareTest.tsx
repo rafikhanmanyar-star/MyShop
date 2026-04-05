@@ -85,7 +85,7 @@ const POSHardwareTest: React.FC = () => {
     };
 
     return (
-        <div className="p-8 max-w-4xl mx-auto">
+        <div className="w-full min-w-0 p-4 sm:p-8">
             <h1 className="text-3xl font-bold mb-8">POS Hardware Test</h1>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

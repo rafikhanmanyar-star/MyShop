@@ -146,7 +146,7 @@ export default function CashierDashboardPage() {
 
   if (!currentShift) {
     return (
-      <div className="max-w-md mx-auto">
+      <div className="w-full min-w-0 max-w-none">
         {!isOnline && (
           <div className="mb-4 p-3 rounded-xl bg-amber-50 text-amber-800 text-sm border border-amber-200">
             Offline — Connect to the internet to start a shift.

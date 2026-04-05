@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { installElectronFocusRecovery } from './utils/electronFocusRecovery';
-import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { ShiftsProvider } from './context/ShiftsContext';
@@ -181,9 +181,6 @@ function AppLayout() {
   const [posFullScreen, setPosFullScreen] = useState(false);
   const { user } = useAuth();
   const role = user?.role || 'pos_cashier';
-  const location = useLocation();
-  const isPosRoute = location.pathname === '/pos';
-
   useEffect(() => {
     const handlePosFullScreen = (e: CustomEvent<{ enabled: boolean }>) => {
       setPosFullScreen(!!e.detail?.enabled);
@@ -204,13 +201,11 @@ function AppLayout() {
           </Suspense>
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
-        <main className={`flex min-h-0 flex-1 flex-col transition-all duration-300 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
-          <div
-            className={`flex min-h-0 flex-1 flex-col overflow-auto ${isPosRoute ? 'w-full p-6' : 'page-container'}`}
-          >
+        <main className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden transition-all duration-300 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden page-container">
           {!posFullScreen && <AppHeader />}
           <OfflineBanner />
-          <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Suspense fallback={
             <div className="flex min-h-[60vh] items-center justify-center">
               <div className="relative h-12 w-12">

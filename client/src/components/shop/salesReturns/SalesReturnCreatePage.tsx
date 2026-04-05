@@ -169,7 +169,7 @@ export default function SalesReturnCreatePage() {
   const blocked = eligibility?.blocked;
 
   return (
-    <div className="flex flex-col gap-6 max-w-4xl mx-auto pb-12">
+    <div className="flex w-full min-w-0 flex-col gap-6 pb-12">
       <div className="flex items-center gap-4">
         <Link to="/sales-returns" className="text-muted-foreground hover:text-foreground">
           <ArrowLeft className="w-5 h-5" />

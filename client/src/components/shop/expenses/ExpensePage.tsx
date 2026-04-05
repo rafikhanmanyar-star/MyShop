@@ -36,7 +36,7 @@ const ExpensePage: React.FC = () => {
   }, [onExpenseSaved]);
 
   return (
-    <div className="flex flex-col h-full bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
+    <div className="flex w-full min-w-0 flex-col h-full bg-muted/80 dark:bg-slate-800">
       <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Expense Management</h1>

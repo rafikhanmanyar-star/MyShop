@@ -249,7 +249,7 @@ const KhataPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-muted/80 -m-4 md:-m-8">
+    <div className="flex w-full min-w-0 flex-col h-full bg-muted/80">
       <div className="bg-card border-b border-border px-6 md:px-8 py-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>

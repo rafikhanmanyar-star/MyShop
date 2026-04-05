@@ -154,7 +154,7 @@ const AddExpenseForm: React.FC<AddExpenseFormProps> = ({ onSaved }) => {
   }
 
   return (
-    <Card className="max-w-2xl p-8 border-none dark:border dark:border-slate-700/80 shadow-sm dark:bg-slate-900/50">
+    <Card className="w-full min-w-0 max-w-none p-6 sm:p-8 border-none dark:border dark:border-slate-700/80 shadow-sm dark:bg-slate-900/50">
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
           <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-200 text-sm border border-rose-200/80 dark:border-rose-800/60">{error}</div>

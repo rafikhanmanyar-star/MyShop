@@ -53,7 +53,7 @@ const FinancialStatements: React.FC = () => {
                 </div>
             )}
 
-            <Card className="border-none dark:border dark:border-slate-700/80 shadow-sm flex-1 overflow-y-auto bg-card dark:bg-slate-900/50 p-12 max-w-4xl mx-auto w-full font-serif border-t-8 border-slate-900 dark:border-t-slate-600 rounded-none shadow-2xl">
+            <Card className="border-none dark:border dark:border-slate-700/80 shadow-sm flex-1 overflow-y-auto bg-card dark:bg-slate-900/50 p-6 sm:p-12 w-full min-w-0 max-w-none font-serif border-t-8 border-slate-900 dark:border-t-slate-600 rounded-none shadow-2xl">
                 <div className="text-center mb-12">
                     <h2 className="text-2xl font-semibold text-foreground uppercase tracking-[0.2em]">MyShop Retail Enterprise</h2>
                     <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-2">

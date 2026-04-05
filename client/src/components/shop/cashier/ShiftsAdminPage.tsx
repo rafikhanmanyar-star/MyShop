@@ -46,7 +46,7 @@ export default function ShiftsAdminPage() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
+    <div className="flex w-full min-w-0 flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800">
       <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-6 md:px-8 py-6 shadow-sm shrink-0">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>

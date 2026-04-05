@@ -100,7 +100,7 @@ const ForecastPage: React.FC = () => {
 
     if (loading && !data) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
+            <div className="flex w-full min-w-0 flex-col items-center justify-center min-h-[60vh] bg-muted/80 dark:bg-slate-800">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 dark:border-indigo-400 mb-4" />
                 <p className="text-muted-foreground dark:text-slate-400 font-medium">Analyzing demand patterns...</p>
             </div>
@@ -109,7 +109,7 @@ const ForecastPage: React.FC = () => {
 
     if (data?.needsRun) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
+            <div className="flex w-full min-w-0 flex-col items-center justify-center min-h-[60vh] text-center px-4 bg-muted/80 dark:bg-slate-800">
                 <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-950/60 rounded-3xl flex items-center justify-center mb-6 border border-indigo-200/80 dark:border-indigo-800/50">
                     <Brain className="w-10 h-10 text-indigo-600 dark:text-indigo-400" />
                 </div>
@@ -131,7 +131,7 @@ const ForecastPage: React.FC = () => {
     }
 
     return (
-        <div className="flex flex-col h-full min-h-0 overflow-y-auto bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8 p-8 pb-12">
+        <div className="flex w-full min-w-0 flex-col h-full min-h-0 overflow-y-auto bg-muted/80 dark:bg-slate-800 p-6 sm:p-8 pb-12">
             <div className="space-y-8">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

@@ -79,7 +79,7 @@ function formatQty(n: number) {
 }
 
 const ReportShell: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <div className="flex flex-col h-full bg-muted/50 dark:bg-slate-800 -m-4 md:-m-8">
+  <div className="flex w-full min-w-0 flex-col h-full bg-muted/50 dark:bg-slate-800">
     <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
       <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">{title}</h1>
       <p className="text-muted-foreground dark:text-slate-400 text-sm font-medium mt-1">
@@ -153,7 +153,7 @@ const DailyReportDashboard: React.FC = () => {
 
   return (
     <ReportShell title="Daily Report">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="w-full min-w-0 space-y-6">
         <div
           className="flex flex-wrap items-end gap-4
             [&_input]:!h-10 [&_input]:!min-h-0 [&_input]:!py-2 [&_input]:!text-sm
@@ -357,7 +357,7 @@ const InventoryOutDrill: React.FC = () => {
 
   return (
     <ReportShell title="Inventory out — detail">
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="w-full min-w-0 space-y-4">
         <button
           type="button"
           onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}
@@ -446,7 +446,7 @@ const InventoryInDrill: React.FC = () => {
 
   return (
     <ReportShell title="Inventory in (procurement) — detail">
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="w-full min-w-0 space-y-4">
         <button
           type="button"
           onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}
@@ -528,7 +528,7 @@ const ExpensesDrill: React.FC = () => {
 
   return (
     <ReportShell title="Expenses — detail">
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="w-full min-w-0 space-y-4">
         <button
           type="button"
           onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}
@@ -610,7 +610,7 @@ const ProductsCreatedDrill: React.FC = () => {
 
   return (
     <ReportShell title="New products — detail">
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="w-full min-w-0 space-y-4">
         <button
           type="button"
           onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}
@@ -688,7 +688,7 @@ const KhataDrill: React.FC = () => {
 
   return (
     <ReportShell title="Khata ledger — detail">
-      <div className="max-w-5xl mx-auto space-y-4">
+      <div className="w-full min-w-0 space-y-4">
         <button
           type="button"
           onClick={() => navigate(`/accounting/reports/daily?${searchParams.toString()}`)}

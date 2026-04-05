@@ -286,7 +286,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                             <div className="absolute inset-0 bg-indigo-200 dark:bg-indigo-600/20 rounded-full animate-ping opacity-20" />
                             {React.isValidElement(ICONS.shield) ? React.cloneElement(ICONS.shield as React.ReactElement<any>, { width: 64, height: 64 }) : ICONS.shield}
                         </div>
-                        <div className="max-w-md mx-auto space-y-4">
+                        <div className="w-full min-w-0 max-w-none space-y-4">
                             <h3 className="text-2xl font-semibold text-foreground dark:text-slate-200">Ready to Synchronize?</h3>
                             <p className="text-sm text-muted-foreground leading-relaxed font-medium">
                                 You are about to adjust <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{discrepancies.length}</span> items in your live inventory.
@@ -294,7 +294,7 @@ const InventoryAuditWizard: React.FC<InventoryAuditWizardProps> = ({ isOpen, onC
                             </p>
                         </div>
 
-                        <div className="max-w-xl mx-auto grid grid-cols-2 gap-4 mt-8">
+                        <div className="w-full min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
                             <div className="p-6 bg-muted/80 dark:bg-slate-800/80 rounded-3xl border border-border dark:border-slate-600 text-left">
                                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Audit Reference</p>
                                 <p className="text-sm font-semibold text-foreground">AUDIT-{new Date().getTime().toString().slice(-6)}</p>

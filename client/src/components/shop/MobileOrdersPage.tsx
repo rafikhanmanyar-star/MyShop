@@ -160,7 +160,7 @@ function MobileOrdersPageContent() {
     const pendingCount = orders.filter(o => o.status === 'Pending').length;
 
     return (
-        <div className="flex flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800 -m-4 md:-m-8">
+        <div className="flex w-full min-w-0 flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800">
             <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-6 sm:px-8 pt-6 pb-4 shadow-sm z-10">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
