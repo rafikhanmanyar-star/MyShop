@@ -66,7 +66,7 @@ export default function SalesReturnDetailPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight font-mono">{data.returnNumber}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Original invoice{' '}
+            Original POS invoice / mobile order{' '}
             <span className="font-semibold text-foreground">{data.originalSaleNumber || data.originalSaleId}</span>
           </p>
         </div>

@@ -1,11 +1,15 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useInventory } from '../../../context/InventoryContext';
 import { ICONS } from '../../../constants';
 import Card from '../../ui/Card';
 
 const StockMovements: React.FC = () => {
-    const { movements, warehouses } = useInventory();
+    const { movements, warehouses, loadMovements } = useInventory();
+
+    useEffect(() => {
+        loadMovements();
+    }, [loadMovements]);
 
     const getMovementStyle = (type: string) => {
         switch (type) {

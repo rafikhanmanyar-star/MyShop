@@ -26,6 +26,10 @@ export interface InventoryItem {
     /** Product description shown in the mobile app when user opens the product. */
     description?: string;
     warehouseStock: Record<string, number>; // warehouseId -> quantity
+    /** Units sellable today (non-expired batches); falls back to available when absent */
+    sellableOnHand?: number;
+    /** Earliest future expiry across batches (YYYY-MM-DD), when tracked */
+    nearestExpiry?: string | null;
 }
 
 export type MovementType = 'Sale' | 'Purchase' | 'Transfer' | 'Adjustment' | 'Return' | 'Damage' | 'Shrinkage';

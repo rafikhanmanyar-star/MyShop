@@ -37,6 +37,8 @@ interface InventoryContextType {
     approveAdjustment: (adjustmentId: string) => void;
     refreshWarehouses: () => Promise<void>; // Refresh warehouses list
     refreshItems: () => Promise<void>; // NEW: Refresh products/SKU list
+    /** Loads movement ledger (lazy; avoids blocking inventory list). */
+    loadMovements: () => Promise<void>;
 
     // Filters & Dashboard Data
     lowStockItems: InventoryItem[];
@@ -89,6 +91,74 @@ function mapServerProductToItem(p: any): InventoryItem {
     };
 }
 
+/** Row from GET /shop/inventory/skus — single round-trip stock + product fields. */
+function mapSkuRowToInventoryItem(r: any): InventoryItem {
+    let ws: Record<string, number> = {};
+    if (r.warehouse_stock != null) {
+        let raw: unknown = r.warehouse_stock;
+        if (typeof r.warehouse_stock === 'string') {
+            try {
+                raw = JSON.parse(r.warehouse_stock);
+            } catch {
+                raw = {};
+            }
+        }
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+            for (const k of Object.keys(raw as object)) {
+                ws[k] = Number((raw as Record<string, unknown>)[k]) || 0;
+            }
+        }
+    }
+    const onHand = Number(r.on_hand) || 0;
+    const available = Number(r.available) || 0;
+    const reserved = Number(r.reserved_total) || 0;
+    const exp = r.nearest_expiry;
+    const nearestExpiry =
+        exp == null || exp === ''
+            ? null
+            : typeof exp === 'string'
+              ? exp.slice(0, 10)
+              : String(exp).slice(0, 10);
+    return {
+        id: r.id,
+        sku: r.sku,
+        barcode: r.barcode || undefined,
+        name: r.name,
+        category: r.category_id || 'General',
+        unit: r.unit || 'pcs',
+        onHand,
+        available,
+        reserved,
+        sellableOnHand: available,
+        inTransit: 0,
+        damaged: 0,
+        costPrice: parseFloat(r.cost_price || '0'),
+        retailPrice: parseFloat(r.retail_price || '0'),
+        reorderPoint: r.reorder_point ?? 10,
+        imageUrl: getFullImageUrl(r.image_url) || undefined,
+        description: r.mobile_description || undefined,
+        warehouseStock: ws,
+        nearestExpiry: nearestExpiry ?? undefined,
+    };
+}
+
+function mapMovementRows(movementList: any[]): StockMovement[] {
+    return movementList.map((m: any) => ({
+        id: m.id,
+        itemId: m.product_id,
+        itemName: m.product_name || 'Unknown Item',
+        type: m.type as any,
+        quantity: parseFloat(m.quantity),
+        beforeQty: 0,
+        afterQty: 0,
+        warehouseId: m.warehouse_id,
+        referenceId: m.reference_id || 'N/A',
+        timestamp: m.created_at,
+        userId: m.user_id || 'system',
+        notes: m.reason,
+    }));
+}
+
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { isAuthenticated } = useAuth();
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -102,16 +172,23 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         const fetchData = async () => {
             try {
-                console.log('🔄 [InventoryContext] Fetching warehouses, products, and inventory...');
-                const [warehousesList, products, inventory, movementList] = await Promise.all([
+                const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+                console.log('🔄 [InventoryContext] Fetching warehouses + inventory SKUs (single request)...');
+                const [warehousesList, skuPack] = await Promise.all([
                     shopApi.getWarehouses(),
-                    shopApi.getProducts(),
-                    shopApi.getInventory(),
-                    shopApi.getMovements()
+                    shopApi.getInventorySkus({ page: 1, limit: 10000 }),
                 ]);
 
+                if (import.meta.env.DEV && skuPack) {
+                    console.log(
+                        `[perf] inventory/skus: ${(skuPack as any).serverMs ?? '?'}ms server, ${(skuPack as any).routeMs ?? '?'}ms route, ${(skuPack as any).items?.length ?? 0} items`
+                    );
+                }
+                if (t0 && import.meta.env.DEV) {
+                    console.log(`[perf] inventory context fetch ${(performance.now() - t0).toFixed(0)}ms (client)`);
+                }
+
                 console.log('📦 [InventoryContext] Raw warehouses from API:', warehousesList);
-                console.log('📦 [InventoryContext] Movements count:', movementList?.length || 0);
 
                 // Map Warehouses
                 const whs: Warehouse[] = warehousesList.map((w: any) => ({
@@ -122,57 +199,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 }));
                 setWarehouses(whs);
 
-                // Map Movements
-                const mappedMovements: StockMovement[] = movementList.map((m: any) => ({
-                    id: m.id,
-                    itemId: m.product_id,
-                    itemName: m.product_name || 'Unknown Item',
-                    type: m.type as any,
-                    quantity: parseFloat(m.quantity),
-                    beforeQty: 0, // Not stored in DB yet
-                    afterQty: 0,  // Not stored in DB yet
-                    warehouseId: m.warehouse_id,
-                    referenceId: m.reference_id || 'N/A',
-                    timestamp: m.created_at,
-                    userId: m.user_id || 'system',
-                    notes: m.reason
-                }));
-                setMovements(mappedMovements);
-
-                // Aggregate Stock
-                const stockMap: Record<string, { total: number, reserved: number, byWh: Record<string, number> }> = {};
-
-                inventory.forEach((inv: any) => {
-                    if (!stockMap[inv.product_id]) {
-                        stockMap[inv.product_id] = { total: 0, reserved: 0, byWh: {} };
-                    }
-                    const qty = parseFloat(inv.quantity_on_hand || '0');
-                    const reserved = parseFloat(inv.quantity_reserved || '0');
-                    stockMap[inv.product_id].total += qty;
-                    stockMap[inv.product_id].reserved += reserved;
-                    stockMap[inv.product_id].byWh[inv.warehouse_id] = qty;
-                });
-
-                // Map Products to InventoryItems
-                const mappedItems: InventoryItem[] = products.map((p: any) => ({
-                    id: p.id,
-                    sku: p.sku,
-                    barcode: p.barcode || undefined,
-                    name: p.name,
-                    category: p.category_id || 'General',
-                    unit: p.unit || 'pcs',
-                    onHand: stockMap[p.id]?.total || 0,
-                    available: (stockMap[p.id]?.total || 0) - (stockMap[p.id]?.reserved || 0),
-                    reserved: stockMap[p.id]?.reserved || 0,
-                    inTransit: 0,
-                    damaged: 0,
-                    costPrice: parseFloat(p.cost_price || '0'),
-                    retailPrice: parseFloat(p.retail_price || '0'),
-                    reorderPoint: p.reorder_point || 10,
-                    imageUrl: getFullImageUrl(p.image_url) || undefined,
-                    description: p.mobile_description || p.description || undefined,
-                    warehouseStock: stockMap[p.id]?.byWh || {}
-                }));
+                const mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
 
                 const pending = await getAllPendingProducts();
                 const pendingAsItems: InventoryItem[] = pending.map((p) => ({
@@ -247,48 +274,21 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
     }, []);
 
+    const loadMovements = useCallback(async () => {
+        try {
+            const movementList = await shopApi.getMovements(undefined, 5000);
+            setMovements(mapMovementRows(movementList || []));
+        } catch (e) {
+            console.error('Failed to load inventory movements:', e);
+        }
+    }, []);
+
     // NEW: Refresh items/products function
     const refreshItems = useCallback(async () => {
         try {
             console.log('🔄 [InventoryContext] Refreshing products/items...');
-            const [products, inventory] = await Promise.all([
-                shopApi.getProducts(),
-                shopApi.getInventory()
-            ]);
-
-            // Aggregate Stock
-            const stockMap: Record<string, { total: number, reserved: number, byWh: Record<string, number> }> = {};
-
-            inventory.forEach((inv: any) => {
-                if (!stockMap[inv.product_id]) {
-                    stockMap[inv.product_id] = { total: 0, reserved: 0, byWh: {} };
-                }
-                const qty = parseFloat(inv.quantity_on_hand || '0');
-                const reserved = parseFloat(inv.quantity_reserved || '0');
-                stockMap[inv.product_id].total += qty;
-                stockMap[inv.product_id].reserved += reserved;
-                stockMap[inv.product_id].byWh[inv.warehouse_id] = qty;
-            });
-
-            // Map Products to InventoryItems
-            const mappedItems: InventoryItem[] = products.map((p: any) => ({
-                id: p.id,
-                sku: p.sku,
-                barcode: p.barcode || undefined,
-                name: p.name,
-                category: p.category_id || 'General',
-                unit: p.unit || 'pcs',
-                onHand: stockMap[p.id]?.total || 0,
-                available: (stockMap[p.id]?.total || 0) - (stockMap[p.id]?.reserved || 0),
-                reserved: stockMap[p.id]?.reserved || 0,
-                inTransit: 0,
-                damaged: 0,
-                costPrice: parseFloat(p.cost_price || '0'),
-                retailPrice: parseFloat(p.retail_price || '0'),
-                reorderPoint: p.reorder_point || 10,
-                imageUrl: getFullImageUrl(p.image_url) || undefined,
-                warehouseStock: stockMap[p.id]?.byWh || {}
-            }));
+            const skuPack = await shopApi.getInventorySkus({ page: 1, limit: 10000 });
+            const mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
 
             const pending = await getAllPendingProducts();
             const pendingAsItems: InventoryItem[] = pending.map((p) => ({
@@ -311,8 +311,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }));
             setItems([...mappedItems, ...pendingAsItems]);
             // Prefill local image cache so product images load offline
-            products.filter((p: any) => p.image_url).slice(0, 50).forEach((p: any) => {
-                const path = p.image_url.startsWith('/') ? p.image_url : `/${p.image_url}`;
+            mappedItems.filter((it) => it.imageUrl).slice(0, 50).forEach((it) => {
+                const rel = it.imageUrl!.replace(/^https?:\/\/[^/]+/, '');
+                const path = rel.startsWith('/') ? rel : `/${rel}`;
                 fetchAndCacheImage(`${getBaseUrl()}${path}`, path).catch(() => {});
             });
             console.log('✅ [InventoryContext] Products refreshed:', mappedItems.length + pendingAsItems.length, 'items');
@@ -621,9 +622,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         approveAdjustment,
         refreshWarehouses,
         refreshItems,
+        loadMovements,
         lowStockItems,
         totalInventoryValue
-    }), [items, warehouses, movements, adjustments, transfers, addItem, updateItem, deleteItem, updateStock, requestTransfer, approveAdjustment, refreshWarehouses, refreshItems, lowStockItems, totalInventoryValue]);
+    }), [items, warehouses, movements, adjustments, transfers, addItem, updateItem, deleteItem, updateStock, requestTransfer, approveAdjustment, refreshWarehouses, refreshItems, loadMovements, lowStockItems, totalInventoryValue]);
 
     return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 };

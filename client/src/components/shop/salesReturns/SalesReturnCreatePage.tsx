@@ -12,6 +12,10 @@ type LineState = Record<
   { qty: string; restock: boolean; reason: string }
 >;
 
+function lineKey(row: { saleLineItemId?: string; mobileOrderLineItemId?: string }) {
+  return String(row.saleLineItemId || row.mobileOrderLineItemId || '');
+}
+
 function formatMoney(n: number) {
   return new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
     Number.isFinite(n) ? n : 0
@@ -31,6 +35,7 @@ export default function SalesReturnCreatePage() {
   const [error, setError] = useState<string | null>(null);
   const [banks, setBanks] = useState<any[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [returnSource, setReturnSource] = useState<'pos' | 'mobile' | null>(null);
 
   const loadBanks = useCallback(async () => {
     try {
@@ -49,18 +54,37 @@ export default function SalesReturnCreatePage() {
     }
     setLoading(true);
     setError(null);
+    setReturnSource(null);
     try {
-      const sale = await shopApi.getSaleByInvoiceNumber(inv);
-      if (!sale?.id) {
+      let el: any = null;
+      try {
+        const sale = await shopApi.getSaleByInvoiceNumber(inv);
+        if (sale?.id) {
+          el = await shopApi.getSaleReturnEligibility(sale.id);
+          setReturnSource('pos');
+        }
+      } catch {
+        // Not a POS invoice — try mobile order number
+      }
+      if (!el) {
+        try {
+          el = await shopApi.getMobileOrderReturnEligibility(inv);
+          if (el?.source === 'mobile') setReturnSource('mobile');
+        } catch {
+          el = null;
+        }
+      }
+      if (!el) {
         setEligibility(null);
-        setError('Sale not found');
+        setError('No POS sale or mobile order found for this number');
         return;
       }
-      const el = await shopApi.getSaleReturnEligibility(sale.id);
       setEligibility(el);
       const next: LineState = {};
       for (const row of el?.items || []) {
-        next[row.saleLineItemId] = {
+        const k = lineKey(row);
+        if (!k) continue;
+        next[k] = {
           qty: '0',
           restock: true,
           reason: '',
@@ -83,7 +107,7 @@ export default function SalesReturnCreatePage() {
     if (!eligibility?.items?.length) return 0;
     let sum = 0;
     for (const row of eligibility.items) {
-      const st = lineState[row.saleLineItemId];
+      const st = lineState[lineKey(row)];
       const q = parseFloat(st?.qty || '0') || 0;
       const sold = Number(row.soldQty) || 0;
       const lineSub = Number(row.lineSubtotal) || 0;
@@ -104,11 +128,12 @@ export default function SalesReturnCreatePage() {
     if (!eligibility?.items) return;
     const next: LineState = { ...lineState };
     for (const row of eligibility.items) {
+      const k = lineKey(row);
       const avail = Number(row.availableToReturn) || 0;
-      next[row.saleLineItemId] = {
+      next[k] = {
         qty: avail > 0 ? String(avail) : '0',
-        restock: next[row.saleLineItemId]?.restock ?? true,
-        reason: next[row.saleLineItemId]?.reason || '',
+        restock: next[k]?.restock ?? true,
+        reason: next[k]?.reason || '',
       };
     }
     setLineState(next);
@@ -122,8 +147,10 @@ export default function SalesReturnCreatePage() {
       return;
     }
     const items: any[] = [];
+    const isMobile = returnSource === 'mobile' || eligibility.source === 'mobile';
     for (const row of eligibility.items) {
-      const st = lineState[row.saleLineItemId];
+      const k = lineKey(row);
+      const st = lineState[k];
       const q = parseFloat(st?.qty || '0') || 0;
       if (q <= 0) continue;
       const avail = Number(row.availableToReturn) || 0;
@@ -131,12 +158,21 @@ export default function SalesReturnCreatePage() {
         setError(`Return qty exceeds available for ${row.productName || 'a line'}`);
         return;
       }
-      items.push({
-        saleLineItemId: row.saleLineItemId,
-        quantity: q,
-        restock: st?.restock !== false,
-        reason: st?.reason || undefined,
-      });
+      if (isMobile) {
+        items.push({
+          mobileOrderLineItemId: row.mobileOrderLineItemId,
+          quantity: q,
+          restock: st?.restock !== false,
+          reason: st?.reason || undefined,
+        });
+      } else {
+        items.push({
+          saleLineItemId: row.saleLineItemId,
+          quantity: q,
+          restock: st?.restock !== false,
+          reason: st?.reason || undefined,
+        });
+      }
     }
     if (items.length === 0) {
       setError('Enter at least one line with return quantity');
@@ -149,14 +185,19 @@ export default function SalesReturnCreatePage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await shopApi.createSalesReturn({
-        originalSaleId: eligibility.sale.id,
+      const payload: Record<string, unknown> = {
         returnType,
         refundMethod,
         bankAccountId: refundMethod === 'BANK' ? bankAccountId : refundMethod === 'CASH' ? undefined : undefined,
         notes: notes.trim() || undefined,
         items,
-      });
+      };
+      if (isMobile) {
+        payload.originalMobileOrderId = eligibility.sale.id;
+      } else {
+        payload.originalSaleId = eligibility.sale.id;
+      }
+      const res = await shopApi.createSalesReturn(payload);
       navigate(`/sales-returns/${res.id}`);
     } catch (e: any) {
       setError(e?.error || e?.message || 'Failed to create return');
@@ -176,7 +217,9 @@ export default function SalesReturnCreatePage() {
         </Link>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">New sales return</h1>
-          <p className="text-sm text-muted-foreground mt-1">Select the original POS invoice, lines, refund method, then confirm.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Enter a POS invoice number or a mobile app order number (delivered and paid), then lines and refund method.
+          </p>
         </div>
       </div>
 
@@ -192,10 +235,10 @@ export default function SalesReturnCreatePage() {
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[200px]">
             <Input
-              label="Invoice / sale number"
+              label="POS invoice or mobile order #"
               value={invoiceInput}
               onChange={(e) => setInvoiceInput(e.target.value)}
-              placeholder="e.g. INV-00042"
+              placeholder="e.g. INV-00042 or MO-1024"
             />
           </div>
           <Button onClick={() => void loadEligibility()} disabled={loading}>
@@ -204,8 +247,23 @@ export default function SalesReturnCreatePage() {
         </div>
         {eligibility?.sale && (
           <p className="text-sm text-muted-foreground">
-            Sale total {CURRENCY} {formatMoney(parseFloat(eligibility.sale.grandTotal) || 0)} · Status{' '}
+            {(returnSource === 'mobile' || eligibility.source === 'mobile') && (
+              <span className="mr-2 rounded-md bg-indigo-100 dark:bg-indigo-950 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:text-indigo-200">
+                Mobile order
+              </span>
+            )}
+            {(returnSource === 'pos' || eligibility.source === 'pos') && (
+              <span className="mr-2 rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium">POS</span>
+            )}
+            Order total {CURRENCY} {formatMoney(parseFloat(eligibility.sale.grandTotal) || 0)} · Status{' '}
             <span className="font-semibold text-foreground">{eligibility.sale.status}</span>
+            {(eligibility.sale as any).paymentStatus != null && (
+              <>
+                {' '}
+                · Payment{' '}
+                <span className="font-semibold text-foreground">{(eligibility.sale as any).paymentStatus}</span>
+              </>
+            )}
           </p>
         )}
       </section>
@@ -240,11 +298,12 @@ export default function SalesReturnCreatePage() {
                 </thead>
                 <tbody>
                   {eligibility.items.map((row: any) => {
-                    const st = lineState[row.saleLineItemId] || { qty: '0', restock: true, reason: '' };
+                    const lk = lineKey(row);
+                    const st = lineState[lk] || { qty: '0', restock: true, reason: '' };
                     const avail = Number(row.availableToReturn) || 0;
                     const ret = Number(row.alreadyReturned) || 0;
                     return (
-                      <tr key={row.saleLineItemId} className="border-b border-border/60">
+                      <tr key={lk} className="border-b border-border/60">
                         <td className="py-2 pr-2 font-medium">{row.productName}</td>
                         <td className="py-2 pr-2 font-mono">{row.soldQty}</td>
                         <td className="py-2 pr-2 font-mono text-rose-600 dark:text-rose-400">{ret}</td>
@@ -258,7 +317,7 @@ export default function SalesReturnCreatePage() {
                             disabled={blocked}
                             className="w-24 rounded-md border border-input bg-background px-2 py-1 text-sm"
                             value={st.qty}
-                            onChange={(e) => updateLine(row.saleLineItemId, { qty: e.target.value })}
+                            onChange={(e) => updateLine(lk, { qty: e.target.value })}
                           />
                         </td>
                         <td className="py-2 pr-2">
@@ -266,7 +325,7 @@ export default function SalesReturnCreatePage() {
                             type="checkbox"
                             checked={st.restock}
                             disabled={blocked}
-                            onChange={(e) => updateLine(row.saleLineItemId, { restock: e.target.checked })}
+                            onChange={(e) => updateLine(lk, { restock: e.target.checked })}
                           />
                         </td>
                         <td className="py-2">
@@ -275,7 +334,7 @@ export default function SalesReturnCreatePage() {
                             placeholder="Optional"
                             value={st.reason}
                             disabled={blocked}
-                            onChange={(e) => updateLine(row.saleLineItemId, { reason: e.target.value })}
+                            onChange={(e) => updateLine(lk, { reason: e.target.value })}
                           />
                         </td>
                       </tr>

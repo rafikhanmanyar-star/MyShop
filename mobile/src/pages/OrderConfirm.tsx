@@ -6,6 +6,7 @@ export default function OrderConfirm() {
     const [searchParams] = useSearchParams();
     const { state } = useApp();
     const isPickup = searchParams.get('pickup') === '1';
+    const isOnlinePayment = searchParams.get('online') === '1';
 
     return (
         <div className="page fade-in" style={{ textAlign: 'center', paddingTop: 60 }}>
@@ -28,7 +29,9 @@ export default function OrderConfirm() {
             <p style={{ fontSize: 15, color: 'var(--text-secondary)', marginBottom: 24 }}>
                 {isPickup
                     ? 'We will prepare your items. Visit the branch to pay and collect when ready.'
-                    : 'Your order has been placed successfully'}
+                    : isOnlinePayment
+                      ? 'Your order is received. The shop will share Easypaisa, Jazzcash, or online payment details — pay to confirm, then we deliver to your address.'
+                      : 'Your order has been placed successfully'}
             </p>
 
             <div style={{

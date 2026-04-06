@@ -2,11 +2,15 @@ import React from 'react';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 
 export interface LineItem {
+  lineId: string;
   productId: string;
   quantity: number;
   unitCost: number;
   taxAmount: number;
   subtotal: number;
+  /** YYYY-MM-DD */
+  expiryDate: string;
+  batchNo?: string;
 }
 
 export interface PurchaseItemRowProps {
@@ -19,6 +23,8 @@ export interface PurchaseItemRowProps {
   reorderPoint?: number;
   onQuantityChange: (qty: number) => void;
   onUnitCostChange: (cost: number) => void;
+  onExpiryChange: (isoDate: string) => void;
+  onBatchNoChange: (batchNo: string) => void;
   onRemove: () => void;
   zebra?: boolean;
 }
@@ -32,6 +38,8 @@ export default function PurchaseItemRow({
   reorderPoint = 0,
   onQuantityChange,
   onUnitCostChange,
+  onExpiryChange,
+  onBatchNoChange,
   onRemove,
   zebra,
 }: PurchaseItemRowProps) {
@@ -92,7 +100,7 @@ export default function PurchaseItemRow({
             </button>
           </div>
         </td>
-        <td className="px-4 py-3 text-right">
+        <td className="px-4 py-3">
           <input
             type="number"
             min={0}
@@ -100,6 +108,26 @@ export default function PurchaseItemRow({
             value={line.unitCost}
             onChange={(e) => onUnitCostChange(parseFloat(e.target.value) || 0)}
             className="input input-text w-28 rounded-lg px-2 py-1.5 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+        </td>
+        <td className="px-4 py-3">
+          <input
+            type="date"
+            value={line.expiryDate.slice(0, 10)}
+            onChange={(e) => onExpiryChange(e.target.value)}
+            className="input input-text w-[9.5rem] rounded-lg px-2 py-1.5 text-sm"
+            required
+            aria-label="Expiry date"
+          />
+        </td>
+        <td className="px-4 py-3">
+          <input
+            type="text"
+            value={line.batchNo ?? ''}
+            onChange={(e) => onBatchNoChange(e.target.value)}
+            placeholder="Auto"
+            className="input input-text w-28 rounded-lg px-2 py-1.5 text-sm"
+            aria-label="Batch number"
           />
         </td>
         <td className="numeric-data px-4 py-3 text-right text-sm font-semibold">
@@ -118,7 +146,7 @@ export default function PurchaseItemRow({
       </tr>
 
       <tr className="md:hidden">
-        <td colSpan={7} className="border-b border-border p-0">
+        <td colSpan={9} className="border-b border-border p-0">
           <div
             className={`rounded-xl border border-border bg-card p-4 shadow-erp ${zebra ? 'bg-table-zebra' : ''}`}
           >
@@ -185,6 +213,26 @@ export default function PurchaseItemRow({
                   value={line.unitCost}
                   onChange={(e) => onUnitCostChange(parseFloat(e.target.value) || 0)}
                   className="input input-text mt-1 w-full rounded-lg px-2 py-1.5 tabular-nums"
+                />
+              </div>
+              <div className="col-span-2">
+                <span className="text-xs text-muted-foreground">Expiry date *</span>
+                <input
+                  type="date"
+                  value={line.expiryDate.slice(0, 10)}
+                  onChange={(e) => onExpiryChange(e.target.value)}
+                  className="input input-text mt-1 w-full rounded-lg px-2 py-1.5"
+                  required
+                />
+              </div>
+              <div className="col-span-2">
+                <span className="text-xs text-muted-foreground">Batch (optional)</span>
+                <input
+                  type="text"
+                  value={line.batchNo ?? ''}
+                  onChange={(e) => onBatchNoChange(e.target.value)}
+                  placeholder="Auto if empty"
+                  className="input input-text mt-1 w-full rounded-lg px-2 py-1.5"
                 />
               </div>
             </div>

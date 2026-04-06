@@ -93,6 +93,26 @@ const AUTH_KEY = 'mobile_token';
 const CUSTOMER_KEY = 'mobile_customer';
 const LAST_SHOP_SLUG_KEY = 'myshop_last_shop_slug';
 
+/** Coerce API/pg values (DECIMAL often arrives as string) so totals use numeric + not string concat. */
+function toFiniteNumber(value: unknown, fallback = 0): number {
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+    const n = parseFloat(String(value).replace(/,/g, ''));
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeShopSettings(raw: ShopSettings): ShopSettings {
+    const free = raw.free_delivery_above;
+    return {
+        ...raw,
+        minimum_order_amount: toFiniteNumber(raw.minimum_order_amount),
+        delivery_fee: toFiniteNumber(raw.delivery_fee),
+        free_delivery_above:
+            free === null || free === undefined ? null : toFiniteNumber(free),
+        estimated_delivery_minutes: Math.round(toFiniteNumber(raw.estimated_delivery_minutes, 60)),
+    };
+}
+
 function loadCart(): CartItem[] {
     try {
         const data = localStorage.getItem(CART_KEY);
@@ -161,7 +181,7 @@ function reducer(state: AppState, action: Action): AppState {
                 shopSlug: action.slug,
                 shop: action.shop,
                 branchId: action.shop?.branchId ?? null,
-                settings: action.settings,
+                settings: action.settings ? normalizeShopSettings(action.settings) : null,
                 branding: action.branding,
                 cart: shopChanged ? [] : state.cart,
                 offerBundles: shopChanged ? [] : state.offerBundles,

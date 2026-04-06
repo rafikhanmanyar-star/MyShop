@@ -4,6 +4,17 @@ import { checkRole } from '../../middleware/roleMiddleware.js';
 
 const router = express.Router();
 
+function procurementWriteErrorStatus(e: any): number {
+  if (e?.statusCode === 409) return 409;
+  const m = String(e?.message || '');
+  if (
+    /line \d|expiry|quantity|required|must be|cannot reverse|negative|no warehouse|not found/i.test(m)
+  ) {
+    return 400;
+  }
+  return 500;
+}
+
 router.get('/purchase-bills', checkRole(['admin', 'accountant']), async (req: any, res) => {
   try {
     const supplierId = req.query.supplierId as string | undefined;
@@ -29,7 +40,7 @@ router.post('/purchase-bills', checkRole(['admin', 'accountant']), async (req: a
     const id = await getProcurementService().createPurchaseBill(req.tenantId, req.body);
     res.status(201).json({ id, message: 'Purchase bill created' });
   } catch (e: any) {
-    res.status(e.statusCode === 409 ? 409 : 500).json({ error: e.message });
+    res.status(procurementWriteErrorStatus(e)).json({ error: e.message });
   }
 });
 
@@ -38,7 +49,7 @@ router.patch('/purchase-bills/:id', checkRole(['admin', 'accountant']), async (r
     await getProcurementService().updatePurchaseBill(req.tenantId, req.params.id, req.body);
     res.json({ message: 'Purchase bill updated' });
   } catch (e: any) {
-    res.status(e.statusCode === 409 ? 409 : 500).json({ error: e.message });
+    res.status(procurementWriteErrorStatus(e)).json({ error: e.message });
   }
 });
 
@@ -47,7 +58,7 @@ router.delete('/purchase-bills/:id', checkRole(['admin', 'accountant']), async (
     await getProcurementService().deletePurchaseBill(req.tenantId, req.params.id);
     res.json({ message: 'Purchase bill deleted' });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    res.status(procurementWriteErrorStatus(e)).json({ error: e.message });
   }
 });
 

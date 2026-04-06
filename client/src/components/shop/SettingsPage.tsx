@@ -11,7 +11,6 @@ import { shopApi, accountingApi, ShopBankAccount, ShopVendor } from '../../servi
 import Card from '../ui/Card';
 import { AccountingProvider } from '../../context/AccountingContext';
 import ChartOfAccounts from './accounting/ChartOfAccounts';
-import { MobileOrdersProvider } from '../../context/MobileOrdersContext';
 import { MobileSettingsPanel } from './MobileOrdersPage';
 import DataExportImportSection from './settings/DataExportImportSection';
 import BackupRestoreSection from './settings/BackupRestoreSection';
@@ -658,9 +657,7 @@ const SettingsContent: React.FC = () => {
                 )}
 
                 {!isCashier && activeTab === 'mobileBranding' && (
-                    <MobileOrdersProvider>
-                        <MobileSettingsPanel />
-                    </MobileOrdersProvider>
+                    <MobileSettingsPanel />
                 )}
 
                 {activeTab === 'pos' && (

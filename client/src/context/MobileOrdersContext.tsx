@@ -1,12 +1,23 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { mobileOrdersApi, MobileOrder, MobileOrderingSettings, ShopBranding } from '../services/mobileOrdersApi';
 import { getApiBaseUrl } from '../config/apiUrl';
+import { useAuth } from './AuthContext';
+
+/** Incoming mobile order alerts for the global bell (from SSE). */
+export interface MobileOrderBellAlert {
+    orderId: string;
+    orderNumber: string;
+    grandTotal?: number;
+    status?: string;
+    createdAt?: string;
+}
 
 interface MobileOrdersState {
     orders: MobileOrder[];
     settings: MobileOrderingSettings | null;
     branding: ShopBranding | null;
     newOrderCount: number;
+    bellAlerts: MobileOrderBellAlert[];
     loading: boolean;
     error: string | null;
     sseConnected: boolean;
@@ -21,20 +32,25 @@ interface MobileOrdersContextType extends MobileOrdersState {
     updateSettings: (data: Partial<MobileOrderingSettings>) => Promise<void>;
     updateBranding: (data: Partial<ShopBranding>) => Promise<void>;
     clearNewOrderCount: () => void;
+    dismissBellAlert: (orderId: string) => void;
+    clearBellAlerts: () => void;
     refreshOrders: () => void;
 }
 
 const MobileOrdersContext = createContext<MobileOrdersContextType>(null!);
 
+const MOBILE_ORDER_SSE_ROLES = ['admin', 'pos_cashier'];
+
 export function MobileOrdersProvider({ children }: { children: React.ReactNode }) {
+    const { user } = useAuth();
     const [orders, setOrders] = useState<MobileOrder[]>([]);
     const [settings, setSettings] = useState<MobileOrderingSettings | null>(null);
     const [branding, setBranding] = useState<ShopBranding | null>(null);
     const [newOrderCount, setNewOrderCount] = useState(0);
+    const [bellAlerts, setBellAlerts] = useState<MobileOrderBellAlert[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sseConnected, setSseConnected] = useState(false);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     // Create notification sound using Web Audio API
     const playNotificationSound = useCallback(() => {
@@ -64,10 +80,32 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
         } catch { /* Audio not available */ }
     }, []);
 
-    // ─── SSE Connection ───────────────────────────────────────
+    const dismissBellAlert = useCallback((orderId: string) => {
+        setBellAlerts(prev => prev.filter(a => a.orderId !== orderId));
+    }, []);
+
+    const clearBellAlerts = useCallback(() => setBellAlerts([]), []);
+
+    const loadOrders = useCallback(async (status?: string) => {
+        setLoading(true);
+        setError(null);
+        try {
+            const data = await mobileOrdersApi.getOrders(status);
+            setOrders(data);
+        } catch (err: any) {
+            setError(err.error || err.message || 'Failed to load orders');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    // ─── SSE Connection (admin / POS cashier only; matches API roles) ───
     useEffect(() => {
         const token = localStorage.getItem('auth_token');
-        if (!token) return;
+        if (!token || !user || !MOBILE_ORDER_SSE_ROLES.includes(user.role)) {
+            setSseConnected(false);
+            return;
+        }
 
         const baseUrl = getApiBaseUrl();
         const url = `${baseUrl}/shop/mobile-orders/stream`;
@@ -110,6 +148,21 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
                                     try {
                                         const payload = JSON.parse(line.slice(6));
                                         if (payload.type === 'new_order') {
+                                            const orderId = payload.orderId ?? payload.order_id;
+                                            const orderNumber = payload.orderNumber ?? payload.order_number ?? 'Order';
+                                            if (orderId) {
+                                                setBellAlerts(prev => {
+                                                    const next: MobileOrderBellAlert = {
+                                                        orderId: String(orderId),
+                                                        orderNumber: String(orderNumber),
+                                                        grandTotal: payload.grandTotal != null ? Number(payload.grandTotal) : undefined,
+                                                        status: payload.status,
+                                                        createdAt: payload.createdAt ?? payload.created_at,
+                                                    };
+                                                    const rest = prev.filter(a => a.orderId !== next.orderId);
+                                                    return [next, ...rest].slice(0, 40);
+                                                });
+                                            }
                                             setNewOrderCount(prev => prev + 1);
                                             playNotificationSound();
                                             // Auto-refresh orders list
@@ -146,21 +199,7 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
         return () => {
             controller?.abort?.();
         };
-    }, []);
-
-    // ─── Data Loading ─────────────────────────────────────────
-    const loadOrders = useCallback(async (status?: string) => {
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await mobileOrdersApi.getOrders(status);
-            setOrders(data);
-        } catch (err: any) {
-            setError(err.error || err.message || 'Failed to load orders');
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    }, [user?.role, loadOrders, playNotificationSound]);
 
     const loadSettings = useCallback(async () => {
         try {
@@ -201,10 +240,10 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
 
     return (
         <MobileOrdersContext.Provider value={{
-            orders, settings, branding, newOrderCount, loading, error, sseConnected,
+            orders, settings, branding, newOrderCount, bellAlerts, loading, error, sseConnected,
             loadOrders, loadSettings, loadBranding,
             updateOrderStatus, collectPayment, updateSettings, updateBranding,
-            clearNewOrderCount, refreshOrders,
+            clearNewOrderCount, dismissBellAlert, clearBellAlerts, refreshOrders,
         }}>
             {children}
         </MobileOrdersContext.Provider>

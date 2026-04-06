@@ -112,8 +112,32 @@ export const shopApi = {
   },
 
   getInventory: () => apiClient.get<any[]>('/shop/inventory'),
+  /** Paginated SKU + stock (single round-trip; use for inventory UI). */
+  getInventorySkus: (params?: { page?: number; limit?: number; search?: string; stockFilter?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.page != null) q.set('page', String(params.page));
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    if (params?.search) q.set('search', params.search);
+    if (params?.stockFilter) q.set('stockFilter', params.stockFilter);
+    const qs = q.toString();
+    return apiClient.get<{
+      items: any[];
+      total: number;
+      page: number;
+      limit: number;
+      serverMs?: number;
+      routeMs?: number;
+    }>(`/shop/inventory/skus${qs ? `?${qs}` : ''}`);
+  },
+  getInventoryExpirySummary: () => apiClient.get<any>('/shop/inventory/expiry-summary'),
   adjustInventory: (data: any) => apiClient.post('/shop/inventory/adjust', data),
-  getMovements: (productId?: string) => apiClient.get<any[]>(`/shop/inventory/movements${productId ? `?productId=${productId}` : ''}`),
+  getMovements: (productId?: string, limit?: number) => {
+    const q = new URLSearchParams();
+    if (productId) q.set('productId', productId);
+    if (limit != null) q.set('limit', String(limit));
+    const qs = q.toString();
+    return apiClient.get<any[]>(`/shop/inventory/movements${qs ? `?${qs}` : ''}`);
+  },
 
   getSales: () => apiClient.get<any[]>('/shop/sales'),
   createSale: (data: any) => apiClient.post('/shop/sales', data),
@@ -168,6 +192,9 @@ export const shopApi = {
 
   getSaleReturnEligibility: (saleId: string) =>
     apiClient.get<any>(`/shop/sales/return-eligibility/${encodeURIComponent(saleId)}`),
+  /** Completed mobile order (delivered + paid) — same return workflow as POS. */
+  getMobileOrderReturnEligibility: (orderNumber: string) =>
+    apiClient.get<any>(`/shop/sales/mobile-return-eligibility/${encodeURIComponent(orderNumber)}`),
   /** Nested under /sales/returns — avoids some proxies/hyphen path issues */
   getSalesReturns: () => apiClient.get<any[]>('/shop/sales/returns'),
   getSalesReturn: (id: string) => apiClient.get<any>(`/shop/sales/returns/${encodeURIComponent(id)}`),

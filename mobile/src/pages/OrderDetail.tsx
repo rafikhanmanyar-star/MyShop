@@ -226,7 +226,9 @@ export default function OrderDetail() {
                 <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
                     {order.payment_method === 'SelfCollection'
                         ? 'Self collection — pay at the branch when you collect'
-                        : 'Cash on delivery'}
+                        : order.payment_method === 'EasypaisaJazzcashOnline'
+                          ? 'Easypaisa / Jazzcash / online — complete payment using details the shop shares with you; delivery follows as usual.'
+                          : 'Cash on delivery'}
                 </p>
             </div>
 

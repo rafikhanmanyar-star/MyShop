@@ -354,8 +354,31 @@ router.get('/debug-uploads', (req: any, res) => {
 // --- Inventory ---
 router.get('/inventory', async (req: any, res) => {
   try {
+    const t0 = Date.now();
     const inventory = await getShopService().getInventory(req.tenantId);
+    res.setHeader('X-Response-Time-Ms', String(Date.now() - t0));
     res.json(inventory);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/** Paginated SKU + stock summary (optimized for large catalogs). */
+router.get('/inventory/skus', async (req: any, res) => {
+  try {
+    const t0 = Date.now();
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(5000, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+    const search = typeof req.query.search === 'string' ? req.query.search : '';
+    const stockFilter = typeof req.query.stockFilter === 'string' ? req.query.stockFilter : 'all';
+    const result = await getShopService().listInventorySkus(req.tenantId, {
+      page,
+      limit,
+      search,
+      stockFilter,
+    });
+    res.setHeader('X-Response-Time-Ms', String(Date.now() - t0));
+    res.json({ ...result, routeMs: Date.now() - t0 });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -374,8 +397,18 @@ router.post('/inventory/adjust', async (req: any, res) => {
 router.get('/inventory/movements', async (req: any, res) => {
   try {
     const productId = req.query.productId as string;
-    const movements = await getShopService().getInventoryMovements(req.tenantId, productId);
+    const maxRows = Math.min(10000, Math.max(1, parseInt(String(req.query.limit || '5000'), 10) || 5000));
+    const movements = await getShopService().getInventoryMovements(req.tenantId, productId, maxRows);
     res.json(movements);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/inventory/expiry-summary', async (req: any, res) => {
+  try {
+    const summary = await getShopService().getInventoryExpirySummary(req.tenantId);
+    res.json(summary);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -748,6 +781,24 @@ router.get('/sales/return-eligibility/:saleId', checkRole(['admin', 'pos_cashier
     res.status(500).json({ error: error.message });
   }
 });
+
+/** Mobile order number (same as shown in the app / POS) — for sales returns on completed mobile orders. */
+router.get(
+  '/sales/mobile-return-eligibility/:orderNumber',
+  checkRole(['admin', 'pos_cashier', 'accountant']),
+  async (req: any, res) => {
+    try {
+      const data = await getSalesReturnService().getMobileOrderReturnEligibilityByOrderNumber(
+        req.tenantId,
+        req.params.orderNumber
+      );
+      if (!data) return res.status(404).json({ error: 'Mobile order not found' });
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
 
 // --- Settings edit lock (multi-user: one editor at a time for Settings module) ---
 router.get('/settings/edit-lock', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {

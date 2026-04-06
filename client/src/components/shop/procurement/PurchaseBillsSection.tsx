@@ -18,6 +18,16 @@ import { useClickOutside } from '../../../hooks/useClickOutside';
 import SupplierSelect, { type VendorOption } from './SupplierSelect';
 import ProductSearchInput, { type ProductOption } from './ProductSearchInput';
 import PurchaseItemRow, { type LineItem } from './PurchaseItemRow';
+
+function newLineId(): string {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `ln-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function defaultExpiryDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 import TotalSummaryCard from './TotalSummaryCard';
 import PaymentSelector, { type PaymentStatus } from './PaymentSelector';
 import { showProcurementToast } from './utils/showProcurementToast';
@@ -206,46 +216,32 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
 
     const addItem = (p: ProductOption) => {
       const unitCost = Number(p.cost_price ?? p.costPrice ?? p.average_cost) || 0;
-      const existing = form.items.find((i) => i.productId === p.id);
-      if (existing) {
-        setForm((f) => ({
-          ...f,
-          items: f.items.map((i) =>
-            i.productId === p.id
-              ? {
-                  ...i,
-                  quantity: i.quantity + 1,
-                  subtotal: (i.quantity + 1) * i.unitCost,
-                }
-              : i
-          ),
-        }));
-        showProcurementToast('Quantity updated', 'success');
-      } else {
-        setForm((f) => ({
-          ...f,
-          items: [
-            ...f.items,
-            {
-              productId: p.id,
-              quantity: 1,
-              unitCost,
-              taxAmount: 0,
-              subtotal: unitCost,
-            },
-          ],
-        }));
-        showProcurementToast('Product added', 'success');
-      }
+      setForm((f) => ({
+        ...f,
+        items: [
+          ...f.items,
+          {
+            lineId: newLineId(),
+            productId: p.id,
+            quantity: 1,
+            unitCost,
+            taxAmount: 0,
+            subtotal: unitCost,
+            expiryDate: defaultExpiryDate(),
+            batchNo: '',
+          },
+        ],
+      }));
+      showProcurementToast('Product added', 'success');
       setProductSearch('');
     };
 
-    const updateItem = (productId: string, field: string, value: number) => {
+    const updateItem = (lineId: string, field: string, value: number | string) => {
       setForm((f) => ({
         ...f,
         items: f.items.map((i) => {
-          if (i.productId !== productId) return i;
-          const next = { ...i, [field]: value };
+          if (i.lineId !== lineId) return i;
+          const next = { ...i, [field]: value } as LineItem;
           if (field === 'quantity' || field === 'unitCost') {
             next.subtotal = next.quantity * next.unitCost;
           }
@@ -254,8 +250,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       }));
     };
 
-    const removeItem = (productId: string) => {
-      setForm((f) => ({ ...f, items: f.items.filter((i) => i.productId !== productId) }));
+    const removeItem = (lineId: string) => {
+      setForm((f) => ({ ...f, items: f.items.filter((i) => i.lineId !== lineId) }));
     };
 
     const resetFormFields = useCallback(() => {
@@ -392,6 +388,27 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         return;
       }
       setFormErrors({});
+      const today = new Date().toISOString().slice(0, 10);
+      for (const row of form.items) {
+        const exp = (row.expiryDate || '').trim().slice(0, 10);
+        if (!exp) {
+          alert('Each line must have an expiry date.');
+          return;
+        }
+        if (exp < today) {
+          alert('Expiry date must be today or a future date.');
+          return;
+        }
+        const qty = Math.max(1, Math.floor(row.quantity));
+        if (qty <= 0) {
+          alert('Quantity must be greater than zero on each line.');
+          return;
+        }
+        if (row.unitCost < 0) {
+          alert('Cost price cannot be negative.');
+          return;
+        }
+      }
       setLoading(true);
       try {
         const itemsPayload = form.items.map((i) => {
@@ -402,6 +419,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
             unitCost: i.unitCost,
             taxAmount: i.taxAmount || 0,
             subtotal: qty * i.unitCost,
+            expiryDate: i.expiryDate.trim().slice(0, 10),
+            batchNo: i.batchNo?.trim() || undefined,
           };
         });
         const sub = itemsPayload.reduce((s, i) => s + i.subtotal, 0);
@@ -585,7 +604,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               {form.items.length > 0 && (
                 <div className="overflow-hidden rounded-xl border border-border bg-card">
                   <div className="overflow-x-auto">
-                    <table className="table-modern min-w-[680px]">
+                    <table className="table-modern min-w-[960px]">
                       <thead className="sticky top-0 z-10 hidden border-b border-border bg-card shadow-erp md:table-header-group">
                         <tr>
                           <th className="table-header w-12 whitespace-nowrap text-center" title="Serial number">
@@ -595,6 +614,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                           <th className="table-header whitespace-nowrap">Stock</th>
                           <th className="table-header whitespace-nowrap">Quantity</th>
                           <th className="table-header whitespace-nowrap text-right">Unit cost</th>
+                          <th className="table-header whitespace-nowrap">Expiry *</th>
+                          <th className="table-header whitespace-nowrap">Batch</th>
                           <th className="table-header whitespace-nowrap text-right">Subtotal</th>
                           <th className="table-header w-12" />
                         </tr>
@@ -606,7 +627,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                           const existingStock = invItem != null ? invItem.onHand : null;
                           return (
                             <PurchaseItemRow
-                              key={i.productId}
+                              key={i.lineId}
                               line={i}
                               serialNumber={idx + 1}
                               productName={p?.name || i.productId}
@@ -614,9 +635,11 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                               stock={existingStock}
                               reorderPoint={invItem?.reorderPoint}
                               zebra={idx % 2 === 1}
-                              onQuantityChange={(q) => updateItem(i.productId, 'quantity', q)}
-                              onUnitCostChange={(c) => updateItem(i.productId, 'unitCost', c)}
-                              onRemove={() => removeItem(i.productId)}
+                              onQuantityChange={(q) => updateItem(i.lineId, 'quantity', q)}
+                              onUnitCostChange={(c) => updateItem(i.lineId, 'unitCost', c)}
+                              onExpiryChange={(d) => updateItem(i.lineId, 'expiryDate', d)}
+                              onBatchNoChange={(b) => updateItem(i.lineId, 'batchNo', b)}
+                              onRemove={() => removeItem(i.lineId)}
                             />
                           );
                         })}
@@ -767,11 +790,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                                   billDate: (bill.bill_date || bill.billDate || '').toString().slice(0, 10),
                                   dueDate: (bill.due_date || bill.dueDate || '').toString().slice(0, 10) || '',
                                   items: bill.items.map((it: any) => ({
+                                    lineId: newLineId(),
                                     productId: it.product_id || it.productId,
                                     quantity: Number(it.quantity) || 1,
                                     unitCost: Number(it.unit_cost ?? it.unitCost) || 0,
                                     taxAmount: Number(it.tax_amount ?? it.taxAmount) || 0,
                                     subtotal: Number(it.subtotal) || 0,
+                                    expiryDate: String(
+                                      it.expiry_date ?? it.expiryDate ?? defaultExpiryDate()
+                                    ).slice(0, 10),
+                                    batchNo: String(it.batch_no ?? it.batchNo ?? ''),
                                   })),
                                   paymentStatus: 'Credit',
                                   paidAmount: 0,

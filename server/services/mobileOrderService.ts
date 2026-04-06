@@ -2,6 +2,7 @@ import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
+import { deductInventoryFefo, getSellableQuantityForWarehouse } from './inventoryBatchService.js';
 import { aggregateQuantitiesFromOfferLines, prepareOfferBundlesForOrder } from './mobileOfferCheckout.js';
 
 function generateId(prefix: string): string {
@@ -121,7 +122,28 @@ export class MobileOrderService {
             paramIdx++;
         }
 
-        const stockSubquery = `COALESCE((SELECT SUM(qty_on_hand - qty_res) FROM (SELECT i.quantity_on_hand as qty_on_hand, i.quantity_reserved as qty_res FROM shop_inventory i WHERE i.product_id = p.id AND i.tenant_id = $1) as inv), 0)`;
+        const stockSubquery = `COALESCE((
+          SELECT SUM(
+            CASE
+              WHEN EXISTS (
+                SELECT 1 FROM inventory_batches b0
+                WHERE b0.tenant_id = $1 AND b0.product_id = i.product_id AND b0.warehouse_id = i.warehouse_id
+              )
+              THEN GREATEST(0,
+                COALESCE((
+                  SELECT SUM(b.quantity_remaining)
+                  FROM inventory_batches b
+                  WHERE b.tenant_id = i.tenant_id AND b.product_id = i.product_id AND b.warehouse_id = i.warehouse_id
+                    AND b.quantity_remaining > 0
+                    AND (b.expiry_date IS NULL OR b.expiry_date >= CURRENT_DATE)
+                ), 0) - COALESCE(i.quantity_reserved, 0)
+              )
+              ELSE GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0)
+            END
+          )
+          FROM shop_inventory i
+          WHERE i.tenant_id = $1 AND i.product_id = p.id
+        ), 0)`;
 
         if (opts.availability === 'in_stock') {
             where += ` AND ${stockSubquery} > 0`;
@@ -222,11 +244,28 @@ export class MobileOrderService {
     async getProductDetailForMobile(tenantId: string, productId: string) {
         const rows = await this.db.query(
             `SELECT p.*, c.name as category_name, b.name as brand_name,
-              COALESCE(
-                (SELECT SUM(i.quantity_on_hand - i.quantity_reserved)
-                 FROM shop_inventory i WHERE i.product_id = p.id AND i.tenant_id = $1),
-                0
-              ) as available_stock
+              COALESCE((
+                SELECT SUM(
+                  CASE
+                    WHEN EXISTS (
+                      SELECT 1 FROM inventory_batches b0
+                      WHERE b0.tenant_id = $1 AND b0.product_id = i.product_id AND b0.warehouse_id = i.warehouse_id
+                    )
+                    THEN GREATEST(0,
+                      COALESCE((
+                        SELECT SUM(b.quantity_remaining)
+                        FROM inventory_batches b
+                        WHERE b.tenant_id = i.tenant_id AND b.product_id = i.product_id AND b.warehouse_id = i.warehouse_id
+                          AND b.quantity_remaining > 0
+                          AND (b.expiry_date IS NULL OR b.expiry_date >= CURRENT_DATE)
+                      ), 0) - COALESCE(i.quantity_reserved, 0)
+                    )
+                    ELSE GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0)
+                  END
+                )
+                FROM shop_inventory i
+                WHERE i.tenant_id = $1 AND i.product_id = p.id
+              ), 0) as available_stock
        FROM shop_products p
        LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
        LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
@@ -352,13 +391,8 @@ export class MobileOrderService {
                     const wid = wh.id;
                     let canFulfill = true;
                     for (const [productId, qty] of demand) {
-                        const productRows = invRows.filter((r: any) => r.product_id === productId);
-                        if (productRows.length === 0) continue;
-                        const row = productRows.find((r: any) => r.warehouse_id === wid);
-                        const available = row
-                            ? Math.max(0, parseFloat(row.quantity_on_hand) - parseFloat(row.quantity_reserved))
-                            : 0;
-                        if (available < qty) {
+                        const sellable = await getSellableQuantityForWarehouse(client, tenantId, productId, wid);
+                        if (sellable < qty) {
                             canFulfill = false;
                             break;
                         }
@@ -375,28 +409,25 @@ export class MobileOrderService {
             let discountTotal = 0;
             let taxTotal = 0;
 
-            const validateStock = (productName: string, productId: string, qty: number) => {
+            const validateStock = async (productName: string, productId: string, qty: number) => {
                 const productInvRows = invRows.filter((r: any) => r.product_id === productId);
-                const totalAvailable = productInvRows.reduce(
-                    (sum: number, r: any) =>
-                        sum + Math.max(0, parseFloat(r.quantity_on_hand) - parseFloat(r.quantity_reserved)),
-                    0
-                );
-                if (productInvRows.length > 0 && totalAvailable < qty) {
-                    throw new Error(
-                        `Insufficient stock for "${productName}". Available: ${Math.max(0, Math.round(totalAvailable * 100) / 100)}, Requested: ${qty}`
-                    );
-                }
-                if (warehouseId && productInvRows.length > 0) {
-                    const atWh = productInvRows.find((r: any) => r.warehouse_id === warehouseId);
-                    const availableAtWh = atWh
-                        ? Math.max(0, parseFloat(atWh.quantity_on_hand) - parseFloat(atWh.quantity_reserved))
-                        : 0;
+                if (warehouseId) {
+                    const availableAtWh = await getSellableQuantityForWarehouse(client, tenantId, productId, warehouseId);
                     if (availableAtWh < qty) {
                         throw new Error(
                             `Insufficient stock for "${productName}" at selected branch. Available at branch: ${Math.max(0, availableAtWh)}, Requested: ${qty}. Try another branch or leave branch unselected.`
                         );
                     }
+                    return;
+                }
+                let totalAvailable = 0;
+                for (const r of productInvRows) {
+                    totalAvailable += await getSellableQuantityForWarehouse(client, tenantId, productId, r.warehouse_id);
+                }
+                if (productInvRows.length > 0 && totalAvailable < qty) {
+                    throw new Error(
+                        `Insufficient stock for "${productName}". Available: ${Math.max(0, Math.round(totalAvailable * 100) / 100)}, Requested: ${qty}`
+                    );
                 }
             };
 
@@ -422,7 +453,7 @@ export class MobileOrderService {
                 }
                 const taxRate = parseFloat(product.tax_rate) || 0;
                 const qty = Number(item.quantity);
-                validateStock(product.name, item.productId, qty);
+                await validateStock(product.name, item.productId, qty);
 
                 const itemGross = unitPrice * qty;
                 const itemTax = Math.round(itemGross * (taxRate / 100) * 100) / 100;
@@ -443,7 +474,7 @@ export class MobileOrderService {
             }
 
             for (const line of offerLines) {
-                validateStock(line.productName, line.productId, line.quantity);
+                await validateStock(line.productName, line.productId, line.quantity);
                 resolvedItems.push({
                     productId: line.productId,
                     productName: line.productName,
@@ -467,7 +498,12 @@ export class MobileOrderService {
             }
 
             const rawPm = (input.paymentMethod || 'COD').trim();
-            const paymentMethod = rawPm === 'SelfCollection' ? 'SelfCollection' : 'COD';
+            const paymentMethod =
+                rawPm === 'SelfCollection'
+                    ? 'SelfCollection'
+                    : rawPm === 'EasypaisaJazzcashOnline'
+                      ? 'EasypaisaJazzcashOnline'
+                      : 'COD';
 
             const settingsRes = await client.query(
                 'SELECT delivery_fee, free_delivery_above, minimum_order_amount FROM mobile_ordering_settings WHERE tenant_id = $1',
@@ -831,14 +867,25 @@ export class MobileOrderService {
             const qty = parseFloat(item.quantity);
 
             if (action === 'confirm') {
+                const fefo = await deductInventoryFefo(
+                    client,
+                    tenantId,
+                    item.product_id,
+                    warehouseId,
+                    qty,
+                    orderId
+                );
                 const unitCostAtConfirm = await fetchUnitCostForProduct(client, tenantId, item.product_id);
-                const unitCost = unitCostAtConfirm > 0 ? unitCostAtConfirm : null;
+                let unitCost =
+                    fefo.weightedUnitCost != null && fefo.weightedUnitCost > 0
+                        ? fefo.weightedUnitCost
+                        : unitCostAtConfirm > 0
+                          ? unitCostAtConfirm
+                          : null;
                 const totalCost = unitCost != null ? unitCost * qty : null;
-                // Deduct from on_hand, release reserved
                 await client.query(
                     `UPDATE shop_inventory
-           SET quantity_on_hand = quantity_on_hand - $1,
-               quantity_reserved = quantity_reserved - $1,
+           SET quantity_reserved = GREATEST(quantity_reserved - $1, 0),
                updated_at = NOW()
            WHERE product_id = $2 AND warehouse_id = $3 AND tenant_id = $4`,
                     [qty, item.product_id, warehouseId, tenantId]

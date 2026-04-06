@@ -5,7 +5,7 @@ import { customerApi } from '../api';
 import { useOnline } from '../hooks/useOnline';
 import { placeOrderOfflineFirst } from '../services/orderSyncService';
 
-type PaymentChoice = 'COD' | 'SelfCollection';
+type PaymentChoice = 'COD' | 'SelfCollection' | 'EasypaisaJazzcashOnline';
 
 export default function Checkout() {
     const { shopSlug } = useParams();
@@ -82,7 +82,12 @@ export default function Checkout() {
 
             if (result.synced && result.orderId) {
                 dispatch({ type: 'CLEAR_CART' });
-                const q = paymentMethod === 'SelfCollection' ? '?pickup=1' : '';
+                const q =
+                    paymentMethod === 'SelfCollection'
+                        ? '?pickup=1'
+                        : paymentMethod === 'EasypaisaJazzcashOnline'
+                          ? '?online=1'
+                          : '';
                 navigate(`/${shopSlug}/order-confirmed/${result.orderId}${q}`, { replace: true });
             } else if (result.localId) {
                 dispatch({ type: 'CLEAR_CART' });
@@ -147,6 +152,23 @@ export default function Checkout() {
                             <div style={{ fontWeight: 600, fontSize: 14 }}>Cash on delivery</div>
                             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                                 We deliver to your address. Pay when the order arrives.
+                            </div>
+                        </div>
+                    </button>
+                    <button type="button" onClick={() => setPaymentMethod('EasypaisaJazzcashOnline')} style={optionCard(paymentMethod === 'EasypaisaJazzcashOnline')}>
+                        <div style={{
+                            width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                            border: '2px solid var(--primary)', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            {paymentMethod === 'EasypaisaJazzcashOnline' && (
+                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--primary)' }} />
+                            )}
+                        </div>
+                        <div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>Easypaisa/Jazzcash/Online</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                We deliver to your address. Pay online via Easypaisa, Jazzcash, or bank transfer before delivery (the shop will share payment details).
                             </div>
                         </div>
                     </button>

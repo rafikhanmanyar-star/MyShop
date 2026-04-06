@@ -16,6 +16,7 @@ import { POSColumnResizeHandle } from './POSColumnResizeHandle';
 
 const POS_CATEGORY_TREE_VISIBLE_KEY = 'pos-category-tree-visible';
 const POS_CATEGORY_TREE_W_KEY = 'pos-category-tree-w-px';
+const POS_FAST_MOVING_VISIBLE_KEY = 'pos-fast-moving-visible';
 
 const MIN_TREE_W = 140;
 const MAX_TREE_W = 360;
@@ -110,7 +111,7 @@ function mapInventoryItemToPOS(item: InventoryItem): POSProduct {
         taxRate: 0,
         isTaxInclusive: true,
         unit: item.unit || 'pcs',
-        stockLevel: Number(item.onHand) || 0,
+        stockLevel: Number(item.available ?? item.onHand) || 0,
         imageUrl: item.imageUrl,
         popularityScore: 0
     };
@@ -245,6 +246,25 @@ const ProductSearch: React.FC = () => {
         setCategoryTreeVisible(visible);
         try {
             localStorage.setItem(POS_CATEGORY_TREE_VISIBLE_KEY, String(visible));
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    const [fastMovingVisible, setFastMovingVisible] = useState(() => {
+        try {
+            const v = localStorage.getItem(POS_FAST_MOVING_VISIBLE_KEY);
+            if (v === null) return true;
+            return v === 'true';
+        } catch {
+            return true;
+        }
+    });
+
+    const persistFastMovingVisible = useCallback((visible: boolean) => {
+        setFastMovingVisible(visible);
+        try {
+            localStorage.setItem(POS_FAST_MOVING_VISIBLE_KEY, String(visible));
         } catch {
             /* ignore */
         }
@@ -708,11 +728,22 @@ const ProductSearch: React.FC = () => {
                 </div>
 
             {/* Popular / Frequent Items Section */}
-            {!localQuery && selectedCategory === 'all' && popularProductsWithStock.length > 0 && (
+            {!localQuery && selectedCategory === 'all' && popularProductsWithStock.length > 0 && fastMovingVisible && (
                 <div className="px-4 py-3 bg-[#eef2ff]/60 dark:bg-slate-800/40 border-b border-slate-200/80 dark:border-slate-700">
-                    <div className="flex items-center gap-2 mb-3 px-1">
-                        <div className="w-1 h-4 bg-[#0056b3] rounded-full" />
-                        <h3 className="text-xs font-bold text-[#0056b3] dark:text-blue-400 uppercase tracking-wider">Fast moving items</h3>
+                    <div className="flex items-center justify-between gap-2 mb-3 px-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-1 h-4 bg-[#0056b3] rounded-full shrink-0" />
+                            <h3 className="text-xs font-bold text-[#0056b3] dark:text-blue-400 uppercase tracking-wider truncate">Fast moving items</h3>
+                        </div>
+                        <button
+                            type="button"
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-200 dark:hover:border-blue-500 transition-colors shrink-0"
+                            onClick={() => persistFastMovingVisible(false)}
+                            title="Hide fast moving items"
+                            aria-label="Hide fast moving items"
+                        >
+                            {React.cloneElement(ICONS.arrowUp as any, { size: 16 })}
+                        </button>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         {popularProductsWithStock.map(p => (
@@ -735,6 +766,21 @@ const ProductSearch: React.FC = () => {
                             </button>
                         ))}
                     </div>
+                </div>
+            )}
+            {!localQuery && selectedCategory === 'all' && popularProductsWithStock.length > 0 && !fastMovingVisible && (
+                <div className="px-4 py-2 bg-[#eef2ff]/40 dark:bg-slate-800/30 border-b border-slate-200/80 dark:border-slate-700">
+                    <button
+                        type="button"
+                        className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-slate-200/90 dark:border-slate-600 bg-white/80 dark:bg-slate-800/80 py-2 px-3 text-xs font-semibold text-[#0056b3] dark:text-blue-400 hover:border-[#0056b3]/35 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        onClick={() => persistFastMovingVisible(true)}
+                        title="Show fast moving items"
+                        aria-label="Show fast moving items"
+                    >
+                        {React.cloneElement(ICONS.trendingUp as any, { size: 14 })}
+                        <span>Show fast moving items</span>
+                        {React.cloneElement(ICONS.chevronDown as any, { size: 14 })}
+                    </button>
                 </div>
             )}
 

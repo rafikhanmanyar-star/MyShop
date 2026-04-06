@@ -1,4 +1,8 @@
 import { getDatabaseService } from './databaseService.js';
+import {
+  insertPurchaseBatch,
+  reverseBatchesForPurchaseBill,
+} from './inventoryBatchService.js';
 
 export interface PurchaseBillItemInput {
   productId: string;
@@ -6,6 +10,10 @@ export interface PurchaseBillItemInput {
   unitCost: number;
   taxAmount?: number;
   subtotal: number;
+  /** Required for new purchase lines: YYYY-MM-DD, must be >= today */
+  expiryDate?: string;
+  /** Optional; auto-generated when omitted */
+  batchNo?: string;
 }
 
 export interface CreatePurchaseBillInput {
@@ -45,6 +53,20 @@ import { COA } from '../constants/accountCodes.js';
 export class ProcurementService {
   private db = getDatabaseService();
 
+  private validatePurchaseItemsForBatches(items: PurchaseBillItemInput[]): void {
+    const today = new Date().toISOString().slice(0, 10);
+    let line = 0;
+    for (const item of items) {
+      line += 1;
+      if (!item.productId) throw new Error(`Line ${line}: product is required`);
+      if (!item.quantity || item.quantity <= 0) throw new Error(`Line ${line}: quantity must be greater than 0`);
+      if (item.unitCost == null || item.unitCost < 0) throw new Error(`Line ${line}: cost price must be zero or positive`);
+      const exp = item.expiryDate?.trim();
+      if (!exp) throw new Error(`Line ${line}: expiry date is required`);
+      if (exp < today) throw new Error(`Line ${line}: expiry date must be today or a future date`);
+    }
+  }
+
   private async getOrCreateAccount(
     client: any,
     tenantId: string,
@@ -60,6 +82,9 @@ export class ProcurementService {
    * insert movements, post double-entry (Inventory ↑, AP or Cash/Bank).
    */
   async createPurchaseBill(tenantId: string, data: CreatePurchaseBillInput): Promise<string> {
+    if (!data.items?.length) throw new Error('Purchase bill must have at least one line item');
+    this.validatePurchaseItemsForBatches(data.items);
+
     const billId = await this.db.transaction(async (client) => {
       const balanceDue = data.totalAmount - (data.paidAmount || 0);
       const status =
@@ -106,10 +131,16 @@ export class ProcurementService {
         warehouseId = whRows[0].id;
       }
 
+      let lineIndex = 0;
       for (const item of data.items) {
+        lineIndex += 1;
+        const batchNo =
+          (item.batchNo && String(item.batchNo).trim()) || `B-${data.billNumber}-${lineIndex}`;
+        const expiryDate = String(item.expiryDate).trim().slice(0, 10);
+
         await client.query(
-          `INSERT INTO purchase_bill_items (tenant_id, purchase_bill_id, product_id, quantity, unit_cost, tax_amount, subtotal)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          `INSERT INTO purchase_bill_items (tenant_id, purchase_bill_id, product_id, quantity, unit_cost, tax_amount, subtotal, expiry_date, batch_no)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9)`,
           [
             tenantId,
             billId,
@@ -118,6 +149,8 @@ export class ProcurementService {
             item.unitCost,
             item.taxAmount || 0,
             item.subtotal,
+            expiryDate,
+            batchNo,
           ]
         );
 
@@ -163,6 +196,18 @@ export class ProcurementService {
           `UPDATE shop_products SET average_cost = $1, cost_price = $2, updated_at = NOW()
            WHERE id = $3 AND tenant_id = $4`,
           [newAvgCost, item.unitCost, item.productId, tenantId]
+        );
+
+        await insertPurchaseBatch(
+          client,
+          tenantId,
+          item.productId,
+          warehouseId,
+          billId,
+          item.quantity,
+          item.unitCost,
+          expiryDate,
+          batchNo
         );
 
         await client.query(
@@ -311,6 +356,9 @@ export class ProcurementService {
       totalAmount: number;
     }
   ): Promise<void> {
+    if (!data.items?.length) throw new Error('Purchase bill must have at least one line item');
+    this.validatePurchaseItemsForBatches(data.items);
+
     await this.db.transaction(async (client) => {
       const billRows = await client.query(
         `SELECT id, bill_number, total_amount, paid_amount, initial_payment_bank_account_id
@@ -370,7 +418,7 @@ export class ProcurementService {
         }
       }
 
-      // 2) Reverse inventory: subtract old quantities
+      // 2) Reverse inventory: batch-aware (remaining qty) or legacy line quantities
       const oldItems = await client.query(
         `SELECT product_id, quantity FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2`,
         [tenantId, billId]
@@ -378,13 +426,21 @@ export class ProcurementService {
       const whRows = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
       const warehouseId = whRows.length > 0 ? whRows[0].id : null;
       if (warehouseId) {
-        for (const item of oldItems) {
-          const qty = parseFloat(item.quantity) || 0;
-          await client.query(
-            `UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand - $1, updated_at = NOW()
-             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4`,
-            [qty, tenantId, item.product_id, warehouseId]
-          );
+        const batchRows = await client.query(
+          `SELECT 1 FROM inventory_batches WHERE tenant_id = $1 AND purchase_bill_id = $2 LIMIT 1`,
+          [tenantId, billId]
+        );
+        if (batchRows.length > 0) {
+          await reverseBatchesForPurchaseBill(client, tenantId, billId, warehouseId);
+        } else {
+          for (const item of oldItems) {
+            const qty = parseFloat(item.quantity) || 0;
+            await client.query(
+              `UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand - $1, updated_at = NOW()
+               WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4`,
+              [qty, tenantId, item.product_id, warehouseId]
+            );
+          }
         }
       }
 
@@ -416,10 +472,16 @@ export class ProcurementService {
       await client.query('DELETE FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2', [tenantId, billId]);
 
       if (!warehouseId) throw new Error('No warehouse found');
+      let lineIndex = 0;
       for (const item of data.items) {
+        lineIndex += 1;
+        const batchNo =
+          (item.batchNo && String(item.batchNo).trim()) || `B-${data.billNumber}-${lineIndex}`;
+        const expiryDate = String(item.expiryDate).trim().slice(0, 10);
+
         await client.query(
-          `INSERT INTO purchase_bill_items (tenant_id, purchase_bill_id, product_id, quantity, unit_cost, tax_amount, subtotal)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          `INSERT INTO purchase_bill_items (tenant_id, purchase_bill_id, product_id, quantity, unit_cost, tax_amount, subtotal, expiry_date, batch_no)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9)`,
           [
             tenantId,
             billId,
@@ -428,6 +490,8 @@ export class ProcurementService {
             item.unitCost,
             item.taxAmount || 0,
             item.subtotal,
+            expiryDate,
+            batchNo,
           ]
         );
 
@@ -474,6 +538,18 @@ export class ProcurementService {
           `UPDATE shop_products SET average_cost = $1, cost_price = $2, updated_at = NOW()
            WHERE id = $3 AND tenant_id = $4`,
           [newAvgCost, item.unitCost, item.productId, tenantId]
+        );
+
+        await insertPurchaseBatch(
+          client,
+          tenantId,
+          item.productId,
+          warehouseId,
+          billId,
+          item.quantity,
+          item.unitCost,
+          expiryDate,
+          batchNo
         );
 
         await client.query(
@@ -572,7 +648,7 @@ export class ProcurementService {
         );
       }
 
-      // 3) Reverse inventory: get items and subtract quantities
+      // 3) Reverse inventory: batch remaining or legacy line quantities
       const items = await client.query(
         `SELECT product_id, quantity, unit_cost FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2`,
         [tenantId, billId]
@@ -580,13 +656,21 @@ export class ProcurementService {
       const whRows = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
       const warehouseId = whRows.length > 0 ? whRows[0].id : null;
       if (warehouseId) {
-        for (const item of items) {
-          const qty = parseFloat(item.quantity) || 0;
-          await client.query(
-            `UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand - $1, updated_at = NOW()
-             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4`,
-            [qty, tenantId, item.product_id, warehouseId]
-          );
+        const batchRows = await client.query(
+          `SELECT 1 FROM inventory_batches WHERE tenant_id = $1 AND purchase_bill_id = $2 LIMIT 1`,
+          [tenantId, billId]
+        );
+        if (batchRows.length > 0) {
+          await reverseBatchesForPurchaseBill(client, tenantId, billId, warehouseId);
+        } else {
+          for (const item of items) {
+            const qty = parseFloat(item.quantity) || 0;
+            await client.query(
+              `UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand - $1, updated_at = NOW()
+               WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4`,
+              [qty, tenantId, item.product_id, warehouseId]
+            );
+          }
         }
       }
 

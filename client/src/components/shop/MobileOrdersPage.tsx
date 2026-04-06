@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { MobileOrdersProvider, useMobileOrders } from '../../context/MobileOrdersContext';
+import { useSearchParams } from 'react-router-dom';
+import { useMobileOrders } from '../../context/MobileOrdersContext';
 import { mobileOrdersApi, MobileOrder } from '../../services/mobileOrdersApi';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -48,6 +49,7 @@ function getNextMobileOrderStatus(order: Pick<MobileOrder, 'status' | 'payment_m
 function formatMobilePaymentMethod(pm: string | undefined): string {
     if (pm === 'SelfCollection') return 'Self collection';
     if (pm === 'COD') return 'Cash on delivery';
+    if (pm === 'EasypaisaJazzcashOnline') return 'Easypaisa/Jazzcash/Online';
     return pm || '—';
 }
 
@@ -64,8 +66,10 @@ function MobileOrdersPageContent() {
         loadBranding();
     }, [loadBranding]);
 
+    const [searchParams, setSearchParams] = useSearchParams();
+    const orderIdFromUrl = searchParams.get('order');
+
     const [statusFilter, setStatusFilter] = useState('All');
-    const [selectedOrder, setSelectedOrder] = useState<MobileOrder | null>(null);
     const [detailOrder, setDetailOrder] = useState<MobileOrder | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState('');
@@ -89,14 +93,31 @@ function MobileOrdersPageContent() {
         }
     }, [newOrderCount]);
 
-    const handleViewDetail = useCallback(async (order: MobileOrder) => {
+    useEffect(() => {
+        if (!orderIdFromUrl) {
+            setDetailOrder(null);
+            setDetailLoading(false);
+            return;
+        }
+        let cancelled = false;
         setDetailLoading(true);
-        try {
-            const detail = await mobileOrdersApi.getOrder(order.id);
-            setDetailOrder(detail);
-        } catch { }
-        setDetailLoading(false);
-    }, []);
+        mobileOrdersApi.getOrder(orderIdFromUrl).then((detail) => {
+            if (!cancelled) setDetailOrder(detail);
+        }).catch(() => {
+            if (!cancelled) setDetailOrder(null);
+        }).finally(() => {
+            if (!cancelled) setDetailLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, [orderIdFromUrl]);
+
+    const handleViewDetail = useCallback((order: MobileOrder) => {
+        setSearchParams((prev) => {
+            const p = new URLSearchParams(prev);
+            p.set('order', order.id);
+            return p;
+        }, { replace: true });
+    }, [setSearchParams]);
 
     const handleStatusUpdate = async (orderId: string, newStatus: string) => {
         setActionLoading(orderId);
@@ -1223,11 +1244,4 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
     );
 }
 
-// ─── Wrapper with Provider ────────────────────────────────
-export default function MobileOrdersPage() {
-    return (
-        <MobileOrdersProvider>
-            <MobileOrdersPageContent />
-        </MobileOrdersProvider>
-    );
-}
+export default MobileOrdersPageContent;

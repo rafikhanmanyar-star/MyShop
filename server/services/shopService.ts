@@ -4,6 +4,7 @@ import { notifyDailyReportUpdated } from './dailyReportNotify.js';
 import { insertSystemLog } from './systemLogService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
+import { deductInventoryFefo, insertReturnRestockBatch } from './inventoryBatchService.js';
 
 /** Strip absolute URLs (e.g. http://localhost:3000/uploads/...) to relative paths for DB storage. */
 function normalizeImageUrl(url: string | null | undefined): string | null {
@@ -13,6 +14,26 @@ function normalizeImageUrl(url: string | null | undefined): string | null {
     try { return new URL(trimmed).pathname; } catch { return trimmed; }
   }
   return trimmed;
+}
+
+/** Short-lived cache for paginated inventory SKU list (reduces repeat load after tab switches). */
+const inventorySkuListCache = new Map<string, { expiresAt: number; payload: unknown }>();
+const INV_SKU_CACHE_TTL_MS = 25_000;
+const INV_SKU_CACHE_MAX_KEYS = 40;
+
+function touchInventorySkuCacheSize() {
+  while (inventorySkuListCache.size > INV_SKU_CACHE_MAX_KEYS) {
+    const first = inventorySkuListCache.keys().next().value;
+    if (first === undefined) break;
+    inventorySkuListCache.delete(first);
+  }
+}
+
+export function invalidateInventorySkuListCache(tenantId: string) {
+  const prefix = `${tenantId}:`;
+  for (const k of [...inventorySkuListCache.keys()]) {
+    if (k.startsWith(prefix)) inventorySkuListCache.delete(k);
+  }
 }
 
 export interface ShopSale {
@@ -504,16 +525,256 @@ export class ShopService {
 
   // --- Inventory Methods ---
   async getInventory(tenantId: string) {
-    return this.db.query(`
-      SELECT i.*, p.name as product_name, p.sku, p.retail_price, w.name as warehouse_name
+    const t0 = Date.now();
+    const rows = await this.db.query(
+      `
+      WITH batch_sellable AS (
+        SELECT tenant_id, product_id, warehouse_id,
+          COALESCE(SUM(quantity_remaining) FILTER (
+            WHERE quantity_remaining > 0
+              AND (expiry_date IS NULL OR expiry_date >= CURRENT_DATE)
+          ), 0)::numeric AS batch_sellable_sum
+        FROM inventory_batches
+        WHERE tenant_id = $1
+        GROUP BY tenant_id, product_id, warehouse_id
+      ),
+      batch_wh AS (
+        SELECT DISTINCT tenant_id, product_id, warehouse_id
+        FROM inventory_batches
+        WHERE tenant_id = $1
+      )
+      SELECT i.*, p.name AS product_name, p.sku, p.retail_price, w.name AS warehouse_name,
+        GREATEST(0,
+          CASE
+            WHEN bw.product_id IS NOT NULL
+            THEN GREATEST(0, COALESCE(bs.batch_sellable_sum, 0) - COALESCE(i.quantity_reserved, 0))
+            ELSE GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0)
+          END
+        )::numeric AS sellable_on_hand
       FROM shop_inventory i
       JOIN shop_products p ON i.product_id = p.id AND p.tenant_id = $1
       JOIN shop_warehouses w ON i.warehouse_id = w.id AND w.tenant_id = $1
+      LEFT JOIN batch_sellable bs
+        ON bs.tenant_id = i.tenant_id AND bs.product_id = i.product_id AND bs.warehouse_id = i.warehouse_id
+      LEFT JOIN batch_wh bw
+        ON bw.tenant_id = i.tenant_id AND bw.product_id = i.product_id AND bw.warehouse_id = i.warehouse_id
       WHERE i.tenant_id = $1
-    `, [tenantId]);
+    `,
+      [tenantId]
+    );
+    const ms = Date.now() - t0;
+    if (ms > 150) console.log(`[perf] getInventory tenant=${tenantId} rows=${rows.length} ${ms}ms`);
+    return rows;
   }
 
-  async getInventoryMovements(tenantId: string, productId?: string) {
+  /**
+   * Paginated per-SKU inventory with server-side search/filters and warehouse_stock JSON.
+   * Avoids N+1 and correlated subqueries; use for inventory UI instead of getProducts + getInventory.
+   */
+  async listInventorySkus(
+    tenantId: string,
+    options: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      /** all | low | out | in | near_expiry */
+      stockFilter?: string;
+      skipCache?: boolean;
+    } = {}
+  ) {
+    const t0 = Date.now();
+    const page = Math.max(1, options.page ?? 1);
+    const limit = Math.min(5000, Math.max(1, options.limit ?? 50));
+    const offset = (page - 1) * limit;
+    const searchRaw = (options.search ?? '').trim();
+    const stockFilter = (options.stockFilter ?? 'all').toLowerCase();
+    const skipCache = options.skipCache === true;
+
+    const cacheKey = `${tenantId}:${page}:${limit}:${searchRaw}:${stockFilter}`;
+    if (!skipCache) {
+      const hit = inventorySkuListCache.get(cacheKey);
+      if (hit && hit.expiresAt > Date.now()) {
+        return { ...(hit.payload as object), _cache: 'hit' as const, serverMs: Date.now() - t0 };
+      }
+    }
+
+    const params: unknown[] = [tenantId];
+    let p = 2;
+    let searchClause = '';
+    if (searchRaw.length > 0) {
+      const safe = `%${searchRaw.replace(/[%_\\]/g, (ch) => '\\' + ch)}%`;
+      params.push(safe);
+      searchClause = `AND (p.name ILIKE $${p} ESCAPE '\\' OR p.sku ILIKE $${p} ESCAPE '\\' OR COALESCE(p.barcode, '') ILIKE $${p} ESCAPE '\\')`;
+      p++;
+    }
+
+    let stockClause = '';
+    if (stockFilter === 'low') {
+      stockClause = 'AND on_hand <= COALESCE(reorder_point, 0)';
+    } else if (stockFilter === 'out') {
+      stockClause = 'AND on_hand <= 0';
+    } else if (stockFilter === 'in') {
+      stockClause = 'AND on_hand > 0';
+    } else if (stockFilter === 'near_expiry') {
+      stockClause = `AND nearest_expiry IS NOT NULL
+        AND nearest_expiry >= CURRENT_DATE
+        AND nearest_expiry <= CURRENT_DATE + INTERVAL '30 days'`;
+    }
+
+    const sql = `
+      WITH batch_sellable AS (
+        SELECT tenant_id, product_id, warehouse_id,
+          COALESCE(SUM(quantity_remaining) FILTER (
+            WHERE quantity_remaining > 0
+              AND (expiry_date IS NULL OR expiry_date >= CURRENT_DATE)
+          ), 0)::numeric AS batch_sellable_sum
+        FROM inventory_batches
+        WHERE tenant_id = $1
+        GROUP BY tenant_id, product_id, warehouse_id
+      ),
+      batch_wh AS (
+        SELECT DISTINCT tenant_id, product_id, warehouse_id
+        FROM inventory_batches
+        WHERE tenant_id = $1
+      ),
+      i_enriched AS (
+        SELECT
+          i.tenant_id,
+          i.product_id,
+          i.warehouse_id,
+          i.quantity_on_hand,
+          i.quantity_reserved,
+          GREATEST(0,
+            CASE
+              WHEN bw.product_id IS NOT NULL
+              THEN GREATEST(0, COALESCE(bs.batch_sellable_sum, 0) - COALESCE(i.quantity_reserved, 0))
+              ELSE GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0)
+            END
+          )::numeric AS sellable_on_hand
+        FROM shop_inventory i
+        LEFT JOIN batch_sellable bs
+          ON bs.tenant_id = i.tenant_id AND bs.product_id = i.product_id AND bs.warehouse_id = i.warehouse_id
+        LEFT JOIN batch_wh bw
+          ON bw.tenant_id = i.tenant_id AND bw.product_id = i.product_id AND bw.warehouse_id = i.warehouse_id
+        WHERE i.tenant_id = $1
+      ),
+      nearest_expiry AS (
+        SELECT product_id,
+          MIN(expiry_date) FILTER (
+            WHERE expiry_date IS NOT NULL AND expiry_date >= CURRENT_DATE
+          ) AS nearest_expiry
+        FROM inventory_batches
+        WHERE tenant_id = $1 AND quantity_remaining > 0
+        GROUP BY product_id
+      ),
+      pa AS (
+        SELECT
+          p.id,
+          p.sku,
+          p.barcode,
+          p.name,
+          p.category_id,
+          p.unit,
+          p.cost_price,
+          p.retail_price,
+          p.reorder_point,
+          p.image_url,
+          p.mobile_description,
+          COALESCE(SUM(ie.quantity_on_hand), 0)::numeric AS on_hand,
+          COALESCE(SUM(ie.sellable_on_hand), 0)::numeric AS available,
+          COALESCE(SUM(ie.quantity_reserved), 0)::numeric AS reserved_total,
+          COALESCE(
+            jsonb_object_agg(ie.warehouse_id::text, ie.quantity_on_hand)
+              FILTER (WHERE ie.warehouse_id IS NOT NULL),
+            '{}'::jsonb
+          ) AS warehouse_stock
+        FROM shop_products p
+        LEFT JOIN i_enriched ie ON ie.product_id = p.id
+        WHERE p.tenant_id = $1 AND p.is_active = TRUE
+          ${searchClause}
+        GROUP BY p.id
+      ),
+      filtered AS (
+        SELECT pa.*, ne.nearest_expiry
+        FROM pa
+        LEFT JOIN nearest_expiry ne ON ne.product_id = pa.id
+        WHERE TRUE
+          ${stockClause}
+      ),
+      counted AS (
+        SELECT f.*, COUNT(*) OVER ()::int AS __total
+        FROM filtered f
+      )
+      SELECT * FROM counted
+      ORDER BY name ASC NULLS LAST
+      LIMIT $${p} OFFSET $${p + 1}
+    `;
+    params.push(limit, offset);
+
+    const rows = await this.db.query(sql, params);
+    const serverMs = Date.now() - t0;
+    if (serverMs > 200) console.log(`[perf] listInventorySkus tenant=${tenantId} rows=${rows.length} ${serverMs}ms`);
+
+    const total = rows.length > 0 ? Number(rows[0].__total ?? 0) : 0;
+    const items = rows.map((r: Record<string, unknown>) => {
+      const { __total, ...rest } = r;
+      return rest;
+    });
+
+    const payload = {
+      items,
+      total,
+      page,
+      limit,
+      serverMs,
+    };
+
+    if (!skipCache) {
+      touchInventorySkuCacheSize();
+      inventorySkuListCache.set(cacheKey, { expiresAt: Date.now() + INV_SKU_CACHE_TTL_MS, payload });
+    }
+
+    return payload;
+  }
+
+  async getInventoryExpirySummary(tenantId: string) {
+    const kpi = await this.db.query(
+      `SELECT
+         COALESCE(SUM(quantity_remaining) FILTER (
+           WHERE expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE AND quantity_remaining > 0
+         ), 0)::numeric AS expired_qty,
+         COALESCE(SUM(quantity_remaining) FILTER (
+           WHERE expiry_date IS NOT NULL
+             AND expiry_date >= CURRENT_DATE
+             AND expiry_date <= CURRENT_DATE + INTERVAL '7 days'
+             AND quantity_remaining > 0
+         ), 0)::numeric AS expiring_7_qty,
+         COALESCE(SUM(quantity_remaining) FILTER (
+           WHERE expiry_date IS NOT NULL
+             AND expiry_date >= CURRENT_DATE
+             AND expiry_date <= CURRENT_DATE + INTERVAL '30 days'
+             AND quantity_remaining > 0
+         ), 0)::numeric AS expiring_30_qty
+       FROM inventory_batches
+       WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    const rows = await this.db.query(
+      `SELECT b.id, b.product_id, b.warehouse_id, b.batch_no, b.expiry_date,
+              b.quantity_remaining, b.cost_price, p.name AS product_name, p.sku,
+              w.name AS warehouse_name
+       FROM inventory_batches b
+       JOIN shop_products p ON b.product_id = p.id AND p.tenant_id = $1
+       JOIN shop_warehouses w ON b.warehouse_id = w.id AND w.tenant_id = $1
+       WHERE b.tenant_id = $1 AND b.quantity_remaining > 0 AND b.expiry_date IS NOT NULL
+       ORDER BY b.expiry_date ASC NULLS LAST
+       LIMIT 400`,
+      [tenantId]
+    );
+    return { kpi: kpi[0] || {}, rows };
+  }
+
+  async getInventoryMovements(tenantId: string, productId?: string, maxRows = 5000) {
     let query = `
       SELECT m.*, p.name as product_name, p.sku, w.name as warehouse_name
       FROM shop_inventory_movements m
@@ -521,13 +782,22 @@ export class ShopService {
       JOIN shop_warehouses w ON m.warehouse_id = w.id AND w.tenant_id = $1
       WHERE m.tenant_id = $1
     `;
-    const params: any[] = [tenantId];
+    const params: unknown[] = [tenantId];
     if (productId) {
       query += ` AND m.product_id = $2`;
       params.push(productId);
     }
     query += ` ORDER BY m.created_at DESC`;
-    return this.db.query(query, params);
+    if (!productId) {
+      const cap = Math.min(10000, Math.max(1, maxRows));
+      params.push(cap);
+      query += ` LIMIT $${params.length}`;
+    }
+    const t0 = Date.now();
+    const rows = await this.db.query(query, params);
+    const ms = Date.now() - t0;
+    if (ms > 200) console.log(`[perf] getInventoryMovements tenant=${tenantId} rows=${rows.length} ${ms}ms`);
+    return rows;
   }
 
   async adjustInventory(tenantId: string, data: {
@@ -535,13 +805,47 @@ export class ShopService {
     type: string; referenceId?: string; reason?: string; userId: string;
   }) {
     const row = await this.db.transaction(async (client) => {
-      const updateRes = await client.query(`
+      const batchRows = await client.query(
+        `SELECT 1 FROM inventory_batches WHERE tenant_id = $1 AND product_id = $2 AND warehouse_id = $3 LIMIT 1`,
+        [tenantId, data.productId, data.warehouseId]
+      );
+      const hasBatches = batchRows.length > 0;
+
+      let updateRes: any[];
+      if (hasBatches && data.quantity < 0) {
+        await deductInventoryFefo(
+          client,
+          tenantId,
+          data.productId,
+          data.warehouseId,
+          -data.quantity,
+          data.referenceId || `adj-${Date.now()}`
+        );
+        updateRes = await client.query(
+          `SELECT * FROM shop_inventory WHERE tenant_id = $1 AND product_id = $2 AND warehouse_id = $3`,
+          [tenantId, data.productId, data.warehouseId]
+        );
+      } else {
+        updateRes = await client.query(`
         INSERT INTO shop_inventory (tenant_id, product_id, warehouse_id, quantity_on_hand, updated_at)
         VALUES ($1, $2, $3, $4, NOW())
         ON CONFLICT (tenant_id, product_id, warehouse_id)
         DO UPDATE SET quantity_on_hand = shop_inventory.quantity_on_hand + $4, updated_at = NOW()
         RETURNING *
       `, [tenantId, data.productId, data.warehouseId, data.quantity]);
+        if (hasBatches && data.quantity > 0) {
+          const uc = await fetchUnitCostForProduct(client, tenantId, data.productId);
+          await insertReturnRestockBatch(
+            client,
+            tenantId,
+            data.productId,
+            data.warehouseId,
+            data.quantity,
+            uc > 0 ? uc : null,
+            data.referenceId || `adj-${Date.now()}`
+          );
+        }
+      }
 
       await client.query(`
         INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, reason)
@@ -553,6 +857,7 @@ export class ShopService {
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});
+    invalidateInventorySkuListCache(tenantId);
     return row;
   }
 
@@ -596,17 +901,8 @@ export class ShopService {
 
       const itemsWithCost: ShopSaleItem[] = [];
       for (const item of saleData.items) {
-        const unitCostAtSale = await fetchUnitCostForProduct(client, tenantId, item.productId);
-        itemsWithCost.push({ ...item, unitCostAtSale });
+        const fallbackUnitCost = await fetchUnitCostForProduct(client, tenantId, item.productId);
 
-        const costSnapshot =
-          Number.isFinite(unitCostAtSale) && unitCostAtSale >= 0 ? unitCostAtSale : null;
-        await client.query(`
-          INSERT INTO shop_sale_items (tenant_id, sale_id, product_id, quantity, unit_price, tax_amount, discount_amount, subtotal, unit_cost_at_sale)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `, [tenantId, saleId, item.productId, item.quantity, item.unitPrice, item.taxAmount, item.discountAmount, item.subtotal, costSnapshot]);
-
-        // Deduct from the sale's branch warehouse when branchId is set (branch id = warehouse id); otherwise first warehouse
         let warehouseId: string | null = null;
         if (saleData.branchId) {
           const branchWh = await client.query(
@@ -619,13 +915,37 @@ export class ShopService {
           const whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
           if (whRes.length > 0) warehouseId = whRes[0].id;
         }
-        if (warehouseId) {
-          await client.query(`
-            UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand - $1
-            WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4
-          `, [item.quantity, tenantId, item.productId, warehouseId]);
 
-          const unitCost: number | null = unitCostAtSale > 0 ? unitCostAtSale : null;
+        let unitCostForLine = fallbackUnitCost;
+        if (warehouseId) {
+          try {
+            const fefo = await deductInventoryFefo(
+              client,
+              tenantId,
+              item.productId,
+              warehouseId,
+              item.quantity,
+              saleId
+            );
+            if (fefo.weightedUnitCost != null && fefo.weightedUnitCost > 0) {
+              unitCostForLine = fefo.weightedUnitCost;
+            }
+          } catch (e: any) {
+            throw new Error(e?.message || String(e));
+          }
+        }
+
+        itemsWithCost.push({ ...item, unitCostAtSale: unitCostForLine });
+
+        const costSnapshot =
+          Number.isFinite(unitCostForLine) && unitCostForLine >= 0 ? unitCostForLine : null;
+        await client.query(`
+          INSERT INTO shop_sale_items (tenant_id, sale_id, product_id, quantity, unit_price, tax_amount, discount_amount, subtotal, unit_cost_at_sale)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [tenantId, saleId, item.productId, item.quantity, item.unitPrice, item.taxAmount, item.discountAmount, item.subtotal, costSnapshot]);
+
+        if (warehouseId) {
+          const unitCost: number | null = unitCostForLine > 0 ? unitCostForLine : null;
           const totalCost: number | null = unitCost != null ? unitCost * item.quantity : null;
           await client.query(`
             INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, unit_cost, total_cost)
@@ -697,6 +1017,7 @@ export class ShopService {
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});
     notifyDailyReportUpdated(tenantId, 'sale_created').catch(() => {});
+    invalidateInventorySkuListCache(tenantId);
 
     return result;
   }

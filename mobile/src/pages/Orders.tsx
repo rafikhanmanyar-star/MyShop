@@ -3,6 +3,13 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { customerApi } from '../api';
 
+function formatOrderPaymentMethod(pm: string | undefined): string {
+    if (pm === 'SelfCollection') return 'Self collection';
+    if (pm === 'COD') return 'Cash on delivery';
+    if (pm === 'EasypaisaJazzcashOnline') return 'Easypaisa/Jazzcash/Online';
+    return pm || '—';
+}
+
 export default function Orders() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
@@ -85,7 +92,7 @@ export default function Orders() {
                                 <span className={`status-badge status-${order.status}`}>{statusLabel(order.status)}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{order.payment_method}</span>
+                                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{formatOrderPaymentMethod(order.payment_method)}</span>
                                 <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--primary)' }}>{formatPrice(order.grand_total)}</span>
                             </div>
                         </Link>

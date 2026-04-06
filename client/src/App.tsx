@@ -13,6 +13,7 @@ import {
   BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList, Receipt, Undo2, Tag
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
+import { MobileOrdersProvider } from './context/MobileOrdersContext';
 import { SyncOnOnline } from './components/SyncOnOnline';
 import OfflineBanner from './components/OfflineBanner';
 import AppHeader from './components/AppHeader';
@@ -195,6 +196,7 @@ function AppLayout() {
     <BranchProvider>
       <AppProvider>
         <ShiftsProvider>
+          <MobileOrdersProvider>
           <SyncOnOnline />
           <Suspense fallback={null}>
             <ShopRealtimeBridge />
@@ -260,6 +262,7 @@ function AppLayout() {
           </div>
         </main>
       </div>
+          </MobileOrdersProvider>
         </ShiftsProvider>
       </AppProvider>
     </BranchProvider>

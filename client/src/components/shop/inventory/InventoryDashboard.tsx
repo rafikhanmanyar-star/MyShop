@@ -4,6 +4,7 @@ import { useInventory } from '../../../context/InventoryContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
+import { shopApi } from '../../../services/shopApi';
 import type { InventoryItem } from '../../../types/inventory';
 import WarehouseHeatmapModal from './WarehouseHeatmapModal';
 
@@ -39,6 +40,12 @@ const InventoryDashboard: React.FC = () => {
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
     const [colWidths, setColWidths] = useState<Record<ColWidthKey, number>>(() => ({ ...DEFAULT_COL_WIDTHS }));
     const [heatmapOpen, setHeatmapOpen] = useState(false);
+    const [expiryKpi, setExpiryKpi] = useState<{
+        expired_qty?: string | number;
+        expiring_7_qty?: string | number;
+        expiring_30_qty?: string | number;
+    } | null>(null);
+    const [expiryRows, setExpiryRows] = useState<any[]>([]);
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -50,6 +57,19 @@ const InventoryDashboard: React.FC = () => {
             }
         };
         fetchCategories();
+    }, []);
+
+    useEffect(() => {
+        shopApi
+            .getInventoryExpirySummary()
+            .then((r: any) => {
+                setExpiryKpi(r?.kpi ?? {});
+                setExpiryRows(Array.isArray(r?.rows) ? r.rows : []);
+            })
+            .catch(() => {
+                setExpiryKpi(null);
+                setExpiryRows([]);
+            });
     }, []);
 
     // Real branch/warehouse inventory: units per warehouse and % of total stock
@@ -173,6 +193,85 @@ const InventoryDashboard: React.FC = () => {
                     </Card>
                 ))}
             </div>
+
+            {expiryKpi !== null && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-shrink-0">
+                    <Card className="border border-rose-200 bg-rose-50/50 p-4 dark:border-rose-900/40 dark:bg-rose-950/30">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-300">
+                            Expired (on hand)
+                        </p>
+                        <p className="mt-1 text-2xl font-bold tabular-nums text-rose-900 dark:text-rose-100">
+                            {Number(expiryKpi.expired_qty ?? 0).toLocaleString()} <span className="text-sm font-medium">units</span>
+                        </p>
+                    </Card>
+                    <Card className="border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/30">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                            Expiring in 7 days
+                        </p>
+                        <p className="mt-1 text-2xl font-bold tabular-nums text-amber-950 dark:text-amber-50">
+                            {Number(expiryKpi.expiring_7_qty ?? 0).toLocaleString()} <span className="text-sm font-medium">units</span>
+                        </p>
+                    </Card>
+                    <Card className="border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+                            Expiring in 30 days
+                        </p>
+                        <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-950 dark:text-emerald-50">
+                            {Number(expiryKpi.expiring_30_qty ?? 0).toLocaleString()} <span className="text-sm font-medium">units</span>
+                        </p>
+                    </Card>
+                </div>
+            )}
+
+            {expiryRows.length > 0 && (
+                <Card className="border-none shadow-sm p-0 overflow-hidden flex-shrink-0">
+                    <div className="border-b border-border px-6 py-4">
+                        <h3 className="font-bold text-foreground">Expiry monitoring (batches)</h3>
+                        <p className="text-sm text-muted-foreground">Nearest dated stock with remaining quantity (up to 400 lines).</p>
+                    </div>
+                    <div className="max-h-64 overflow-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-muted/60 text-xs uppercase text-muted-foreground sticky top-0">
+                                <tr>
+                                    <th className="px-4 py-2">Product</th>
+                                    <th className="px-4 py-2">SKU</th>
+                                    <th className="px-4 py-2">Warehouse</th>
+                                    <th className="px-4 py-2">Batch</th>
+                                    <th className="px-4 py-2">Expiry</th>
+                                    <th className="px-4 py-2 text-right">Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {expiryRows.map((r) => {
+                                    const exp = r.expiry_date ? String(r.expiry_date).slice(0, 10) : '';
+                                    const d = exp ? new Date(exp + 'T12:00:00') : null;
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    const cls =
+                                        d && d < today
+                                            ? 'bg-rose-500/10'
+                                            : d &&
+                                                d.getTime() - today.getTime() <= 7 * 86400000
+                                              ? 'bg-amber-500/10'
+                                              : '';
+                                    return (
+                                        <tr key={r.id} className={`border-b border-border ${cls}`}>
+                                            <td className="px-4 py-2 font-medium">{r.product_name}</td>
+                                            <td className="px-4 py-2 text-muted-foreground">{r.sku}</td>
+                                            <td className="px-4 py-2">{r.warehouse_name}</td>
+                                            <td className="px-4 py-2 font-mono text-xs">{r.batch_no}</td>
+                                            <td className="px-4 py-2 tabular-nums">{exp || '—'}</td>
+                                            <td className="px-4 py-2 text-right tabular-nums">
+                                                {Number(r.quantity_remaining ?? 0).toLocaleString()}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0 overflow-hidden">
                 {/* Low Stock Table */}

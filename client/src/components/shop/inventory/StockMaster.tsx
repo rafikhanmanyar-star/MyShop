@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { FixedSizeList, ListChildComponentProps } from 'react-window';
 import { useInventory } from '../../../context/InventoryContext';
 import { CURRENCY, ICONS } from '../../../constants';
 import Card from '../../ui/Card';
@@ -10,10 +11,27 @@ import Select from '../../ui/Select';
 import { shopApi } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import { getFullImageUrl } from '../../../config/apiUrl';
+import type { InventoryItem, StockMovement } from '../../../types/inventory';
+
+const ROW_H = 72;
+const LIST_OVERSCAN = 10;
+
+function isExpiringWithinDays(item: InventoryItem, days: number): boolean {
+    if (!item.nearestExpiry) return false;
+    const d = new Date(item.nearestExpiry + 'T12:00:00');
+    if (Number.isNaN(d.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const until = new Date(today);
+    until.setDate(until.getDate() + days);
+    return d >= today && d <= until;
+}
 
 const StockMaster: React.FC = () => {
-    const { items, warehouses, updateStock, requestTransfer, deleteItem, movements, updateItem } = useInventory();
+    const { items, warehouses, updateStock, requestTransfer, deleteItem, updateItem } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [stockFilter, setStockFilter] = useState<'all' | 'in' | 'low' | 'out' | 'expiring'>('all');
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
     const [selectedItem, setSelectedItem] = useState<any>(null);
 
@@ -21,7 +39,8 @@ const StockMaster: React.FC = () => {
     const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const itemHistory = movements.filter(m => m.itemId === selectedItem?.id);
+    const [historyMovements, setHistoryMovements] = useState<StockMovement[]>([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
     const [editData, setEditData] = useState<any>(null);
     const [categories, setCategories] = useState<any[]>([]);
 
@@ -36,6 +55,50 @@ const StockMaster: React.FC = () => {
         };
         fetchCategories();
     }, []);
+
+    useEffect(() => {
+        const t = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
+        return () => window.clearTimeout(t);
+    }, [searchQuery]);
+
+    useEffect(() => {
+        if (!isHistoryModalOpen || !selectedItem?.id || String(selectedItem.id).startsWith('pending-')) {
+            setHistoryMovements([]);
+            return;
+        }
+        let cancelled = false;
+        setHistoryLoading(true);
+        shopApi
+            .getMovements(selectedItem.id)
+            .then((rows) => {
+                if (cancelled) return;
+                setHistoryMovements(
+                    (rows || []).map((m: any) => ({
+                        id: m.id,
+                        itemId: m.product_id,
+                        itemName: m.product_name || 'Unknown Item',
+                        type: m.type,
+                        quantity: parseFloat(m.quantity),
+                        beforeQty: 0,
+                        afterQty: 0,
+                        warehouseId: m.warehouse_id,
+                        referenceId: m.reference_id || 'N/A',
+                        timestamp: m.created_at,
+                        userId: m.user_id || 'system',
+                        notes: m.reason,
+                    }))
+                );
+            })
+            .catch(() => {
+                if (!cancelled) setHistoryMovements([]);
+            })
+            .finally(() => {
+                if (!cancelled) setHistoryLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [isHistoryModalOpen, selectedItem?.id]);
 
     // Initialize edit data when selected item changes
     React.useEffect(() => {
@@ -155,21 +218,108 @@ const StockMaster: React.FC = () => {
         setAdjustData({ warehouseId: '', type: 'Increase', quantity: 0, reason: '' });
     };
 
-    const filteredItems = items.filter(item => {
-        const query = searchQuery.toLowerCase().trim();
-        const matchesSearch = !query ||
-            item.name.toLowerCase().includes(query) ||
-            item.sku.toLowerCase().includes(query) ||
-            (item.barcode && item.barcode.toLowerCase().includes(query));
-        const selectedCat = selectedCategoryId
-            ? categories.find((c: any) => c.id === selectedCategoryId)
-            : null;
-        const matchesCategory =
-            !selectedCategoryId ||
-            item.category === selectedCategoryId ||
-            (selectedCat && selectedCat.name === item.category);
-        return matchesSearch && matchesCategory;
-    });
+    const filteredItems = useMemo(() => {
+        const query = debouncedSearch.toLowerCase();
+        return items.filter((item) => {
+            const matchesSearch =
+                !query ||
+                item.name.toLowerCase().includes(query) ||
+                item.sku.toLowerCase().includes(query) ||
+                (item.barcode && item.barcode.toLowerCase().includes(query));
+            const selectedCat = selectedCategoryId
+                ? categories.find((c: any) => c.id === selectedCategoryId)
+                : null;
+            const matchesCategory =
+                !selectedCategoryId ||
+                item.category === selectedCategoryId ||
+                (selectedCat && selectedCat.name === item.category);
+            if (!matchesSearch || !matchesCategory) return false;
+            if (stockFilter === 'in') return item.onHand > 0;
+            if (stockFilter === 'out') return item.onHand <= 0;
+            if (stockFilter === 'low') return item.onHand <= item.reorderPoint;
+            if (stockFilter === 'expiring') return isExpiringWithinDays(item, 30);
+            return true;
+        });
+    }, [items, debouncedSearch, selectedCategoryId, categories, stockFilter]);
+
+    const listScrollRef = useRef<HTMLDivElement>(null);
+    const [listDims, setListDims] = useState({ w: 800, h: 400 });
+
+    useLayoutEffect(() => {
+        const el = listScrollRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(() => {
+            setListDims({ w: Math.max(320, el.clientWidth), h: Math.max(120, el.clientHeight) });
+        });
+        ro.observe(el);
+        setListDims({ w: Math.max(320, el.clientWidth), h: Math.max(120, el.clientHeight) });
+        return () => ro.disconnect();
+    }, []);
+
+    const renderRow = useCallback(
+        ({ index, style }: ListChildComponentProps) => {
+            const item = filteredItems[index];
+            if (!item) return null;
+            const sel = selectedItem?.id === item.id;
+            return (
+                <div
+                    style={style}
+                    className={`flex items-stretch border-b border-border cursor-pointer transition-colors ${
+                        sel
+                            ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-950/40 dark:ring-indigo-500/40'
+                            : 'hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30'
+                    }`}
+                    onClick={() => setSelectedItem(item)}
+                >
+                    <div className="flex-1 min-w-0 px-6 py-2 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center overflow-hidden border border-border shrink-0">
+                            {item.imageUrl ? (
+                                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                            ) : (
+                                React.cloneElement(ICONS.image as React.ReactElement, { size: 20, className: 'text-slate-300 dark:text-slate-500' })
+                            )}
+                        </div>
+                        <div className="min-w-0">
+                            <div className="font-bold text-foreground text-sm truncate">{item.name}</div>
+                            <div className="text-xs text-muted-foreground font-mono italic truncate">SKU: {item.sku}</div>
+                            {item.nearestExpiry && isExpiringWithinDays(item, 30) && (
+                                <div className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 mt-0.5">
+                                    Expires {item.nearestExpiry}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="w-[140px] shrink-0 px-4 py-2 flex items-center whitespace-nowrap">
+                        {item.barcode ? (
+                            <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg w-fit border border-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60">
+                                <span className="text-xs font-mono font-bold">{item.barcode}</span>
+                            </div>
+                        ) : (
+                            <span className="text-slate-300 dark:text-slate-500 text-xs italic">No Barcode</span>
+                        )}
+                    </div>
+                    <div className="w-[88px] shrink-0 px-4 py-2 flex items-center text-sm font-semibold font-mono text-foreground">{item.onHand}</div>
+                    <div className="w-[120px] shrink-0 px-4 py-2 flex items-center">
+                        <span
+                            className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                item.available > 10
+                                    ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                    : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'
+                            }`}
+                        >
+                            {item.available} {item.unit}
+                        </span>
+                    </div>
+                    <div className="w-[88px] shrink-0 px-4 py-2 flex items-center text-sm font-bold text-muted-foreground font-mono">{item.inTransit}</div>
+                    <div className="w-[120px] shrink-0 px-4 py-2 flex items-center text-sm font-semibold text-foreground font-mono">
+                        {(item.onHand * item.retailPrice).toLocaleString()}
+                    </div>
+                    <div className="w-12 shrink-0 flex items-center justify-end pr-4">{ICONS.chevronRight}</div>
+                </div>
+            );
+        },
+        [filteredItems, selectedItem?.id]
+    );
 
     return (
         <div className="flex gap-6 h-full max-h-full min-h-0 overflow-hidden relative">
@@ -205,72 +355,58 @@ const StockMaster: React.FC = () => {
                             ))}
                         </select>
                     </div>
+                    <div className="flex flex-wrap gap-2 flex-shrink-0">
+                        {(
+                            [
+                                { id: 'all' as const, label: 'All' },
+                                { id: 'in' as const, label: 'In stock' },
+                                { id: 'low' as const, label: 'Low stock' },
+                                { id: 'out' as const, label: 'Out of stock' },
+                                { id: 'expiring' as const, label: 'Expiring (30d)' },
+                            ] as const
+                        ).map((f) => (
+                            <button
+                                key={f.id}
+                                type="button"
+                                onClick={() => setStockFilter(f.id)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                                    stockFilter === f.id
+                                        ? 'bg-indigo-600 text-white border-indigo-600'
+                                        : 'bg-card text-muted-foreground border-border hover:border-indigo-300'
+                                }`}
+                            >
+                                {f.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 <Card className="border-none shadow-sm flex-1 min-h-0 flex flex-col overflow-hidden">
-                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
-                        <table className="w-full text-left">
-                            <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground sticky top-0 z-10">
-                                <tr>
-                                    <th className="px-6 py-4 bg-muted/80">Item Details</th>
-                                    <th className="px-6 py-4 bg-muted/80">Barcode</th>
-                                    <th className="px-6 py-4 bg-muted/80">On Hand</th>
-                                    <th className="px-6 py-4 bg-muted/80">Available</th>
-                                    <th className="px-6 py-4 bg-muted/80">In Transit</th>
-                                    <th className="px-6 py-4 bg-muted/80">Value (Retail)</th>
-                                    <th className="px-6 py-4 bg-muted/80"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                                {filteredItems.map(item => (
-                                    <tr
-                                        key={item.id}
-                                        onClick={() => setSelectedItem(item)}
-                                        className={`hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 cursor-pointer transition-colors ${selectedItem?.id === item.id ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-950/40 dark:ring-indigo-500/40' : ''}`}
-                                    >
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center overflow-hidden border border-border">
-                                                    {item.imageUrl ? (
-                                                        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        React.cloneElement(ICONS.image as React.ReactElement, { size: 20, className: "text-slate-300 dark:text-slate-500" })
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-foreground text-sm">{item.name}</div>
-                                                    <div className="text-xs text-muted-foreground font-mono italic">SKU: {item.sku}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            {item.barcode ? (
-                                                <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg w-fit border border-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60">
-                                                    <span className="text-xs font-mono font-bold">{item.barcode}</span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-slate-300 dark:text-slate-500 text-xs italic">No Barcode</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm font-semibold font-mono text-foreground">{item.onHand}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.available > 10 ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'}`}>
-                                                {item.available} {item.unit}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm font-bold text-muted-foreground font-mono">{item.inTransit}</td>
-                                        <td className="px-6 py-4 text-sm font-semibold text-foreground font-mono">
-                                            {(item.onHand * item.retailPrice).toLocaleString()}
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button className="p-2 text-slate-300 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                                                {ICONS.chevronRight}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                        <div className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground flex shrink-0 border-b border-border">
+                            <div className="flex-1 min-w-0 px-6 py-3">Item Details</div>
+                            <div className="w-[140px] shrink-0 px-4 py-3">Barcode</div>
+                            <div className="w-[88px] shrink-0 px-4 py-3">On Hand</div>
+                            <div className="w-[120px] shrink-0 px-4 py-3">Available</div>
+                            <div className="w-[88px] shrink-0 px-4 py-3">In Transit</div>
+                            <div className="w-[120px] shrink-0 px-4 py-3">Value (Retail)</div>
+                            <div className="w-12 shrink-0" />
+                        </div>
+                        <div ref={listScrollRef} className="flex-1 min-h-0 overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
+                            {filteredItems.length === 0 ? (
+                                <div className="px-6 py-12 text-center text-muted-foreground text-sm italic">No matching SKUs.</div>
+                            ) : (
+                                <FixedSizeList
+                                    height={listDims.h}
+                                    width={listDims.w}
+                                    itemCount={filteredItems.length}
+                                    itemSize={ROW_H}
+                                    overscanCount={LIST_OVERSCAN}
+                                >
+                                    {renderRow}
+                                </FixedSizeList>
+                            )}
+                        </div>
                     </div>
                 </Card>
             </div>
@@ -413,7 +549,13 @@ const StockMaster: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {itemHistory.length > 0 ? itemHistory.map(move => (
+                                {historyLoading ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground text-sm">
+                                            Loading history…
+                                        </td>
+                                    </tr>
+                                ) : historyMovements.length > 0 ? historyMovements.map(move => (
                                     <tr key={move.id} className="hover:bg-muted/50/50 transition-colors">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="text-xs font-bold text-foreground">
