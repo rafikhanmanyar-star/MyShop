@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 import { procurementApi, shopApi } from '../../../services/shopApi';
 import { createPurchaseBillOfflineFirst, setProcurementCache } from '../../../services/procurementSyncService';
 import { getProcurementCache, getTenantId } from '../../../services/procurementOfflineCache';
@@ -92,15 +92,30 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       : '';
 
     const inventoryItems = inventory?.items ?? [];
-    const productsForDropdown: ProductOption[] = inventoryItems.map((item) => ({
-      id: item.id,
-      name: item.name,
-      sku: item.sku,
-      barcode: item.barcode ?? '',
-      cost_price: item.costPrice,
-      costPrice: item.costPrice,
-      average_cost: undefined,
-    }));
+
+    /** Loaded directly from API so procurement works even when Inventory context is still empty. */
+    const [catalogProducts, setCatalogProducts] = useState<ProductOption[]>([]);
+    const [loadingCatalog, setLoadingCatalog] = useState(false);
+
+    const productsForDropdown: ProductOption[] = useMemo(() => {
+      const byId = new Map<string, ProductOption>();
+      for (const p of catalogProducts) {
+        byId.set(p.id, { ...p });
+      }
+      for (const item of inventoryItems) {
+        const prev = byId.get(item.id);
+        byId.set(item.id, {
+          id: item.id,
+          name: item.name,
+          sku: item.sku,
+          barcode: item.barcode ?? '',
+          cost_price: item.costPrice,
+          costPrice: item.costPrice,
+          average_cost: prev?.average_cost,
+        });
+      }
+      return Array.from(byId.values());
+    }, [catalogProducts, inventoryItems]);
 
     const loadBillsAndFormData = useCallback(() => {
       setLoadingData(true);
@@ -196,6 +211,37 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         refreshItemsRef.current?.();
       }
     }, [showForm, loadBillsAndFormData]);
+
+    useEffect(() => {
+      if (!showForm) return;
+      let cancelled = false;
+      setLoadingCatalog(true);
+      shopApi
+        .getProducts()
+        .then((rows) => {
+          if (cancelled || !Array.isArray(rows)) return;
+          setCatalogProducts(
+            rows.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              sku: p.sku,
+              barcode: p.barcode ?? '',
+              cost_price: parseFloat(String(p.cost_price ?? 0)),
+              costPrice: parseFloat(String(p.cost_price ?? 0)),
+              average_cost: p.average_cost != null ? parseFloat(String(p.average_cost)) : undefined,
+            }))
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setCatalogProducts([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingCatalog(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [showForm]);
 
     useClickOutside(
       vendorDropdownRef,
@@ -591,7 +637,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                   productSearch={productSearch}
                   dropdownOpen={productDropdownOpen}
                   products={productsForDropdown}
-                  loadingData={loadingData}
+                  loadingData={loadingData || loadingCatalog}
                   onSearchChange={setProductSearch}
                   onOpenChange={setProductDropdownOpen}
                   onSelectProduct={(p) => addItem(p)}

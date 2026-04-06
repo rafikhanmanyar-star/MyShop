@@ -19,6 +19,23 @@ CREATE TABLE IF NOT EXISTS inventory_batches (
     )
 );
 
+-- If inventory_batches already existed from an older/minimal schema, CREATE TABLE IF NOT EXISTS
+-- does nothing — add any missing columns (and FKs) before indexes and backfill INSERT.
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS tenant_id TEXT REFERENCES tenants(id) ON DELETE CASCADE;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS product_id TEXT REFERENCES shop_products(id) ON DELETE RESTRICT;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS warehouse_id TEXT REFERENCES shop_warehouses(id) ON DELETE CASCADE;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS batch_no TEXT;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS expiry_date DATE;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS quantity_received NUMERIC(15, 4);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS quantity_remaining NUMERIC(15, 4);
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS cost_price NUMERIC(15, 2) DEFAULT 0;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS purchase_bill_id TEXT REFERENCES purchase_bills(id) ON DELETE CASCADE;
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+ALTER TABLE inventory_batches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+
+-- NULL expiry means "no dated batch" / always sellable (see backfill INSERT). Older tables may have NOT NULL here.
+ALTER TABLE inventory_batches ALTER COLUMN expiry_date DROP NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_inventory_batches_tenant_product ON inventory_batches(tenant_id, product_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_batches_expiry ON inventory_batches(tenant_id, expiry_date);
 CREATE INDEX IF NOT EXISTS idx_inventory_batches_bill ON inventory_batches(tenant_id, purchase_bill_id);

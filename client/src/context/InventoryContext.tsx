@@ -142,6 +142,49 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
     };
 }
 
+/** Legacy merge when GET /inventory/skus is empty or unavailable (same rules as original inventory load). */
+function mergeLegacyProductsInventory(products: any[], inventory: any[]): InventoryItem[] {
+    const stockMap: Record<
+        string,
+        { total: number; reserved: number; sellable: number; byWh: Record<string, number> }
+    > = {};
+    inventory.forEach((inv: any) => {
+        if (!stockMap[inv.product_id]) {
+            stockMap[inv.product_id] = { total: 0, reserved: 0, sellable: 0, byWh: {} };
+        }
+        const qty = parseFloat(inv.quantity_on_hand || '0');
+        const reserved = parseFloat(inv.quantity_reserved || '0');
+        const availRow =
+            parseFloat(inv.sellable_on_hand ?? '0') || Math.max(0, qty - reserved);
+        stockMap[inv.product_id].total += qty;
+        stockMap[inv.product_id].reserved += reserved;
+        stockMap[inv.product_id].sellable += Math.max(0, availRow);
+        stockMap[inv.product_id].byWh[inv.warehouse_id] = qty;
+    });
+    return products.map((p: any) => ({
+        id: p.id,
+        sku: p.sku,
+        barcode: p.barcode || undefined,
+        name: p.name,
+        category: p.category_id || 'General',
+        unit: p.unit || 'pcs',
+        onHand: stockMap[p.id]?.total || 0,
+        available:
+            stockMap[p.id]?.sellable ??
+            Math.max(0, (stockMap[p.id]?.total || 0) - (stockMap[p.id]?.reserved || 0)),
+        sellableOnHand: stockMap[p.id]?.sellable,
+        reserved: stockMap[p.id]?.reserved || 0,
+        inTransit: 0,
+        damaged: 0,
+        costPrice: parseFloat(p.cost_price || '0'),
+        retailPrice: parseFloat(p.retail_price || '0'),
+        reorderPoint: p.reorder_point || 10,
+        imageUrl: getFullImageUrl(p.image_url) || undefined,
+        description: p.mobile_description || p.description || undefined,
+        warehouseStock: stockMap[p.id]?.byWh || {},
+    }));
+}
+
 function mapMovementRows(movementList: any[]): StockMovement[] {
     return movementList.map((m: any) => ({
         id: m.id,
@@ -199,7 +242,23 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 }));
                 setWarehouses(whs);
 
-                const mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
+                let mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
+                if (mappedItems.length === 0) {
+                    try {
+                        const [products, inventory] = await Promise.all([
+                            shopApi.getProducts(),
+                            shopApi.getInventory(),
+                        ]);
+                        if (Array.isArray(products) && products.length > 0) {
+                            mappedItems = mergeLegacyProductsInventory(products, inventory || []);
+                            console.warn(
+                                '[InventoryContext] /inventory/skus returned 0 rows; loaded SKUs via legacy products + inventory merge.'
+                            );
+                        }
+                    } catch (fbErr) {
+                        console.warn('[InventoryContext] Legacy inventory fallback failed:', fbErr);
+                    }
+                }
 
                 const pending = await getAllPendingProducts();
                 const pendingAsItems: InventoryItem[] = pending.map((p) => ({
@@ -288,7 +347,20 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         try {
             console.log('🔄 [InventoryContext] Refreshing products/items...');
             const skuPack = await shopApi.getInventorySkus({ page: 1, limit: 10000 });
-            const mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
+            let mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
+            if (mappedItems.length === 0) {
+                try {
+                    const [products, inventory] = await Promise.all([
+                        shopApi.getProducts(),
+                        shopApi.getInventory(),
+                    ]);
+                    if (Array.isArray(products) && products.length > 0) {
+                        mappedItems = mergeLegacyProductsInventory(products, inventory || []);
+                    }
+                } catch (fbErr) {
+                    console.warn('[InventoryContext] Legacy refresh fallback failed:', fbErr);
+                }
+            }
 
             const pending = await getAllPendingProducts();
             const pendingAsItems: InventoryItem[] = pending.map((p) => ({

@@ -667,6 +667,20 @@ export class ShopService {
         WHERE tenant_id = $1 AND quantity_remaining > 0
         GROUP BY product_id
       ),
+      inv_agg AS (
+        SELECT
+          ie.product_id,
+          COALESCE(SUM(ie.quantity_on_hand), 0)::numeric AS on_hand,
+          COALESCE(SUM(ie.sellable_on_hand), 0)::numeric AS available,
+          COALESCE(SUM(ie.quantity_reserved), 0)::numeric AS reserved_total,
+          COALESCE(
+            jsonb_object_agg(ie.warehouse_id::text, ie.quantity_on_hand)
+              FILTER (WHERE ie.warehouse_id IS NOT NULL),
+            '{}'::jsonb
+          ) AS warehouse_stock
+        FROM i_enriched ie
+        GROUP BY ie.product_id
+      ),
       pa AS (
         SELECT
           p.id,
@@ -680,19 +694,14 @@ export class ShopService {
           p.reorder_point,
           p.image_url,
           p.mobile_description,
-          COALESCE(SUM(ie.quantity_on_hand), 0)::numeric AS on_hand,
-          COALESCE(SUM(ie.sellable_on_hand), 0)::numeric AS available,
-          COALESCE(SUM(ie.quantity_reserved), 0)::numeric AS reserved_total,
-          COALESCE(
-            jsonb_object_agg(ie.warehouse_id::text, ie.quantity_on_hand)
-              FILTER (WHERE ie.warehouse_id IS NOT NULL),
-            '{}'::jsonb
-          ) AS warehouse_stock
+          COALESCE(ia.on_hand, 0)::numeric AS on_hand,
+          COALESCE(ia.available, 0)::numeric AS available,
+          COALESCE(ia.reserved_total, 0)::numeric AS reserved_total,
+          COALESCE(ia.warehouse_stock, '{}'::jsonb) AS warehouse_stock
         FROM shop_products p
-        LEFT JOIN i_enriched ie ON ie.product_id = p.id
+        LEFT JOIN inv_agg ia ON ia.product_id = p.id
         WHERE p.tenant_id = $1 AND p.is_active = TRUE
           ${searchClause}
-        GROUP BY p.id
       ),
       filtered AS (
         SELECT pa.*, ne.nearest_expiry

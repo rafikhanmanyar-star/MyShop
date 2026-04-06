@@ -22,7 +22,20 @@ Local testing is **run-only**; there is no combined “test and push” command.
 
 ---
 
-## 2. Installable app
+## 2. Database migrations
+
+Apply SQL migrations in `server/migrations/` (e.g. new indexes, schema changes). Requires PostgreSQL connection settings in `server/.env` (same as the API).
+
+| Command | Where to run | Description |
+|--------|----------------|-------------|
+| `npm run migrate` | **Repository root** | Runs `server`’s migration runner (`tsx scripts/run-migrations.ts`). Applies any pending `.sql` files in order. |
+| `npm run migrate` | **`server/`** | Same as above (defined in `server/package.json` as `migrate`). |
+
+**What it does:** Executes pending migrations once and records them so they are not applied twice. Run after pulling changes that add files under `server/migrations/`.
+
+---
+
+## 3. Installable app
 
 Build the Windows desktop app and optionally bump version, commit, push, and create a GitHub release.
 
@@ -69,5 +82,6 @@ One command runs the PowerShell script that does all steps: bump version, build,
 | Action | Build / run only | Full (with push to GitHub) |
 |--------|-------------------|----------------------------|
 | **Local test** | `npm run electron:dev` | — (run-only; use installable release when ready to ship) |
+| **Database migrations** | `npm run migrate` (from repo root or `server/`) | — |
 | **Installable (local stack)** | `npm run dist:local` or `npm run dist:win:local` | — (use `release` for cloud + push) |
 | **Installable (cloud, Windows)** | `npm run dist:win` | `npm run release` (patch), `npm run release:minor`, `npm run release:major` |
