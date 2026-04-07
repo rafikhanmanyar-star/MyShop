@@ -14,6 +14,17 @@ type CriticalSortKey = 'name' | 'category' | 'onHand' | 'reorderPoint' | 'status
 
 type ColWidthKey = 'item' | 'category' | 'onHand' | 'reorder' | 'status';
 
+/** Drives Critical Stock Alerts rows; `critical` = all at/below reorder (default). */
+type SummaryFilter =
+    | 'critical'
+    | 'total_skus'
+    | 'low_stock'
+    | 'out_of_stock'
+    | 'stock_value'
+    | 'expired'
+    | 'expiring_7'
+    | 'expiring_30';
+
 const MIN_COL_PX = 72;
 const DEFAULT_COL_WIDTHS: Record<ColWidthKey, number> = {
     item: 220,
@@ -46,6 +57,7 @@ const InventoryDashboard: React.FC = () => {
         expiring_30_qty?: string | number;
     } | null>(null);
     const [expiryRows, setExpiryRows] = useState<any[]>([]);
+    const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>('critical');
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -82,14 +94,62 @@ const InventoryDashboard: React.FC = () => {
         });
     }, [warehouses, items]);
 
+    /** Product IDs with batch expiry in each bucket (from expiry-summary rows). */
+    const expiryProductIdSets = useMemo(() => {
+        const expired = new Set<string>();
+        const expiring7 = new Set<string>();
+        const expiring30 = new Set<string>();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        for (const r of expiryRows) {
+            const pid = String((r as { product_id?: string; productId?: string }).product_id ?? (r as { productId?: string }).productId ?? '');
+            const expRaw = (r as { expiry_date?: string }).expiry_date;
+            const exp = expRaw != null ? String(expRaw).slice(0, 10) : '';
+            if (!pid || !exp) continue;
+            const d = new Date(`${exp}T12:00:00`);
+            if (Number.isNaN(d.getTime())) continue;
+            if (d < today) {
+                expired.add(pid);
+                continue;
+            }
+            const days = (d.getTime() - today.getTime()) / 86400000;
+            if (days <= 30) expiring30.add(pid);
+            if (days <= 7) expiring7.add(pid);
+        }
+        return { expired, expiring7, expiring30 };
+    }, [expiryRows]);
+
+    const tableSourceItems = useMemo((): InventoryItem[] => {
+        switch (summaryFilter) {
+            case 'critical':
+                return lowStockItems;
+            case 'total_skus':
+                return items;
+            case 'low_stock':
+                return items.filter(i => i.onHand > 0 && i.onHand <= i.reorderPoint);
+            case 'out_of_stock':
+                return items.filter(i => i.onHand <= 0);
+            case 'stock_value':
+                return items;
+            case 'expired':
+                return items.filter(i => expiryProductIdSets.expired.has(i.id));
+            case 'expiring_7':
+                return items.filter(i => expiryProductIdSets.expiring7.has(i.id));
+            case 'expiring_30':
+                return items.filter(i => expiryProductIdSets.expiring30.has(i.id));
+            default:
+                return lowStockItems;
+        }
+    }, [summaryFilter, items, lowStockItems, expiryProductIdSets]);
+
     const filteredLowStockItems = useMemo(() => {
-        if (!selectedCategoryId) return lowStockItems;
+        if (!selectedCategoryId) return tableSourceItems;
         const selectedCat = categories.find(c => c.id === selectedCategoryId);
-        return lowStockItems.filter(item =>
+        return tableSourceItems.filter(item =>
             item.category === selectedCategoryId ||
             (selectedCat && selectedCat.name === item.category)
         );
-    }, [lowStockItems, selectedCategoryId, categories]);
+    }, [tableSourceItems, selectedCategoryId, categories]);
 
     const getCategoryDisplayName = useCallback((itemCategory: string | undefined) => {
         if (!itemCategory) return 'General';
@@ -155,9 +215,9 @@ const InventoryDashboard: React.FC = () => {
                     cmp = a.reorderPoint - b.reorderPoint;
                     break;
                 case 'status': {
-                    const av = a.onHand <= 0 ? 0 : 1;
-                    const bv = b.onHand <= 0 ? 0 : 1;
-                    cmp = av - bv;
+                    const rank = (i: InventoryItem) =>
+                        i.onHand <= 0 ? 0 : i.onHand <= i.reorderPoint ? 1 : 2;
+                    cmp = rank(a) - rank(b);
                     if (cmp === 0) cmp = a.onHand - b.onHand;
                     break;
                 }
@@ -170,58 +230,181 @@ const InventoryDashboard: React.FC = () => {
         return list;
     }, [filteredLowStockItems, sortKey, sortDir, getCategoryDisplayName]);
 
-    const stats = [
-        { label: 'Total SKUs', value: items.length, icon: ICONS.package, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-        { label: 'Low Stock', value: lowStockItems.length, icon: ICONS.trendingDown, color: 'text-amber-600', bg: 'bg-amber-50' },
-        { label: 'Out of Stock', value: items.filter(i => i.onHand <= 0).length, icon: ICONS.xCircle, color: 'text-rose-600', bg: 'bg-rose-50' },
-        { label: 'Stock Value', value: `${CURRENCY} ${totalInventoryValue.toLocaleString()}`, icon: ICONS.dollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    ];
+    const toggleSummaryFilter = useCallback((key: SummaryFilter) => {
+        setSummaryFilter((prev) => (prev === key ? 'critical' : key));
+    }, []);
+
+    const summaryCards = useMemo(() => {
+        const core: {
+            key: SummaryFilter;
+            label: string;
+            value: React.ReactNode;
+            icon: React.ReactElement;
+            color: string;
+            bg: string;
+            border?: string;
+        }[] = [
+            {
+                key: 'total_skus',
+                label: 'Total SKUs',
+                value: items.length,
+                icon: ICONS.package,
+                color: 'text-indigo-600 dark:text-indigo-400',
+                bg: 'bg-indigo-50 dark:bg-indigo-950/40',
+            },
+            {
+                key: 'low_stock',
+                label: 'Low Stock',
+                value: lowStockItems.length,
+                icon: ICONS.trendingDown,
+                color: 'text-amber-600 dark:text-amber-400',
+                bg: 'bg-amber-50 dark:bg-amber-950/40',
+            },
+            {
+                key: 'out_of_stock',
+                label: 'Out of Stock',
+                value: items.filter((i) => i.onHand <= 0).length,
+                icon: ICONS.xCircle,
+                color: 'text-rose-600 dark:text-rose-400',
+                bg: 'bg-rose-50 dark:bg-rose-950/40',
+            },
+            {
+                key: 'stock_value',
+                label: 'Stock Value',
+                value: `${CURRENCY} ${totalInventoryValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+                icon: ICONS.dollarSign,
+                color: 'text-emerald-600 dark:text-emerald-400',
+                bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+            },
+        ];
+        if (expiryKpi === null) return core;
+        return [
+            ...core,
+            {
+                key: 'expired' as const,
+                label: 'Expired (on hand)',
+                value: (
+                    <>
+                        {Number(expiryKpi.expired_qty ?? 0).toLocaleString()}{' '}
+                        <span className="text-[10px] font-medium opacity-90">units</span>
+                    </>
+                ),
+                icon: ICONS.alertTriangle,
+                color: 'text-rose-700 dark:text-rose-300',
+                bg: 'bg-rose-50/80 dark:bg-rose-950/35',
+                border: 'border-rose-200 dark:border-rose-900/50',
+            },
+            {
+                key: 'expiring_7' as const,
+                label: 'Expiring ≤ 7 days',
+                value: (
+                    <>
+                        {Number(expiryKpi.expiring_7_qty ?? 0).toLocaleString()}{' '}
+                        <span className="text-[10px] font-medium opacity-90">units</span>
+                    </>
+                ),
+                icon: ICONS.clock,
+                color: 'text-amber-800 dark:text-amber-200',
+                bg: 'bg-amber-50/80 dark:bg-amber-950/35',
+                border: 'border-amber-200 dark:border-amber-900/50',
+            },
+            {
+                key: 'expiring_30' as const,
+                label: 'Expiring ≤ 30 days',
+                value: (
+                    <>
+                        {Number(expiryKpi.expiring_30_qty ?? 0).toLocaleString()}{' '}
+                        <span className="text-[10px] font-medium opacity-90">units</span>
+                    </>
+                ),
+                icon: ICONS.calendar,
+                color: 'text-emerald-800 dark:text-emerald-200',
+                bg: 'bg-emerald-50/80 dark:bg-emerald-950/35',
+                border: 'border-emerald-200 dark:border-emerald-900/50',
+            },
+        ];
+    }, [items, lowStockItems, totalInventoryValue, expiryKpi]);
+
+    const emptyTableHint = useMemo(() => {
+        if (filteredLowStockItems.length > 0) return '';
+        if (tableSourceItems.length > 0) return 'No rows match the category filter.';
+        switch (summaryFilter) {
+            case 'critical':
+                return lowStockItems.length > 0 ? 'No critical stock in this category.' : 'No critical stock levels detected.';
+            case 'total_skus':
+            case 'stock_value':
+                return 'No SKUs loaded.';
+            case 'low_stock':
+                return 'No SKUs are low (in stock but at/below reorder).';
+            case 'out_of_stock':
+                return 'No SKUs are out of stock.';
+            case 'expired':
+            case 'expiring_7':
+            case 'expiring_30':
+                return 'No batch expiry data for this filter.';
+            default:
+                return 'No rows to show.';
+        }
+    }, [filteredLowStockItems.length, tableSourceItems.length, summaryFilter, lowStockItems.length]);
+
+    const alertsTableHeading = useMemo(() => {
+        switch (summaryFilter) {
+            case 'critical':
+                return { title: 'Critical Stock Alerts', subtitle: 'At or below reorder point (default view).' };
+            case 'total_skus':
+                return { title: 'All SKUs', subtitle: 'Full catalog with stock status.' };
+            case 'stock_value':
+                return { title: 'Stock value (all SKUs)', subtitle: 'Line value = on hand × cost.' };
+            case 'low_stock':
+                return { title: 'Low stock', subtitle: 'On hand > 0 and at or below reorder.' };
+            case 'out_of_stock':
+                return { title: 'Out of stock', subtitle: 'Zero on hand.' };
+            case 'expired':
+                return { title: 'Expired batches (on hand)', subtitle: 'From batch expiry data.' };
+            case 'expiring_7':
+                return { title: 'Expiring within 7 days', subtitle: 'From batch expiry data.' };
+            case 'expiring_30':
+                return { title: 'Expiring within 30 days', subtitle: 'From batch expiry data.' };
+            default:
+                return { title: 'Critical Stock Alerts', subtitle: '' };
+        }
+    }, [summaryFilter]);
 
     return (
         <div className="flex flex-col h-full min-h-0 overflow-hidden gap-8 animate-fade-in">
-            {/* KPI Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 flex-shrink-0">
-                {stats.map((stat, i) => (
-                    <Card key={i} className="p-6 border-none shadow-sm flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center`}>
-                            {React.cloneElement(stat.icon as React.ReactElement<any>, { width: 28, height: 28 })}
-                        </div>
-                        <div>
-                            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
-                            <p className="text-2xl font-semibold text-foreground tracking-tight">{stat.value}</p>
-                        </div>
-                    </Card>
-                ))}
+            {/* KPI row — compact, single row; scroll on narrow viewports. Default view = critical (no card selected); click a card to filter; click again to reset. */}
+            <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1 flex-shrink-0 [scrollbar-gutter:stable]">
+                {summaryCards.map((stat) => {
+                    const selected = summaryFilter === stat.key;
+                    return (
+                        <button
+                            type="button"
+                            key={stat.key}
+                            title={`Filter table: ${stat.label}. ${selected ? 'Click again to show critical alerts only.' : ''}`}
+                            onClick={() => toggleSummaryFilter(stat.key)}
+                            className={`flex min-w-[5.5rem] max-w-[170px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left shadow-sm transition-colors sm:min-w-[7.25rem] ${
+                                stat.border ?? 'border-border'
+                            } bg-card ${
+                                selected
+                                    ? 'ring-2 ring-primary-500 ring-offset-1 ring-offset-background dark:ring-offset-slate-900'
+                                    : 'hover:bg-muted/50 dark:hover:bg-muted/30'
+                            } ${summaryFilter === 'critical' && !selected ? 'opacity-95' : ''}`}
+                        >
+                            <div
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${stat.bg} ${stat.color}`}
+                            >
+                                {React.cloneElement(stat.icon as React.ReactElement<any>, { width: 16, height: 16 })}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-[9px] font-semibold uppercase leading-tight tracking-wide text-muted-foreground line-clamp-2">
+                                    {stat.label}
+                                </p>
+                                <p className="truncate text-xs font-semibold tabular-nums text-foreground sm:text-sm">{stat.value}</p>
+                            </div>
+                        </button>
+                    );
+                })}
             </div>
-
-            {expiryKpi !== null && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-shrink-0">
-                    <Card className="border border-rose-200 bg-rose-50/50 p-4 dark:border-rose-900/40 dark:bg-rose-950/30">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-rose-700 dark:text-rose-300">
-                            Expired (on hand)
-                        </p>
-                        <p className="mt-1 text-2xl font-bold tabular-nums text-rose-900 dark:text-rose-100">
-                            {Number(expiryKpi.expired_qty ?? 0).toLocaleString()} <span className="text-sm font-medium">units</span>
-                        </p>
-                    </Card>
-                    <Card className="border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/30">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-200">
-                            Expiring in 7 days
-                        </p>
-                        <p className="mt-1 text-2xl font-bold tabular-nums text-amber-950 dark:text-amber-50">
-                            {Number(expiryKpi.expiring_7_qty ?? 0).toLocaleString()} <span className="text-sm font-medium">units</span>
-                        </p>
-                    </Card>
-                    <Card className="border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/30">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
-                            Expiring in 30 days
-                        </p>
-                        <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-950 dark:text-emerald-50">
-                            {Number(expiryKpi.expiring_30_qty ?? 0).toLocaleString()} <span className="text-sm font-medium">units</span>
-                        </p>
-                    </Card>
-                </div>
-            )}
 
             {expiryRows.length > 0 && (
                 <Card className="border-none shadow-sm p-0 overflow-hidden flex-shrink-0">
@@ -277,7 +460,12 @@ const InventoryDashboard: React.FC = () => {
                 {/* Low Stock Table */}
                 <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden flex flex-col min-h-0">
                     <div className="p-6 border-b border-border flex flex-wrap justify-between items-center gap-4 flex-shrink-0">
-                        <h3 className="font-bold text-foreground">Critical Stock Alerts</h3>
+                        <div>
+                            <h3 className="font-bold text-foreground">{alertsTableHeading.title}</h3>
+                            {alertsTableHeading.subtitle ? (
+                                <p className="mt-0.5 text-xs text-muted-foreground">{alertsTableHeading.subtitle}</p>
+                            ) : null}
+                        </div>
                         <div className="flex items-center gap-3">
                             <label htmlFor="critical-alerts-category" className="text-xs font-bold text-muted-foreground whitespace-nowrap">
                                 Category:
@@ -414,16 +602,27 @@ const InventoryDashboard: React.FC = () => {
                                         <td className="min-w-0 px-6 py-4 text-sm font-semibold font-mono">{item.onHand} {item.unit}</td>
                                         <td className="min-w-0 px-6 py-4 text-sm font-medium text-muted-foreground font-mono">{item.reorderPoint}</td>
                                         <td className="min-w-0 px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${item.onHand <= 0 ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300' : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'
-                                                }`}>
-                                                {item.onHand <= 0 ? 'OUT OF STOCK' : 'LOW STOCK'}
+                                            <span
+                                                className={`px-2 py-1 rounded text-xs font-bold ${
+                                                    item.onHand <= 0
+                                                        ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300'
+                                                        : item.onHand <= item.reorderPoint
+                                                          ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'
+                                                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                }`}
+                                            >
+                                                {item.onHand <= 0
+                                                    ? 'OUT OF STOCK'
+                                                    : item.onHand <= item.reorderPoint
+                                                      ? 'LOW STOCK'
+                                                      : 'IN STOCK'}
                                             </span>
                                         </td>
                                     </tr>
                                 )) : (
                                     <tr>
                                         <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic text-sm">
-                                            {lowStockItems.length > 0 ? 'No critical stock in this category.' : 'No critical stock levels detected.'}
+                                            {emptyTableHint}
                                         </td>
                                     </tr>
                                 )}

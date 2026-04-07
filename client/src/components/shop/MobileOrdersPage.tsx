@@ -219,9 +219,9 @@ function MobileOrdersPageContent() {
                 </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-auto p-6 sm:p-8 space-y-6">
+            <div className="flex flex-1 min-h-0 flex-col overflow-hidden p-6 sm:p-8 gap-6">
             {/* Status Filter */}
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex shrink-0 gap-2 overflow-x-auto pb-1">
                 {STATUS_FILTERS.map(s => {
                     const cfg = STATUS_CONFIG[s];
                     const count = s === 'All'
@@ -248,10 +248,11 @@ function MobileOrdersPageContent() {
                 })}
             </div>
 
-            {/* Content area */}
-            <div className="flex gap-6">
+            {/* Content area — list scrolls; page does not */}
+            <div className="flex min-h-0 flex-1 gap-6">
                 {/* Orders List */}
-                <div className="flex-1 space-y-3">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1 space-y-3">
                     {loading && orders.length === 0 ? (
                         <div className="flex items-center justify-center h-64">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400" />
@@ -351,10 +352,11 @@ function MobileOrdersPageContent() {
                             );
                         })
                     )}
+                    </div>
                 </div>
 
                 {/* Order Detail Panel */}
-                <div className="w-[400px] flex-shrink-0">
+                <div className="flex w-[400px] shrink-0 flex-col min-h-0 overflow-y-auto">
                     {detailLoading ? (
                         <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 p-8 flex items-center justify-center h-96">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400" />
@@ -518,7 +520,7 @@ function OrderDetailPanel({
                 <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
             </div>
 
-            <div className="p-5 space-y-5 max-h-[60vh] overflow-y-auto">
+            <div className="p-5 space-y-5">
                 {/* Customer */}
                 <div>
                     <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Customer</h4>

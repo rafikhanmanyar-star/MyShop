@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { installElectronFocusRecovery } from './utils/electronFocusRecovery';
-import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { ShiftsProvider } from './context/ShiftsContext';
@@ -17,6 +17,7 @@ import { MobileOrdersProvider } from './context/MobileOrdersContext';
 import { SyncOnOnline } from './components/SyncOnOnline';
 import OfflineBanner from './components/OfflineBanner';
 import AppHeader from './components/AppHeader';
+import { InventoryPageHeaderProvider } from './context/InventoryPageHeaderContext';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
 const InventoryPage = lazy(() => import('./components/shop/InventoryPage'));
@@ -180,6 +181,9 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
 function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [posFullScreen, setPosFullScreen] = useState(false);
+  const { pathname } = useLocation();
+  const isPosRoute = pathname === '/pos';
+  const isMobileOrdersRoute = pathname === '/mobile-orders';
   const { user } = useAuth();
   const role = user?.role || 'pos_cashier';
   useEffect(() => {
@@ -197,6 +201,7 @@ function AppLayout() {
       <AppProvider>
         <ShiftsProvider>
           <MobileOrdersProvider>
+          <InventoryPageHeaderProvider>
           <SyncOnOnline />
           <Suspense fallback={null}>
             <ShopRealtimeBridge />
@@ -204,8 +209,8 @@ function AppLayout() {
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
         <main className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden transition-all duration-300 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden page-container">
-          {!posFullScreen && <AppHeader />}
+          <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isMobileOrdersRoute ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
+          {!posFullScreen && !isPosRoute && <AppHeader />}
           <OfflineBanner />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Suspense fallback={
@@ -262,6 +267,7 @@ function AppLayout() {
           </div>
         </main>
       </div>
+          </InventoryPageHeaderProvider>
           </MobileOrdersProvider>
         </ShiftsProvider>
       </AppProvider>

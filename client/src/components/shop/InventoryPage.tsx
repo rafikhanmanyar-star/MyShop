@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRegisterInventoryPageHeader, type InventoryTabId } from '../../context/InventoryPageHeaderContext';
 import { InventoryProvider, useInventory } from '../../context/InventoryContext';
 import InventoryDashboard from './inventory/InventoryDashboard';
 import StockMaster from './inventory/StockMaster';
@@ -15,7 +16,7 @@ import { getShopCategoriesOfflineFirst } from '../../services/categoriesOfflineC
 import { getFullImageUrl } from '../../config/apiUrl';
 const InventoryContent: React.FC = () => {
     const { items, addItem, refreshItems } = useInventory();
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'stock' | 'movements' | 'adjustments' | 'categories' | 'incomplete'>('dashboard');
+    const [activeTab, setActiveTab] = useState<InventoryTabId>('dashboard');
     const [isNewSkuModalOpen, setIsNewSkuModalOpen] = useState(false);
     const [shopCategories, setShopCategories] = useState<ShopProductCategory[]>([]);
     const [newItemData, setNewItemData] = useState({
@@ -135,56 +136,35 @@ const InventoryContent: React.FC = () => {
         }
     };
 
-    const tabs = [
-        { id: 'dashboard', label: 'Dashboard', icon: ICONS.barChart },
-        { id: 'stock', label: 'Stock Master', icon: ICONS.package },
-        { id: 'movements', label: 'Movements', icon: ICONS.trendingUp },
-        { id: 'adjustments', label: 'Adjustments', icon: ICONS.settings },
-        { id: 'categories', label: 'Categories', icon: ICONS.folder },
-        { id: 'incomplete', label: 'Incomplete SKUs', icon: ICONS.alertTriangle },
-    ];
+    const tabs = useMemo(
+        () =>
+            [
+                { id: 'dashboard' as const, label: 'Dashboard', icon: ICONS.barChart },
+                { id: 'stock' as const, label: 'Stock Master', icon: ICONS.package },
+                { id: 'movements' as const, label: 'Movements', icon: ICONS.trendingUp },
+                { id: 'adjustments' as const, label: 'Adjustments', icon: ICONS.settings },
+                { id: 'categories' as const, label: 'Categories', icon: ICONS.folder },
+                { id: 'incomplete' as const, label: 'Incomplete SKUs', icon: ICONS.alertTriangle },
+            ] as const,
+        []
+    );
+
+    const inventoryHeaderPayload = useMemo(
+        () => ({
+            activeTab,
+            setActiveTab,
+            onNewSku: () => setIsNewSkuModalOpen(true),
+            tabs: [...tabs],
+        }),
+        [activeTab, tabs]
+    );
+
+    useRegisterInventoryPageHeader(inventoryHeaderPayload);
 
     return (
         <div className="flex w-full min-w-0 flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800">
-            {/* Header / Tab Navigation */}
-            <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
-                <div className="flex justify-between items-center mb-6">
-                    <div>
-                        <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Inventory Management</h1>
-                        <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">Enterprise-level stock control and logistics.</p>
-                    </div>
-                    <div className="flex gap-3">
-                        <button
-                            onClick={() => setIsNewSkuModalOpen(true)}
-                            className="flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-primary-900/20 transition-all hover:bg-primary-700 dark:shadow-primary-950/40"
-                        >
-                            {ICONS.plus} New SKU
-                        </button>
-                    </div>
-                </div>
-
-                <div className="flex gap-8">
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
-                            className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
-                                ? 'text-primary-600 dark:text-primary-400'
-                                : 'text-muted-foreground dark:text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
-                                }`}
-                        >
-                            {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
-                            {tab.label}
-                            {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 rounded-t-full bg-primary-600 dark:bg-primary-400"></div>
-                            )}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
             {/* Content area: flex so Stock Master / Dashboard / Movements can fill and scroll internally; other tabs can scroll here */}
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden p-8">
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${['stock', 'dashboard', 'movements', 'categories', 'incomplete'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                     {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col"><InventoryDashboard /></div>}
                     {activeTab === 'stock' && <div className="flex-1 min-h-0 flex flex-col"><StockMaster /></div>}

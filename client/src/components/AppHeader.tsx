@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bell, Smartphone, User } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useMobileOrders } from '../context/MobileOrdersContext';
+import { useInventoryPageHeaderPayload } from '../context/InventoryPageHeaderContext';
+import { ICONS } from '../constants';
 import ThemeToggle from './ui/ThemeToggle';
 
 const MOBILE_ORDER_ROLES = ['admin', 'pos_cashier'];
 
 /**
- * Top app bar: mobile-order notifications (bell), theme toggle, signed-in user.
- * Uses design tokens so light/dark applies across the shell.
+ * Bell, theme toggle, and signed-in user — reusable beside page-specific toolbar (e.g. POS strip).
  */
-export default function AppHeader({ className = '' }: { className?: string }) {
+export function AppHeaderToolbar({ className = '' }: { className?: string }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { bellAlerts, dismissBellAlert, clearBellAlerts } = useMobileOrders();
@@ -19,7 +20,7 @@ export default function AppHeader({ className = '' }: { className?: string }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const roleLabel = user?.role ? user.role.replace(/_/g, ' ') : '';
-  const showMobileBell = user && MOBILE_ORDER_ROLES.includes(user.role);
+  const showMobileBell = !!(user && MOBILE_ORDER_ROLES.includes(user.role));
   const badgeCount = showMobileBell ? bellAlerts.length : 0;
 
   useEffect(() => {
@@ -40,9 +41,7 @@ export default function AppHeader({ className = '' }: { className?: string }) {
   };
 
   return (
-    <header
-      className={`mb-6 flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-gray-200 pb-4 dark:border-gray-700 sm:gap-3 ${className}`}
-    >
+    <div className={`flex shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3 ${className}`}>
       {showMobileBell && (
         <div className="relative" ref={menuRef}>
           <button
@@ -150,6 +149,80 @@ export default function AppHeader({ className = '' }: { className?: string }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Top app bar: mobile-order notifications (bell), theme toggle, signed-in user.
+ * On `/inventory`, the page registers title, tabs, and New SKU here to save vertical space.
+ */
+export default function AppHeader({ className = '' }: { className?: string }) {
+  const { pathname } = useLocation();
+  const inventoryHeader = useInventoryPageHeaderPayload();
+
+  if (pathname === '/inventory' && inventoryHeader) {
+    const { activeTab, setActiveTab, onNewSku, tabs } = inventoryHeader;
+    return (
+      <header
+        className={`mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3 dark:border-gray-700 lg:flex-row lg:items-center lg:gap-4 ${className}`}
+      >
+        <div className="min-w-0 shrink-0 lg:max-w-[14rem]">
+          <h1 className="truncate text-lg font-semibold tracking-tight text-foreground md:text-xl">
+            Inventory Management
+          </h1>
+          <p className="truncate text-xs text-muted-foreground md:text-sm">
+            Enterprise-level stock control and logistics.
+          </p>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <nav
+            className="flex min-h-[2.25rem] min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-lg border border-border/60 bg-muted/30 px-1 py-0.5 dark:border-slate-600/80 dark:bg-slate-900/40 sm:border-0 sm:bg-transparent sm:p-0 dark:sm:bg-transparent"
+            aria-label="Inventory sections"
+          >
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-bold transition-colors sm:gap-2 sm:px-2.5 sm:text-sm ${
+                    isActive
+                      ? 'bg-primary-600 text-white shadow-sm dark:bg-primary-500'
+                      : 'text-muted-foreground hover:bg-muted/80 hover:text-foreground dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {React.cloneElement(tab.icon as React.ReactElement<{ width?: number; height?: number }>, {
+                    width: 16,
+                    height: 16,
+                  })}
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={onNewSku}
+              className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-md shadow-primary-900/20 transition-all hover:bg-primary-700 dark:shadow-primary-950/40"
+            >
+              {ICONS.plus}
+              New SKU
+            </button>
+            <AppHeaderToolbar />
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  return (
+    <header
+      className={`mb-6 flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-gray-200 pb-4 dark:border-gray-700 sm:gap-3 ${className}`}
+    >
+      <AppHeaderToolbar />
     </header>
   );
 }

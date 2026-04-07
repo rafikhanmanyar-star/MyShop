@@ -181,7 +181,11 @@ const ProductSearch: React.FC = () => {
         searchQuery,
         setSearchQuery,
         selectedBranchId,
-        isDenseMode
+        isDenseMode,
+        isPaymentModalOpen,
+        isHeldSalesModalOpen,
+        isCustomerModalOpen,
+        isSalesHistoryModalOpen
     } = usePOS();
     const { items: inventoryItems } = useInventory();
     const inventoryItemsRef = useRef(inventoryItems);
@@ -275,6 +279,72 @@ const ProductSearch: React.FC = () => {
     const searchInputRef = useRef<HTMLInputElement>(null);
     const listRef = useRef<FixedSizeList>(null);
 
+    const focusPosSearch = useCallback(() => {
+        searchInputRef.current?.focus({ preventScroll: true });
+    }, []);
+
+    /** Keep the catalog search focused for keyboard-wedge barcode scanners, except while typing in other fields or in modals. */
+    const shouldRestorePosSearchFocus = useCallback(
+        (target: EventTarget | null) => {
+            if (!(target instanceof Element)) return true;
+            if (isAddSkuModalOpen) return false;
+            if (
+                isPaymentModalOpen ||
+                isHeldSalesModalOpen ||
+                isCustomerModalOpen ||
+                isSalesHistoryModalOpen
+            ) {
+                return false;
+            }
+            if (target.closest('[role="dialog"]')) return false;
+            if (target instanceof HTMLElement && target.isContentEditable) return false;
+
+            if (target.id === 'pos-product-search') return false;
+
+            if (target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) {
+                return false;
+            }
+            if (target instanceof HTMLInputElement) {
+                const t = (target.type || 'text').toLowerCase();
+                const textLike =
+                    t === 'text' ||
+                    t === 'search' ||
+                    t === 'number' ||
+                    t === 'tel' ||
+                    t === 'url' ||
+                    t === 'email' ||
+                    t === 'password' ||
+                    t === '';
+                if (textLike) {
+                    if (target.id === 'tender-amount-input') return false;
+                    if (target.closest('#pos-cart-panel')) return false;
+                    return false;
+                }
+            }
+
+            return true;
+        },
+        [
+            isAddSkuModalOpen,
+            isPaymentModalOpen,
+            isHeldSalesModalOpen,
+            isCustomerModalOpen,
+            isSalesHistoryModalOpen
+        ]
+    );
+
+    useEffect(() => {
+        const onDocClick = (e: MouseEvent) => {
+            if (!shouldRestorePosSearchFocus(e.target)) return;
+            requestAnimationFrame(() => {
+                if (!shouldRestorePosSearchFocus(document.activeElement)) return;
+                focusPosSearch();
+            });
+        };
+        document.addEventListener('click', onDocClick);
+        return () => document.removeEventListener('click', onDocClick);
+    }, [shouldRestorePosSearchFocus, focusPosSearch]);
+
     const loadShopCategories = useCallback(async () => {
         try {
             const list = await getShopCategoriesOfflineFirst();
@@ -326,9 +396,9 @@ const ProductSearch: React.FC = () => {
     }, [loadProducts, loadShopCategories, loadPopularProducts]);
 
     useEffect(() => {
-        const t = window.setTimeout(() => searchInputRef.current?.focus(), 0);
+        const t = window.setTimeout(() => focusPosSearch(), 0);
         return () => clearTimeout(t);
-    }, []);
+    }, [focusPosSearch]);
 
     const categoryTree = useMemo(() => buildCategoryTree(shopCategories), [shopCategories]);
 
@@ -565,6 +635,7 @@ const ProductSearch: React.FC = () => {
             addToCart(currentMatch, undefined, 1);
             setLocalQuery('');
             setSearchQuery('');
+            focusPosSearch();
             setTimeout(() => { justAddedFromBarcodeRef.current = false; }, 500);
         }, 200);
         return () => {
@@ -573,7 +644,7 @@ const ProductSearch: React.FC = () => {
                 barcodeAddTimeoutRef.current = null;
             }
         };
-    }, [localQuery, productsWithStock, addToCart, setSearchQuery]);
+    }, [localQuery, productsWithStock, addToCart, setSearchQuery, focusPosSearch]);
 
     // Virtualized Grid Setup — dense by default; row height sized so content doesn't overlap
     const columnCount = isDenseMode ? 3 : 2;
