@@ -219,7 +219,7 @@ export interface KhataLedgerEntry {
   created_at: string;
   customer_name?: string;
   sale_number?: string;
-  /** Debit rows: amount still owed on this line (after linked credits) */
+  /** Debit rows: amount still owed on this line (linked credits + unlinked credits FIFO) */
   remaining_debit?: number;
   linked_debit_id?: string | null;
 }

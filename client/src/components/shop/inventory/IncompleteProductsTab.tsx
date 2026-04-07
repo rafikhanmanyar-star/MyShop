@@ -74,6 +74,22 @@ function isIncompleteServerProduct(item: InventoryItem): boolean {
     return allIssueLabels(item).length > 0;
 }
 
+/** Which summary card is active; drives table filtering (Incomplete SKUs tab). */
+type SummaryIssueFilter = 'all' | 'image' | 'barcode' | 'name' | 'sku' | 'unit' | 'weak_pricing';
+
+function matchesSummaryFilter(item: InventoryItem, filter: SummaryIssueFilter): boolean {
+    if (filter === 'all') return true;
+    if (filter === 'weak_pricing') return pricingIssueLabels(item).length > 0;
+    const labelByFilter: Record<Exclude<SummaryIssueFilter, 'all' | 'weak_pricing'>, string> = {
+        image: 'Image',
+        barcode: 'Barcode',
+        name: 'Name',
+        sku: 'SKU',
+        unit: 'Unit',
+    };
+    return missingLabels(item).includes(labelByFilter[filter]);
+}
+
 function categoryLabel(categories: { id: string; name: string }[], category: string): string {
     if (category === 'General' || !category) return 'General';
     const c = categories.find((x) => x.id === category);
@@ -84,6 +100,7 @@ const IncompleteProductsTab: React.FC = () => {
     const { items, updateItem } = useInventory();
     const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
     const [search, setSearch] = useState('');
+    const [summaryIssueFilter, setSummaryIssueFilter] = useState<SummaryIssueFilter>('all');
     const [sortKey, setSortKey] = useState<SortKey>('sku');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -146,15 +163,16 @@ const IncompleteProductsTab: React.FC = () => {
     }, [incomplete]);
 
     const filtered = useMemo(() => {
+        const byCard = incomplete.filter((i) => matchesSummaryFilter(i, summaryIssueFilter));
         const q = search.trim().toLowerCase();
-        if (!q) return incomplete;
-        return incomplete.filter(
+        if (!q) return byCard;
+        return byCard.filter(
             (i) =>
                 i.sku.toLowerCase().includes(q) ||
                 i.name.toLowerCase().includes(q) ||
                 (i.barcode && i.barcode.toLowerCase().includes(q))
         );
-    }, [incomplete, search]);
+    }, [incomplete, search, summaryIssueFilter]);
 
     const sorted = useMemo(() => {
         const dir = sortDir === 'asc' ? 1 : -1;
@@ -290,7 +308,17 @@ const IncompleteProductsTab: React.FC = () => {
     return (
         <div className="flex h-full min-h-0 flex-col gap-4">
             <div className="grid flex-shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-                <div className="rounded-xl border border-border bg-card p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/50">
+                <button
+                    type="button"
+                    aria-pressed={summaryIssueFilter === 'all'}
+                    aria-label="Show all SKUs with any issue"
+                    onClick={() => setSummaryIssueFilter('all')}
+                    className={`rounded-xl border bg-card p-4 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:bg-slate-900/50 dark:hover:brightness-110 ${
+                        summaryIssueFilter === 'all'
+                            ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-background dark:ring-offset-slate-800'
+                            : 'border-border dark:border-slate-700'
+                    }`}
+                >
                     <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">SKUs to fix</p>
                     <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{issueStats.totalSkus}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -298,43 +326,103 @@ const IncompleteProductsTab: React.FC = () => {
                             ? `${issueStats.totalIssueFlags} issue${issueStats.totalIssueFlags === 1 ? '' : 's'} total`
                             : 'All clear'}
                     </p>
-                </div>
-                <div className="rounded-xl border border-amber-200/80 bg-amber-50/80 p-4 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/30">
+                </button>
+                <button
+                    type="button"
+                    aria-pressed={summaryIssueFilter === 'image'}
+                    aria-label="Filter by missing image"
+                    onClick={() => setSummaryIssueFilter('image')}
+                    className={`rounded-xl border p-4 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:brightness-110 ${
+                        summaryIssueFilter === 'image'
+                            ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-background dark:ring-offset-slate-800 border-amber-300 dark:border-amber-800'
+                            : 'border-amber-200/80 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/30'
+                    }`}
+                >
                     <p className="text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-200/90">No image</p>
                     <p className="mt-1 text-2xl font-semibold tabular-nums text-amber-950 dark:text-amber-100">
                         {issueStats.missingImage}
                     </p>
                     <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/70">Products affected</p>
-                </div>
-                <div className="rounded-xl border border-sky-200/80 bg-sky-50/80 p-4 shadow-sm dark:border-sky-900/50 dark:bg-sky-950/30">
+                </button>
+                <button
+                    type="button"
+                    aria-pressed={summaryIssueFilter === 'barcode'}
+                    aria-label="Filter by missing barcode"
+                    onClick={() => setSummaryIssueFilter('barcode')}
+                    className={`rounded-xl border p-4 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:brightness-110 ${
+                        summaryIssueFilter === 'barcode'
+                            ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-background dark:ring-offset-slate-800 border-sky-300 dark:border-sky-800'
+                            : 'border-sky-200/80 bg-sky-50/80 dark:border-sky-900/50 dark:bg-sky-950/30'
+                    }`}
+                >
                     <p className="text-[10px] font-bold uppercase tracking-wider text-sky-800 dark:text-sky-200/90">No barcode</p>
                     <p className="mt-1 text-2xl font-semibold tabular-nums text-sky-950 dark:text-sky-100">
                         {issueStats.missingBarcode}
                     </p>
                     <p className="mt-1 text-xs text-sky-800/80 dark:text-sky-200/70">Products affected</p>
-                </div>
-                <div className="rounded-xl border border-violet-200/80 bg-violet-50/80 p-4 shadow-sm dark:border-violet-900/50 dark:bg-violet-950/30">
+                </button>
+                <button
+                    type="button"
+                    aria-pressed={summaryIssueFilter === 'name'}
+                    aria-label="Filter by missing name"
+                    onClick={() => setSummaryIssueFilter('name')}
+                    className={`rounded-xl border p-4 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:brightness-110 ${
+                        summaryIssueFilter === 'name'
+                            ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-background dark:ring-offset-slate-800 border-violet-300 dark:border-violet-800'
+                            : 'border-violet-200/80 bg-violet-50/80 dark:border-violet-900/50 dark:bg-violet-950/30'
+                    }`}
+                >
                     <p className="text-[10px] font-bold uppercase tracking-wider text-violet-800 dark:text-violet-200/90">No name</p>
                     <p className="mt-1 text-2xl font-semibold tabular-nums text-violet-950 dark:text-violet-100">
                         {issueStats.missingName}
                     </p>
                     <p className="mt-1 text-xs text-violet-800/80 dark:text-violet-200/70">Products affected</p>
-                </div>
-                <div className="rounded-xl border border-rose-200/80 bg-rose-50/80 p-4 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/30">
+                </button>
+                <button
+                    type="button"
+                    aria-pressed={summaryIssueFilter === 'sku'}
+                    aria-label="Filter by missing SKU"
+                    onClick={() => setSummaryIssueFilter('sku')}
+                    className={`rounded-xl border p-4 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:brightness-110 ${
+                        summaryIssueFilter === 'sku'
+                            ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-background dark:ring-offset-slate-800 border-rose-300 dark:border-rose-800'
+                            : 'border-rose-200/80 bg-rose-50/80 dark:border-rose-900/50 dark:bg-rose-950/30'
+                    }`}
+                >
                     <p className="text-[10px] font-bold uppercase tracking-wider text-rose-800 dark:text-rose-200/90">No SKU</p>
                     <p className="mt-1 text-2xl font-semibold tabular-nums text-rose-950 dark:text-rose-100">
                         {issueStats.missingSku}
                     </p>
                     <p className="mt-1 text-xs text-rose-800/80 dark:text-rose-200/70">Products affected</p>
-                </div>
-                <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/80 p-4 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
+                </button>
+                <button
+                    type="button"
+                    aria-pressed={summaryIssueFilter === 'unit'}
+                    aria-label="Filter by missing unit"
+                    onClick={() => setSummaryIssueFilter('unit')}
+                    className={`rounded-xl border p-4 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:brightness-110 ${
+                        summaryIssueFilter === 'unit'
+                            ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-background dark:ring-offset-slate-800 border-emerald-300 dark:border-emerald-800'
+                            : 'border-emerald-200/80 bg-emerald-50/80 dark:border-emerald-900/50 dark:bg-emerald-950/30'
+                    }`}
+                >
                     <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-200/90">No unit</p>
                     <p className="mt-1 text-2xl font-semibold tabular-nums text-emerald-950 dark:text-emerald-100">
                         {issueStats.missingUnit}
                     </p>
                     <p className="mt-1 text-xs text-emerald-800/80 dark:text-emerald-200/70">Products affected</p>
-                </div>
-                <div className="rounded-xl border border-orange-200/80 bg-orange-50/80 p-4 shadow-sm dark:border-orange-900/50 dark:bg-orange-950/30">
+                </button>
+                <button
+                    type="button"
+                    aria-pressed={summaryIssueFilter === 'weak_pricing'}
+                    aria-label="Filter by weak pricing"
+                    onClick={() => setSummaryIssueFilter('weak_pricing')}
+                    className={`rounded-xl border p-4 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:brightness-110 ${
+                        summaryIssueFilter === 'weak_pricing'
+                            ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-background dark:ring-offset-slate-800 border-orange-300 dark:border-orange-800'
+                            : 'border-orange-200/80 bg-orange-50/80 dark:border-orange-900/50 dark:bg-orange-950/30'
+                    }`}
+                >
                     <p className="text-[10px] font-bold uppercase tracking-wider text-orange-800 dark:text-orange-200/90">
                         Weak pricing
                     </p>
@@ -346,7 +434,7 @@ const IncompleteProductsTab: React.FC = () => {
                             ? 'Retail above cost, margin at least 5%'
                             : `${issueStats.pricingRetailLteCost} retail ≤ cost · ${issueStats.pricingLowMargin} margin under 5%`}
                     </p>
-                </div>
+                </button>
             </div>
             <p className="flex-shrink-0 text-xs text-muted-foreground">
                 Per-issue counts can add up to more than “SKUs to fix” because one product may have several gaps at once. Weak
@@ -399,7 +487,11 @@ const IncompleteProductsTab: React.FC = () => {
                                     <td colSpan={12} className="px-6 py-16 text-center text-sm text-muted-foreground">
                                         {incomplete.length === 0
                                             ? 'No issues — field data is complete and retail is above cost with at least 5% gross margin on retail (where prices apply).'
-                                            : 'No rows match your search.'}
+                                            : search.trim() !== ''
+                                              ? 'No rows match your search.'
+                                              : summaryIssueFilter !== 'all'
+                                                ? 'No SKUs match this issue filter.'
+                                                : 'No rows match your search.'}
                                     </td>
                                 </tr>
                             ) : (

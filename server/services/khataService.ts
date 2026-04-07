@@ -33,6 +33,53 @@ export function getKhataService(): KhataService {
   return instance;
 }
 
+/**
+ * Per-debit remaining balance: linked credits first, then unallocated credits
+ * applied FIFO (oldest debits first). Matches how balances net out when payments
+ * are recorded without applyToLedgerId.
+ */
+function computeDebitRemainingById(
+  rows: Array<{
+    id: string;
+    type: string;
+    amount: unknown;
+    linked_debit_id: string | null;
+    created_at: string | Date;
+  }>
+): Map<string, number> {
+  const sorted = [...rows].sort((a, b) => {
+    const ta = new Date(a.created_at).getTime();
+    const tb = new Date(b.created_at).getTime();
+    if (ta !== tb) return ta - tb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+  const linkedSum = new Map<string, number>();
+  for (const row of sorted) {
+    if (row.type !== 'credit') continue;
+    const amt = Number(row.amount);
+    if (!row.linked_debit_id) continue;
+    const k = row.linked_debit_id;
+    linkedSum.set(k, (linkedSum.get(k) || 0) + amt);
+  }
+  let unlinkedPool = 0;
+  for (const row of sorted) {
+    if (row.type !== 'credit' || row.linked_debit_id) continue;
+    unlinkedPool += Number(row.amount);
+  }
+  unlinkedPool = Math.round(unlinkedPool * 100) / 100;
+  const out = new Map<string, number>();
+  for (const row of sorted) {
+    if (row.type !== 'debit') continue;
+    let r = Number(row.amount) - (linkedSum.get(row.id) || 0);
+    r = Math.max(0, Math.round(r * 100) / 100);
+    const take = Math.min(r, unlinkedPool);
+    r = Math.round((r - take) * 100) / 100;
+    unlinkedPool = Math.round((unlinkedPool - take) * 100) / 100;
+    out.set(row.id, Math.max(0, r));
+  }
+  return out;
+}
+
 export class KhataService {
   private db = getDatabaseService();
 
@@ -76,14 +123,14 @@ export class KhataService {
         const row = deb[0] as { type: string; amount: unknown; customer_id: string };
         if (row.type !== 'debit') throw new Error('Payment can only be applied to a debit line');
         if (row.customer_id !== params.customerId) throw new Error('Debit line does not belong to this customer');
-        const debitAmt = Number(row.amount);
-        const paid = await client.query(
-          `SELECT COALESCE(SUM(amount), 0)::numeric AS s FROM khata_ledger
-           WHERE tenant_id = $1 AND linked_debit_id = $2 AND type = 'credit'`,
-          [tenantId, linkedDebitId]
+        const fifoRows = await client.query(
+          `SELECT id, type, amount, linked_debit_id, created_at FROM khata_ledger
+           WHERE tenant_id = $1 AND customer_id = $2
+           ORDER BY created_at ASC, id ASC`,
+          [tenantId, params.customerId]
         );
-        const alreadyPaid = Number((paid[0] as any)?.s ?? 0);
-        const remaining = Math.round((debitAmt - alreadyPaid) * 100) / 100;
+        const fifoRemaining = computeDebitRemainingById(fifoRows as any[]);
+        const remaining = Math.round((fifoRemaining.get(linkedDebitId) ?? 0) * 100) / 100;
         if (remaining <= 0) throw new Error('This debit is already fully paid');
         if (params.amount > remaining + 0.01) {
           throw new Error(`Amount exceeds remaining balance for this line (${remaining.toFixed(2)})`);
@@ -155,25 +202,23 @@ export class KhataService {
   }
 
   async getLedger(tenantId: string, customerId?: string): Promise<KhataLedgerEntry[]> {
+    const baseSelect = `
+        SELECT k.id, k.customer_id, k.order_id, k.type, k.amount, k.note, k.created_at,
+               k.linked_debit_id,
+               c.name AS customer_name, s.sale_number
+        FROM khata_ledger k
+        LEFT JOIN contacts c ON c.id = k.customer_id AND c.tenant_id = k.tenant_id
+        LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
+    `;
     if (customerId) {
       const rows = await this.db.query(
-        `SELECT k.id, k.customer_id, k.order_id, k.type, k.amount, k.note, k.created_at,
-                k.linked_debit_id,
-                c.name AS customer_name, s.sale_number,
-                CASE WHEN k.type = 'debit' THEN
-                  ROUND((k.amount::numeric - COALESCE((
-                    SELECT SUM(c2.amount::numeric) FROM khata_ledger c2
-                    WHERE c2.tenant_id = k.tenant_id AND c2.linked_debit_id = k.id AND c2.type = 'credit'
-                  ), 0))::numeric, 2)
-                ELSE NULL END AS remaining_debit
-         FROM khata_ledger k
-         LEFT JOIN contacts c ON c.id = k.customer_id AND c.tenant_id = k.tenant_id
-         LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
+        `${baseSelect}
          WHERE k.tenant_id = $1 AND k.customer_id = $2
-         ORDER BY k.created_at DESC`,
+         ORDER BY k.created_at ASC, k.id ASC`,
         [tenantId, customerId]
       );
-      return rows.map((r: any) => ({
+      const remainingById = computeDebitRemainingById(rows as any[]);
+      const mapped = (rows as any[]).map((r) => ({
         id: r.id,
         customer_id: r.customer_id,
         order_id: r.order_id,
@@ -184,27 +229,34 @@ export class KhataService {
         customer_name: r.customer_name,
         sale_number: r.sale_number,
         linked_debit_id: r.linked_debit_id ?? null,
-        remaining_debit: r.type === 'debit' && r.remaining_debit != null ? Math.max(0, Number(r.remaining_debit)) : undefined,
+        remaining_debit: r.type === 'debit' ? Math.max(0, remainingById.get(r.id) ?? 0) : undefined,
       }));
+      mapped.sort((a, b) => {
+        const ta = new Date(a.created_at).getTime();
+        const tb = new Date(b.created_at).getTime();
+        if (ta !== tb) return tb - ta;
+        return String(b.id).localeCompare(String(a.id));
+      });
+      return mapped;
     }
     const rows = await this.db.query(
-      `SELECT k.id, k.customer_id, k.order_id, k.type, k.amount, k.note, k.created_at,
-              k.linked_debit_id,
-              c.name AS customer_name, s.sale_number,
-              CASE WHEN k.type = 'debit' THEN
-                ROUND((k.amount::numeric - COALESCE((
-                  SELECT SUM(c2.amount::numeric) FROM khata_ledger c2
-                  WHERE c2.tenant_id = k.tenant_id AND c2.linked_debit_id = k.id AND c2.type = 'credit'
-                ), 0))::numeric, 2)
-              ELSE NULL END AS remaining_debit
-       FROM khata_ledger k
-       LEFT JOIN contacts c ON c.id = k.customer_id AND c.tenant_id = k.tenant_id
-       LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
+      `${baseSelect}
        WHERE k.tenant_id = $1
-       ORDER BY k.created_at DESC`,
+       ORDER BY k.customer_id, k.created_at ASC, k.id ASC`,
       [tenantId]
     );
-    return rows.map((r: any) => ({
+    const byCustomer = new Map<string, any[]>();
+    for (const r of rows as any[]) {
+      const cid = r.customer_id as string;
+      if (!byCustomer.has(cid)) byCustomer.set(cid, []);
+      byCustomer.get(cid)!.push(r);
+    }
+    const remainingById = new Map<string, number>();
+    for (const list of byCustomer.values()) {
+      const m = computeDebitRemainingById(list);
+      for (const [id, rem] of m) remainingById.set(id, rem);
+    }
+    const mapped = (rows as any[]).map((r) => ({
       id: r.id,
       customer_id: r.customer_id,
       order_id: r.order_id,
@@ -215,8 +267,15 @@ export class KhataService {
       customer_name: r.customer_name,
       sale_number: r.sale_number,
       linked_debit_id: r.linked_debit_id ?? null,
-      remaining_debit: r.type === 'debit' && r.remaining_debit != null ? Math.max(0, Number(r.remaining_debit)) : undefined,
+      remaining_debit: r.type === 'debit' ? Math.max(0, remainingById.get(r.id) ?? 0) : undefined,
     }));
+    mapped.sort((a, b) => {
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
+      if (ta !== tb) return tb - ta;
+      return String(b.id).localeCompare(String(a.id));
+    });
+    return mapped;
   }
 
   async getBalance(tenantId: string, customerId: string): Promise<number> {

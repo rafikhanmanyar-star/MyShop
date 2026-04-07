@@ -241,11 +241,23 @@ const KhataPage: React.FC = () => {
 
   const totalBalance = summary.reduce((s, r) => s + r.balance, 0);
 
+  const PAID_EPS = 0.009;
+
   const debitRemaining = (entry: KhataLedgerEntry): number => {
     if (entry.type !== 'debit') return 0;
     const r = entry.remaining_debit;
     if (typeof r === 'number' && Number.isFinite(r)) return Math.max(0, r);
     return entry.amount;
+  };
+
+  /** Paid / partial / open — uses remaining on the line (includes FIFO unlinked credits). */
+  const debitLineStatus = (entry: KhataLedgerEntry): 'paid' | 'partial' | 'open' | null => {
+    if (entry.type !== 'debit') return null;
+    const rem = debitRemaining(entry);
+    const amt = entry.amount;
+    if (rem <= PAID_EPS) return 'paid';
+    if (rem >= amt - PAID_EPS) return 'open';
+    return 'partial';
   };
 
   return (
@@ -363,6 +375,7 @@ const KhataPage: React.FC = () => {
                       <tr>
                         <th className="px-4 py-3">Date</th>
                         <th className="px-4 py-3">Type</th>
+                        <th className="px-4 py-3">Status</th>
                         <th className="px-4 py-3">Reference</th>
                         <th className="px-4 py-3 text-right">Amount</th>
                         <th className="px-4 py-3 text-right w-[1%] whitespace-nowrap">Actions</th>
@@ -379,6 +392,34 @@ const KhataPage: React.FC = () => {
                               {entry.type === 'debit' ? 'Debit' : 'Credit'}
                             </span>
                           </td>
+                          <td className="px-4 py-3">
+                            {entry.type === 'credit' ? (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            ) : (
+                              (() => {
+                                const st = debitLineStatus(entry);
+                                if (st === 'paid') {
+                                  return (
+                                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                      Paid
+                                    </span>
+                                  );
+                                }
+                                if (st === 'partial') {
+                                  return (
+                                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
+                                      Partial
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="inline-flex items-center rounded-full border border-border bg-muted/80 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                                    Open
+                                  </span>
+                                );
+                              })()
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-muted-foreground">
                             <div>{entry.note || entry.sale_number || '—'}</div>
                             {entry.type === 'credit' && entry.linked_debit_id && (
@@ -387,19 +428,16 @@ const KhataPage: React.FC = () => {
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-bold">
                             {entry.type === 'debit' ? '+' : '-'}{CURRENCY} {entry.amount.toLocaleString()}
-                            {entry.type === 'debit' && (
+                            {entry.type === 'debit' && debitLineStatus(entry) !== 'paid' && (
                               <div className="text-[10px] font-normal text-muted-foreground mt-0.5">
-                                {debitRemaining(entry) <= 0.009 ? (
-                                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Paid</span>
-                                ) : (
-                                  <>Due {CURRENCY} {debitRemaining(entry).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>
-                                )}
+                                Due {CURRENCY}{' '}
+                                {debitRemaining(entry).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </div>
                             )}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="inline-flex flex-wrap items-center justify-end gap-1">
-                              {entry.type === 'debit' && debitRemaining(entry) > 0.009 && (
+                              {entry.type === 'debit' && debitLineStatus(entry) !== 'paid' && (
                                 <button
                                   type="button"
                                   onClick={() => openReceiveModalFromEntry(entry)}
