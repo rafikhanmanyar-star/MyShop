@@ -18,6 +18,7 @@ export interface DailyReportSummary {
   khataCreditTotal: number;
   khataNetChange: number;
   khataEntryCount: number;
+  /** Line margin for the day: POS + mobile sale lines minus same-day return impact (sale − unit cost × qty). */
   netProfitDaily: number;
 }
 
@@ -113,6 +114,72 @@ export class DailyReportService {
     const khataEntryCount = parseInt(khata[0]?.n || '0', 10) || 0;
     const khataNetChange = khataDebitTotal - khataCreditTotal;
 
+    const posLineMargin = await db.query<{ s: string }>(
+      `SELECT COALESCE(SUM(
+          si.subtotal::numeric
+          - si.quantity::numeric * COALESCE(
+              si.unit_cost_at_sale,
+              NULLIF(p.average_cost, 0),
+              p.cost_price,
+              0
+            )::numeric
+        ), 0)::text AS s
+       FROM shop_sale_items si
+       JOIN shop_sales s ON s.id = si.sale_id AND s.tenant_id = si.tenant_id
+       JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
+       WHERE si.tenant_id = $1 AND s.created_at >= $2::timestamptz AND s.created_at < $3::timestamptz
+       ${branchId ? 'AND s.branch_id = $4' : ''}`,
+      branchId ? [tenantId, start, end, branchId] : [tenantId, start, end]
+    );
+
+    const mobileLineMargin = await db.query<{ s: string }>(
+      `SELECT COALESCE(SUM(
+          oi.subtotal::numeric
+          - oi.quantity::numeric * COALESCE(
+              oi.unit_cost_at_sale,
+              NULLIF(p.average_cost, 0),
+              p.cost_price,
+              0
+            )::numeric
+        ), 0)::text AS s
+       FROM mobile_order_items oi
+       JOIN mobile_orders mo ON mo.id = oi.order_id AND mo.tenant_id = oi.tenant_id
+       JOIN shop_products p ON p.id = oi.product_id AND p.tenant_id = oi.tenant_id
+       WHERE oi.tenant_id = $1 AND mo.created_at >= $2::timestamptz AND mo.created_at < $3::timestamptz
+         AND mo.status <> 'Cancelled'
+       ${branchId ? 'AND mo.branch_id = $4' : ''}`,
+      branchId ? [tenantId, start, end, branchId] : [tenantId, start, end]
+    );
+
+    const returnMarginImpact = await db.query<{ s: string }>(
+      `SELECT COALESCE(SUM(
+          ri.total_price::numeric
+          - ri.quantity::numeric * COALESCE(
+              CASE
+                WHEN ri.sale_line_item_id IS NOT NULL THEN
+                  COALESCE(osi.unit_cost_at_sale, NULLIF(pr.average_cost, 0), pr.cost_price, 0)::numeric
+                ELSE
+                  COALESCE(omi.unit_cost_at_sale, NULLIF(pm.average_cost, 0), pm.cost_price, 0)::numeric
+              END,
+              0
+            )
+        ), 0)::text AS s
+       FROM shop_sales_return_items ri
+       JOIN shop_sales_returns r ON r.id = ri.sales_return_id AND r.tenant_id = ri.tenant_id
+       LEFT JOIN shop_sale_items osi ON osi.id = ri.sale_line_item_id AND osi.tenant_id = ri.tenant_id
+       LEFT JOIN shop_products pr ON pr.id = osi.product_id AND pr.tenant_id = ri.tenant_id
+       LEFT JOIN mobile_order_items omi ON omi.id = ri.mobile_order_line_item_id AND omi.tenant_id = ri.tenant_id
+       LEFT JOIN shop_products pm ON pm.id = omi.product_id AND pm.tenant_id = ri.tenant_id
+       WHERE ri.tenant_id = $1 AND r.return_date >= $2::timestamptz AND r.return_date < $3::timestamptz
+       ${branchId ? 'AND r.branch_id = $4' : ''}`,
+      branchId ? [tenantId, start, end, branchId] : [tenantId, start, end]
+    );
+
+    const posM = parseFloat(posLineMargin[0]?.s || '0') || 0;
+    const mobM = parseFloat(mobileLineMargin[0]?.s || '0') || 0;
+    const retM = parseFloat(returnMarginImpact[0]?.s || '0') || 0;
+    const netProfitDaily = posM + mobM - retM;
+
     return {
       date: dateStr,
       branchId,
@@ -128,7 +195,7 @@ export class DailyReportService {
       khataCreditTotal,
       khataNetChange,
       khataEntryCount,
-      netProfitDaily: netPosSales + mobileSales - totalExpenses,
+      netProfitDaily,
     };
   }
 

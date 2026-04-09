@@ -320,7 +320,9 @@ const DailyReportDashboard: React.FC = () => {
           <div className="text-2xl font-semibold text-emerald-900 dark:text-emerald-200 mt-1">
             {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.netProfitDaily ?? 0)}`}
           </div>
-          <div className="text-xs text-emerald-800/80 dark:text-emerald-300/90 mt-1">POS + Mobile sales − expenses (same day)</div>
+          <div className="text-xs text-emerald-800/80 dark:text-emerald-300/90 mt-1">
+            Line margin: sale subtotal − cost (unit snapshot or product cost); same-day returns reduce margin.
+          </div>
         </div>
       </div>
     </ReportShell>
