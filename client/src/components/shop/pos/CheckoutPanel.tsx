@@ -3,6 +3,8 @@ import { usePOS } from '../../../context/POSContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import { POSPaymentMethod } from '../../../types/pos';
 import { shopApi, ShopBankAccount } from '../../../services/shopApi';
+import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
+import { showAppToast } from '../../../utils/appToast';
 import CustomerSelectionModal from './CustomerSelectionModal';
 import type { CheckoutPanelHandle } from './usePosKeyboard';
 
@@ -45,8 +47,11 @@ const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, 
                 const list = await shopApi.getBankAccounts(true);
                 setBankAccounts(Array.isArray(list) ? list : []);
                 setSelectedBankId(prev => (list?.length && (!prev || !list.some((b: ShopBankAccount) => b.id === prev))) ? list[0].id : prev);
-            } catch {
+            } catch (e) {
                 setBankAccounts([]);
+                if (isApiConnectivityFailure(e)) {
+                    showAppToast(userMessageForApiError(e, 'Could not load bank accounts.'), 'error');
+                }
             }
         };
         loadBanks();

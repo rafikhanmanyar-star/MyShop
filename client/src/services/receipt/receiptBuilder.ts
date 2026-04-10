@@ -21,6 +21,11 @@ export interface ReceiptSettings {
   mobile_qr_data_url?: string | null;
   /** Mobile order URL (server may include with receipt settings for preview/print) */
   mobile_order_url?: string | null;
+  /** Printable margins in millimeters (thermal printers often need extra margin_right_mm) */
+  margin_top_mm?: number;
+  margin_bottom_mm?: number;
+  margin_left_mm?: number;
+  margin_right_mm?: number;
 }
 
 export interface ReceiptSaleData {
@@ -63,7 +68,17 @@ const DEFAULT_SETTINGS: ReceiptSettings = {
   show_cashier_name: true,
   show_shift_number: true,
   footer_message: null,
+  margin_top_mm: 2,
+  margin_bottom_mm: 2,
+  margin_left_mm: 2,
+  margin_right_mm: 4,
 };
+
+function clampMarginMm(v: unknown, fallback: number): number {
+  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(25, Math.max(0, n));
+}
 
 function escapeHtml(s: string): string {
   return String(s)
@@ -85,7 +100,11 @@ export function generateReceiptHTML(
   const barcodeType = (s.barcode_type === 'CODE39' || s.barcode_type === 'EAN13') ? s.barcode_type : 'CODE128';
   const barcodePosition = s.barcode_position === 'header' ? 'header' : 'footer';
   const widthMm = s.receipt_width === '58mm' ? 58 : 80;
-  const bodyWidth = widthMm - 8;
+  const mt = clampMarginMm(s.margin_top_mm, DEFAULT_SETTINGS.margin_top_mm!);
+  const mr = clampMarginMm(s.margin_right_mm, DEFAULT_SETTINGS.margin_right_mm!);
+  const mb = clampMarginMm(s.margin_bottom_mm, DEFAULT_SETTINGS.margin_bottom_mm!);
+  const ml = clampMarginMm(s.margin_left_mm, DEFAULT_SETTINGS.margin_left_mm!);
+  const contentWidthMm = Math.max(24, widthMm - ml - mr);
   const reprintLabel = (saleData.reprint_count ?? 0) > 0 ? '*** DUPLICATE COPY ***' : '';
 
   let barcodeDataUrl: string | null = null;
@@ -93,13 +112,13 @@ export function generateReceiptHTML(
     barcodeDataUrl = generateBarcodeBase64(saleData.barcode_value, barcodeType);
   }
 
-  let barcodeMaxWidth = Math.min(bodyWidth - 4, 50);
+  let barcodeMaxWidth = Math.min(contentWidthMm - 2, 50);
   let barcodeMinHeight = '18px';
   if (s.barcode_size === 'small') {
-    barcodeMaxWidth = Math.min(bodyWidth - 4, 35);
+    barcodeMaxWidth = Math.min(contentWidthMm - 2, 35);
     barcodeMinHeight = '12px';
   } else if (s.barcode_size === 'large') {
-    barcodeMaxWidth = Math.min(bodyWidth - 4, 75);
+    barcodeMaxWidth = Math.min(contentWidthMm - 2, 75);
     barcodeMinHeight = '24px';
   }
 
@@ -113,7 +132,7 @@ export function generateReceiptHTML(
 
   const logoBlock =
     s.show_logo && saleData.logoUrl
-      ? `<div style="text-align:center;margin-bottom:1mm;"><img src="${escapeHtml(saleData.logoUrl)}" alt="Logo" style="max-width:${bodyWidth - 4}mm;max-height:15mm;" /></div>`
+      ? `<div style="text-align:center;margin-bottom:1mm;"><img src="${escapeHtml(saleData.logoUrl)}" alt="Logo" style="max-width:${contentWidthMm - 2}mm;max-height:15mm;" /></div>`
       : '';
 
   const shopName = escapeHtml(saleData.storeName || 'My Shop');
@@ -138,7 +157,7 @@ export function generateReceiptHTML(
   const itemsRows = saleData.items
     .map(
       (item) =>
-        `<tr><td style="padding:0.5mm 0;line-height:1.1;word-wrap:break-word;max-width:${bodyWidth * 0.45}mm;">${escapeHtml(item.name)}</td><td style="text-align:center;padding:0.5mm 0;">${item.quantity}</td><td style="text-align:right;padding:0.5mm 0;">${Number(item.unitPrice).toLocaleString()}</td><td style="text-align:right;padding:0.5mm 0;">${Number(item.total).toLocaleString()}</td></tr>`
+        `<tr><td style="padding:0.5mm 0;line-height:1.1;word-wrap:break-word;max-width:${contentWidthMm * 0.42}mm;">${escapeHtml(item.name)}</td><td style="text-align:center;padding:0.5mm 0;">${item.quantity}</td><td style="text-align:right;padding:0.5mm 0;">${Number(item.unitPrice).toLocaleString()}</td><td style="text-align:right;padding:0.5mm 0;">${Number(item.total).toLocaleString()}</td></tr>`
     )
     .join('');
 
@@ -171,13 +190,12 @@ export function generateReceiptHTML(
     : '';
 
   const pageSize = s.receipt_width === '58mm' ? '58mm auto' : '80mm auto';
-  const bodyPadding = '2mm';
   const fontSize = widthMm === 58 ? '9px' : '10px';
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-@page { size: ${pageSize}; margin: 0; }
-html, body { min-height: 100vh; overflow: visible; display: block; margin: 0 auto; }
-body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: ${bodyWidth}mm; padding: ${bodyPadding}; font-size: ${fontSize}; line-height: 1.1; color: #000; background: #fff; box-sizing: border-box; }
+@page { size: ${pageSize}; margin: ${mt}mm ${mr}mm ${mb}mm ${ml}mm; }
+html, body { min-height: 100vh; overflow: visible; display: block; margin: 0; padding: 0; width: 100%; }
+body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 100%; font-size: ${fontSize}; line-height: 1.1; color: #000; background: #fff; box-sizing: border-box; }
 * { box-sizing: border-box; }
 .text-center { text-align: center; }
 .font-bold { font-weight: bold; }

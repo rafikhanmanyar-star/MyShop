@@ -5,6 +5,8 @@ export interface ApiError {
   error: string;
   message?: string;
   status?: number;
+  /** True when the failure is likely unreachable server / restart / bad gateway (not app-level validation). */
+  connectivity?: boolean;
 }
 
 class ApiClient {
@@ -99,13 +101,14 @@ class ApiClient {
       if (!contentType || !contentType.includes('application/json')) {
         if (!response.ok) {
           const statusMessages: Record<number, string> = {
-            502: 'Server is temporarily unavailable (Bad Gateway). Please try again.',
-            503: 'Server is currently overloaded. Please try again in a moment.',
-            504: 'Request timed out. The server took too long to respond.',
+            502: 'API server is unreachable or restarting (bad gateway). Please try again shortly.',
+            503: 'API server is temporarily unavailable. It may be restarting—please try again in a moment.',
+            504: 'Request timed out. The API server may be slow or restarting.',
           };
           const friendlyMsg = statusMessages[response.status]
             || `Server returned an unexpected response (HTTP ${response.status}).`;
-          throw { error: friendlyMsg, message: friendlyMsg, status: response.status };
+          const connectivity = response.status === 502 || response.status === 503 || response.status === 504;
+          throw { error: friendlyMsg, message: friendlyMsg, status: response.status, connectivity };
         }
         return {} as T;
       }
@@ -124,11 +127,14 @@ class ApiClient {
       }
 
       if (!response.ok) {
+        const connectivity =
+          response.status === 502 || response.status === 503 || response.status === 504;
         throw {
           error: responseData.error || 'Request failed',
           message: responseData.message,
           status: response.status,
           lockedBy: responseData.lockedBy,
+          connectivity,
         };
       }
 
@@ -146,7 +152,14 @@ class ApiClient {
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.name === 'TypeError') {
-          throw { error: 'NetworkError', message: 'No internet connection.', status: 0 };
+          const msg =
+            'Cannot reach the API server. It may be restarting or offline, or you may have no network connection.';
+          throw {
+            error: 'NetworkError',
+            message: msg,
+            status: 0,
+            connectivity: true,
+          };
         }
       }
       throw error;

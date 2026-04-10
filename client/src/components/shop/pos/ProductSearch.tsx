@@ -2,17 +2,19 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { usePOS } from '../../../context/POSContext';
 import { useInventory } from '../../../context/InventoryContext';
 import { ICONS, CURRENCY } from '../../../constants';
-import { POSProduct } from '../../../types/pos';
+import { POSProduct, POSProductVariant } from '../../../types/pos';
 import { InventoryItem } from '../../../types/inventory';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import { getFullImageUrl } from '../../../config/apiUrl';
 import CachedImage from '../../ui/CachedImage';
-import { FixedSizeList } from 'react-window';
+import { FixedSizeList, ListChildComponentProps } from 'react-window';
 import Fuse from 'fuse.js';
 import { debounce } from 'lodash-es';
 import AddOrEditSkuModal from './AddOrEditSkuModal';
 import { POSColumnResizeHandle } from './POSColumnResizeHandle';
+import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
+import { showAppToast } from '../../../utils/appToast';
 
 const POS_CATEGORY_TREE_VISIBLE_KEY = 'pos-category-tree-visible';
 const POS_CATEGORY_TREE_W_KEY = 'pos-category-tree-w-px';
@@ -117,6 +119,34 @@ function mapInventoryItemToPOS(item: InventoryItem): POSProduct {
     };
 }
 
+/** When catalog is API-backed but inventory row is missing, still open the SKU editor from grid data. */
+function posProductToInventoryStub(p: POSProduct): InventoryItem {
+    return {
+        id: p.id,
+        sku: p.sku,
+        barcode: p.barcode || undefined,
+        name: p.name,
+        category: p.categoryId || 'General',
+        unit: p.unit || 'pcs',
+        onHand: p.stockLevel,
+        available: p.stockLevel,
+        reserved: 0,
+        inTransit: 0,
+        damaged: 0,
+        costPrice: p.cost,
+        retailPrice: p.price,
+        reorderPoint: p.reorderPoint ?? 10,
+        imageUrl: p.imageUrl,
+        description: undefined,
+        warehouseStock: {}
+    };
+}
+
+type SkuModalState =
+    | { open: false }
+    | { open: true; kind: 'add'; initialQuery: string }
+    | { open: true; kind: 'edit'; product: POSProduct };
+
 const CategoryTreeBranch: React.FC<{
     nodes: CategoryTreeNode[];
     depth: number;
@@ -175,6 +205,78 @@ const CategoryTreeBranch: React.FC<{
     </>
 );
 
+/** Stable row renderer for react-window — must not be defined inside ProductSearch or the list "blinks" on every parent re-render (e.g. cart updates). */
+type POSProductGridRowData = {
+    filteredProducts: POSProduct[];
+    columnCount: number;
+    keyboardIndex: number;
+    isDenseMode: boolean;
+    addToCart: (product: POSProduct, variant?: POSProductVariant, quantity?: number) => void;
+    onProductContextMenu: (e: React.MouseEvent, product: POSProduct) => void;
+};
+
+const POS_PRODUCT_GRID_PASTELS = ['bg-[#eef2ff]', 'bg-[#fef3c7]', 'bg-[#e0f2fe]', 'bg-[#fce7f3]'];
+
+function POSProductGridRow({ index, style, data }: ListChildComponentProps<POSProductGridRowData>) {
+    const { filteredProducts, columnCount, keyboardIndex, isDenseMode, addToCart, onProductContextMenu } = data;
+    const rowItems: React.ReactNode[] = [];
+    const cellClass = columnCount === 2 ? 'flex-[0_0_50%] min-w-0 max-w-[50%]' : 'flex-[0_0_33.333%] min-w-0 max-w-[33.333%]';
+    for (let i = 0; i < columnCount; i++) {
+        const itemIndex = index * columnCount + i;
+        if (itemIndex < filteredProducts.length) {
+            const product = filteredProducts[itemIndex];
+            const isSelected = keyboardIndex === itemIndex;
+            const bgClass = POS_PRODUCT_GRID_PASTELS[itemIndex % POS_PRODUCT_GRID_PASTELS.length];
+            rowItems.push(
+                <div
+                    key={product.id}
+                    className={`p-2 ${cellClass}`}
+                    onContextMenu={(e) => onProductContextMenu(e, product)}
+                >
+                    <button
+                        type="button"
+                        onClick={() => product.stockLevel > 0 && addToCart(product)}
+                        disabled={product.stockLevel <= 0}
+                        className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white dark:bg-slate-800 border rounded-[10px] text-left transition-all overflow-hidden shadow-sm ${product.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed border-slate-100 dark:border-slate-700' : 'hover:border-[#0056b3]/40 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]'} ${isSelected ? 'border-[#0056b3] ring-2 ring-[#0056b3]/15' : 'border-slate-200/90 dark:border-slate-700'
+                            }`}
+                    >
+                        <div className={`w-full flex-shrink-0 ${bgClass} dark:bg-slate-700/80 rounded-[8px] flex items-center justify-center border border-white/50 dark:border-slate-600 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
+                            {product.imageUrl ? (
+                                <CachedImage path={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
+                            ) : (
+                                <div className="text-slate-300 dark:text-slate-500">
+                                    {React.cloneElement(ICONS.package as any, { size: isDenseMode ? 24 : 40 })}
+                                </div>
+                            )}
+                            {product.stockLevel <= (product.reorderPoint || 10) && (
+                                <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-[6px] text-xs font-bold uppercase tracking-wider shadow-sm ${product.stockLevel <= 0 ? 'bg-slate-800 text-white' : 'bg-[#fee2e2] text-[#991b1b] dark:bg-rose-950/80 dark:text-rose-200'}`}>
+                                    {product.stockLevel <= 0 ? 'Out' : `Low: ${product.stockLevel}`}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className={`flex-shrink-0 font-semibold text-slate-900 dark:text-slate-200 line-clamp-2 leading-tight mt-2 min-h-0 ${isDenseMode ? 'text-xs h-[1.75rem]' : 'text-sm h-[2.5rem]'}`}>
+                            {product.name}
+                        </div>
+
+                        <div className="flex flex-shrink-0 items-center justify-between mt-1">
+                            <span className={`font-bold text-[#0056b3] dark:text-blue-400 truncate ${isDenseMode ? 'text-xs' : 'text-sm'}`}>
+                                {CURRENCY}{product.price.toLocaleString()}
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
+                                Stock: {product.stockLevel}
+                            </span>
+                        </div>
+                    </button>
+                </div>
+            );
+        } else {
+            rowItems.push(<div key={`empty-${i}`} className={`p-2 ${cellClass}`}></div>);
+        }
+    }
+    return <div style={style} className="flex px-3 min-h-0 overflow-hidden">{rowItems}</div>;
+}
+
 const ProductSearch: React.FC = () => {
     const {
         addToCart,
@@ -199,7 +301,12 @@ const ProductSearch: React.FC = () => {
     const [loadError, setLoadError] = useState<string | null>(null);
     const [keyboardIndex, setKeyboardIndex] = useState(-1);
     const [showFilters, setShowFilters] = useState(false);
-    const [isAddSkuModalOpen, setIsAddSkuModalOpen] = useState(false);
+    const [skuModal, setSkuModal] = useState<SkuModalState>({ open: false });
+    const [productContextMenu, setProductContextMenu] = useState<{
+        x: number;
+        y: number;
+        product: POSProduct;
+    } | null>(null);
 
     const [categoryTreeVisible, setCategoryTreeVisible] = useState(() => {
         try {
@@ -287,7 +394,7 @@ const ProductSearch: React.FC = () => {
     const shouldRestorePosSearchFocus = useCallback(
         (target: EventTarget | null) => {
             if (!(target instanceof Element)) return true;
-            if (isAddSkuModalOpen) return false;
+            if (skuModal.open) return false;
             if (
                 isPaymentModalOpen ||
                 isHeldSalesModalOpen ||
@@ -325,7 +432,7 @@ const ProductSearch: React.FC = () => {
             return true;
         },
         [
-            isAddSkuModalOpen,
+            skuModal.open,
             isPaymentModalOpen,
             isHeldSalesModalOpen,
             isCustomerModalOpen,
@@ -369,8 +476,15 @@ const ProductSearch: React.FC = () => {
             if (fallback?.length) {
                 setProducts(fallback.map(mapInventoryItemToPOS));
                 setLoadError(null);
+                if (isApiConnectivityFailure(error)) {
+                    showAppToast(
+                        userMessageForApiError(error, 'Product list could not be refreshed from the server; showing cached inventory.'),
+                        'error',
+                        6000
+                    );
+                }
             } else {
-                setLoadError('Unable to load products.');
+                setLoadError(userMessageForApiError(error, 'Unable to load products.'));
                 setProducts([]);
             }
         } finally {
@@ -386,6 +500,9 @@ const ProductSearch: React.FC = () => {
             }
         } catch (error) {
             console.error('Failed to load popular products:', error);
+            if (isApiConnectivityFailure(error)) {
+                showAppToast(userMessageForApiError(error, 'Could not load fast-moving products.'), 'error');
+            }
         }
     }, []);
 
@@ -428,7 +545,7 @@ const ProductSearch: React.FC = () => {
         return getDescendantCategoryIds(shopCategories, selectedCategory);
     }, [selectedCategory, shopCategories]);
 
-    // Merge inventory stock into products so POS shows correct stock (branch-specific when branch selected)
+    // Merge inventory into products: stock (branch-aware), and name/price/image/SKU so edits reflect without refetching the catalog API.
     const productsWithStock = useMemo(() => {
         if (!inventoryItems?.length) return products;
         return products.map((p) => {
@@ -438,15 +555,28 @@ const ProductSearch: React.FC = () => {
                     ? (inv.warehouseStock[selectedBranchId] ?? 0)
                     : (inv?.onHand ?? p.stockLevel);
             const stockLevel = inv ? branchStock : p.stockLevel;
+            const merged =
+                inv != null
+                    ? {
+                          ...p,
+                          name: inv.name,
+                          sku: inv.sku,
+                          barcode: inv.barcode ?? p.barcode,
+                          price: Number(inv.retailPrice) || p.price,
+                          cost: Number(inv.costPrice) || p.cost,
+                          imageUrl: inv.imageUrl ?? p.imageUrl,
+                          categoryId: inv.category || p.categoryId
+                      }
+                    : p;
             return {
-                ...p,
+                ...merged,
                 stockLevel: Number(stockLevel) || 0,
                 reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
             };
         });
     }, [products, inventoryItems, selectedBranchId]);
 
-    /** Same stock merge as main grid — popular list API can lag or omit branch qty; without this, fast-moving tiles stay disabled. */
+    /** Same merge as main grid — popular list API can lag or omit branch qty; inventory keeps labels and stock in sync. */
     const popularProductsWithStock = useMemo(() => {
         if (!popularProducts.length) return [];
         return popularProducts.map((p) => {
@@ -456,8 +586,21 @@ const ProductSearch: React.FC = () => {
                     ? (inv.warehouseStock[selectedBranchId] ?? 0)
                     : (inv?.onHand ?? p.stockLevel);
             const stockLevel = inv ? branchStock : p.stockLevel;
+            const merged =
+                inv != null
+                    ? {
+                          ...p,
+                          name: inv.name,
+                          sku: inv.sku,
+                          barcode: inv.barcode ?? p.barcode,
+                          price: Number(inv.retailPrice) || p.price,
+                          cost: Number(inv.costPrice) || p.cost,
+                          imageUrl: inv.imageUrl ?? p.imageUrl,
+                          categoryId: inv.category || p.categoryId
+                      }
+                    : p;
             return {
-                ...p,
+                ...merged,
                 stockLevel: Number(stockLevel) || 0,
                 reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
             };
@@ -646,66 +789,63 @@ const ProductSearch: React.FC = () => {
         };
     }, [localQuery, productsWithStock, addToCart, setSearchQuery, focusPosSearch]);
 
+    const initialEditingItemForModal = useMemo((): InventoryItem | null => {
+        if (!skuModal.open || skuModal.kind !== 'edit') return null;
+        const p = skuModal.product;
+        return inventoryItems.find((i) => i.id === p.id) ?? posProductToInventoryStub(p);
+    }, [skuModal, inventoryItems]);
+
+    const handleProductContextMenu = useCallback((e: React.MouseEvent, product: POSProduct) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const pad = 8;
+        const mw = 200;
+        const mh = 100;
+        let x = e.clientX;
+        let y = e.clientY;
+        if (typeof window !== 'undefined') {
+            x = Math.min(x, window.innerWidth - mw - pad);
+            y = Math.min(y, window.innerHeight - mh - pad);
+            x = Math.max(pad, x);
+            y = Math.max(pad, y);
+        }
+        setProductContextMenu({ x, y, product });
+    }, []);
+
+    useEffect(() => {
+        if (!productContextMenu) return;
+        const onDown = (e: MouseEvent) => {
+            const el = document.getElementById('pos-product-context-menu');
+            if (el && e.target instanceof Node && el.contains(e.target)) return;
+            setProductContextMenu(null);
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setProductContextMenu(null);
+        };
+        document.addEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [productContextMenu]);
+
     // Virtualized Grid Setup — dense by default; row height sized so content doesn't overlap
     const columnCount = isDenseMode ? 3 : 2;
     const rowCount = Math.ceil(filteredProducts.length / columnCount);
     const rowHeight = isDenseMode ? 156 : 200;
 
-    const pastelBgs = ['bg-[#eef2ff]', 'bg-[#fef3c7]', 'bg-[#e0f2fe]', 'bg-[#fce7f3]'];
-
-    const ProductRow = ({ index, style }: { index: number; style: React.CSSProperties }) => {
-        const rowItems: any[] = [];
-        const cellClass = columnCount === 2 ? 'flex-[0_0_50%] min-w-0 max-w-[50%]' : 'flex-[0_0_33.333%] min-w-0 max-w-[33.333%]';
-        for (let i = 0; i < columnCount; i++) {
-            const itemIndex = index * columnCount + i;
-            if (itemIndex < filteredProducts.length) {
-                const product = filteredProducts[itemIndex];
-                const isSelected = keyboardIndex === itemIndex;
-                const bgClass = pastelBgs[itemIndex % pastelBgs.length];
-                rowItems.push(
-                    <div key={product.id} className={`p-2 ${cellClass}`}>
-                        <button
-                            onClick={() => product.stockLevel > 0 && addToCart(product)}
-                            disabled={product.stockLevel <= 0}
-                            className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white dark:bg-slate-800 border rounded-[10px] text-left transition-all overflow-hidden shadow-sm ${product.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed border-slate-100 dark:border-slate-700' : 'hover:border-[#0056b3]/40 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]'} ${isSelected ? 'border-[#0056b3] ring-2 ring-[#0056b3]/15' : 'border-slate-200/90 dark:border-slate-700'
-                                }`}
-                        >
-                            <div className={`w-full flex-shrink-0 ${bgClass} dark:bg-slate-700/80 rounded-[8px] flex items-center justify-center border border-white/50 dark:border-slate-600 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
-                                {product.imageUrl ? (
-                                    <CachedImage path={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
-                                ) : (
-                                    <div className="text-slate-300 dark:text-slate-500">
-                                        {React.cloneElement(ICONS.package as any, { size: isDenseMode ? 24 : 40 })}
-                                    </div>
-                                )}
-                                {product.stockLevel <= (product.reorderPoint || 10) && (
-                                    <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-[6px] text-xs font-bold uppercase tracking-wider shadow-sm ${product.stockLevel <= 0 ? 'bg-slate-800 text-white' : 'bg-[#fee2e2] text-[#991b1b] dark:bg-rose-950/80 dark:text-rose-200'}`}>
-                                        {product.stockLevel <= 0 ? 'Out' : `Low: ${product.stockLevel}`}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className={`flex-shrink-0 font-semibold text-slate-900 dark:text-slate-200 line-clamp-2 leading-tight mt-2 min-h-0 ${isDenseMode ? 'text-xs h-[1.75rem]' : 'text-sm h-[2.5rem]'}`}>
-                                {product.name}
-                            </div>
-
-                            <div className="flex flex-shrink-0 items-center justify-between mt-1">
-                                <span className={`font-bold text-[#0056b3] dark:text-blue-400 truncate ${isDenseMode ? 'text-xs' : 'text-sm'}`}>
-                                    {CURRENCY}{product.price.toLocaleString()}
-                                </span>
-                                <span className="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
-                                    Stock: {product.stockLevel}
-                                </span>
-                            </div>
-                        </button>
-                    </div>
-                );
-            } else {
-                rowItems.push(<div key={`empty-${i}`} className={`p-2 ${cellClass}`}></div>);
-            }
-        }
-        return <div style={style} className="flex px-3 min-h-0 overflow-hidden">{rowItems}</div>;
-    };
+    const productGridItemData = useMemo(
+        (): POSProductGridRowData => ({
+            filteredProducts,
+            columnCount,
+            keyboardIndex,
+            isDenseMode,
+            addToCart,
+            onProductContextMenu: handleProductContextMenu
+        }),
+        [filteredProducts, columnCount, keyboardIndex, isDenseMode, addToCart, handleProductContextMenu]
+    );
 
     return (
         <div className="flex flex-row h-full min-h-0 bg-[#f8fafc] dark:bg-slate-900 relative overflow-hidden">
@@ -818,11 +958,16 @@ const ProductSearch: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                         {popularProductsWithStock.map(p => (
-                            <button
+                            <div
                                 key={p.id}
+                                onContextMenu={(e) => handleProductContextMenu(e, p)}
+                                className="min-w-0"
+                            >
+                            <button
+                                type="button"
                                 onClick={() => p.stockLevel > 0 && addToCart(p)}
                                 disabled={p.stockLevel <= 0}
-                                className={`flex flex-col items-center p-2 rounded-[10px] border transition-all ${p.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700' : 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 hover:border-[#0056b3]/35 hover:shadow-sm active:scale-95'}`}
+                                className={`w-full flex flex-col items-center p-2 rounded-[10px] border transition-all ${p.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700' : 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 hover:border-[#0056b3]/35 hover:shadow-sm active:scale-95'}`}
                             >
                                 <div className="w-10 h-10 rounded-[8px] bg-[#eef2ff] dark:bg-slate-700/80 flex items-center justify-center mb-1 overflow-hidden">
                                     {p.imageUrl ? (
@@ -835,6 +980,7 @@ const ProductSearch: React.FC = () => {
                                 </div>
                                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate w-full text-center">{p.name}</span>
                             </button>
+                            </div>
                         ))}
                     </div>
                 </div>
@@ -870,8 +1016,9 @@ const ProductSearch: React.FC = () => {
                         itemSize={rowHeight}
                         width="100%"
                         className="pos-scrollbar"
+                        itemData={productGridItemData}
                     >
-                        {ProductRow}
+                        {POSProductGridRow}
                     </FixedSizeList>
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full p-10 text-center">
@@ -887,7 +1034,8 @@ const ProductSearch: React.FC = () => {
                         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                             {localQuery.trim() && (
                                 <button
-                                    onClick={() => setIsAddSkuModalOpen(true)}
+                                    type="button"
+                                    onClick={() => setSkuModal({ open: true, kind: 'add', initialQuery: localQuery.trim() })}
                                     className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold uppercase tracking-widest rounded-lg hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
                                 >
                                     {React.cloneElement(ICONS.plus as any, { size: 14 })}
@@ -914,11 +1062,35 @@ const ProductSearch: React.FC = () => {
                 </div>
             </div>
 
+            {productContextMenu ? (
+                <div
+                    id="pos-product-context-menu"
+                    role="menu"
+                    className="fixed z-[10050] min-w-[180px] rounded-xl border border-slate-200/90 dark:border-slate-600 bg-white dark:bg-slate-800 py-1 shadow-xl shadow-slate-900/15"
+                    style={{ left: productContextMenu.x, top: productContextMenu.y }}
+                >
+                    <button
+                        type="button"
+                        role="menuitem"
+                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-colors"
+                        onClick={() => {
+                            setSkuModal({ open: true, kind: 'edit', product: productContextMenu.product });
+                            setProductContextMenu(null);
+                        }}
+                    >
+                        {React.cloneElement(ICONS.edit as any, { size: 16, className: 'text-slate-500 dark:text-slate-400 shrink-0' })}
+                        Edit product…
+                    </button>
+                </div>
+            ) : null}
+
             <AddOrEditSkuModal
-                isOpen={isAddSkuModalOpen}
-                onClose={() => setIsAddSkuModalOpen(false)}
-                initialSkuOrBarcode={localQuery.trim()}
-                onItemReady={(item) => {
+                isOpen={skuModal.open}
+                onClose={() => setSkuModal({ open: false })}
+                initialSkuOrBarcode={skuModal.open && skuModal.kind === 'add' ? skuModal.initialQuery : ''}
+                initialEditingItem={initialEditingItemForModal}
+                onItemReady={(item, action) => {
+                    if (action === 'updated') return;
                     const posProduct = mapInventoryItemToPOS(item);
                     addToCart(posProduct);
                     setLocalQuery('');

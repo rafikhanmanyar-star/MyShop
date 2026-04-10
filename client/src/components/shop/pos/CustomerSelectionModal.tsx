@@ -7,6 +7,8 @@ import { ContactsApiRepository } from '../../../services/api/repositories/contac
 import { useLoyalty } from '../../../context/LoyaltyContext';
 import { POSCustomer } from '../../../types/pos';
 import { Contact, ContactType } from '../../../types';
+import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
+import { showAppToast } from '../../../utils/appToast';
 
 interface CustomerSelectionModalProps {
     isOpen: boolean;
@@ -42,6 +44,9 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
             setContacts(data);
         } catch (error) {
             console.error('Failed to fetch contacts:', error);
+            if (isApiConnectivityFailure(error)) {
+                showAppToast(userMessageForApiError(error, 'Could not load customers from the server.'), 'error');
+            }
         } finally {
             setLoading(false);
         }
@@ -89,7 +94,11 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
             handleSelect(contactToUse);
         } catch (err) {
             console.error('Failed to register new account:', err);
-            setRegisterError('Could not create account. Please try again.');
+            setRegisterError(
+                isApiConnectivityFailure(err)
+                    ? userMessageForApiError(err, 'Could not create account.')
+                    : 'Could not create account. Please try again.'
+            );
         } finally {
             setRegisterSubmitting(false);
         }

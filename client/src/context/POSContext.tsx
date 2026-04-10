@@ -20,6 +20,8 @@ import { useShifts } from './ShiftsContext';
 import { useInventory } from './InventoryContext';
 import { getAppContext, setAppContext, clearAppContextBranch } from '../services/appContext';
 import { apiClient } from '../services/apiClient';
+import { isApiConnectivityFailure, userMessageForApiError } from '../utils/apiConnectivity';
+import { showAppToast } from '../utils/appToast';
 
 
 
@@ -207,6 +209,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
             } catch (error) {
                 console.error('Failed to fetch POS configuration:', error);
+                if (isApiConnectivityFailure(error)) {
+                    showAppToast(
+                        userMessageForApiError(error, 'Cannot load POS configuration (branches, terminals, settings).'),
+                        'error',
+                        6500
+                    );
+                }
             }
         };
 
@@ -249,8 +258,16 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setCustomer(null);
             setHeldSales([]);
             setLastCompletedSale(null);
-            shopApi.getBranches().then(setBranches).catch(() => { });
-            shopApi.getTerminals().then(setTerminals).catch(() => { });
+            shopApi.getBranches().then(setBranches).catch((e) => {
+                if (isApiConnectivityFailure(e)) {
+                    showAppToast(userMessageForApiError(e, 'Cannot refresh branches.'), 'error');
+                }
+            });
+            shopApi.getTerminals().then(setTerminals).catch((e) => {
+                if (isApiConnectivityFailure(e)) {
+                    showAppToast(userMessageForApiError(e, 'Cannot refresh terminals.'), 'error');
+                }
+            });
         };
         window.addEventListener('branch-changed', handleBranchChanged as EventListener);
         return () => window.removeEventListener('branch-changed', handleBranchChanged as EventListener);
@@ -502,6 +519,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     }
                 } catch (error) {
                     console.error('Failed to restore customer:', error);
+                    if (isApiConnectivityFailure(error)) {
+                        showAppToast(
+                            userMessageForApiError(error, 'Could not load customer from the server.'),
+                            'error'
+                        );
+                    }
                 }
             }
 
@@ -603,11 +626,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return completedSale;
         } catch (error: any) {
             console.error('Failed to complete sale:', error);
-            let message = (error && (typeof error === 'object' && ('error' in error) ? error.error : error.message))
-                || (error instanceof Error ? error.message : null)
-                || 'Unknown error';
+            let message = userMessageForApiError(error, 'Unknown error');
             if (typeof message === 'string' && (message.includes('<!DOCTYPE') || message.includes('<html'))) {
-                message = 'Server returned an unexpected response. Please check your connection and try again.';
+                message =
+                    'Server returned an unexpected response. The API may be restarting—check your connection and try again.';
             }
             alert('Error completing sale: ' + message);
             throw error;

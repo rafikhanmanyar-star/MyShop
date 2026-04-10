@@ -1797,12 +1797,22 @@ export class ShopService {
     const taxId = data.tax_id ?? null;
     const logoUrl = data.logo_url ?? null;
     const showMobileUrlQr = data.show_mobile_url_qr !== undefined ? data.show_mobile_url_qr : false;
+    const clampMm = (v: unknown, def: number) => {
+      const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+      if (!Number.isFinite(n)) return def;
+      return Math.min(25, Math.max(0, n));
+    };
+    const marginTop = clampMm(data.margin_top_mm, 2);
+    const marginBottom = clampMm(data.margin_bottom_mm, 2);
+    const marginLeft = clampMm(data.margin_left_mm, 2);
+    const marginRight = clampMm(data.margin_right_mm, 4);
     const res = await this.db.query(
       `INSERT INTO pos_receipt_settings (
         tenant_id, show_logo, show_barcode, barcode_type, barcode_position, barcode_size,
         receipt_width, show_tax_breakdown, show_cashier_name, show_shift_number,
-        footer_message, shop_name, shop_address, shop_phone, tax_id, logo_url, show_mobile_url_qr, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
+        footer_message, shop_name, shop_address, shop_phone, tax_id, logo_url, show_mobile_url_qr,
+        margin_top_mm, margin_bottom_mm, margin_left_mm, margin_right_mm, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW())
       ON CONFLICT (tenant_id) DO UPDATE SET
         show_logo = EXCLUDED.show_logo,
         show_barcode = EXCLUDED.show_barcode,
@@ -1820,9 +1830,35 @@ export class ShopService {
         tax_id = EXCLUDED.tax_id,
         logo_url = EXCLUDED.logo_url,
         show_mobile_url_qr = EXCLUDED.show_mobile_url_qr,
+        margin_top_mm = EXCLUDED.margin_top_mm,
+        margin_bottom_mm = EXCLUDED.margin_bottom_mm,
+        margin_left_mm = EXCLUDED.margin_left_mm,
+        margin_right_mm = EXCLUDED.margin_right_mm,
         updated_at = NOW()
       RETURNING *`,
-      [tenantId, showLogo, showBarcode, barcodeType, barcodePosition, barcodeSize, receiptWidth, showTaxBreakdown, showCashierName, showShiftNumber, footerMessage, shopName, shopAddress, shopPhone, taxId, logoUrl, showMobileUrlQr]
+      [
+        tenantId,
+        showLogo,
+        showBarcode,
+        barcodeType,
+        barcodePosition,
+        barcodeSize,
+        receiptWidth,
+        showTaxBreakdown,
+        showCashierName,
+        showShiftNumber,
+        footerMessage,
+        shopName,
+        shopAddress,
+        shopPhone,
+        taxId,
+        logoUrl,
+        showMobileUrlQr,
+        marginTop,
+        marginBottom,
+        marginLeft,
+        marginRight,
+      ]
     );
     return res[0];
   }

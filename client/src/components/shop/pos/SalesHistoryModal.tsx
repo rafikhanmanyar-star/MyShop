@@ -5,6 +5,8 @@ import { usePOS } from '../../../context/POSContext';
 import { shopApi } from '../../../services/shopApi';
 import { POSSale } from '../../../types/pos';
 import { ICONS, CURRENCY } from '../../../constants';
+import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
+import { showAppToast } from '../../../utils/appToast';
 
 const SalesHistoryModal: React.FC = () => {
     const {
@@ -38,7 +40,11 @@ const SalesHistoryModal: React.FC = () => {
         setIsBarcodeScan(!!pipeMatch);
         shopApi.getSaleByInvoiceNumber(invoiceNumber)
             .then((sale) => { if (sale) setSelectedSale(sale as POSSale); })
-            .catch(() => {})
+            .catch((e) => {
+                if (isApiConnectivityFailure(e)) {
+                    showAppToast(userMessageForApiError(e, 'Could not look up sale.'), 'error');
+                }
+            })
             .finally(() => setSearchQuery(''));
     }, [isSalesHistoryModalOpen, searchQuery, setSearchQuery]);
 
@@ -56,6 +62,9 @@ const SalesHistoryModal: React.FC = () => {
             }
         } catch (error) {
             console.error('Failed to fetch sales history:', error);
+            if (isApiConnectivityFailure(error)) {
+                showAppToast(userMessageForApiError(error, 'Could not load sales history.'), 'error');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -75,8 +84,10 @@ const SalesHistoryModal: React.FC = () => {
                     setSelectedSale(saleByInvoice as POSSale);
                     setSearchTerm(invoiceNumber);
                 }
-            } catch (_) {
-                // Not found or API error; fall back to local filter
+            } catch (e) {
+                if (isApiConnectivityFailure(e)) {
+                    showAppToast(userMessageForApiError(e, 'Could not look up sale by invoice.'), 'error');
+                }
                 const matchedSale = sales.find(s => s.saleNumber === invoiceNumber);
                 if (matchedSale) setSelectedSale(matchedSale);
             }
@@ -108,6 +119,9 @@ const SalesHistoryModal: React.FC = () => {
                 printReceipt({ ...sale, reprintCount: reprintCount + 1 });
             } catch (e) {
                 console.error('Reprint count increment failed', e);
+                if (isApiConnectivityFailure(e)) {
+                    showAppToast(userMessageForApiError(e, 'Could not update reprint count on the server.'), 'error');
+                }
                 printReceipt(sale);
             }
         } else {

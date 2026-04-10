@@ -4,6 +4,8 @@ import { usePOS } from '../../../context/POSContext';
 import { POSPaymentMethod } from '../../../types/pos';
 import { ICONS, CURRENCY } from '../../../constants';
 import { shopApi, ShopBankAccount } from '../../../services/shopApi';
+import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
+import { showAppToast } from '../../../utils/appToast';
 
 const PaymentModal: React.FC = () => {
     const {
@@ -35,8 +37,11 @@ const PaymentModal: React.FC = () => {
             const list = await shopApi.getBankAccounts(true);
             setBankAccounts(Array.isArray(list) ? list : []);
             setSelectedBankId(prev => (list?.length && (!prev || !list.some((b: ShopBankAccount) => b.id === prev))) ? list[0].id : prev);
-        } catch {
+        } catch (e) {
             setBankAccounts([]);
+            if (isApiConnectivityFailure(e)) {
+                showAppToast(userMessageForApiError(e, 'Could not load bank accounts for checkout.'), 'error');
+            }
         }
     }, []);
 

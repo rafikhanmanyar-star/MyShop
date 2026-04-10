@@ -7,6 +7,7 @@ import Button from '../../ui/Button';
 import { ICONS } from '../../../constants';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
+import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 
 import CachedImage from '../../ui/CachedImage';
 import Fuse from 'fuse.js';
@@ -20,8 +21,13 @@ interface AddOrEditSkuModalProps {
     initialSkuOrBarcode?: string;
     /** When true, open directly in Add New SKU mode (skip choice screen). Use with initialSkuOrBarcode for quick add. */
     openInAddMode?: boolean;
-    /** After creating/updating, optionally add to cart (POS flow) */
-    onItemReady?: (item: InventoryItem) => void;
+    /**
+     * When set while opening, skip the choice screen and edit this item (e.g. POS catalog right-click → Edit).
+     * Parent should resolve from inventory when possible; ref is read when `isOpen` becomes true only.
+     */
+    initialEditingItem?: InventoryItem | null;
+    /** After creating/updating. Use `action` to distinguish create vs update (e.g. POS should not add to cart on update). */
+    onItemReady?: (item: InventoryItem, action?: 'created' | 'updated') => void;
 }
 
 const defaultForm = {
@@ -44,6 +50,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     onClose,
     initialSkuOrBarcode = '',
     openInAddMode = false,
+    initialEditingItem = null,
     onItemReady
 }) => {
     const { items, addItem, updateItem, deleteItem } = useInventory();
@@ -66,32 +73,45 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         }
     }, []);
 
+    const initialEditingItemRef = React.useRef<InventoryItem | null>(null);
+    initialEditingItemRef.current = initialEditingItem ?? null;
+
     React.useEffect(() => {
-        if (isOpen) {
-            loadCategories();
-            const skuOrBarcode = (initialSkuOrBarcode || '').trim();
-            const startInAddMode = openInAddMode && !!skuOrBarcode;
-            setMode(startInAddMode ? 'add' : 'choice');
+        if (!isOpen) return;
+        loadCategories();
+
+        const editItem = initialEditingItemRef.current;
+        if (editItem) {
+            setMode('edit');
             setExistingSearch('');
-            setEditingItem(null);
-            setFormData({
-                ...defaultForm,
-                sku: skuOrBarcode,
-                barcode: /^\d+$/.test(skuOrBarcode) ? skuOrBarcode : '',
-                name: '',
-                description: '',
-                category: 'General',
-                retailPrice: 0,
-                costPrice: 0,
-                retailPriceMode: 'percentage',
-                retailMarkupPercent: 0,
-                reorderPoint: 10,
-                unit: 'pcs',
-                imageUrl: ''
-            });
+            setEditingItem(editItem);
             setSelectedImage(null);
-            setImagePreview(null);
+            setImagePreview(editItem.imageUrl || null);
+            return;
         }
+
+        const skuOrBarcode = (initialSkuOrBarcode || '').trim();
+        const startInAddMode = openInAddMode && !!skuOrBarcode;
+        setMode(startInAddMode ? 'add' : 'choice');
+        setExistingSearch('');
+        setEditingItem(null);
+        setFormData({
+            ...defaultForm,
+            sku: skuOrBarcode,
+            barcode: /^\d+$/.test(skuOrBarcode) ? skuOrBarcode : '',
+            name: '',
+            description: '',
+            category: 'General',
+            retailPrice: 0,
+            costPrice: 0,
+            retailPriceMode: 'percentage',
+            retailMarkupPercent: 0,
+            reorderPoint: 10,
+            unit: 'pcs',
+            imageUrl: ''
+        });
+        setSelectedImage(null);
+        setImagePreview(null);
     }, [isOpen, initialSkuOrBarcode, openInAddMode, loadCategories]);
 
     React.useEffect(() => {
@@ -226,9 +246,12 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 imageAlreadyUploaded ? undefined : selectedImage || undefined
             );
             handleClose();
-            onItemReady?.(newItem);
+            onItemReady?.(newItem, 'created');
         } catch (e) {
             console.error(e);
+            if (isApiConnectivityFailure(e)) {
+                alert(userMessageForApiError(e, 'Could not save SKU.'));
+            }
         } finally {
             setSaving(false);
         }
@@ -257,9 +280,12 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             });
             handleClose();
             const updated = { ...editingItem, ...formData, barcode: formData.barcode || undefined };
-            onItemReady?.(updated as InventoryItem);
+            onItemReady?.(updated as InventoryItem, 'updated');
         } catch (e) {
             console.error(e);
+            if (isApiConnectivityFailure(e)) {
+                alert(userMessageForApiError(e, 'Could not update SKU.'));
+            }
         } finally {
             setSaving(false);
         }
@@ -276,7 +302,9 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             await deleteItem(editingItem.id);
             handleClose();
         } catch (e: any) {
-            const msg = e?.message ?? e?.error ?? 'This SKU has been used in transactions. Please delete the transactions first if you want to delete the SKU.';
+            const msg = isApiConnectivityFailure(e)
+                ? userMessageForApiError(e, 'Could not delete SKU.')
+                : (e?.message ?? e?.error ?? 'This SKU has been used in transactions. Please delete the transactions first if you want to delete the SKU.');
             alert(msg);
         } finally {
             setDeleting(false);
