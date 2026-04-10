@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 // MyShop Settings Page - Reorganized Chart of Accounts
 import { Smartphone, Printer } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -31,6 +31,16 @@ function toState(v: ShopVendor) {
 import { generateReceiptHTML, ReceiptSaleData } from '../../services/receipt/receiptBuilder';
 import QRCode from 'qrcode';
 
+/** Stable hash so iframe `key` changes whenever preview HTML changes (forces remount; some browsers ignore `srcDoc` updates). */
+function previewContentKey(html: string): string {
+    let h = 2166136261;
+    for (let i = 0; i < html.length; i++) {
+        h ^= html.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return `${html.length}:${h >>> 0}`;
+}
+
 const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettings }) => {
     const [mobileQrDataUrl, setMobileQrDataUrl] = useState<string | null>(null);
     useEffect(() => {
@@ -43,42 +53,54 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettin
         }
     }, [receiptSettings?.show_mobile_url_qr, receiptSettings?.mobile_order_url]);
 
-    const saleData: ReceiptSaleData = {
-        storeName: receiptSettings.shop_name || 'My Store',
-        storeAddress: receiptSettings.shop_address || '123 Fake Street',
-        storePhone: receiptSettings.shop_phone || '021-1234567',
-        taxId: receiptSettings.tax_id || '',
-        logoUrl: receiptSettings.logo_url || null,
-        receiptNumber: 'SALE-TEST-001',
-        date: new Date().toLocaleDateString(),
-        time: new Date().toLocaleTimeString(),
-        cashier: 'John Cashier',
-        shiftNumber: '1',
-        customer: 'Walk-in Customer',
-        items: [
-            { name: 'Test Product 1', quantity: 1, unitPrice: 25.00, total: 25.00 },
-            { name: 'Test Product 2', quantity: 2, unitPrice: 15.00, total: 30.00 }
-        ],
-        subtotal: 55.00,
-        discount: 5.00,
-        tax: 5.00,
-        total: 55.00,
-        payments: [{ method: 'Cash', amount: 55.00 }],
-        change: 0,
-        barcode_value: 'SALE-TEST-001'
-    };
+    const { previewHtml, iframeKey, containerWidth } = useMemo(() => {
+        const saleData: ReceiptSaleData = {
+            storeName: receiptSettings.shop_name || 'My Store',
+            storeAddress: receiptSettings.shop_address || '123 Fake Street',
+            storePhone: receiptSettings.shop_phone || '021-1234567',
+            taxId: receiptSettings.tax_id || '',
+            logoUrl: receiptSettings.logo_url || null,
+            receiptNumber: 'SALE-TEST-001',
+            date: new Date().toLocaleDateString(),
+            time: new Date().toLocaleTimeString(),
+            cashier: 'John Cashier',
+            shiftNumber: '1',
+            customer: 'Walk-in Customer',
+            items: [
+                { name: 'Test Product 1', quantity: 1, unitPrice: 25.00, total: 25.00 },
+                { name: 'Test Product 2', quantity: 2, unitPrice: 15.00, total: 30.00 }
+            ],
+            subtotal: 55.00,
+            discount: 5.00,
+            tax: 5.00,
+            total: 55.00,
+            payments: [{ method: 'Cash', amount: 55.00 }],
+            change: 0,
+            barcode_value: 'SALE-TEST-001'
+        };
 
-    const containerWidth = receiptSettings.receipt_width === '58mm' ? '58mm' : '80mm';
-    const settingsWithQr = mobileQrDataUrl
-        ? { ...receiptSettings, mobile_qr_data_url: mobileQrDataUrl }
-        : receiptSettings;
-    const html = generateReceiptHTML(saleData, settingsWithQr);
+        const settingsWithQr = mobileQrDataUrl
+            ? { ...receiptSettings, mobile_qr_data_url: mobileQrDataUrl }
+            : receiptSettings;
+        const html = generateReceiptHTML(saleData, settingsWithQr);
+        const width = receiptSettings.receipt_width === '58mm' ? '58mm' : '80mm';
+        return {
+            previewHtml: html,
+            iframeKey: previewContentKey(html),
+            containerWidth: width
+        };
+    }, [receiptSettings, mobileQrDataUrl]);
 
     return (
         <Card className="border-none shadow-sm p-6 bg-muted flex flex-col items-center overflow-hidden">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 self-start">Live Preview</h3>
             <div className="bg-card shadow-xl border border-border transition-all overflow-hidden relative" style={{ width: containerWidth }}>
-                <iframe srcDoc={html} style={{ width: '100%', height: '500px', border: 'none', backgroundColor: '#fff' }} title="Receipt Preview" />
+                <iframe
+                    key={iframeKey}
+                    srcDoc={previewHtml}
+                    style={{ width: '100%', height: '500px', border: 'none', backgroundColor: '#fff' }}
+                    title="Receipt Preview"
+                />
             </div>
             <p className="text-xs text-muted-foreground mt-4 text-center">This is an approximate software rendering.<br />Actual thermal paper may look slightly different.</p>
         </Card>

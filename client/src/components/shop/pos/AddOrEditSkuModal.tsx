@@ -205,6 +205,33 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
 
     const hasConflict = conflictItems.length > 0;
 
+    /**
+     * For **new** SKUs, any name/barcode collision blocks save.
+     * For **edits**, only block if the user *changed* name or barcode and that new value still collides.
+     * Otherwise duplicate rows in inventory (same barcode on two ids) would prevent saving price/image updates.
+     */
+    const hasBlockingConflict = useMemo(() => {
+        if (!editingItem) return hasConflict;
+        const nameNorm = formData.name.trim().toLowerCase();
+        const origName = (editingItem.name || '').trim().toLowerCase();
+        const nameChanged = nameNorm !== origName;
+
+        const bcNorm = (formData.barcode || '').trim().toLowerCase();
+        const origBc = (editingItem.barcode || '').trim().toLowerCase();
+        const barcodeChanged = bcNorm !== origBc;
+
+        const blockName = nameChanged && nameConflictItems.length > 0;
+        const blockBarcode = barcodeChanged && barcodeConflictItems.length > 0;
+        return blockName || blockBarcode;
+    }, [
+        editingItem,
+        formData.name,
+        formData.barcode,
+        hasConflict,
+        nameConflictItems.length,
+        barcodeConflictItems.length
+    ]);
+
     const handleClose = useCallback(() => {
         setMode('choice');
         setEditingItem(null);
@@ -213,7 +240,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     }, [onClose]);
 
     const handleCreateNew = useCallback(async () => {
-        if (hasConflict) return;
+        if (hasBlockingConflict) return;
         setSaving(true);
         try {
             let imageUrl = formData.imageUrl;
@@ -255,10 +282,10 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         } finally {
             setSaving(false);
         }
-    }, [formData, selectedImage, addItem, handleClose, onItemReady, hasConflict]);
+    }, [formData, selectedImage, addItem, handleClose, onItemReady, hasBlockingConflict]);
 
     const handleUpdateExisting = useCallback(async () => {
-        if (!editingItem || hasConflict) return;
+        if (!editingItem || hasBlockingConflict) return;
         setSaving(true);
         try {
             let imageUrl = formData.imageUrl;
@@ -289,7 +316,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         } finally {
             setSaving(false);
         }
-    }, [editingItem, formData, selectedImage, updateItem, handleClose, onItemReady, hasConflict]);
+    }, [editingItem, formData, selectedImage, updateItem, handleClose, onItemReady, hasBlockingConflict]);
 
     const handleDeleteSku = useCallback(async () => {
         if (!editingItem || editingItem.id.startsWith('pending-')) return;
@@ -662,13 +689,27 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                         </div>
 
                         {hasConflict && (
-                            <div className="rounded-xl border-2 border-rose-200 bg-rose-50 p-4 space-y-2">
-                                <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
+                            <div
+                                className={`rounded-xl border-2 p-4 space-y-2 ${hasBlockingConflict ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'}`}
+                            >
+                                <div
+                                    className={`flex items-center gap-2 font-bold text-sm ${hasBlockingConflict ? 'text-rose-800' : 'text-amber-900'}`}
+                                >
                                     {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 18 })}
                                     <span>Name and barcode must be unique</span>
                                 </div>
-                                <p className="text-xs text-rose-700">
-                                    The following SKU(s) already use this name or barcode. Use a different name or barcode, or edit the existing item instead.
+                                <p className={`text-xs ${hasBlockingConflict ? 'text-rose-700' : 'text-amber-800'}`}>
+                                    {hasBlockingConflict ? (
+                                        <>
+                                            The following SKU(s) already use this name or barcode. Change the name or barcode to save, or edit the
+                                            other item instead.
+                                        </>
+                                    ) : (
+                                        <>
+                                            Another product in your catalog shares this name or barcode. You can still save changes to price, image,
+                                            and other fields. To rename or reassign the barcode, pick values that are not already used.
+                                        </>
+                                    )}
                                 </p>
                                 <ul className="max-h-40 overflow-y-auto border border-rose-200 rounded-lg bg-white divide-y divide-rose-100">
                                     {conflictItems.map(({ item, reason }) => (
@@ -687,7 +728,9 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                     <span className="text-slate-500 ml-1">· Barcode: {item.barcode}</span>
                                                 )}
                                             </div>
-                                            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-200 text-rose-800 flex-shrink-0">
+                                            <span
+                                                className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded flex-shrink-0 ${hasBlockingConflict ? 'bg-rose-200 text-rose-800' : 'bg-amber-200 text-amber-900'}`}
+                                            >
                                                 Same {reason}
                                             </span>
                                         </li>
@@ -724,11 +767,11 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 Back
                             </Button>
                             {editingItem ? (
-                                <Button onClick={handleUpdateExisting} disabled={!formData.name || saving || hasConflict}>
+                                <Button onClick={handleUpdateExisting} disabled={!formData.name || saving || hasBlockingConflict}>
                                     {saving ? 'Saving...' : 'Save changes'}
                                 </Button>
                             ) : (
-                                <Button onClick={handleCreateNew} disabled={!formData.name || saving || hasConflict}>
+                                <Button onClick={handleCreateNew} disabled={!formData.name || saving || hasBlockingConflict}>
                                     {saving ? 'Creating...' : 'Create product'}
                                 </Button>
                             )}
