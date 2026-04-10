@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { usePOS } from '../../context/POSContext';
 import POSHeader from './pos/POSHeader';
 import ProductSearch from './pos/ProductSearch';
@@ -69,6 +70,8 @@ function loadStoredWidth(key: string, fallback: number, min: number, max: number
 
 const POSSalesContent: React.FC = () => {
     const { state } = useAppContext();
+    const location = useLocation();
+    const navigate = useNavigate();
     const {
         isHeldSalesModalOpen,
         setIsHeldSalesModalOpen,
@@ -76,6 +79,7 @@ const POSSalesContent: React.FC = () => {
         setIsCustomerModalOpen,
         isSalesHistoryModalOpen,
         setIsSalesHistoryModalOpen,
+        setSearchQuery,
         holdSale,
         clearCart,
         cart,
@@ -125,6 +129,16 @@ const POSSalesContent: React.FC = () => {
         ro.observe(row);
         return () => ro.disconnect();
     }, []);
+
+    /** Open Sales Archive on a specific receipt (e.g. from Khata ledger). */
+    useEffect(() => {
+        const st = location.state as { openSaleInvoice?: string } | null | undefined;
+        const inv = st?.openSaleInvoice?.trim();
+        if (!inv) return;
+        setSearchQuery(inv);
+        setIsSalesHistoryModalOpen(true);
+        navigate(location.pathname, { replace: true, state: null });
+    }, [location.state, location.pathname, navigate, setSearchQuery, setIsSalesHistoryModalOpen]);
 
     const useStackedLayout = layoutRowWidth > 0 && layoutRowWidth < STACK_LAYOUT_BELOW_PX;
 

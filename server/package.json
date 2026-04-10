@@ -1,6 +1,6 @@
 {
   "name": "myshop-api",
-  "version": "1.0.111",
+  "version": "1.0.112",
   "description": "MyShop API Server - Standalone Shop & POS Application",
   "type": "module",
   "main": "dist/api/index.js",
@@ -9,6 +9,7 @@
     "build": "tsc && node scripts/copy-migrations.cjs",
     "start": "node dist/api/index.js",
     "migrate": "tsx scripts/run-migrations.ts",
+    "backfill-batch-expiry": "tsx scripts/backfill-legacy-batch-expiry.ts",
     "test": "vitest run"
   },
   "dependencies": {

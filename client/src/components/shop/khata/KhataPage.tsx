@@ -1,12 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { khataApi, KhataLedgerEntry, KhataSummaryRow, shopApi, ShopBankAccount } from '../../../services/shopApi';
 import { ICONS, CURRENCY } from '../../../constants';
 import Modal from '../../ui/Modal';
 import Card from '../../ui/Card';
 
+/** Receipt # for POS lookup — from joined sale or parsed from note (e.g. "Sale SALE-…"). */
+function khataEntrySaleInvoice(entry: KhataLedgerEntry): string | null {
+  const sn = entry.sale_number?.trim();
+  if (sn && /^SALE-/i.test(sn)) return sn;
+  const note = entry.note?.trim();
+  if (note) {
+    const m = note.match(/SALE-\d+/i);
+    if (m) return m[0];
+  }
+  return null;
+}
+
 const KhataPage: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [summary, setSummary] = useState<KhataSummaryRow[]>([]);
   const [ledger, setLedger] = useState<KhataLedgerEntry[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -239,6 +252,10 @@ const KhataPage: React.FC = () => {
     }
   };
 
+  const openSaleDetail = (invoice: string) => {
+    navigate('/pos', { state: { openSaleInvoice: invoice } });
+  };
+
   const totalBalance = summary.reduce((s, r) => s + r.balance, 0);
 
   const PAID_EPS = 0.009;
@@ -421,10 +438,50 @@ const KhataPage: React.FC = () => {
                             )}
                           </td>
                           <td className="px-4 py-3 text-muted-foreground">
-                            <div>{entry.note || entry.sale_number || '—'}</div>
-                            {entry.type === 'credit' && entry.linked_debit_id && (
-                              <div className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-0.5">Applied to debit line</div>
-                            )}
+                            {(() => {
+                              const inv = khataEntrySaleInvoice(entry);
+                              const displayBase = entry.note || entry.sale_number || '—';
+                              const linkBtn = inv ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openSaleDetail(inv)}
+                                  className="font-semibold text-primary-600 hover:text-primary-700 hover:underline dark:text-primary-400 dark:hover:text-primary-300"
+                                  title="View sale detail in Sales Archive"
+                                >
+                                  {inv}
+                                </button>
+                              ) : null;
+                              let refLine: React.ReactNode;
+                              if (inv && displayBase !== '—') {
+                                const idx = displayBase.indexOf(inv);
+                                if (idx >= 0) {
+                                  refLine = (
+                                    <div>
+                                      {displayBase.slice(0, idx)}
+                                      {linkBtn}
+                                      {displayBase.slice(idx + inv.length)}
+                                    </div>
+                                  );
+                                } else {
+                                  refLine = (
+                                    <div>
+                                      <div>{displayBase}</div>
+                                      <div className="mt-0.5">{linkBtn}</div>
+                                    </div>
+                                  );
+                                }
+                              } else {
+                                refLine = <div>{displayBase}</div>;
+                              }
+                              return (
+                                <>
+                                  {refLine}
+                                  {entry.type === 'credit' && entry.linked_debit_id && (
+                                    <div className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-0.5">Applied to debit line</div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-bold">
                             {entry.type === 'debit' ? '+' : '-'}{CURRENCY} {entry.amount.toLocaleString()}

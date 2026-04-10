@@ -27,20 +27,20 @@ const SalesHistoryModal: React.FC = () => {
         }
     }, [isSalesHistoryModalOpen]);
 
-    // When opened by barcode scan (SALE|tenant|invoice), lookup sale and select
+    // When opened with a receipt id in context (barcode SALE|tenant|invoice, or Khata / deep link with plain SALE-…), lookup sale and select
     useEffect(() => {
         if (!isSalesHistoryModalOpen || !searchQuery) return;
-        const match = String(searchQuery).match(/^SALE\|[^|]+\|(.+)$/);
-        if (match) {
-            const invoiceNumber = match[1].trim();
-            setSearchTerm(invoiceNumber);
-            setIsBarcodeScan(true);
-            shopApi.getSaleByInvoiceNumber(invoiceNumber)
-                .then((sale) => { if (sale) setSelectedSale(sale as POSSale); })
-                .catch(() => {})
-                .finally(() => setSearchQuery(''));
-        }
-    }, [isSalesHistoryModalOpen, searchQuery]);
+        const raw = String(searchQuery).trim();
+        const pipeMatch = raw.match(/^SALE\|[^|]+\|(.+)$/);
+        const invoiceNumber = pipeMatch ? pipeMatch[1].trim() : raw;
+        if (!/^SALE-/i.test(invoiceNumber)) return;
+        setSearchTerm(invoiceNumber);
+        setIsBarcodeScan(!!pipeMatch);
+        shopApi.getSaleByInvoiceNumber(invoiceNumber)
+            .then((sale) => { if (sale) setSelectedSale(sale as POSSale); })
+            .catch(() => {})
+            .finally(() => setSearchQuery(''));
+    }, [isSalesHistoryModalOpen, searchQuery, setSearchQuery]);
 
     const fetchSales = async () => {
         setIsLoading(true);
