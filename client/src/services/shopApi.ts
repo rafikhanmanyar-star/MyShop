@@ -130,6 +130,8 @@ export const shopApi = {
     }>(`/shop/inventory/skus${qs ? `?${qs}` : ''}`);
   },
   getInventoryExpirySummary: () => apiClient.get<any>('/shop/inventory/expiry-summary'),
+  updateInventoryBatchExpiry: (batchId: string, data: { expiryDate: string }) =>
+    apiClient.patch<{ id: string; expiry_date: string }>(`/shop/inventory/batches/${batchId}/expiry`, data),
   adjustInventory: (data: any) => apiClient.post('/shop/inventory/adjust', data),
   getMovements: (productId?: string, limit?: number) => {
     const q = new URLSearchParams();

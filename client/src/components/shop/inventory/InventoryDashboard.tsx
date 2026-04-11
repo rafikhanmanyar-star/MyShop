@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowUpDown, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 import { useInventory } from '../../../context/InventoryContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
+import Modal from '../../ui/Modal';
+import Button from '../../ui/Button';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import { shopApi } from '../../../services/shopApi';
 import type { InventoryItem } from '../../../types/inventory';
 import WarehouseHeatmapModal from './WarehouseHeatmapModal';
+import { showAppToast } from '../../../utils/appToast';
+import { userMessageForApiError } from '../../../utils/apiConnectivity';
 
 const BAR_COLORS = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-500'];
 
@@ -43,8 +47,18 @@ function SortGlyph({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
     );
 }
 
+type ExpiryRow = {
+    id: string;
+    product_name?: string;
+    sku?: string;
+    warehouse_name?: string;
+    batch_no?: string;
+    expiry_date?: string | null;
+    quantity_remaining?: number | string;
+};
+
 const InventoryDashboard: React.FC = () => {
-    const { items, lowStockItems, totalInventoryValue, warehouses } = useInventory();
+    const { items, lowStockItems, totalInventoryValue, warehouses, refreshItems } = useInventory();
     const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
     const [sortKey, setSortKey] = useState<CriticalSortKey>('name');
@@ -56,8 +70,24 @@ const InventoryDashboard: React.FC = () => {
         expiring_7_qty?: string | number;
         expiring_30_qty?: string | number;
     } | null>(null);
-    const [expiryRows, setExpiryRows] = useState<any[]>([]);
+    const [expiryRows, setExpiryRows] = useState<ExpiryRow[]>([]);
     const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>('critical');
+    const [batchExpiryModal, setBatchExpiryModal] = useState<ExpiryRow | null>(null);
+    const [batchExpiryDraft, setBatchExpiryDraft] = useState('');
+    const [batchExpirySaving, setBatchExpirySaving] = useState(false);
+
+    const loadExpirySummary = useCallback(() => {
+        shopApi
+            .getInventoryExpirySummary()
+            .then((r: any) => {
+                setExpiryKpi(r?.kpi ?? {});
+                setExpiryRows(Array.isArray(r?.rows) ? r.rows : []);
+            })
+            .catch(() => {
+                setExpiryKpi(null);
+                setExpiryRows([]);
+            });
+    }, []);
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -72,17 +102,8 @@ const InventoryDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        shopApi
-            .getInventoryExpirySummary()
-            .then((r: any) => {
-                setExpiryKpi(r?.kpi ?? {});
-                setExpiryRows(Array.isArray(r?.rows) ? r.rows : []);
-            })
-            .catch(() => {
-                setExpiryKpi(null);
-                setExpiryRows([]);
-            });
-    }, []);
+        loadExpirySummary();
+    }, [loadExpirySummary]);
 
     // Real branch/warehouse inventory: units per warehouse and % of total stock
     const warehouseUtilization = React.useMemo(() => {
@@ -233,6 +254,33 @@ const InventoryDashboard: React.FC = () => {
     const toggleSummaryFilter = useCallback((key: SummaryFilter) => {
         setSummaryFilter((prev) => (prev === key ? 'critical' : key));
     }, []);
+
+    const openBatchExpiryEdit = useCallback((r: ExpiryRow) => {
+        const exp = r.expiry_date ? String(r.expiry_date).slice(0, 10) : '';
+        setBatchExpiryDraft(exp);
+        setBatchExpiryModal(r);
+    }, []);
+
+    const saveBatchExpiry = useCallback(async () => {
+        if (!batchExpiryModal?.id) return;
+        const trimmed = batchExpiryDraft.trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            showAppToast('Enter a valid date (YYYY-MM-DD).', 'error');
+            return;
+        }
+        setBatchExpirySaving(true);
+        try {
+            await shopApi.updateInventoryBatchExpiry(batchExpiryModal.id, { expiryDate: trimmed });
+            showAppToast('Batch expiry updated.', 'success');
+            setBatchExpiryModal(null);
+            loadExpirySummary();
+            await refreshItems();
+        } catch (e: unknown) {
+            showAppToast(userMessageForApiError(e, 'Could not update batch expiry.'), 'error');
+        } finally {
+            setBatchExpirySaving(false);
+        }
+    }, [batchExpiryModal, batchExpiryDraft, loadExpirySummary, refreshItems]);
 
     const summaryCards = useMemo(() => {
         const core: {
@@ -422,6 +470,7 @@ const InventoryDashboard: React.FC = () => {
                                     <th className="px-4 py-2">Batch</th>
                                     <th className="px-4 py-2">Expiry</th>
                                     <th className="px-4 py-2 text-right">Qty</th>
+                                    <th className="px-4 py-2 text-right w-24">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -446,6 +495,17 @@ const InventoryDashboard: React.FC = () => {
                                             <td className="px-4 py-2 tabular-nums">{exp || '—'}</td>
                                             <td className="px-4 py-2 text-right tabular-nums">
                                                 {Number(r.quantity_remaining ?? 0).toLocaleString()}
+                                            </td>
+                                            <td className="px-4 py-2 text-right">
+                                                <button
+                                                    type="button"
+                                                    title="Correct expiry date"
+                                                    onClick={() => openBatchExpiryEdit(r)}
+                                                    className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                >
+                                                    <Pencil className="h-4 w-4" aria-hidden />
+                                                    <span className="sr-only">Edit expiry</span>
+                                                </button>
                                             </td>
                                         </tr>
                                     );
@@ -672,6 +732,52 @@ const InventoryDashboard: React.FC = () => {
                 warehouses={warehouses}
                 categories={categories}
             />
+
+            <Modal
+                isOpen={!!batchExpiryModal}
+                onClose={() => !batchExpirySaving && setBatchExpiryModal(null)}
+                title="Correct batch expiry"
+                size="sm"
+            >
+                {batchExpiryModal ? (
+                    <div className="space-y-4">
+                        <div className="text-sm text-muted-foreground space-y-1">
+                            <p>
+                                <span className="font-medium text-foreground">{batchExpiryModal.product_name}</span>
+                                <span className="font-mono text-xs ml-2">{batchExpiryModal.sku}</span>
+                            </p>
+                            <p className="font-mono text-xs break-all">{batchExpiryModal.batch_no}</p>
+                            <p>{batchExpiryModal.warehouse_name}</p>
+                        </div>
+                        <div>
+                            <label htmlFor="batch-expiry-date" className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                                Expiry date
+                            </label>
+                            <input
+                                id="batch-expiry-date"
+                                type="date"
+                                value={batchExpiryDraft}
+                                onChange={(e) => setBatchExpiryDraft(e.target.value)}
+                                disabled={batchExpirySaving}
+                                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 dark:border-slate-600"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setBatchExpiryModal(null)}
+                                disabled={batchExpirySaving}
+                            >
+                                Cancel
+                            </Button>
+                            <Button type="button" onClick={() => void saveBatchExpiry()} disabled={batchExpirySaving}>
+                                {batchExpirySaving ? 'Saving…' : 'Save'}
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
+            </Modal>
         </div>
     );
 };

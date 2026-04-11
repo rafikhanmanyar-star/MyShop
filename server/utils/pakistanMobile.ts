@@ -7,7 +7,7 @@ function digitsOnly(raw: string): string {
 
 /**
  * Normalize common local / partial inputs to 92 + 10 digits.
- * Accepts: 923175505575 | 03175505575 | 3175505575 (+spaces/dashes)
+ * Accepts: 923********* | 03********* | 3********* (+spaces/dashes)
  */
 export function normalizePakistanMobileTo92Digits(raw: string): string | null {
   const d = digitsOnly(raw);
@@ -29,7 +29,7 @@ export function parsePakistanMobile(raw: string):
     return {
       ok: false,
       message:
-        'Use 12 digits: 92 and 10 digits (e.g. 923175505575). Local numbers starting with 0 are adjusted automatically.',
+        'Use 12 digits: 92 and 10 digits (e.g. 923*********). Local numbers starting with 0 are adjusted automatically.',
     };
   }
   return { ok: true, digits: n };

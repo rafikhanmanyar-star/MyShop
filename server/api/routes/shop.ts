@@ -414,6 +414,22 @@ router.get('/inventory/expiry-summary', async (req: any, res) => {
   }
 });
 
+router.patch('/inventory/batches/:batchId/expiry', async (req: any, res) => {
+  try {
+    const expiryDate = req.body?.expiryDate;
+    const row = await getShopService().updateInventoryBatchExpiry(
+      req.tenantId,
+      req.params.batchId,
+      expiryDate
+    );
+    res.json(row);
+  } catch (error: any) {
+    const msg = error?.message || 'Failed to update batch expiry';
+    const status = msg === 'Batch not found' ? 404 : 400;
+    res.status(status).json({ error: msg });
+  }
+});
+
 // --- Sales (Admin/Cashier) ---
 router.get('/sales', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {

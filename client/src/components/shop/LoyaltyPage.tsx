@@ -154,8 +154,8 @@ const LoyaltyContent: React.FC = () => {
                             type="tel"
                             inputMode="numeric"
                             autoComplete="tel"
-                            placeholder="923175505575"
-                            helperText="Format: 92 followed by 10 digits (e.g. 923175505575). Local 03… numbers are saved without the leading 0."
+                            placeholder="923*********"
+                            helperText="Format: 92 followed by 10 digits (e.g. 923*********). Local 03… numbers are saved without the leading 0."
                             error={phoneError}
                             value={newMemberData.phone}
                             onChange={(e) => {

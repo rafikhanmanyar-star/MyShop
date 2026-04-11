@@ -903,6 +903,30 @@ export class ShopService {
     return { kpi: kpi[0] || {}, rows };
   }
 
+  /** Correct a wrongly entered batch expiry date (inventory_batches row). */
+  async updateInventoryBatchExpiry(tenantId: string, batchId: string, expiryDate: unknown) {
+    const raw = String(expiryDate ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      throw new Error('Invalid expiry date; use YYYY-MM-DD');
+    }
+    const probe = new Date(`${raw}T12:00:00`);
+    if (Number.isNaN(probe.getTime())) {
+      throw new Error('Invalid expiry date');
+    }
+    const rows = await this.db.query<{ id: string; expiry_date: string }>(
+      `UPDATE inventory_batches
+       SET expiry_date = $3
+       WHERE tenant_id = $1 AND id = $2
+       RETURNING id, expiry_date`,
+      [tenantId, batchId, raw]
+    );
+    if (!rows.length) {
+      throw new Error('Batch not found');
+    }
+    invalidateInventorySkuListCache(tenantId);
+    return rows[0];
+  }
+
   async getInventoryMovements(tenantId: string, productId?: string, maxRows = 5000) {
     let query = `
       SELECT m.*, p.name as product_name, p.sku, w.name as warehouse_name

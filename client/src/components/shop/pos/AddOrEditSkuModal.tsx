@@ -195,6 +195,30 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         );
     }, [shopCategories, formData.category]);
 
+    const mainCategoryLabel =
+        formData.category === 'General'
+            ? 'Uncategorized'
+            : rootCategories.find((c) => c.id === formData.category)?.name ?? '—';
+
+    const subcategoryHelperText = (() => {
+        if (formData.category === 'General') {
+            return 'Choose a main category first. Subcategories for that main category will appear here.';
+        }
+        if (subcategoriesForParent.length === 0) {
+            return 'This main category has no subcategories — classification stops at the main category.';
+        }
+        return 'Choose a subcategory to finish, or “Main category only” if the product sits under the parent shelf.';
+    })();
+
+    const subcategorySelectDisabled =
+        formData.category === 'General' || subcategoriesForParent.length === 0;
+
+    React.useEffect(() => {
+        if (formData.category !== 'General' && subcategoriesForParent.length === 0 && formData.subcategoryId) {
+            setFormData((prev) => ({ ...prev, subcategoryId: '' }));
+        }
+    }, [formData.category, formData.subcategoryId, subcategoriesForParent.length]);
+
     const existingResults = useMemo(() => {
         const q = existingSearch.trim().toLowerCase();
         if (!q) return items.slice(0, 20);
@@ -582,16 +606,33 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 </div>
                             )}
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div
+                            className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4"
+                            aria-label="Category selection"
+                        >
                             <div>
+                                <p className="text-sm font-semibold text-slate-800">Category</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Step 1: pick the main category. Step 2: pick a subcategory under that main
+                                    (when available).
+                                </p>
+                            </div>
+
+                            <div className="space-y-1.5">
                                 <label
-                                    htmlFor="pos-add-edit-sku-category"
-                                    className="block text-sm font-medium text-slate-700 mb-1"
+                                    htmlFor="pos-add-edit-sku-main-category"
+                                    className="flex items-baseline gap-2 text-sm font-medium text-slate-700"
                                 >
-                                    Category
+                                    <span
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-800"
+                                        aria-hidden
+                                    >
+                                        1
+                                    </span>
+                                    <span>Main category</span>
                                 </label>
                                 <select
-                                    id="pos-add-edit-sku-category"
+                                    id="pos-add-edit-sku-main-category"
                                     className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                     value={formData.category}
                                     onChange={(e) => {
@@ -603,7 +644,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                         });
                                     }}
                                 >
-                                    <option value="General">General</option>
+                                    <option value="General">General (uncategorized)</option>
                                     {rootCategories.map((c) => (
                                         <option key={c.id} value={c.id}>
                                             {c.name}
@@ -611,16 +652,29 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     ))}
                                 </select>
                             </div>
-                            <div>
+
+                            <div className="space-y-1.5">
                                 <label
                                     htmlFor="pos-add-edit-sku-subcategory"
-                                    className="block text-sm font-medium text-slate-700 mb-1"
+                                    className="flex items-baseline gap-2 text-sm font-medium text-slate-700"
                                 >
-                                    Subcategory
+                                    <span
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-800"
+                                        aria-hidden
+                                    >
+                                        2
+                                    </span>
+                                    <span>Subcategory</span>
+                                    {!subcategorySelectDisabled && (
+                                        <span className="text-xs font-normal text-slate-500">
+                                            (under “{mainCategoryLabel}”)
+                                        </span>
+                                    )}
                                 </label>
                                 <select
                                     id="pos-add-edit-sku-subcategory"
-                                    disabled={formData.category === 'General' || subcategoriesForParent.length === 0}
+                                    aria-describedby="pos-add-edit-sku-subcategory-help"
+                                    disabled={subcategorySelectDisabled}
                                     className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
                                     value={formData.subcategoryId}
                                     onChange={(e) =>
@@ -629,10 +683,10 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 >
                                     <option value="">
                                         {formData.category === 'General'
-                                            ? '—'
+                                            ? 'Select a main category first…'
                                             : subcategoriesForParent.length === 0
-                                              ? 'No subcategories'
-                                              : 'None (parent only)'}
+                                              ? '— No subcategories for this main category'
+                                              : 'Main category only (no subcategory)'}
                                     </option>
                                     {subcategoriesForParent.map((c) => (
                                         <option key={c.id} value={c.id}>
@@ -640,6 +694,12 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                         </option>
                                     ))}
                                 </select>
+                                <p
+                                    id="pos-add-edit-sku-subcategory-help"
+                                    className="text-xs text-slate-500 leading-snug"
+                                >
+                                    {subcategoryHelperText}
+                                </p>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
