@@ -523,7 +523,10 @@ router.post('/loyalty/members', async (req: any, res) => {
     const memberId = await getShopService().createLoyaltyMember(req.tenantId, req.body);
     res.status(201).json({ id: memberId, message: 'Member enrolled successfully' });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const msg = String(error?.message || '');
+    const status =
+      /Invalid phone|already exists|Phone number is required/i.test(msg) ? 400 : 500;
+    res.status(status).json({ error: msg || 'Failed to enroll member' });
   }
 });
 

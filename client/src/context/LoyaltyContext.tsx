@@ -18,7 +18,7 @@ interface LoyaltyContextType {
     tiers: LoyaltyTierConfig[];
     campaigns: LoyaltyCampaign[];
 
-    addMember: (member: Omit<LoyaltyMember, 'id' | 'joinDate' | 'pointsBalance' | 'lifetimePoints'>) => void;
+    addMember: (member: Omit<LoyaltyMember, 'id' | 'joinDate' | 'pointsBalance' | 'lifetimePoints'>) => Promise<void>;
     updateMember: (id: string, data: Partial<LoyaltyMember>) => void;
     deleteMember: (id: string) => void;
     processLoyalty: (customerId: string, saleAmount: number, saleId: string, isRedemption?: boolean, redeemPoints?: number) => void;
@@ -109,19 +109,7 @@ export const LoyaltyProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setMembers(prev => [...prev, newMember]);
         } catch (error) {
             console.error('Failed to create member:', error);
-            // Fallback
-            const newMember: LoyaltyMember = {
-                ...memberData,
-                id: crypto.randomUUID(),
-                joinDate: new Date().toISOString(),
-                pointsBalance: 0,
-                lifetimePoints: 0,
-                status: 'Active',
-                tier: 'Silver',
-                visitCount: 0,
-                totalSpend: 0
-            };
-            setMembers(prev => [...prev, newMember]);
+            throw error;
         }
     }, []);
 

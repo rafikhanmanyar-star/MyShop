@@ -16,7 +16,7 @@ import { POSColumnResizeHandle } from './POSColumnResizeHandle';
 import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 import { showAppToast } from '../../../utils/appToast';
 
-const POS_CATEGORY_TREE_VISIBLE_KEY = 'pos-category-tree-visible';
+export const POS_CATEGORY_TREE_VISIBLE_KEY = 'pos-category-tree-visible';
 const POS_CATEGORY_TREE_W_KEY = 'pos-category-tree-w-px';
 const POS_FAST_MOVING_VISIBLE_KEY = 'pos-fast-moving-visible';
 
@@ -97,7 +97,8 @@ function mapApiProductToPOS(p: any): POSProduct {
         unit: p.unit || 'pcs',
         stockLevel: Number(p.stock_quantity) || 0,
         imageUrl: getFullImageUrl(p.image_url),
-        popularityScore: p.popularity_score || 0
+        popularityScore: p.popularity_score || 0,
+        salesDeactivated: Boolean(p.sales_deactivated)
     };
 }
 
@@ -115,7 +116,8 @@ function mapInventoryItemToPOS(item: InventoryItem): POSProduct {
         unit: item.unit || 'pcs',
         stockLevel: Number(item.available ?? item.onHand) || 0,
         imageUrl: item.imageUrl,
-        popularityScore: 0
+        popularityScore: 0,
+        salesDeactivated: Boolean(item.salesDeactivated)
     };
 }
 
@@ -360,6 +362,9 @@ const ProductSearch: React.FC = () => {
         } catch {
             /* ignore */
         }
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('pos:category-tree-visibility', { detail: { visible } }));
+        }
     }, []);
 
     const [fastMovingVisible, setFastMovingVisible] = useState(() => {
@@ -565,7 +570,8 @@ const ProductSearch: React.FC = () => {
                           price: Number(inv.retailPrice) || p.price,
                           cost: Number(inv.costPrice) || p.cost,
                           imageUrl: inv.imageUrl ?? p.imageUrl,
-                          categoryId: inv.category || p.categoryId
+                          categoryId: inv.category || p.categoryId,
+                          salesDeactivated: inv.salesDeactivated ?? p.salesDeactivated
                       }
                     : p;
             return {
@@ -575,6 +581,12 @@ const ProductSearch: React.FC = () => {
             };
         });
     }, [products, inventoryItems, selectedBranchId]);
+
+    /** SKUs manually deactivated for sales stay out of POS grid and barcode add (still in inventory for reactivation). */
+    const productsForPOSCatalog = useMemo(
+        () => productsWithStock.filter((p) => !p.salesDeactivated),
+        [productsWithStock]
+    );
 
     /** Same merge as main grid — popular list API can lag or omit branch qty; inventory keeps labels and stock in sync. */
     const popularProductsWithStock = useMemo(() => {
@@ -596,7 +608,8 @@ const ProductSearch: React.FC = () => {
                           price: Number(inv.retailPrice) || p.price,
                           cost: Number(inv.costPrice) || p.cost,
                           imageUrl: inv.imageUrl ?? p.imageUrl,
-                          categoryId: inv.category || p.categoryId
+                          categoryId: inv.category || p.categoryId,
+                          salesDeactivated: inv.salesDeactivated ?? p.salesDeactivated
                       }
                     : p;
             return {
@@ -606,6 +619,11 @@ const ProductSearch: React.FC = () => {
             };
         });
     }, [popularProducts, inventoryItems, selectedBranchId]);
+
+    const popularProductsForPOS = useMemo(
+        () => popularProductsWithStock.filter((p) => !p.salesDeactivated),
+        [popularProductsWithStock]
+    );
 
     // Update local query when external search query changes (e.g. from barcode scanner)
     useEffect(() => {
@@ -638,16 +656,16 @@ const ProductSearch: React.FC = () => {
     }, []);
 
     const fuse = useMemo(() => {
-        return new Fuse(productsWithStock, {
+        return new Fuse(productsForPOSCatalog, {
             keys: ['name', 'sku', 'barcode', 'categoryId', 'subcategoryId'],
             threshold: 0.3,
             distance: 100,
             ignoreLocation: true,
         });
-    }, [productsWithStock]);
+    }, [productsForPOSCatalog]);
 
     const filteredProducts = useMemo(() => {
-        let result = productsWithStock;
+        let result = productsForPOSCatalog;
 
         // Category Filter (tree node = node + descendants; matches categoryId / subcategoryId)
         if (selectedCategory !== 'all' && selectedCategoryIdSet) {
@@ -663,7 +681,7 @@ const ProductSearch: React.FC = () => {
         const query = localQuery.toLowerCase().trim();
         if (query) {
             // Check for exact barcode match first (Speed optimization)
-            const exactBarcode = productsWithStock.find(p => p.barcode && p.barcode.toLowerCase() === query);
+            const exactBarcode = productsForPOSCatalog.find(p => p.barcode && p.barcode.toLowerCase() === query);
             if (exactBarcode) return [exactBarcode];
 
             // Fuzzy match
@@ -672,7 +690,7 @@ const ProductSearch: React.FC = () => {
         }
 
         return result;
-    }, [productsWithStock, selectedCategory, selectedCategoryIdSet, localQuery, fuse, shopCategories]);
+    }, [productsForPOSCatalog, selectedCategory, selectedCategoryIdSet, localQuery, fuse, shopCategories]);
 
     // Keyboard navigation
     useEffect(() => {
@@ -754,7 +772,7 @@ const ProductSearch: React.FC = () => {
         const isNumeric = /^\d+$/.test(query);
         if (!isNumeric) return;
 
-        const exactMatch = productsWithStock.find(p => p.barcode === query);
+        const exactMatch = productsForPOSCatalog.find(p => p.barcode === query);
         if (!exactMatch) return;
 
         // Cooldown: avoid adding the same barcode again within 800ms (e.g. effect re-run or Strict Mode)
@@ -767,7 +785,7 @@ const ProductSearch: React.FC = () => {
         if (barcodeAddTimeoutRef.current) clearTimeout(barcodeAddTimeoutRef.current);
         barcodeAddTimeoutRef.current = setTimeout(() => {
             barcodeAddTimeoutRef.current = null;
-            const currentMatch = productsWithStock.find(p => p.barcode === query);
+            const currentMatch = productsForPOSCatalog.find(p => p.barcode === query);
             if (!currentMatch) return;
             const n = Date.now();
             if (lastAddedBarcodeRef.current === query && n - lastBarcodeAddTimeRef.current < 800) return;
@@ -787,7 +805,7 @@ const ProductSearch: React.FC = () => {
                 barcodeAddTimeoutRef.current = null;
             }
         };
-    }, [localQuery, productsWithStock, addToCart, setSearchQuery, focusPosSearch]);
+    }, [localQuery, productsForPOSCatalog, addToCart, setSearchQuery, focusPosSearch]);
 
     const initialEditingItemForModal = useMemo((): InventoryItem | null => {
         if (!skuModal.open || skuModal.kind !== 'edit') return null;
@@ -939,7 +957,7 @@ const ProductSearch: React.FC = () => {
                 </div>
 
             {/* Popular / Frequent Items Section */}
-            {!localQuery && selectedCategory === 'all' && popularProductsWithStock.length > 0 && fastMovingVisible && (
+            {!localQuery && selectedCategory === 'all' && popularProductsForPOS.length > 0 && fastMovingVisible && (
                 <div className="px-4 py-3 bg-[#eef2ff]/60 dark:bg-slate-800/40 border-b border-slate-200/80 dark:border-slate-700">
                     <div className="flex items-center justify-between gap-2 mb-3 px-1">
                         <div className="flex items-center gap-2 min-w-0">
@@ -957,7 +975,7 @@ const ProductSearch: React.FC = () => {
                         </button>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                        {popularProductsWithStock.map(p => (
+                        {popularProductsForPOS.map(p => (
                             <div
                                 key={p.id}
                                 onContextMenu={(e) => handleProductContextMenu(e, p)}
@@ -985,7 +1003,7 @@ const ProductSearch: React.FC = () => {
                     </div>
                 </div>
             )}
-            {!localQuery && selectedCategory === 'all' && popularProductsWithStock.length > 0 && !fastMovingVisible && (
+            {!localQuery && selectedCategory === 'all' && popularProductsForPOS.length > 0 && !fastMovingVisible && (
                 <div className="px-4 py-2 bg-[#eef2ff]/40 dark:bg-slate-800/30 border-b border-slate-200/80 dark:border-slate-700">
                     <button
                         type="button"

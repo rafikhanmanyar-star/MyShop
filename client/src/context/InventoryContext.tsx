@@ -76,6 +76,7 @@ function mapServerProductToItem(p: any): InventoryItem {
         barcode: p.barcode || undefined,
         name: p.name,
         category: p.category_id || 'General',
+        subcategoryId: p.subcategory_id || undefined,
         unit: p.unit || 'pcs',
         onHand: 0,
         available: 0,
@@ -88,6 +89,7 @@ function mapServerProductToItem(p: any): InventoryItem {
         imageUrl: getFullImageUrl(p.image_url) || undefined,
         description: p.mobile_description || p.description || undefined,
         warehouseStock: {},
+        salesDeactivated: Boolean(p.sales_deactivated),
     };
 }
 
@@ -125,6 +127,7 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
         barcode: r.barcode || undefined,
         name: r.name,
         category: r.category_id || 'General',
+        subcategoryId: r.subcategory_id || undefined,
         unit: r.unit || 'pcs',
         onHand,
         available,
@@ -139,6 +142,7 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
         description: r.mobile_description || undefined,
         warehouseStock: ws,
         nearestExpiry: nearestExpiry ?? undefined,
+        salesDeactivated: Boolean(r.sales_deactivated),
     };
 }
 
@@ -167,6 +171,7 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         barcode: p.barcode || undefined,
         name: p.name,
         category: p.category_id || 'General',
+        subcategoryId: p.subcategory_id || undefined,
         unit: p.unit || 'pcs',
         onHand: stockMap[p.id]?.total || 0,
         available:
@@ -182,6 +187,7 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         imageUrl: getFullImageUrl(p.image_url) || undefined,
         description: p.mobile_description || p.description || undefined,
         warehouseStock: stockMap[p.id]?.byWh || {},
+        salesDeactivated: Boolean(p.sales_deactivated),
     }));
 }
 
@@ -267,6 +273,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     barcode: p.payload.barcode ?? undefined,
                     name: p.payload.name,
                     category: p.payload.category_id || 'General',
+                    subcategoryId: p.payload.subcategory_id || undefined,
                     unit: p.payload.unit || 'pcs',
                     onHand: 0,
                     available: 0,
@@ -293,6 +300,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                             barcode: p.payload.barcode ?? undefined,
                             name: p.payload.name,
                             category: p.payload.category_id || 'General',
+                            subcategoryId: p.payload.subcategory_id || undefined,
                             unit: p.payload.unit || 'pcs',
                             onHand: 0,
                             available: 0,
@@ -369,6 +377,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 barcode: p.payload.barcode ?? undefined,
                 name: p.payload.name,
                 category: p.payload.category_id || 'General',
+                subcategoryId: p.payload.subcategory_id || undefined,
                 unit: p.payload.unit || 'pcs',
                 onHand: 0,
                 available: 0,
@@ -400,6 +409,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                         barcode: p.payload.barcode ?? undefined,
                         name: p.payload.name,
                         category: p.payload.category_id || 'General',
+                        subcategoryId: p.payload.subcategory_id || undefined,
                         unit: p.payload.unit || 'pcs',
                         onHand: 0,
                         available: 0,
@@ -498,6 +508,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             barcode: item.barcode || null,
             name: item.name,
             category_id: item.category === 'General' ? null : item.category,
+            subcategory_id:
+                item.category !== 'General' && item.subcategoryId ? item.subcategoryId : null,
             retail_price: item.retailPrice,
             cost_price: item.costPrice,
             unit: item.unit,
@@ -602,13 +614,26 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (updates.name !== undefined) payload.name = updates.name;
             if (updates.sku !== undefined) payload.sku = updates.sku;
             if (updates.barcode !== undefined) payload.barcode = updates.barcode;
-            if (updates.category) payload.category_id = updates.category === 'General' ? null : updates.category;
+            if (updates.category !== undefined) {
+                payload.category_id = updates.category === 'General' ? null : updates.category;
+                if (updates.category === 'General') {
+                    payload.subcategory_id = null;
+                }
+            }
+            if (updates.subcategoryId !== undefined) {
+                if (updates.category === 'General') {
+                    payload.subcategory_id = null;
+                } else {
+                    payload.subcategory_id = updates.subcategoryId || null;
+                }
+            }
             if (updates.retailPrice !== undefined) payload.retail_price = updates.retailPrice;
             if (updates.costPrice !== undefined) payload.cost_price = updates.costPrice;
             if (updates.unit) payload.unit = updates.unit;
             if (updates.reorderPoint !== undefined) payload.reorder_point = updates.reorderPoint;
             if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
             if (updates.description !== undefined) payload.mobile_description = updates.description;
+            if (updates.salesDeactivated !== undefined) payload.sales_deactivated = updates.salesDeactivated;
 
             const updateRes = await withRetries(() => shopApi.updateProduct(id, payload));
             if (!updateRes.success) {

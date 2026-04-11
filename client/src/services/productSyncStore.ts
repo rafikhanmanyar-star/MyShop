@@ -13,6 +13,7 @@ export interface PendingProductPayload {
   barcode?: string | null;
   name: string;
   category_id: string | null;
+  subcategory_id?: string | null;
   retail_price: number;
   cost_price: number;
   unit: string;

@@ -9,6 +9,8 @@ import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
+import { parsePakistanMobile } from '../../utils/pakistanMobile';
+import type { ApiError } from '../../services/apiClient';
 
 const LoyaltyContent: React.FC = () => {
     const { addMember } = useLoyalty();
@@ -20,21 +22,40 @@ const LoyaltyContent: React.FC = () => {
         email: '',
         phone: ''
     });
+    const [phoneError, setPhoneError] = useState('');
+    const [enrollError, setEnrollError] = useState('');
 
-    const handleEnroll = () => {
-        addMember({
-            customerId: newMemberData.cardNumber || `CUST-${Date.now().toString().slice(-6)}`,
-            customerName: newMemberData.customerName,
-            cardNumber: newMemberData.cardNumber || `LOY-${Date.now().toString().slice(-6)}`,
-            email: newMemberData.email,
-            phone: newMemberData.phone,
-            tier: 'Silver',
-            visitCount: 0,
-            totalSpend: 0,
-            status: 'Active'
-        });
-        setIsEnrollModalOpen(false);
-        setNewMemberData({ customerName: '', cardNumber: '', email: '', phone: '' });
+    const handleEnroll = async () => {
+        setEnrollError('');
+        const parsed = parsePakistanMobile(newMemberData.phone);
+        if (!parsed.ok) {
+            setPhoneError(parsed.message);
+            return;
+        }
+        setPhoneError('');
+        try {
+            await addMember({
+                customerId: newMemberData.cardNumber || `CUST-${Date.now().toString().slice(-6)}`,
+                customerName: newMemberData.customerName,
+                cardNumber: newMemberData.cardNumber || `LOY-${Date.now().toString().slice(-6)}`,
+                email: newMemberData.email,
+                phone: parsed.digits,
+                tier: 'Silver',
+                visitCount: 0,
+                totalSpend: 0,
+                status: 'Active'
+            });
+            setIsEnrollModalOpen(false);
+            setNewMemberData({ customerName: '', cardNumber: '', email: '', phone: '' });
+        } catch (e) {
+            const err = e as ApiError;
+            const msg = typeof err?.error === 'string' ? err.error : 'Could not enroll member.';
+            if (/Invalid phone|Phone number is required/i.test(msg)) {
+                setPhoneError(msg.replace(/^Invalid phone:\s*/i, '').trim());
+            } else {
+                setEnrollError(msg);
+            }
+        }
     };
 
     const tabs = [
@@ -55,7 +76,11 @@ const LoyaltyContent: React.FC = () => {
                     </div>
                     <div className="flex gap-3">
                         <button
-                            onClick={() => setIsEnrollModalOpen(true)}
+                            onClick={() => {
+                                setPhoneError('');
+                                setEnrollError('');
+                                setIsEnrollModalOpen(true);
+                            }}
                             className="px-4 py-2 bg-rose-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-rose-100 dark:shadow-rose-900/40 hover:bg-rose-700 transition-all flex items-center gap-2"
                         >
                             {ICONS.plus} Enroll Member
@@ -93,7 +118,11 @@ const LoyaltyContent: React.FC = () => {
 
             <Modal
                 isOpen={isEnrollModalOpen}
-                onClose={() => setIsEnrollModalOpen(false)}
+                onClose={() => {
+                    setPhoneError('');
+                    setEnrollError('');
+                    setIsEnrollModalOpen(false);
+                }}
                 title="Enroll New Loyalty Member"
                 size="lg"
             >
@@ -122,11 +151,32 @@ const LoyaltyContent: React.FC = () => {
                         />
                         <Input
                             label="Phone Number"
-                            placeholder="+92..."
+                            type="tel"
+                            inputMode="numeric"
+                            autoComplete="tel"
+                            placeholder="923175505575"
+                            helperText="Format: 92 followed by 10 digits (e.g. 923175505575). Local 03… numbers are saved without the leading 0."
+                            error={phoneError}
                             value={newMemberData.phone}
-                            onChange={(e) => setNewMemberData({ ...newMemberData, phone: e.target.value })}
+                            onChange={(e) => {
+                                setPhoneError('');
+                                setEnrollError('');
+                                setNewMemberData({ ...newMemberData, phone: e.target.value });
+                            }}
+                            onBlur={() => {
+                                const parsed = parsePakistanMobile(newMemberData.phone);
+                                if (parsed.ok) {
+                                    setNewMemberData((prev) => ({ ...prev, phone: parsed.digits }));
+                                }
+                            }}
                         />
                     </div>
+
+                    {enrollError ? (
+                        <p className="text-sm font-medium text-destructive" role="alert">
+                            {enrollError}
+                        </p>
+                    ) : null}
 
                     <div className="bg-rose-50 dark:bg-rose-950/40 p-4 rounded-xl border border-rose-100 dark:border-rose-900/60 mt-2">
                         <div className="flex items-center gap-3">
@@ -141,8 +191,22 @@ const LoyaltyContent: React.FC = () => {
                     </div>
 
                     <div className="flex justify-end gap-3 mt-6">
-                        <Button variant="secondary" onClick={() => setIsEnrollModalOpen(false)}>Cancel</Button>
-                        <Button onClick={handleEnroll} disabled={!newMemberData.customerName}>Enroll Member</Button>
+                        <Button
+                            variant="secondary"
+                            onClick={() => {
+                                setPhoneError('');
+                                setEnrollError('');
+                                setIsEnrollModalOpen(false);
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => void handleEnroll()}
+                            disabled={!newMemberData.customerName.trim()}
+                        >
+                            Enroll Member
+                        </Button>
                     </div>
                 </div>
             </Modal>

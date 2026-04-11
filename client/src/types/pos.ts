@@ -20,6 +20,8 @@ export interface POSProduct {
     stockLevel: number;
     reorderPoint?: number;
     popularityScore?: number;
+    /** Hidden from POS grid when true (manual deactivate for sales). */
+    salesDeactivated?: boolean;
 }
 
 export interface POSProductVariant {

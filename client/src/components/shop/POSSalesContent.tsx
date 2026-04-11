@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { usePOS } from '../../context/POSContext';
 import POSHeader from './pos/POSHeader';
-import ProductSearch from './pos/ProductSearch';
+import ProductSearch, { POS_CATEGORY_TREE_VISIBLE_KEY } from './pos/ProductSearch';
 import CartGrid from './pos/CartGrid';
 import CheckoutPanel from './pos/CheckoutPanel';
 import ShortcutBar from './pos/ShortcutBar';
@@ -36,6 +36,19 @@ const CENTER_MIN_PX = 100;
  * stack catalog / cart / checkout vertically so nothing is clipped off-screen.
  */
 const STACK_LAYOUT_BELOW_PX = 960;
+
+/** When the category tree is open, widen the catalog column and narrow checkout so the product grid stays usable. */
+const CATEGORY_OPEN_RIGHT_SCALE = 0.88;
+
+function loadCategoryTreeOpenFromStorage(): boolean {
+    try {
+        const v = localStorage.getItem(POS_CATEGORY_TREE_VISIBLE_KEY);
+        if (v === null) return false;
+        return v === 'true';
+    } catch {
+        return false;
+    }
+}
 
 function clampSideWidths(rowWidth: number, left: number, right: number): { left: number; right: number } {
     const budget = rowWidth - HANDLES_TOTAL_PX - CENTER_MIN_PX;
@@ -91,6 +104,7 @@ const POSSalesContent: React.FC = () => {
     const mainRef = useRef<HTMLDivElement>(null);
     const layoutRowRef = useRef<HTMLDivElement>(null);
     const [layoutRowWidth, setLayoutRowWidth] = useState(0);
+    const [categoryTreeOpen, setCategoryTreeOpen] = useState(loadCategoryTreeOpenFromStorage);
 
     const [leftColWidthPx, setLeftColWidthPx] = useState(() =>
         loadStoredWidth(STORAGE_POS_LEFT_W, DEFAULT_LEFT_W, MIN_LEFT_W, MAX_LEFT_W)
@@ -130,6 +144,15 @@ const POSSalesContent: React.FC = () => {
         return () => ro.disconnect();
     }, []);
 
+    useEffect(() => {
+        const onCategoryTreeVisibility = (e: Event) => {
+            const ce = e as CustomEvent<{ visible?: boolean }>;
+            if (typeof ce.detail?.visible === 'boolean') setCategoryTreeOpen(ce.detail.visible);
+        };
+        window.addEventListener('pos:category-tree-visibility', onCategoryTreeVisibility);
+        return () => window.removeEventListener('pos:category-tree-visibility', onCategoryTreeVisibility);
+    }, []);
+
     /** Open Sales Archive on a specific receipt (e.g. from Khata ledger). */
     useEffect(() => {
         const st = location.state as { openSaleInvoice?: string } | null | undefined;
@@ -146,9 +169,20 @@ const POSSalesContent: React.FC = () => {
         if (useStackedLayout || layoutRowWidth === 0) {
             return { displayLeftW: leftColWidthPx, displayRightW: rightColWidthPx };
         }
-        const { left, right } = clampSideWidths(layoutRowWidth, leftColWidthPx, rightColWidthPx);
+        // Extra catalog width when categories are shown ( funded by narrower checkout + smaller bill column )
+        const leftBoost =
+            categoryTreeOpen
+                ? Math.min(80, Math.max(40, Math.round(layoutRowWidth * 0.034)))
+                : 0;
+        const boostedLeft = categoryTreeOpen
+            ? Math.min(MAX_LEFT_W, leftColWidthPx + leftBoost)
+            : leftColWidthPx;
+        const scaledRight = categoryTreeOpen
+            ? Math.max(MIN_RIGHT_W, Math.round(rightColWidthPx * CATEGORY_OPEN_RIGHT_SCALE))
+            : rightColWidthPx;
+        const { left, right } = clampSideWidths(layoutRowWidth, boostedLeft, scaledRight);
         return { displayLeftW: left, displayRightW: right };
-    }, [useStackedLayout, layoutRowWidth, leftColWidthPx, rightColWidthPx]);
+    }, [useStackedLayout, layoutRowWidth, leftColWidthPx, rightColWidthPx, categoryTreeOpen]);
 
     const startResizeLeft = useCallback(
         (e: React.MouseEvent) => {

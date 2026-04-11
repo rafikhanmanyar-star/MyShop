@@ -4,6 +4,7 @@ import { notifyDailyReportUpdated } from './dailyReportNotify.js';
 import { insertSystemLog } from './systemLogService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
+import { parsePakistanMobile } from '../utils/pakistanMobile.js';
 import { deductInventoryFefo, insertReturnRestockBatch } from './inventoryBatchService.js';
 
 /** Strip absolute URLs (e.g. http://localhost:3000/uploads/...) to relative paths for DB storage. */
@@ -312,7 +313,10 @@ export class ShopService {
 
   // --- Product Methods ---
   async getProducts(tenantId: string) {
-    return this.db.query('SELECT * FROM shop_products WHERE tenant_id = $1 AND is_active = TRUE ORDER BY popularity_score DESC, name ASC', [tenantId]);
+    return this.db.query(
+      'SELECT * FROM shop_products WHERE tenant_id = $1 AND is_active = TRUE AND COALESCE(sales_deactivated, FALSE) = FALSE ORDER BY popularity_score DESC, name ASC',
+      [tenantId]
+    );
   }
 
   /** Single product by id (tenant-scoped). Used for post-save verification. */
@@ -329,7 +333,7 @@ export class ShopService {
       SELECT p.*, SUM(si.quantity) as total_sold
       FROM shop_products p
       JOIN shop_sale_items si ON p.id = si.product_id AND si.tenant_id = $1
-      WHERE p.tenant_id = $1 AND p.is_active = TRUE
+      WHERE p.tenant_id = $1 AND p.is_active = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
       GROUP BY p.id
       ORDER BY total_sold DESC
       LIMIT $2
@@ -365,13 +369,39 @@ export class ShopService {
     }
 
     const createdRow = await this.db.transaction(async (client) => {
-      let categoryId = data.category_id || null;
-      if (categoryId && categoryId.length < 32) {
+      let categoryId: string | null = data.category_id || null;
+      let subcategoryId: string | null = data.subcategory_id ?? data.subcategoryId ?? null;
+      if (categoryId && String(categoryId).length < 32) {
         const catRes = await client.query(
           'SELECT id FROM categories WHERE tenant_id = $1 AND name ILIKE $2 LIMIT 1',
           [tenantId, categoryId]
         );
         categoryId = catRes.length > 0 ? catRes[0].id : null;
+      }
+      if (subcategoryId && String(subcategoryId).length < 32) {
+        const subRes = await client.query(
+          'SELECT id FROM categories WHERE tenant_id = $1 AND name ILIKE $2 LIMIT 1',
+          [tenantId, subcategoryId]
+        );
+        subcategoryId = subRes.length > 0 ? subRes[0].id : null;
+      }
+      if (subcategoryId) {
+        const srows = await client.query(
+          'SELECT parent_id FROM categories WHERE tenant_id = $1 AND id = $2',
+          [tenantId, subcategoryId]
+        );
+        if (srows.length && srows[0].parent_id) {
+          categoryId = srows[0].parent_id;
+        }
+      } else if (categoryId) {
+        const crows = await client.query(
+          'SELECT parent_id FROM categories WHERE tenant_id = $1 AND id = $2',
+          [tenantId, categoryId]
+        );
+        if (crows.length && crows[0].parent_id) {
+          subcategoryId = categoryId;
+          categoryId = crows[0].parent_id;
+        }
       }
 
       try {
@@ -381,12 +411,12 @@ export class ShopService {
         const createdBy = data.created_by || data.createdBy || null;
         const res = await client.query(`
           INSERT INTO shop_products (
-            tenant_id, name, sku, barcode, category_id, unit,
+            tenant_id, name, sku, barcode, category_id, subcategory_id, unit,
             cost_price, retail_price, tax_rate, reorder_point, image_url, is_active, mobile_description, created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *
         `, [
           tenantId, name, sku, data.barcode || null,
-          categoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
+          categoryId, subcategoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
           data.tax_rate || 0, data.reorder_point || 10, normalizeImageUrl(data.image_url), true, mobileDesc,
           createdBy,
         ]);
@@ -434,23 +464,109 @@ export class ShopService {
   }
 
   async updateProduct(tenantId: string, productId: string, data: any) {
-    return this.db.transaction(async (client) => {
+    const row = await this.db.transaction(async (client) => {
       try {
-        const mobileDesc = data.mobile_description !== undefined ? data.mobile_description : (data.description !== undefined ? data.description : undefined);
+        const prevRows = await client.query(
+          `SELECT name, sku, barcode, category_id, subcategory_id, unit, cost_price, retail_price, tax_rate,
+                  reorder_point, image_url, is_active, mobile_description, sales_deactivated
+           FROM shop_products WHERE id = $1 AND tenant_id = $2`,
+          [productId, tenantId]
+        );
+        if (!prevRows.length) {
+          throw new Error('Product not found or could not be updated (no matching row).');
+        }
+        const prev = prevRows[0];
+
+        let categoryId =
+          data.category_id !== undefined || data.categoryId !== undefined
+            ? data.category_id ?? data.categoryId
+            : prev.category_id;
+        let subcategoryId =
+          data.subcategory_id !== undefined || data.subcategoryId !== undefined
+            ? data.subcategory_id ?? data.subcategoryId
+            : prev.subcategory_id;
+
+        if (categoryId && String(categoryId).length < 32) {
+          const catRes = await client.query(
+            'SELECT id FROM categories WHERE tenant_id = $1 AND name ILIKE $2 LIMIT 1',
+            [tenantId, categoryId]
+          );
+          categoryId = catRes.length > 0 ? catRes[0].id : null;
+        }
+        if (subcategoryId && String(subcategoryId).length < 32) {
+          const subRes = await client.query(
+            'SELECT id FROM categories WHERE tenant_id = $1 AND name ILIKE $2 LIMIT 1',
+            [tenantId, subcategoryId]
+          );
+          subcategoryId = subRes.length > 0 ? subRes[0].id : null;
+        }
+        if (subcategoryId) {
+          const srows = await client.query(
+            'SELECT parent_id FROM categories WHERE tenant_id = $1 AND id = $2',
+            [tenantId, subcategoryId]
+          );
+          if (srows.length && srows[0].parent_id) {
+            categoryId = srows[0].parent_id;
+          }
+        } else if (categoryId) {
+          const crows = await client.query(
+            'SELECT parent_id FROM categories WHERE tenant_id = $1 AND id = $2',
+            [tenantId, categoryId]
+          );
+          if (crows.length && crows[0].parent_id) {
+            subcategoryId = categoryId;
+            categoryId = crows[0].parent_id;
+          }
+        }
+
+        const name = data.name !== undefined ? data.name : prev.name;
+        const sku = data.sku !== undefined ? data.sku : prev.sku;
+        const barcode = data.barcode !== undefined ? data.barcode : prev.barcode;
+        const unit = data.unit !== undefined ? data.unit : prev.unit;
+        const costPrice = data.cost_price !== undefined || data.cost !== undefined ? data.cost_price ?? data.cost : prev.cost_price;
+        const retailPrice = data.retail_price !== undefined || data.price !== undefined ? data.retail_price ?? data.price : prev.retail_price;
+        const taxRate = data.tax_rate !== undefined || data.taxRate !== undefined ? data.tax_rate ?? data.taxRate : prev.tax_rate;
+        const reorderPoint =
+          data.reorder_point !== undefined || data.reorderPoint !== undefined
+            ? data.reorder_point ?? data.reorderPoint
+            : prev.reorder_point;
+        const imageUrl =
+          data.image_url !== undefined ? normalizeImageUrl(data.image_url) : normalizeImageUrl(prev.image_url);
+        const isActive = data.is_active !== undefined ? data.is_active : prev.is_active;
+        const mobileDesc =
+          data.mobile_description !== undefined
+            ? data.mobile_description
+            : data.description !== undefined
+              ? data.description
+              : undefined;
+        const salesDeactivatedParam =
+          data.sales_deactivated !== undefined ? Boolean(data.sales_deactivated) : null;
         const res = await client.query(`
           UPDATE shop_products
-          SET name = $1, sku = $2, barcode = $3, category_id = $4, unit = $5,
-              cost_price = $6, retail_price = $7, tax_rate = $8, reorder_point = $9,
-              image_url = $10, is_active = $11, updated_at = NOW(),
-              mobile_description = COALESCE($14, mobile_description)
-          WHERE id = $12 AND tenant_id = $13
+          SET name = $1, sku = $2, barcode = $3, category_id = $4, subcategory_id = $5, unit = $6,
+              cost_price = $7, retail_price = $8, tax_rate = $9, reorder_point = $10,
+              image_url = $11, is_active = $12, updated_at = NOW(),
+              mobile_description = COALESCE($15, mobile_description),
+              sales_deactivated = CASE WHEN $16 IS NULL THEN sales_deactivated ELSE $16 END
+          WHERE id = $13 AND tenant_id = $14
           RETURNING *
         `, [
-          data.name, data.sku, data.barcode, data.category_id || data.categoryId,
-          data.unit, data.cost_price || data.cost, data.retail_price || data.price,
-          data.tax_rate || data.taxRate, data.reorder_point || data.reorderPoint,
-          normalizeImageUrl(data.image_url), data.is_active !== undefined ? data.is_active : true, productId, tenantId,
-          mobileDesc === undefined ? null : mobileDesc
+          name,
+          sku,
+          barcode,
+          categoryId,
+          subcategoryId,
+          unit,
+          costPrice,
+          retailPrice,
+          taxRate,
+          reorderPoint,
+          imageUrl,
+          isActive,
+          productId,
+          tenantId,
+          mobileDesc === undefined ? null : mobileDesc,
+          salesDeactivatedParam,
         ]);
         if (!res.length) {
           throw new Error('Product not found or could not be updated (no matching row).');
@@ -467,6 +583,8 @@ export class ShopService {
         throw new Error(`Failed to update product: ${err.message}`);
       }
     });
+    invalidateInventorySkuListCache(tenantId);
+    return row;
   }
 
   /** Check if a product (SKU) can be deleted: no inventory on hand, and not used in any sales, mobile orders, or purchase bills. */
@@ -688,12 +806,14 @@ export class ShopService {
           p.barcode,
           p.name,
           p.category_id,
+          p.subcategory_id,
           p.unit,
           p.cost_price,
           p.retail_price,
           p.reorder_point,
           p.image_url,
           p.mobile_description,
+          COALESCE(p.sales_deactivated, FALSE) AS sales_deactivated,
           COALESCE(ia.on_hand, 0)::numeric AS on_hand,
           COALESCE(ia.available, 0)::numeric AS available,
           COALESCE(ia.reserved_total, 0)::numeric AS reserved_total,
@@ -874,6 +994,17 @@ export class ShopService {
   async createSale(tenantId: string, saleData: ShopSale) {
     if (!saleData?.items?.length) {
       throw new Error('Sale must have at least one item');
+    }
+    const saleProductIds = [...new Set(saleData.items.map((i) => i.productId))];
+    const blockedForSale = await this.db.query(
+      `SELECT name FROM shop_products WHERE tenant_id = $1 AND id = ANY($2::text[]) AND COALESCE(sales_deactivated, FALSE) = TRUE`,
+      [tenantId, saleProductIds]
+    );
+    if (blockedForSale.length > 0) {
+      const names = blockedForSale.map((r: any) => r.name).join(', ');
+      throw new Error(
+        `Cannot sell deactivated SKU(s): ${names}. Open the product in Inventory and turn off "Deactivate for sales" to sell it again.`
+      );
     }
     const paymentDetails = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [];
     const barcodeValue = `SALE|${tenantId}|${saleData.saleNumber}`;
@@ -1263,24 +1394,49 @@ export class ShopService {
   }
 
   async createLoyaltyMember(tenantId: string, data: any) {
+    const phoneParsed = parsePakistanMobile(data.phone || '');
+    if (!phoneParsed.ok) {
+      throw new Error(`Invalid phone: ${phoneParsed.message}`);
+    }
+    const phone = phoneParsed.digits;
+
     return this.db.transaction(async (client) => {
       let customerId = data.customerId;
 
-      if (!customerId && data.phone) {
-        const existing = await client.query(
+      if (!customerId) {
+        let existing = await client.query(
           'SELECT id FROM contacts WHERE tenant_id = $1 AND contact_no = $2 LIMIT 1',
-          [tenantId, data.phone]
+          [tenantId, phone]
         );
+        if (existing.length === 0) {
+          existing = await client.query(
+            `SELECT id FROM contacts WHERE tenant_id = $1 AND contact_no IS NOT NULL
+             AND regexp_replace(COALESCE(contact_no, ''), '[^0-9]', '', 'g') = regexp_replace($2, '[^0-9]', '', 'g')
+             AND length(regexp_replace($2, '[^0-9]', '', 'g')) > 0
+             LIMIT 1`,
+            [tenantId, phone]
+          );
+        }
         if (existing.length > 0) customerId = existing[0].id;
+      }
+
+      if (customerId) {
+        const memberRow = await client.query(
+          'SELECT id FROM shop_loyalty_members WHERE tenant_id = $1 AND customer_id = $2 LIMIT 1',
+          [tenantId, customerId]
+        );
+        if (memberRow.length > 0) {
+          throw new Error('A loyalty member with this phone number already exists.');
+        }
       }
 
       if (!customerId) {
         const newContactId = `contact_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-        const newContact = await client.query(`
+        await client.query(`
           INSERT INTO contacts (id, tenant_id, name, type, contact_no, address)
           VALUES ($1, $2, $3, 'Customer', $4, $5) RETURNING id
-        `, [newContactId, tenantId, data.name, data.phone, data.email]);
-        customerId = newContact[0].id;
+        `, [newContactId, tenantId, data.name, phone, data.email]);
+        customerId = newContactId;
       }
 
       const res = await client.query(`

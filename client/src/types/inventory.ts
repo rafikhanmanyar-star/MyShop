@@ -12,7 +12,10 @@ export interface InventoryItem {
     sku: string;
     barcode?: string; // Barcode for scanning in POS
     name: string;
+    /** Primary category id from catalog, or the literal `General` when uncategorized */
     category: string;
+    /** Subcategory id when the product is filed under a child category */
+    subcategoryId?: string;
     unit: string;
     onHand: number;
     available: number;
@@ -30,6 +33,8 @@ export interface InventoryItem {
     sellableOnHand?: number;
     /** Earliest future expiry across batches (YYYY-MM-DD), when tracked */
     nearestExpiry?: string | null;
+    /** When true, hidden from mobile catalog and POS; still in inventory for management. */
+    salesDeactivated?: boolean;
 }
 
 export type MovementType = 'Sale' | 'Purchase' | 'Transfer' | 'Adjustment' | 'Return' | 'Damage' | 'Shrinkage';

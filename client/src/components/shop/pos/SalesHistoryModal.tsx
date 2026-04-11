@@ -8,6 +8,21 @@ import { ICONS, CURRENCY } from '../../../constants';
 import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 import { showAppToast } from '../../../utils/appToast';
 
+/** Stable 5-char audit code from sale id (avoids random flicker on re-render). */
+function authCodeFromSaleKey(saleNumber: string, id?: string): string {
+    const seed = `${saleNumber}|${id ?? ''}`;
+    let h = 2166136261;
+    for (let i = 0; i < seed.length; i++) {
+        h ^= seed.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    const n = Math.abs(h) % 2176782336; // base-36 up to 6 chars
+    return n.toString(36).toUpperCase().padStart(5, '0').slice(-5);
+}
+
+const scrollNoBar =
+    'overflow-y-auto overscroll-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden';
+
 const SalesHistoryModal: React.FC = () => {
     const {
         isSalesHistoryModalOpen,
@@ -135,174 +150,180 @@ const SalesHistoryModal: React.FC = () => {
         <Modal
             isOpen={isSalesHistoryModalOpen}
             onClose={() => setIsSalesHistoryModalOpen(false)}
-            title={<div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl pos-gradient-dark flex items-center justify-center text-white shadow-none">
+            title={<div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl pos-gradient-primary flex items-center justify-center text-white shadow-none shrink-0">
                     {ICONS.clock}
                 </div>
-                <div>
-                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 leading-none tracking-tight">Sales Archive</h2>
-                    <div className="flex items-center gap-2 mt-2">
-                        <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest leading-none">Reprint & Audit Station</span>
-                    </div>
+                <div className="min-w-0">
+                    <h2 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100 leading-tight tracking-tight truncate">Sales Archive</h2>
+                    <p className="text-[10px] sm:text-xs font-medium text-emerald-700/90 dark:text-emerald-400/90 uppercase tracking-[0.2em] mt-0.5">Reprint &amp; audit</p>
                 </div>
             </div>}
-            size="xl"
+            size="full"
+            disableScroll
+            className="sm:max-w-[min(1120px,96vw)]"
         >
-            <div className="flex flex-col h-[700px] -m-2">
-                {/* Search Bar Area */}
-                <div className="mb-8">
-                    <div className="relative group">
-                        <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-colors">
-                            {React.cloneElement(ICONS.search as React.ReactElement, { size: 22 })}
-                        </div>
-                        <input
-                            type="text"
-                            placeholder="Search Receipt #, Customer Name or scan barcode (F4)..."
-                            className={`w-full pl-16 pr-24 py-5 bg-[#f8fafc] dark:bg-slate-800 border-2 rounded-[1.5rem] focus:bg-white dark:focus:bg-slate-700 transition-all font-semibold text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none ${isBarcodeScan
-                                ? 'border-indigo-500 ring-8 ring-indigo-500/5'
-                                : 'border-transparent focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5'
-                                } shadow-none`}
-                            value={searchTerm}
-                            onChange={(e) => handleSearchChange(e.target.value).catch(() => {})}
-                            autoFocus
-                        />
-                        {isBarcodeScan && (
-                            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold tracking-widest animate-pulse shadow-none shadow-none-600/30">
-                                📷 BARCODE SCAN
-                            </div>
-                        )}
+            <div className="flex flex-col h-[min(640px,calc(100vh-5.5rem))] -mx-1 -mt-1 sm:-m-2 gap-3 min-h-0">
+                <div className="relative shrink-0 group">
+                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0056b3] transition-colors">
+                        {React.cloneElement(ICONS.search as React.ReactElement, { size: 18 })}
                     </div>
+                    <input
+                        type="text"
+                        placeholder="Receipt #, customer, or scan barcode…"
+                        className={`w-full pl-10 pr-28 py-2.5 text-sm rounded-lg bg-slate-50 dark:bg-slate-900/50 border transition-all font-medium text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none ${isBarcodeScan
+                            ? 'border-[#0056b3] ring-2 ring-[#0056b3]/15'
+                            : 'border-slate-200 dark:border-slate-600 focus:border-[#0056b3] focus:ring-2 focus:ring-[#0056b3]/15'
+                            }`}
+                        value={searchTerm}
+                        onChange={(e) => handleSearchChange(e.target.value).catch(() => {})}
+                        autoFocus
+                    />
+                    {isBarcodeScan && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-[#0056b3] text-white rounded-md text-[10px] font-semibold tracking-wide">
+                            Scan
+                        </div>
+                    )}
                 </div>
 
-                <div className="flex-1 flex gap-8 overflow-hidden">
-                    {/* Sales List Panel */}
-                    <div className="w-[45%] flex flex-col bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[2.5rem] overflow-hidden shadow-none">
-                        <div className="px-8 py-5 bg-[#f8fafc]/50 dark:bg-slate-800/80 border-b border-slate-50 dark:border-slate-700 text-xs font-semibold uppercase text-slate-400 dark:text-slate-500 tracking-[0.2em] flex justify-between items-center">
-                            <span>Transactional Log</span>
-                            <span className="text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-lg">{filteredSales.length} RECORDED</span>
+                <div className="flex-1 flex gap-3 min-h-0 overflow-hidden">
+                    {/* Sales list — compact table-style */}
+                    <div className="w-[34%] min-w-[200px] max-w-[320px] flex flex-col rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800/80 overflow-hidden shadow-sm">
+                        <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between gap-2 bg-slate-50/80 dark:bg-slate-900/40">
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Recent sales</span>
+                            <span className="text-[10px] font-bold tabular-nums text-[#0056b3] dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-1.5 py-0.5 rounded">{filteredSales.length}</span>
                         </div>
-                        <div className="flex-1 overflow-y-auto pos-scrollbar p-3">
+                        <div className={`flex-1 min-h-0 ${scrollNoBar} p-1.5`}>
                             {isLoading ? (
-                                <div className="py-24 flex flex-col items-center gap-4 text-slate-300 dark:text-slate-600">
-                                    <div className="w-10 h-10 border-4 border-indigo-100 dark:border-indigo-900 border-t-indigo-600 dark:border-t-indigo-400 rounded-full animate-spin"></div>
-                                    <span className="font-semibold text-xs uppercase tracking-widest">Accessing Ledger...</span>
+                                <div className="py-12 flex flex-col items-center gap-3 text-slate-400">
+                                    <div className="w-8 h-8 border-2 border-slate-200 dark:border-slate-600 border-t-[#0056b3] rounded-full animate-spin" />
+                                    <span className="text-[11px] font-medium uppercase tracking-wide">Loading…</span>
                                 </div>
                             ) : filteredSales.length === 0 ? (
-                                <div className="py-24 text-center text-slate-400 dark:text-slate-500 animate-fade-in px-8">
-                                    <div className="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-2xl flex items-center justify-center mx-auto mb-5">
-                                        {React.cloneElement(ICONS.search as React.ReactElement, { size: 28, className: "opacity-20" })}
+                                <div className="py-10 px-2 text-center text-slate-400 dark:text-slate-500">
+                                    <div className="w-10 h-10 mx-auto mb-2 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                                        {React.cloneElement(ICONS.search as React.ReactElement, { size: 20, className: 'opacity-40' })}
                                     </div>
-                                    <h5 className="text-sm font-semibold uppercase tracking-widest">No Matches Found</h5>
-                                    <p className="text-xs font-bold mt-2 opacity-60">Try searching for a partial receipt ID or customer name.</p>
+                                    <p className="text-xs font-semibold">No matches</p>
+                                    <p className="text-[10px] mt-1 opacity-80">Try another receipt or name.</p>
                                 </div>
                             ) : (
-                                <div className="space-y-2">
-                                    {filteredSales.map(sale => (
-                                        <button
-                                            key={sale.id || sale.saleNumber}
-                                            onClick={() => setSelectedSale(sale)}
-                                            className={`w-full p-5 text-left rounded-3xl transition-all flex justify-between items-center group relative overflow-hidden ${selectedSale?.saleNumber === sale.saleNumber
-                                                ? 'bg-indigo-600 text-white'
-                                                : 'hover:bg-slate-50 dark:hover:bg-slate-700 border border-transparent'}`}
-                                        >
-                                            <div className="flex flex-col relative z-10">
-                                                <span className={`text-sm font-semibold uppercase tracking-tight mb-1 ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white' : 'text-slate-900 dark:text-slate-100'}`}>
-                                                    {sale.saleNumber}
-                                                </span>
-                                                <span className={`text-xs font-bold uppercase tracking-widest ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white/60' : 'text-slate-400 dark:text-slate-500'}`}>
-                                                    {new Date(sale.createdAt).toLocaleDateString()} • {new Date(sale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </span>
-                                            </div>
-                                            <div className="text-right relative z-10">
-                                                <div className={`text-base font-semibold font-mono tracking-tighter ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`}>
-                                                    {CURRENCY}{sale.grandTotal.toLocaleString()}
-                                                </div>
-                                                <div className={`text-xs font-semibold uppercase tracking-widest mt-1 ${selectedSale?.saleNumber === sale.saleNumber ? 'text-white/40' : 'text-slate-300 dark:text-slate-600'}`}>
-                                                    {sale.paymentMethod}
-                                                </div>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
+                                <ul className="flex flex-col gap-0.5">
+                                    {filteredSales.map((sale, i) => {
+                                        const sel = selectedSale?.saleNumber === sale.saleNumber;
+                                        return (
+                                            <li key={sale.id || sale.saleNumber}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSelectedSale(sale)}
+                                                    className={`w-full text-left rounded-lg px-2 py-1.5 transition-colors border border-transparent ${sel
+                                                        ? 'bg-slate-800 dark:bg-slate-700 text-white border-slate-700'
+                                                        : i % 2 === 0
+                                                            ? 'bg-slate-50/50 dark:bg-slate-900/30 hover:bg-emerald-50/80 dark:hover:bg-slate-700/50'
+                                                            : 'bg-white dark:bg-transparent hover:bg-emerald-50/80 dark:hover:bg-slate-700/50'}`}
+                                                >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <span className={`text-[11px] font-semibold font-mono leading-tight truncate ${sel ? 'text-white' : 'text-slate-800 dark:text-slate-100'}`}>
+                                                            {sale.saleNumber}
+                                                        </span>
+                                                        <span className={`text-[11px] font-semibold tabular-nums shrink-0 ${sel ? 'text-emerald-300' : 'text-[#0056b3] dark:text-blue-400'}`}>
+                                                            {CURRENCY}{sale.grandTotal.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                    <div className={`flex items-center justify-between gap-1 mt-0.5 text-[10px] ${sel ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                        <span className="truncate">
+                                                            {new Date(sale.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                            {' · '}
+                                                            {new Date(sale.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                        <span className="shrink-0 uppercase tracking-tight opacity-90">{sale.paymentMethod}</span>
+                                                    </div>
+                                                </button>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
                             )}
                         </div>
                     </div>
 
-                    {/* Sale Detail / Receipt Preview Panel */}
-                    <div className="flex-1 flex flex-col bg-[#0f172a] dark:bg-slate-800 rounded-[2.5rem] p-10 text-white overflow-hidden relative shadow-none">
-                        <div className="absolute top-0 right-0 p-12 opacity-[0.03] text-white">
-                            {React.cloneElement(ICONS.shoppingCart as React.ReactElement, { size: 200 })}
+                    {/* Receipt preview — dense single-screen */}
+                    <div className="flex-1 min-w-0 flex flex-col rounded-xl border border-slate-700 bg-[#0c1222] text-slate-100 overflow-hidden relative shadow-inner">
+                        <div className="absolute top-2 right-2 opacity-[0.06] pointer-events-none text-white">
+                            {React.cloneElement(ICONS.shoppingCart as React.ReactElement, { size: 120 })}
                         </div>
 
                         {selectedSale ? (
-                            <div className="flex flex-col h-full relative z-10 animate-scale-in">
-                                <div className="mb-10 text-center">
-                                    <span className="text-xs font-semibold uppercase tracking-[0.5em] text-white/30 mb-4 block">Official Transaction Slip</span>
-                                    <h3 className="text-3xl font-semibold mb-2 tracking-tighter">{selectedSale.saleNumber}</h3>
-                                    <p className="text-xs text-indigo-400 uppercase font-semibold tracking-widest bg-indigo-500/10 inline-block px-4 py-1.5 rounded-xl border border-indigo-500/20">
-                                        AUTH CODE: {Math.random().toString(36).substring(7).toUpperCase()}
-                                    </p>
+                            <div className="flex flex-col h-full min-h-0 relative z-10 p-3 sm:p-4">
+                                <div className="shrink-0 flex flex-wrap items-end justify-between gap-2 pb-2 border-b border-white/10">
+                                    <div>
+                                        <p className="text-[9px] font-semibold uppercase tracking-[0.25em] text-emerald-400/90">Transaction slip</p>
+                                        <h3 className="text-base sm:text-lg font-semibold font-mono tracking-tight text-white mt-0.5">{selectedSale.saleNumber}</h3>
+                                    </div>
+                                    <span className="text-[10px] font-mono text-emerald-200/90 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/25">
+                                        AUTH {authCodeFromSaleKey(selectedSale.saleNumber, selectedSale.id)}
+                                    </span>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto mb-10 pr-4 pos-scrollbar space-y-8">
-                                    <div>
-                                        <div className="flex items-center gap-3 mb-5">
-                                            <div className="h-px bg-white/10 flex-1"></div>
-                                            <h4 className="text-xs font-semibold uppercase text-white/40 tracking-[0.3em] whitespace-nowrap">Order Manifesto</h4>
-                                            <div className="h-px bg-white/10 flex-1"></div>
-                                        </div>
-                                        <div className="space-y-4">
+                                <div className={`flex-1 min-h-0 ${scrollNoBar} py-2`}>
+                                    <table className="w-full text-left text-[11px] sm:text-xs border-collapse">
+                                        <thead>
+                                            <tr className="text-[9px] uppercase tracking-wider text-slate-500 border-b border-white/10">
+                                                <th className="font-semibold py-1 pr-2">Item</th>
+                                                <th className="font-semibold py-1 w-8 text-center">Qty</th>
+                                                <th className="font-semibold py-1 w-[4.5rem] text-right tabular-nums">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
                                             {selectedSale.items.map((item, idx) => (
-                                                <div key={idx} className="flex justify-between items-center group/item hover:bg-white/5 p-3 -mx-3 rounded-2xl transition-all">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm font-semibold text-white/90">{item.name}</span>
-                                                        <span className="text-xs font-bold text-white/30 uppercase tracking-widest mt-0.5">Quantity: {item.quantity}</span>
-                                                    </div>
-                                                    <span className="font-mono text-base font-semibold tracking-tighter text-white/80">{item.subtotal.toLocaleString()}</span>
-                                                </div>
+                                                <tr key={idx} className="border-b border-white/[0.06] last:border-0">
+                                                    <td className="py-1 pr-2 align-top text-slate-100 leading-snug max-w-[1px]">
+                                                        <span className="line-clamp-2">{item.name}</span>
+                                                    </td>
+                                                    <td className="py-1 text-center tabular-nums text-slate-400">{item.quantity}</td>
+                                                    <td className="py-1 text-right font-mono tabular-nums text-slate-200">{item.subtotal.toLocaleString()}</td>
+                                                </tr>
                                             ))}
-                                        </div>
-                                    </div>
+                                        </tbody>
+                                    </table>
+                                </div>
 
-                                    <div className="pt-8 border-t border-white/10 space-y-4">
-                                        <div className="flex justify-between text-xs font-semibold uppercase tracking-widest text-white/40">
-                                            <span>Sub-total Provision</span>
-                                            <span className="font-mono text-white/80">{selectedSale.subtotal.toLocaleString()}</span>
+                                <div className="shrink-0 space-y-1 pt-2 border-t border-white/10">
+                                    <div className="flex justify-between text-[10px] uppercase tracking-wide text-slate-500">
+                                        <span>Subtotal</span>
+                                        <span className="font-mono tabular-nums text-slate-300">{selectedSale.subtotal.toLocaleString()}</span>
+                                    </div>
+                                    {selectedSale.discountTotal > 0 && (
+                                        <div className="flex justify-between text-[10px] uppercase tracking-wide text-rose-300/90">
+                                            <span>Discount</span>
+                                            <span className="font-mono">−{selectedSale.discountTotal.toLocaleString()}</span>
                                         </div>
-                                        {selectedSale.discountTotal > 0 && (
-                                            <div className="flex justify-between text-xs font-semibold uppercase tracking-widest text-rose-400">
-                                                <span>Applied Rebate</span>
-                                                <span className="font-mono">-{selectedSale.discountTotal.toLocaleString()}</span>
-                                            </div>
-                                        )}
-                                        <div className="flex justify-between items-baseline pt-4">
-                                            <span className="text-sm font-semibold uppercase tracking-[0.4em] text-indigo-400">Payable Total</span>
-                                            <span className="text-5xl font-semibold text-white font-mono tracking-tighter">
-                                                <span className="text-xl text-white/30 mr-2">{CURRENCY}</span>
-                                                {selectedSale.grandTotal.toLocaleString()}
-                                            </span>
-                                        </div>
+                                    )}
+                                    <div className="flex justify-between items-baseline gap-2 pt-1">
+                                        <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-400/90">Total</span>
+                                        <span className="text-xl sm:text-2xl font-semibold font-mono tabular-nums text-white tracking-tight">
+                                            <span className="text-xs text-slate-500 mr-1">{CURRENCY}</span>
+                                            {selectedSale.grandTotal.toLocaleString()}
+                                        </span>
                                     </div>
                                 </div>
 
                                 <button
+                                    type="button"
                                     onClick={() => handlePrint(selectedSale)}
-                                    className="w-full py-7 pos-gradient-primary text-white rounded-[2rem] font-semibold text-xl transition-all shadow-none shadow-none-500/20 active:scale-[0.97] flex items-center justify-center gap-4 uppercase tracking-[0.2em] group"
+                                    className="mt-3 w-full py-3 pos-gradient-primary text-white rounded-lg text-sm font-semibold transition-all active:scale-[0.99] flex items-center justify-center gap-2 uppercase tracking-wide"
                                 >
-                                    <div className="group-hover:rotate-12 transition-transform">
-                                        {ICONS.print}
-                                    </div>
-                                    PRINT TRANSACTION SLIP
+                                    {ICONS.print}
+                                    Print slip
                                 </button>
                             </div>
                         ) : (
-                            <div className="flex-1 flex flex-col items-center justify-center text-white/20 text-center animate-fade-in">
-                                <div className="w-24 h-24 bg-white/5 rounded-[2.5rem] flex items-center justify-center mb-8 border border-white/5">
-                                    {React.cloneElement(ICONS.archive as React.ReactElement, { size: 40, className: "opacity-20" })}
+                            <div className="flex-1 flex flex-col items-center justify-center text-center px-6 text-slate-500 min-h-[200px]">
+                                <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-3">
+                                    {React.cloneElement(ICONS.archive as React.ReactElement, { size: 28, className: 'opacity-40' })}
                                 </div>
-                                <h4 className="text-lg font-semibold uppercase tracking-[0.2em] text-white/40">Access Log Panel</h4>
-                                <p className="text-xs font-bold mt-3 opacity-30 max-w-[200px] uppercase tracking-widest leading-loose">Select a record from the ledger to perform archival actions</p>
+                                <p className="text-xs font-semibold text-slate-400">Select a sale</p>
+                                <p className="text-[10px] mt-1 max-w-[14rem] leading-relaxed opacity-80">Choose a row on the left to preview and reprint.</p>
                             </div>
                         )}
                     </div>

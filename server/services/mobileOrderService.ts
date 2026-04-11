@@ -74,7 +74,7 @@ export class MobileOrderService {
         const params: any[] = [tenantId];
         let paramIdx = 2;
 
-        let where = `WHERE p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE`;
+        let where = `WHERE p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE`;
 
         if (opts.categoryIds && opts.categoryIds.length > 0) {
             where += ` AND p.category_id = ANY($${paramIdx})`;
@@ -269,7 +269,7 @@ export class MobileOrderService {
        FROM shop_products p
        LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
        LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
-       WHERE p.id = $2 AND p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE`,
+       WHERE p.id = $2 AND p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE`,
             [tenantId, productId]
         );
         if (rows.length === 0) return null;
@@ -360,6 +360,15 @@ export class MobileOrderService {
 
             // 1. Lock inventory rows for all products in the order
             const productIds = [...demand.keys()];
+            const blockedForSale = await client.query(
+              `SELECT name FROM shop_products WHERE tenant_id = $1 AND id = ANY($2::text[]) AND COALESCE(sales_deactivated, FALSE) = TRUE`,
+              [tenantId, productIds]
+            );
+            if (blockedForSale.length > 0) {
+              const names = blockedForSale.map((r: any) => r.name).join(', ');
+              throw new Error(`These products are not available for sale: ${names}.`);
+            }
+
             const invRows = await client.query(
                 `SELECT product_id, warehouse_id, quantity_on_hand, quantity_reserved
            FROM shop_inventory

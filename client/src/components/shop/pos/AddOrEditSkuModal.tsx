@@ -36,14 +36,38 @@ const defaultForm = {
     name: '',
     description: '',
     category: 'General',
+    /** Subcategory row id when applicable; empty string if none */
+    subcategoryId: '',
     retailPrice: 0,
     costPrice: 0,
     retailPriceMode: 'fixed' as 'fixed' | 'percentage',
     retailMarkupPercent: 0,
     reorderPoint: 10,
     unit: 'pcs',
-    imageUrl: ''
+    imageUrl: '',
+    salesDeactivated: false
 };
+
+function deriveCategoryFormFromItem(
+    item: InventoryItem,
+    cats: ShopProductCategory[]
+): { category: string; subcategoryId: string } {
+    if (!item.category || item.category === 'General') {
+        return { category: 'General', subcategoryId: '' };
+    }
+    if (item.subcategoryId) {
+        return { category: item.category, subcategoryId: item.subcategoryId };
+    }
+    const byId = new Map(cats.map((c) => [c.id, c]));
+    const node = byId.get(item.category);
+    if (!node) {
+        return { category: 'General', subcategoryId: '' };
+    }
+    if (node.parent_id) {
+        return { category: node.parent_id, subcategoryId: node.id };
+    }
+    return { category: node.id, subcategoryId: '' };
+}
 
 const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     isOpen,
@@ -63,6 +87,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const categoryFormInitForItemId = React.useRef<string | null>(null);
 
     const loadCategories = useCallback(async () => {
         try {
@@ -108,7 +133,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             retailMarkupPercent: 0,
             reorderPoint: 10,
             unit: 'pcs',
-            imageUrl: ''
+            imageUrl: '',
+            subcategoryId: ''
         });
         setSelectedImage(null);
         setImagePreview(null);
@@ -116,23 +142,35 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
 
     React.useEffect(() => {
         if (editingItem) {
+            categoryFormInitForItemId.current = null;
             setFormData({
                 sku: editingItem.sku,
                 barcode: editingItem.barcode || '',
                 name: editingItem.name,
                 description: editingItem.description || '',
                 category: editingItem.category || 'General',
+                subcategoryId: editingItem.subcategoryId || '',
                 retailPrice: editingItem.retailPrice ?? 0,
                 costPrice: editingItem.costPrice ?? 0,
                 retailPriceMode: 'fixed',
                 retailMarkupPercent: 0,
                 reorderPoint: editingItem.reorderPoint ?? 10,
                 unit: editingItem.unit || 'pcs',
-                imageUrl: editingItem.imageUrl || ''
+                imageUrl: editingItem.imageUrl || '',
+                salesDeactivated: editingItem.salesDeactivated === true
             });
             setImagePreview(editingItem.imageUrl || null);
         }
     }, [editingItem]);
+
+    /** After shop categories load, normalize parent/sub dropdowns for edit and legacy rows. */
+    React.useEffect(() => {
+        if (!editingItem || shopCategories.length === 0) return;
+        if (categoryFormInitForItemId.current === editingItem.id) return;
+        const derived = deriveCategoryFormFromItem(editingItem, shopCategories);
+        setFormData((prev) => ({ ...prev, ...derived }));
+        categoryFormInitForItemId.current = editingItem.id;
+    }, [editingItem, shopCategories]);
 
     const fuse = useMemo(
         () =>
@@ -144,15 +182,18 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         [items]
     );
 
-    const categoryPickerRows = useMemo(() => {
-        const byId = new Map(shopCategories.map((c) => [c.id, c]));
-        const rows = shopCategories.map((c) => {
-            const parent = c.parent_id ? byId.get(c.parent_id) : undefined;
-            const label = parent ? `${parent.name} › ${c.name}` : c.name;
-            return { id: c.id, label };
-        });
-        return [...rows].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    const rootCategories = useMemo(() => {
+        return [...shopCategories.filter((c) => !c.parent_id)].sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+        );
     }, [shopCategories]);
+
+    const subcategoriesForParent = useMemo(() => {
+        if (formData.category === 'General') return [];
+        return [...shopCategories.filter((c) => c.parent_id === formData.category)].sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+        );
+    }, [shopCategories, formData.category]);
 
     const existingResults = useMemo(() => {
         const q = existingSearch.trim().toLowerCase();
@@ -233,6 +274,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     ]);
 
     const handleClose = useCallback(() => {
+        categoryFormInitForItemId.current = null;
         setMode('choice');
         setEditingItem(null);
         setFormData(defaultForm);
@@ -258,6 +300,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                     name: formData.name,
                     description: formData.description || undefined,
                     category: formData.category,
+                    subcategoryId: formData.subcategoryId || undefined,
                     retailPrice: Number(formData.retailPrice),
                     costPrice: Number(formData.costPrice),
                     onHand: 0,
@@ -299,11 +342,13 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 name: formData.name,
                 description: formData.description || undefined,
                 category: formData.category,
+                subcategoryId: formData.subcategoryId,
                 retailPrice: Number(formData.retailPrice),
                 costPrice: Number(formData.costPrice),
                 reorderPoint: Number(formData.reorderPoint),
                 unit: formData.unit,
-                imageUrl
+                imageUrl,
+                salesDeactivated: formData.salesDeactivated
             });
             handleClose();
             const updated = { ...editingItem, ...formData, barcode: formData.barcode || undefined };
@@ -537,7 +582,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 </div>
                             )}
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label
                                     htmlFor="pos-add-edit-sku-category"
@@ -549,16 +594,55 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     id="pos-add-edit-sku-category"
                                     className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                                     value={formData.category}
-                                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                    onChange={(e) => {
+                                        const next = e.target.value;
+                                        setFormData({
+                                            ...formData,
+                                            category: next,
+                                            subcategoryId: ''
+                                        });
+                                    }}
                                 >
                                     <option value="General">General</option>
-                                    {categoryPickerRows.map((row) => (
-                                        <option key={row.id} value={row.id}>
-                                            {row.label}
+                                    {rootCategories.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name}
                                         </option>
                                     ))}
                                 </select>
                             </div>
+                            <div>
+                                <label
+                                    htmlFor="pos-add-edit-sku-subcategory"
+                                    className="block text-sm font-medium text-slate-700 mb-1"
+                                >
+                                    Subcategory
+                                </label>
+                                <select
+                                    id="pos-add-edit-sku-subcategory"
+                                    disabled={formData.category === 'General' || subcategoriesForParent.length === 0}
+                                    className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                                    value={formData.subcategoryId}
+                                    onChange={(e) =>
+                                        setFormData({ ...formData, subcategoryId: e.target.value })
+                                    }
+                                >
+                                    <option value="">
+                                        {formData.category === 'General'
+                                            ? '—'
+                                            : subcategoriesForParent.length === 0
+                                              ? 'No subcategories'
+                                              : 'None (parent only)'}
+                                    </option>
+                                    {subcategoriesForParent.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
                             <Input
                                 label="Unit"
                                 value={formData.unit}
@@ -570,6 +654,21 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 value={formData.reorderPoint}
                                 onChange={(e) => setFormData({ ...formData, reorderPoint: Number(e.target.value) })}
                             />
+                        </div>
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/90 dark:bg-slate-800/50 px-3 py-2.5 flex items-start gap-2.5">
+                            <input
+                                id="pos-sku-sales-deactivated"
+                                type="checkbox"
+                                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                checked={formData.salesDeactivated}
+                                onChange={(e) => setFormData({ ...formData, salesDeactivated: e.target.checked })}
+                            />
+                            <label htmlFor="pos-sku-sales-deactivated" className="text-sm text-slate-700 dark:text-slate-300 leading-snug cursor-pointer">
+                                <span className="font-medium">Deactivate for sales</span>
+                                <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    Hides this SKU from the mobile shop and from POS product selection. Past orders and stock are unchanged; you can turn sales back on anytime.
+                                </span>
+                            </label>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <Input

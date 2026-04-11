@@ -280,7 +280,14 @@ const StockMaster: React.FC = () => {
                             )}
                         </div>
                         <div className="min-w-0">
-                            <div className="font-bold text-foreground text-sm truncate">{item.name}</div>
+                            <div className="flex items-center gap-2 min-w-0">
+                                <span className="font-bold text-foreground text-sm truncate">{item.name}</span>
+                                {item.salesDeactivated && (
+                                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-100">
+                                        Sales off
+                                    </span>
+                                )}
+                            </div>
                             <div className="text-xs text-muted-foreground font-mono italic truncate">SKU: {item.sku}</div>
                             {item.nearestExpiry && isExpiringWithinDays(item, 30) && (
                                 <div className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 mt-0.5">
