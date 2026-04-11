@@ -6,7 +6,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import {
     Smartphone, RefreshCw, Package, Truck, Check, X, Clock,
     ChevronRight, WifiOff, Wifi, QrCode, Settings as SettingsIcon,
-    Filter, Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
+    Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
     Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
     Banknote, Building2, Wallet,
 } from 'lucide-react';
@@ -180,79 +180,102 @@ function MobileOrdersPageContent() {
 
     const pendingCount = orders.filter(o => o.status === 'Pending').length;
 
+    const filterCounts = STATUS_FILTERS.map((s) => ({
+        key: s,
+        label: s === 'All' ? 'All' : STATUS_CONFIG[s]?.label || s,
+        count:
+            s === 'All'
+                ? orders.length
+                : s === 'Unpaid'
+                  ? orders.filter((o) => o.status === 'Delivered' && o.payment_status !== 'Paid').length
+                  : orders.filter((o) => o.status === s).length,
+    }));
+
     return (
         <div className="flex w-full min-w-0 flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800">
-            <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-6 sm:px-8 pt-6 pb-4 shadow-sm z-10">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-12 h-12 shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/40">
-                            <Smartphone className="w-6 h-6 text-white" />
-                        </div>
-                        <div className="min-w-0">
-                            <h1 className="text-2xl font-bold text-foreground dark:text-slate-200 tracking-tight">Mobile Orders</h1>
-                            <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                                <span className="flex items-center gap-1.5 text-xs font-medium">
-                                    {sseConnected ? (
-                                        <><Wifi className="w-3.5 h-3.5 text-green-500 dark:text-green-400" /><span className="text-green-600 dark:text-green-400">Live</span></>
-                                    ) : (
-                                        <><WifiOff className="w-3.5 h-3.5 text-red-400" /><span className="text-red-500 dark:text-red-400">Disconnected</span></>
-                                    )}
-                                </span>
-                                {pendingCount > 0 && (
-                                    <span className="flex items-center gap-1 bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded-full text-xs font-bold">
-                                        <Bell className="w-3 h-3" /> {pendingCount} pending
+            {/* Page header + status filters (single band) */}
+            <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 shadow-sm z-10 shrink-0">
+                <div className="px-4 sm:px-6 lg:px-8 pt-4 pb-3">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                            <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/40">
+                                <Smartphone className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    <h1 className="text-xl sm:text-2xl font-bold text-foreground dark:text-slate-200 tracking-tight">
+                                        Mobile Orders
+                                    </h1>
+                                    <span className="flex items-center gap-1.5 text-xs font-medium">
+                                        {sseConnected ? (
+                                            <>
+                                                <Wifi className="w-3.5 h-3.5 text-green-500 dark:text-green-400 shrink-0" />
+                                                <span className="text-green-600 dark:text-green-400">Live</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <WifiOff className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                                                <span className="text-red-500 dark:text-red-400">Disconnected</span>
+                                            </>
+                                        )}
                                     </span>
-                                )}
+                                    {pendingCount > 0 && (
+                                        <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded-full text-xs font-bold">
+                                            <Bell className="w-3 h-3 shrink-0" /> {pendingCount} pending
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-0.5 hidden sm:block">
+                                    Select an order to view the full bill on the right
+                                </p>
                             </div>
                         </div>
+                        <div className="flex items-center justify-end gap-2 shrink-0 lg:pt-1">
+                            <button
+                                type="button"
+                                onClick={() => loadOrders(statusFilter === 'All' ? undefined : statusFilter)}
+                                className="p-2.5 bg-muted/80 dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl hover:bg-muted dark:hover:bg-slate-700/80 transition-colors"
+                                title="Refresh"
+                            >
+                                <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
+                            </button>
+                        </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                        <button
-                            onClick={() => loadOrders(statusFilter === 'All' ? undefined : statusFilter)}
-                            className="p-2.5 bg-card dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl hover:bg-muted dark:hover:bg-slate-700/80 transition-colors"
-                            title="Refresh"
-                        >
-                            <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
-                        </button>
+                </div>
+                <div className="border-t border-border/70 dark:border-slate-700/80 px-4 sm:px-6 lg:px-8 py-2.5 -mt-px">
+                    <div className="flex gap-2 overflow-x-auto overflow-y-hidden pb-0.5 custom-scrollbar [scrollbar-gutter:stable]">
+                        {filterCounts.map(({ key: s, label, count }) => (
+                            <button
+                                key={s}
+                                type="button"
+                                onClick={() => setStatusFilter(s)}
+                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all border shrink-0
+                                    ${
+                                        statusFilter === s
+                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/15 dark:shadow-indigo-900/30'
+                                            : 'bg-muted/50 dark:bg-slate-800/90 text-muted-foreground border-border dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-500/40'
+                                    }`}
+                            >
+                                {label}
+                                <span
+                                    className={`text-[0.65rem] sm:text-xs tabular-nums px-1.5 py-0.5 rounded-full ${
+                                        statusFilter === s ? 'bg-white/20' : 'bg-background/80 dark:bg-slate-900/80'
+                                    }`}
+                                >
+                                    {count}
+                                </span>
+                            </button>
+                        ))}
                     </div>
                 </div>
             </div>
 
-            <div className="flex flex-1 min-h-0 flex-col overflow-hidden p-6 sm:p-8 gap-6">
-            {/* Status Filter */}
-            <div className="flex shrink-0 gap-2 overflow-x-auto pb-1">
-                {STATUS_FILTERS.map(s => {
-                    const cfg = STATUS_CONFIG[s];
-                    const count = s === 'All'
-                        ? orders.length
-                        : s === 'Unpaid'
-                            ? orders.filter(o => o.status === 'Delivered' && o.payment_status !== 'Paid').length
-                            : orders.filter(o => o.status === s).length;
-                    return (
-                        <button
-                            key={s}
-                            onClick={() => setStatusFilter(s)}
-                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all border
-                ${statusFilter === s
-                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/40'
-                                    : 'bg-card dark:bg-slate-900/80 text-muted-foreground border-border dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-500/40'
-                                }`}
-                        >
-                            {s === 'All' ? 'All' : cfg?.label || s}
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${statusFilter === s ? 'bg-card/20' : 'bg-muted'}`}>
-                                {count}
-                            </span>
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* Content area — list scrolls; page does not */}
-            <div className="flex min-h-0 flex-1 gap-6">
+            {/* Content: list + bill — scrollbars only when content overflows */}
+            <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden px-4 sm:px-6 lg:px-8 py-4">
+                <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6">
                 {/* Orders List */}
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1 space-y-3">
+                <div className="flex min-h-0 min-w-0 flex-[1.15] flex-col lg:max-w-[min(100%,52%)]">
+                    <div className="min-h-0 flex-1 overflow-auto custom-scrollbar [scrollbar-gutter:stable] pr-1 space-y-3">
                     {loading && orders.length === 0 ? (
                         <div className="flex items-center justify-center h-64">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400" />
@@ -273,34 +296,40 @@ function MobileOrdersPageContent() {
                                 <div
                                     key={order.id}
                                     onClick={() => handleViewDetail(order)}
-                                    className={`bg-card dark:bg-slate-900/90 rounded-2xl border p-4 cursor-pointer transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-500/40 ${detailOrder?.id === order.id ? 'ring-2 ring-indigo-500 border-indigo-300 dark:ring-indigo-400 dark:border-indigo-500/60' : 'border-border dark:border-slate-600'
+                                    className={`bg-card dark:bg-slate-900/90 rounded-2xl border p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-500/40 ${detailOrder?.id === order.id ? 'ring-2 ring-indigo-500 border-indigo-300 dark:ring-indigo-400 dark:border-indigo-500/60' : 'border-border dark:border-slate-600'
                                         }`}
                                 >
-                                    <div className="flex items-start justify-between mb-3">
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-bold text-foreground">{order.order_number}</span>
-                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border ${cfg.bg} ${cfg.color}`}>
-                                                    <StatusIcon className="w-3 h-3" />
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                                        <div className="min-w-0 flex-1 space-y-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="font-bold text-foreground text-sm sm:text-base break-all">{order.order_number}</span>
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border shrink-0 ${cfg.bg} ${cfg.color}`}>
+                                                    <StatusIcon className="w-3 h-3 shrink-0" />
                                                     {cfg.label}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-muted-foreground mt-1">{formatDate(order.created_at)}</p>
+                                            <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
+                                            <div className="flex flex-col gap-2 text-xs sm:text-sm text-muted-foreground">
+                                                {order.customer_name && (
+                                                    <span className="flex items-start gap-2 min-w-0">
+                                                        <User className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                                        <span className="break-words leading-snug">{order.customer_name}</span>
+                                                    </span>
+                                                )}
+                                                <span className="flex items-start gap-2 min-w-0">
+                                                    <Phone className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                                    <span className="break-all leading-snug">{order.customer_phone}</span>
+                                                </span>
+                                                <span className={`flex items-start gap-2 font-medium min-w-0 ${order.payment_status === 'Paid' ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                                                    <FileText className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                                    <span className="break-words leading-snug">
+                                                        {formatMobilePaymentMethod(order.payment_method)} ({order.payment_status || 'Unpaid'})
+                                                    </span>
+                                                </span>
+                                            </div>
                                         </div>
-                                        <span className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{formatPrice(order.grand_total)}</span>
-                                    </div>
-
-                                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                        {order.customer_name && (
-                                            <span className="flex items-center gap-1">
-                                                <User className="w-3 h-3" />{order.customer_name}
-                                            </span>
-                                        )}
-                                        <span className="flex items-center gap-1">
-                                            <Phone className="w-3 h-3" />{order.customer_phone}
-                                        </span>
-                                        <span className={`flex items-center gap-1 font-medium ${order.payment_status === 'Paid' ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
-                                            <FileText className="w-3 h-3" />{formatMobilePaymentMethod(order.payment_method)} ({order.payment_status || 'Unpaid'})
+                                        <span className="text-lg sm:text-xl font-bold text-indigo-600 dark:text-indigo-400 shrink-0 tabular-nums sm:text-right">
+                                            {formatPrice(order.grand_total)}
                                         </span>
                                     </div>
 
@@ -355,10 +384,11 @@ function MobileOrdersPageContent() {
                     </div>
                 </div>
 
-                {/* Order Detail Panel */}
-                <div className="flex w-[400px] shrink-0 flex-col min-h-0 overflow-y-auto">
+                {/* Bill / detail — fixed min width for readable receipt; scrolls when needed */}
+                <div className="flex min-h-0 w-full min-w-0 flex-[0.95] flex-col lg:min-w-[min(100%,22rem)] lg:max-w-xl xl:max-w-2xl">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card dark:border-slate-600 dark:bg-slate-900/95 shadow-sm">
                     {detailLoading ? (
-                        <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 p-8 flex items-center justify-center h-96">
+                        <div className="flex flex-1 items-center justify-center p-10 min-h-[12rem]">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 dark:border-indigo-400" />
                         </div>
                     ) : detailOrder ? (
@@ -374,12 +404,13 @@ function MobileOrdersPageContent() {
                             formatDate={formatFullDate}
                         />
                     ) : (
-                        <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 p-8 flex flex-col items-center justify-center h-96 text-muted-foreground">
-                            <Eye className="w-12 h-12 mb-3 opacity-30" />
-                            <p className="font-semibold text-muted-foreground">Select an order</p>
-                            <p className="text-sm">Click on an order to view details</p>
+                        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground min-h-[12rem] lg:min-h-0">
+                            <Eye className="w-12 h-12 opacity-25 shrink-0" />
+                            <p className="font-semibold text-foreground/80">Bill preview</p>
+                            <p className="text-sm max-w-xs leading-relaxed">Select an order from the list. Line items and totals appear here.</p>
                         </div>
                     )}
+                    </div>
                 </div>
             </div>
 
@@ -495,151 +526,182 @@ function OrderDetailPanel({
     formatDate: (d: string) => string;
 }) {
     const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Pending;
+    const DetailStatusIcon = cfg.icon;
     const nextStatus = getNextMobileOrderStatus(order);
     const isUnpaid = order.status === 'Delivered' && order.payment_status !== 'Paid';
 
     return (
-        <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-600 overflow-hidden shadow-sm relative">
-            {/* Header */}
-            <div className="p-5 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-950/60 dark:to-purple-950/50 border-b border-indigo-100 dark:border-indigo-900/50">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="font-bold text-lg text-foreground dark:text-slate-200">{order.order_number}</span>
-                    <div className="flex items-center gap-2">
+        <div className="flex h-full min-h-0 flex-col">
+            {/* Order header — fixed */}
+            <div className="shrink-0 border-b border-indigo-100/80 bg-gradient-to-r from-indigo-50 to-purple-50 px-4 py-4 dark:border-indigo-900/50 dark:from-indigo-950/60 dark:to-purple-950/50 sm:px-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                        <span className="font-bold text-base sm:text-lg text-foreground dark:text-slate-200 break-all">{order.order_number}</span>
+                        <p className="text-xs text-muted-foreground mt-0.5">{formatDate(order.created_at)}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                         {isUnpaid && (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950/50 dark:border-orange-800 dark:text-orange-300">
-                                <Banknote className="w-3 h-3" />
+                                <Banknote className="w-3 h-3 shrink-0" />
                                 Unpaid
                             </span>
                         )}
                         <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold border ${cfg.bg} ${cfg.color}`}>
-                            <cfg.icon className="w-3 h-3" />
+                            <DetailStatusIcon className="w-3 h-3 shrink-0" />
                             {cfg.label}
                         </span>
                     </div>
                 </div>
-                <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
             </div>
 
-            <div className="p-5 space-y-5">
-                {/* Customer */}
-                <div>
-                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Customer</h4>
-                    <div className="space-y-1.5 text-sm">
-                        {order.customer_name && (
-                            <div className="flex items-center gap-2 text-foreground">
-                                <User className="w-4 h-4 text-muted-foreground" />{order.customer_name}
-                            </div>
-                        )}
-                        <div className="flex items-center gap-2 text-foreground">
-                            <Phone className="w-4 h-4 text-muted-foreground" />{order.customer_phone}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Payment Status */}
-                <div>
-                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Payment</h4>
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="text-foreground">{formatMobilePaymentMethod(order.payment_method)}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${order.payment_status === 'Paid' ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300' : 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300'}`}>
-                            {order.payment_status || 'Unpaid'}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Delivery */}
-                {order.delivery_address && (
+            {/* Scrollable body — customer, delivery, bill lines, history */}
+            <div className="min-h-0 flex-1 overflow-auto custom-scrollbar [scrollbar-gutter:stable] px-4 py-4 sm:px-5">
+                <div className="space-y-5">
                     <div>
-                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Delivery</h4>
-                        <div className="flex items-start gap-2 text-sm text-foreground">
-                            <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                            <div>
-                                <p>{order.delivery_address}</p>
-                                {order.delivery_notes && <p className="text-xs text-muted-foreground mt-1">Note: {order.delivery_notes}</p>}
+                        <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-2">Customer</h4>
+                        <div className="space-y-2 text-sm sm:text-base text-foreground">
+                            {order.customer_name && (
+                                <div className="flex gap-2 min-w-0">
+                                    <User className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                                    <span className="break-words leading-snug">{order.customer_name}</span>
+                                </div>
+                            )}
+                            <div className="flex gap-2 min-w-0">
+                                <Phone className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                                <span className="break-all leading-snug">{order.customer_phone}</span>
                             </div>
                         </div>
                     </div>
-                )}
 
-                {/* Items */}
-                <div>
-                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-                        Items ({order.items?.length || 0})
-                    </h4>
-                    <div className="space-y-2">
-                        {order.items?.map(item => (
-                            <div key={item.id} className="flex justify-between items-center py-2 border-b border-border/60 last:border-0">
-                                <div>
-                                    <p className="text-sm font-medium text-foreground">{item.product_name}</p>
-                                    <p className="text-xs text-muted-foreground">{item.product_sku} × {item.quantity}</p>
-                                </div>
-                                <span className="text-sm font-bold text-foreground">{formatPrice(item.subtotal)}</span>
-                            </div>
-                        ))}
+                    <div>
+                        <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-2">Payment</h4>
+                        <div className="flex flex-wrap items-center gap-2 text-sm sm:text-base">
+                            <span className="text-foreground break-words">{formatMobilePaymentMethod(order.payment_method)}</span>
+                            <span
+                                className={`px-2 py-0.5 rounded-full text-xs font-bold shrink-0 ${
+                                    order.payment_status === 'Paid'
+                                        ? 'bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300'
+                                        : 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300'
+                                }`}
+                            >
+                                {order.payment_status || 'Unpaid'}
+                            </span>
+                        </div>
                     </div>
-                </div>
 
-                {/* Totals */}
-                <div className="bg-muted dark:bg-slate-800/80 -mx-5 px-5 py-3 space-y-1.5 text-sm">
-                    <div className="flex justify-between text-muted-foreground">
-                        <span>Subtotal</span><span>{formatPrice(order.subtotal)}</span>
+                    {order.delivery_address && (
+                        <div>
+                            <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-2">Delivery</h4>
+                            <div className="flex gap-2 text-sm sm:text-base text-foreground">
+                                <MapPin className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                                <div className="min-w-0 space-y-1">
+                                    <p className="break-words leading-relaxed">{order.delivery_address}</p>
+                                    {order.delivery_notes && (
+                                        <p className="text-xs text-muted-foreground leading-relaxed break-words">
+                                            Note: {order.delivery_notes}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div>
+                        <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-3">
+                            Bill — {order.items?.length || 0} line{order.items?.length === 1 ? '' : 's'}
+                        </h4>
+                        <ul className="divide-y divide-border/80 border border-dashed border-border/70 rounded-xl bg-muted/30 dark:bg-slate-800/40">
+                            {(order.items || []).map((item) => (
+                                <li key={item.id} className="flex gap-3 px-3 py-3 sm:px-4 sm:py-3.5">
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <p className="text-sm sm:text-base font-semibold text-foreground leading-snug break-words">
+                                            {item.product_name}
+                                        </p>
+                                        <p className="text-xs sm:text-sm text-muted-foreground break-all">
+                                            {item.product_sku ? `${item.product_sku} · ` : ''}
+                                            {item.quantity} × {formatPrice(item.unit_price)}
+                                            {parseFloat(String(item.discount_amount || 0)) > 0 && (
+                                                <span className="text-amber-600 dark:text-amber-400"> · disc {formatPrice(item.discount_amount)}</span>
+                                            )}
+                                        </p>
+                                    </div>
+                                    <span className="shrink-0 text-sm sm:text-base font-bold tabular-nums text-foreground text-right">
+                                        {formatPrice(item.subtotal)}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    {order.status_history && order.status_history.length > 0 && (
+                        <div>
+                            <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-2">History</h4>
+                            <div className="space-y-2.5 text-xs sm:text-sm">
+                                {order.status_history.map((h) => (
+                                    <div key={h.id} className="flex flex-wrap gap-x-2 gap-y-0.5 text-muted-foreground">
+                                        <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-indigo-400 dark:bg-indigo-500 mt-1.5" />
+                                        <span className="font-medium text-foreground">{h.to_status}</span>
+                                        <span className="text-muted-foreground">· {formatDate(h.created_at)}</span>
+                                        {h.note && <span className="w-full pl-4 text-muted-foreground break-words sm:pl-0 sm:inline">— {h.note}</span>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Totals — fixed above actions */}
+            <div className="shrink-0 border-t border-border bg-muted/50 px-4 py-3 dark:bg-slate-800/90 sm:px-5">
+                <div className="space-y-1.5 text-sm">
+                    <div className="flex justify-between gap-4 text-muted-foreground">
+                        <span>Subtotal</span>
+                        <span className="tabular-nums">{formatPrice(order.subtotal)}</span>
                     </div>
                     {parseFloat(String(order.tax_total)) > 0 && (
-                        <div className="flex justify-between text-muted-foreground">
-                            <span>Tax</span><span>{formatPrice(order.tax_total)}</span>
+                        <div className="flex justify-between gap-4 text-muted-foreground">
+                            <span>Tax</span>
+                            <span className="tabular-nums">{formatPrice(order.tax_total)}</span>
                         </div>
                     )}
                     {parseFloat(String(order.delivery_fee)) > 0 && (
-                        <div className="flex justify-between text-muted-foreground">
-                            <span>Delivery</span><span>{formatPrice(order.delivery_fee)}</span>
+                        <div className="flex justify-between gap-4 text-muted-foreground">
+                            <span>Delivery</span>
+                            <span className="tabular-nums">{formatPrice(order.delivery_fee)}</span>
                         </div>
                     )}
-                    <div className="flex justify-between font-bold text-foreground text-base pt-1.5 border-t border-border">
-                        <span>Total</span><span>{formatPrice(order.grand_total)}</span>
+                    <div className="flex justify-between gap-4 border-t border-border pt-2 text-base font-bold text-foreground">
+                        <span>Total</span>
+                        <span className="tabular-nums text-indigo-600 dark:text-indigo-400">{formatPrice(order.grand_total)}</span>
                     </div>
                 </div>
-
-                {/* Status History */}
-                {order.status_history && order.status_history.length > 0 && (
-                    <div>
-                        <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">History</h4>
-                        <div className="space-y-2">
-                            {order.status_history.map(h => (
-                                <div key={h.id} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <div className="w-2 h-2 rounded-full bg-indigo-400 dark:bg-indigo-500" />
-                                    <span className="font-medium text-foreground">{h.to_status}</span>
-                                    <span>•</span>
-                                    <span>{formatDate(h.created_at)}</span>
-                                    {h.note && <span className="text-muted-foreground">— {h.note}</span>}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
 
-            {/* Actions */}
             {nextStatus && (
-                <div className="p-4 border-t border-border flex gap-2">
+                <div className="shrink-0 border-t border-border p-3 sm:p-4 flex gap-2">
                     <button
+                        type="button"
                         onClick={() => onStatusUpdate(order.id, nextStatus)}
                         disabled={actionLoading === order.id}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
                     >
                         {actionLoading === order.id ? (
-                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <RefreshCw className="h-4 w-4 animate-spin" />
                         ) : (
-                            <Check className="w-4 h-4" />
+                            <Check className="h-4 w-4" />
                         )}
                         {nextStatus === 'Delivered'
-                            ? (order.status === 'Packed' && order.payment_method === 'SelfCollection' ? 'Mark Collected' : 'Mark Delivered')
+                            ? order.status === 'Packed' && order.payment_method === 'SelfCollection'
+                                ? 'Mark Collected'
+                                : 'Mark Delivered'
                             : `Mark as ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
                     </button>
                     {order.status === 'Pending' && (
                         <button
+                            type="button"
                             onClick={() => onStatusUpdate(order.id, 'Cancelled')}
                             disabled={actionLoading === order.id}
-                            className="px-4 py-3 bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 rounded-xl font-semibold text-sm hover:bg-red-100 dark:hover:bg-red-950/70 transition-colors border border-red-200 dark:border-red-800"
+                            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-950/70"
                         >
                             Cancel
                         </button>
@@ -647,17 +709,17 @@ function OrderDetailPanel({
                 </div>
             )}
             {isUnpaid && (
-                <div className="p-4 border-t border-border">
+                <div className="shrink-0 border-t border-border p-3 sm:p-4">
                     <button
+                        type="button"
                         onClick={() => onCollectPayment(order)}
-                        className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 text-white rounded-xl font-bold text-sm hover:bg-orange-600 transition-colors"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-3 text-sm font-bold text-white transition-colors hover:bg-orange-600"
                     >
-                        <Banknote className="w-4 h-4" />
-                        Collect Payment — {formatPrice(order.grand_total)}
+                        <Banknote className="h-4 w-4 shrink-0" />
+                        Collect payment — {formatPrice(order.grand_total)}
                     </button>
                 </div>
             )}
-
         </div>
     );
 }

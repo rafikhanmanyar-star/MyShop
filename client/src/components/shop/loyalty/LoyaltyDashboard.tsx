@@ -1,17 +1,59 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLoyalty } from '../../../context/LoyaltyContext';
-import { ICONS } from '../../../constants';
+import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
+import { shopApi } from '../../../services/shopApi';
 
 const LoyaltyDashboard: React.FC = () => {
-    const { totalMembers, activeMembers, pointsIssued, pointsRedeemed } = useLoyalty();
+    const {
+        totalMembers,
+        activeMembers,
+        pointsIssued,
+        pointsRedeemed,
+        totalPointsOutstanding,
+        members,
+        tiers
+    } = useLoyalty();
+    const [redemptionRatio, setRedemptionRatio] = useState(0.01);
+
+    useEffect(() => {
+        let cancelled = false;
+        shopApi.getPolicies()
+            .then((p: any) => {
+                if (!cancelled && p?.loyalty_redemption_ratio != null) {
+                    setRedemptionRatio(parseFloat(String(p.loyalty_redemption_ratio)) || 0.01);
+                }
+            })
+            .catch(() => { });
+        return () => { cancelled = true; };
+    }, []);
+
+    const burnRatePct = pointsIssued > 0
+        ? Math.min(100, Math.round((pointsRedeemed / pointsIssued) * 100))
+        : 0;
+    const liabilityValuation = totalPointsOutstanding * redemptionRatio;
+    const circumference = 2 * Math.PI * 70;
+    const strokeDashoffset = circumference - (circumference * burnRatePct) / 100;
+
+    const tierThresholds = [...tiers].sort((a, b) => a.threshold - b.threshold);
+    const nextTierUp = (spend: number) => {
+        const above = tierThresholds.filter(t => t.threshold > spend);
+        return above.length ? above[0] : null;
+    };
+    const sampleMember = members.length
+        ? members.reduce((a, b) => (a.totalSpend >= b.totalSpend ? a : b))
+        : null;
+    const next = sampleMember ? nextTierUp(sampleMember.totalSpend) : null;
+    const spendToNext = next && sampleMember
+        ? Math.max(0, next.threshold - sampleMember.totalSpend)
+        : 0;
 
     const stats = [
         { label: 'Total Members', value: totalMembers, icon: ICONS.users, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/50' },
-        { label: 'Active (30d)', value: activeMembers, icon: ICONS.heart, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/50' },
-        { label: 'Points Issued', value: pointsIssued.toLocaleString(), icon: ICONS.plus, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/50' },
-        { label: 'Redeemed', value: pointsRedeemed.toLocaleString(), icon: ICONS.trash, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/50' },
+        { label: 'Active members', value: activeMembers, icon: ICONS.heart, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/50' },
+        { label: 'Points issued (lifetime)', value: pointsIssued.toLocaleString(), icon: ICONS.plus, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/50' },
+        { label: 'Points redeemed (est.)', value: pointsRedeemed.toLocaleString(), icon: ICONS.trash, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/50' },
     ];
 
     return (
@@ -64,25 +106,35 @@ const LoyaltyDashboard: React.FC = () => {
                         <div className="relative w-40 h-40 flex items-center justify-center">
                             <svg className="w-full h-full -rotate-90">
                                 <circle cx="80" cy="80" r="70" fill="none" className="stroke-slate-200 dark:stroke-slate-700" strokeWidth="12" />
-                                <circle cx="80" cy="80" r="70" fill="none" stroke="#e11d48" strokeWidth="12" strokeDasharray="440" strokeDashoffset="110" strokeLinecap="round" />
+                                <circle
+                                    cx="80"
+                                    cy="80"
+                                    r="70"
+                                    fill="none"
+                                    stroke="#e11d48"
+                                    strokeWidth="12"
+                                    strokeDasharray={circumference}
+                                    strokeDashoffset={strokeDashoffset}
+                                    strokeLinecap="round"
+                                />
                             </svg>
                             <div className="absolute text-center">
-                                <p className="text-3xl font-semibold text-foreground tracking-tighter">75%</p>
+                                <p className="text-3xl font-semibold text-foreground tracking-tighter">{burnRatePct}%</p>
                                 <p className="text-xs font-semibold uppercase text-muted-foreground leading-tight">Burn Rate</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 w-full">
                             <div className="p-3 bg-muted/80 dark:bg-slate-800/80 rounded-xl border border-border dark:border-slate-600">
                                 <p className="text-xs font-semibold text-muted-foreground uppercase">Outstanding</p>
-                                <p className="text-sm font-semibold text-foreground mt-1">1.2M Pts</p>
+                                <p className="text-sm font-semibold text-foreground mt-1">{totalPointsOutstanding.toLocaleString()} Pts</p>
                             </div>
                             <div className="p-3 bg-muted/80 dark:bg-slate-800/80 rounded-xl border border-border dark:border-slate-600">
                                 <p className="text-xs font-semibold text-muted-foreground uppercase">Valuation</p>
-                                <p className="text-sm font-semibold text-rose-600 dark:text-rose-400 mt-1">$12,400</p>
+                                <p className="text-sm font-semibold text-rose-600 dark:text-rose-400 mt-1">{CURRENCY} {liabilityValuation.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
                             </div>
                         </div>
                     </div>
-                    <button className="w-full py-4 bg-slate-900 dark:bg-slate-950 text-white rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-black dark:hover:bg-slate-800 transition-all border border-transparent dark:border-slate-700">
+                    <button type="button" className="w-full py-4 bg-slate-900 dark:bg-slate-950 text-white rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-black dark:hover:bg-slate-800 transition-all border border-transparent dark:border-slate-700">
                         Financial Audit Log
                     </button>
                 </Card>
@@ -96,7 +148,7 @@ const LoyaltyDashboard: React.FC = () => {
                     </div>
                     <div>
                         <p className="text-sm font-bold text-indigo-900 dark:text-indigo-200">Campaign Alert: Double Points Friday</p>
-                        <p className="text-xs text-indigo-700 dark:text-indigo-300/90">Automation active. Tracking 1,200 participants currently.</p>
+                        <p className="text-xs text-indigo-700 dark:text-indigo-300/90">Automation active. Tracking {Math.min(totalMembers, 1200)} participants currently.</p>
                     </div>
                 </div>
                 <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/60 rounded-2xl flex items-center gap-4">
@@ -109,6 +161,22 @@ const LoyaltyDashboard: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {sampleMember && next && spendToNext > 0 && (
+                <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="p-3 bg-indigo-100 text-indigo-600 dark:bg-indigo-950/80 dark:text-indigo-400 rounded-xl shrink-0">
+                        {ICONS.trophy}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200 uppercase tracking-widest">Top spender path</p>
+                        <p className="text-xs text-indigo-700 dark:text-indigo-300/90 font-medium">
+                            Highest LTV member ({sampleMember.customerName}): spend another{' '}
+                            <span className="font-semibold">{CURRENCY} {spendToNext.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>{' '}
+                            to reach <span className="font-semibold italic">{next.tier}</span>.
+                        </p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

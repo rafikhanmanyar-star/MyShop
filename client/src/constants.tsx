@@ -6,6 +6,7 @@ import React from 'react';
 // 2. Format it as: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg...'
 export const APP_LOGO = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgdmlld0JveD0iMCAwIDUxMiA1MTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiByeD0iOTYiIGZpbGw9IiM0ZjQ2ZTUiLz4KPHBhdGggZD0iTTIwOCAxNjBIMzM2VjIwOEgyNTZWMjU2SDMyMFYzMDRIMjU2VjM4NEgyMDhWMTYwWiIgZmlsbD0id2hpdGUiLz4KPC9zdmc+Cg==';
 
+/** Shop currency label (Pakistani Rupee). */
 export const CURRENCY = 'PKR';
 
 export const ICONS = {

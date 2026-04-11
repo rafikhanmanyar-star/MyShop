@@ -547,7 +547,7 @@ export class ShopService {
               cost_price = $7, retail_price = $8, tax_rate = $9, reorder_point = $10,
               image_url = $11, is_active = $12, updated_at = NOW(),
               mobile_description = COALESCE($15, mobile_description),
-              sales_deactivated = CASE WHEN $16 IS NULL THEN sales_deactivated ELSE $16 END
+              sales_deactivated = COALESCE($16::boolean, sales_deactivated)
           WHERE id = $13 AND tenant_id = $14
           RETURNING *
         `, [
@@ -1122,7 +1122,10 @@ export class ShopService {
         const pointsEarned = Math.floor(saleData.grandTotal / 100);
         await client.query(`
           UPDATE shop_loyalty_members
-          SET points_balance = points_balance + $1, total_spend = total_spend + $2, visit_count = visit_count + 1
+          SET points_balance = points_balance + $1,
+              lifetime_points = lifetime_points + $1,
+              total_spend = total_spend + $2,
+              visit_count = visit_count + 1
           WHERE id = $3 AND tenant_id = $4
         `, [pointsEarned, saleData.grandTotal, saleData.loyaltyMemberId, tenantId]);
         await client.query(`UPDATE shop_sales SET points_earned = $1 WHERE id = $2 AND tenant_id = $3`, [pointsEarned, saleId, tenantId]);
@@ -1544,12 +1547,52 @@ export class ShopService {
   }
 
   async updateLoyaltyMember(tenantId: string, memberId: string, data: any) {
-    return this.db.query(`
-      UPDATE shop_loyalty_members
-      SET card_number = COALESCE($1, card_number), tier = COALESCE($2, tier),
-          status = COALESCE($3, status), updated_at = NOW()
-      WHERE id = $4 AND tenant_id = $5 RETURNING *
-    `, [data.cardNumber, data.tier, data.status, memberId, tenantId]);
+    const sets: string[] = [];
+    const vals: any[] = [];
+
+    if (data.cardNumber !== undefined || data.card_number !== undefined) {
+      sets.push(`card_number = $${vals.length + 1}`);
+      vals.push(data.cardNumber ?? data.card_number);
+    }
+    if (data.tier !== undefined) {
+      sets.push(`tier = $${vals.length + 1}`);
+      vals.push(data.tier);
+    }
+    if (data.status !== undefined) {
+      sets.push(`status = $${vals.length + 1}`);
+      vals.push(data.status);
+    }
+    if (data.pointsBalance !== undefined || data.points_balance !== undefined) {
+      sets.push(`points_balance = $${vals.length + 1}`);
+      vals.push(Number(data.pointsBalance ?? data.points_balance));
+    }
+    if (data.lifetimePoints !== undefined || data.lifetime_points !== undefined) {
+      sets.push(`lifetime_points = $${vals.length + 1}`);
+      vals.push(Number(data.lifetimePoints ?? data.lifetime_points));
+    }
+    if (data.totalSpend !== undefined || data.total_spend !== undefined) {
+      sets.push(`total_spend = $${vals.length + 1}`);
+      vals.push(data.totalSpend ?? data.total_spend);
+    }
+    if (data.visitCount !== undefined || data.visit_count !== undefined) {
+      sets.push(`visit_count = $${vals.length + 1}`);
+      vals.push(Number(data.visitCount ?? data.visit_count));
+    }
+
+    if (sets.length === 0) {
+      return this.db.query(
+        'SELECT * FROM shop_loyalty_members WHERE id = $1 AND tenant_id = $2',
+        [memberId, tenantId]
+      );
+    }
+
+    const midIdx = vals.length + 1;
+    const tidIdx = vals.length + 2;
+    vals.push(memberId, tenantId);
+    return this.db.query(
+      `UPDATE shop_loyalty_members SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $${midIdx} AND tenant_id = $${tidIdx} RETURNING *`,
+      vals
+    );
   }
 
   async deleteLoyaltyMember(tenantId: string, memberId: string) {

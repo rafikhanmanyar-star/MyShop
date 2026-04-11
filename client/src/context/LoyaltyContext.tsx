@@ -29,6 +29,8 @@ interface LoyaltyContextType {
     activeMembers: number;
     pointsIssued: number;
     pointsRedeemed: number;
+    /** Sum of current points balances (liability). */
+    totalPointsOutstanding: number;
 }
 
 const LoyaltyContext = createContext<LoyaltyContextType | undefined>(undefined);
@@ -209,12 +211,22 @@ export const LoyaltyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
     }, [members, programs, tiers]);
 
-    const stats = useMemo(() => ({
-        totalMembers: members.length,
-        activeMembers: members.filter(m => m.status === 'Active').length,
-        pointsIssued: transactions.filter(t => t.type === 'Earn' || t.type === 'Bonus').reduce((sum, t) => sum + t.points, 0),
-        pointsRedeemed: transactions.filter(t => t.type === 'Redeem').reduce((sum, t) => sum + t.points, 0)
-    }), [members, transactions]);
+    const stats = useMemo(() => {
+        const totalLifetimePoints = members.reduce((s, m) => s + (m.lifetimePoints || 0), 0);
+        const totalBalance = members.reduce((s, m) => s + (m.pointsBalance || 0), 0);
+        /** Points no longer in balance vs lifetime earned (redeemed/adjusted); aligns with DB when only earn/redeem moves balance. */
+        const redeemedFromBalances = members.reduce(
+            (s, m) => s + Math.max(0, (m.lifetimePoints || 0) - (m.pointsBalance || 0)),
+            0
+        );
+        return {
+            totalMembers: members.length,
+            activeMembers: members.filter(m => m.status === 'Active').length,
+            pointsIssued: totalLifetimePoints,
+            pointsRedeemed: redeemedFromBalances,
+            totalPointsOutstanding: totalBalance
+        };
+    }, [members]);
 
     return (
         <LoyaltyContext.Provider value={{

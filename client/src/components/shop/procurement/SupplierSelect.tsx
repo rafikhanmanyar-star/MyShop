@@ -20,8 +20,6 @@ export interface SupplierSelectProps {
   vendorSearch: string;
   vendorDisplayName: string;
   vendorDropdownOpen: boolean;
-  /** Focus supplier field when opening create form (ERP data entry flow). */
-  autoFocus?: boolean;
   disabled?: boolean;
   loadingData?: boolean;
   onVendorSearchChange: (q: string) => void;
@@ -36,7 +34,6 @@ export default function SupplierSelect({
   vendorSearch,
   vendorDisplayName,
   vendorDropdownOpen,
-  autoFocus,
   disabled,
   loadingData,
   onVendorSearchChange,
@@ -76,7 +73,6 @@ export default function SupplierSelect({
       <input
         type="text"
         value={inputValue}
-        autoFocus={autoFocus}
         onChange={(e) => {
           if (disabled) return;
           onVendorSearchChange(e.target.value);

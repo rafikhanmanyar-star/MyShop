@@ -7,12 +7,13 @@ import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
 import Modal from '../../ui/Modal';
 import { LoyaltyMember, LoyaltyTier } from '../../../types/loyalty';
-import { khataApi } from '../../../services/shopApi';
+import { khataApi, shopApi } from '../../../services/shopApi';
 import { mobileOrdersApi } from '../../../services/mobileOrdersApi';
 
 const MemberDirectory: React.FC = () => {
     const navigate = useNavigate();
-    const { members, deleteMember, updateMember, transactions } = useLoyalty();
+    const { members, deleteMember, updateMember, tiers } = useLoyalty();
+    const [posSales, setPosSales] = useState<any[] | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTierFilter, setActiveTierFilter] = useState<LoyaltyTier | 'All'>('All');
     const [selectedMember, setSelectedMember] = useState<LoyaltyMember | null>(null);
@@ -31,6 +32,18 @@ const MemberDirectory: React.FC = () => {
     };
 
     useEffect(() => {
+        let cancelled = false;
+        shopApi.getSales()
+            .then((data) => {
+                if (!cancelled) setPosSales(Array.isArray(data) ? data : []);
+            })
+            .catch(() => {
+                if (!cancelled) setPosSales([]);
+            });
+        return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
         if (!selectedMember?.customerId) {
             setKhataSummary(null);
             return;
@@ -44,6 +57,23 @@ const MemberDirectory: React.FC = () => {
     }, [selectedMember?.customerId]);
 
     const showKhataSummary = selectedMember?.customerId && khataSummary != null;
+
+    const salesForMember = useMemo(() => {
+        if (!selectedMember?.id || !posSales) return [];
+        return posSales
+            .filter((s: any) => s.loyaltyMemberId === selectedMember.id && (s.status === 'Completed' || !s.status))
+            .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }, [selectedMember?.id, posSales]);
+
+    const tierProgress = (m: LoyaltyMember) => {
+        const sorted = [...tiers].sort((a, b) => a.threshold - b.threshold);
+        const next = sorted.find(t => t.threshold > m.totalSpend);
+        if (!next) return { next: null as typeof sorted[0] | null, remaining: 0, pct: 100 };
+        const prevThreshold = sorted.filter(t => t.threshold <= m.totalSpend).pop()?.threshold ?? 0;
+        const span = next.threshold - prevThreshold;
+        const pct = span > 0 ? Math.min(100, ((m.totalSpend - prevThreshold) / span) * 100) : 0;
+        return { next, remaining: Math.max(0, next.threshold - m.totalSpend), pct };
+    };
 
     const filteredMembers = useMemo(() => {
         return members.filter(m => {
@@ -82,10 +112,6 @@ const MemberDirectory: React.FC = () => {
         if (window.confirm('Are you sure you want to remove this member from the loyalty program?')) {
             await deleteMember(id);
         }
-    };
-
-    const getMemberTransactions = (memberId: string) => {
-        return transactions.filter(t => t.memberId === memberId);
     };
 
     return (
@@ -140,7 +166,8 @@ const MemberDirectory: React.FC = () => {
                                 <th className="px-8 py-5">Card / Member</th>
                                 <th className="px-6 py-5">Tier Segment</th>
                                 <th className="px-6 py-5 text-center">Visits</th>
-                                <th className="px-6 py-5 text-right">Points Balance</th>
+                                <th className="px-6 py-5 text-right">Lifetime pts earned</th>
+                                <th className="px-6 py-5 text-right">Points balance</th>
                                 <th className="px-6 py-5 text-right">LTV (Lifetime)</th>
                                 <th className="px-6 py-5">Status</th>
                                 <th className="px-8 py-5"></th>
@@ -181,12 +208,16 @@ const MemberDirectory: React.FC = () => {
                                     <td className="px-6 py-5 text-center font-semibold text-muted-foreground font-mono text-sm">
                                         {m.visitCount}
                                     </td>
+                                    <td className="px-6 py-5 text-right font-mono">
+                                        <div className="text-sm font-semibold text-foreground tracking-tighter">{m.lifetimePoints.toLocaleString()}</div>
+                                        <div className="text-xs text-muted-foreground font-medium mt-0.5">Total earned</div>
+                                    </td>
                                     <td className="px-6 py-5 text-right">
                                         <div className="text-sm font-semibold text-foreground font-mono tracking-tighter">{m.pointsBalance.toLocaleString()}</div>
                                         <div className="text-xs text-rose-500 dark:text-rose-400 font-bold uppercase tracking-widest mt-0.5 animate-pulse">Available</div>
                                     </td>
                                     <td className="px-6 py-5 text-right font-mono">
-                                        <div className="text-sm font-semibold text-foreground tracking-tighter">${m.totalSpend.toLocaleString()}</div>
+                                        <div className="text-sm font-semibold text-foreground tracking-tighter">{CURRENCY} {m.totalSpend.toLocaleString()}</div>
                                         <div className="text-xs text-muted-foreground uppercase font-medium">Gross Value</div>
                                     </td>
                                     <td className="px-6 py-5">
@@ -211,7 +242,7 @@ const MemberDirectory: React.FC = () => {
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan={7} className="px-8 py-20 text-center">
+                                    <td colSpan={8} className="px-8 py-20 text-center">
                                         <div className="flex flex-col items-center justify-center gap-3">
                                             <div className="p-6 bg-muted/80 dark:bg-slate-800 rounded-3xl text-slate-200 dark:text-slate-500">
                                                 {React.cloneElement(ICONS.users as React.ReactElement<any>, { width: 48, height: 48 })}
@@ -301,14 +332,18 @@ const MemberDirectory: React.FC = () => {
 
                             {/* Right Side: Performance stats and history */}
                             <div className="flex-1 space-y-8">
-                                <div className="grid grid-cols-3 gap-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                     <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
-                                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Points</p>
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Points balance</p>
                                         <p className="text-2xl font-semibold text-rose-600 dark:text-rose-400 font-mono tracking-tighter">{selectedMember.pointsBalance.toLocaleString()}</p>
                                     </div>
                                     <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
+                                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Lifetime pts earned</p>
+                                        <p className="text-2xl font-semibold text-indigo-600 dark:text-indigo-400 font-mono tracking-tighter">{selectedMember.lifetimePoints.toLocaleString()}</p>
+                                    </div>
+                                    <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
                                         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Total LTV</p>
-                                        <p className="text-2xl font-semibold text-foreground font-mono tracking-tighter">${selectedMember.totalSpend.toLocaleString()}</p>
+                                        <p className="text-2xl font-semibold text-foreground font-mono tracking-tighter">{CURRENCY} {selectedMember.totalSpend.toLocaleString()}</p>
                                     </div>
                                     <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
                                         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Visit Count</p>
@@ -339,7 +374,7 @@ const MemberDirectory: React.FC = () => {
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
                                         <h5 className="text-sm font-semibold text-foreground tracking-tight flex items-center gap-2 uppercase">
-                                            {ICONS.barChart} Transaction History
+                                            {ICONS.barChart} POS sales and points earned
                                         </h5>
                                         <button
                                             type="button"
@@ -361,31 +396,43 @@ const MemberDirectory: React.FC = () => {
                                     </div>
 
                                     <div className="bg-muted/80/50 dark:bg-slate-800/50 rounded-3xl border border-border dark:border-slate-600 overflow-hidden">
-                                        {getMemberTransactions(selectedMember.id).length > 0 ? (
-                                            <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                                                {getMemberTransactions(selectedMember.id).map(tx => (
-                                                    <div key={tx.id} className="p-4 flex justify-between items-center hover:bg-card dark:hover:bg-slate-800/80 transition-colors">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className={`p-2 rounded-lg ${tx.type === 'Earn' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400'}`}>
-                                                                {tx.type === 'Earn' ? ICONS.plus : ICONS.minus}
+                                        {posSales === null ? (
+                                            <div className="p-12 text-center text-muted-foreground text-xs font-semibold uppercase tracking-widest">Loading sales…</div>
+                                        ) : salesForMember.length > 0 ? (
+                                            <div className="divide-y divide-slate-100 dark:divide-slate-700 max-h-72 overflow-y-auto">
+                                                {salesForMember.map((sale: any) => {
+                                                    const pts = parseInt(String(sale.pointsEarned ?? 0), 10) || 0;
+                                                    return (
+                                                        <div key={sale.id} className="p-4 flex justify-between items-center hover:bg-card dark:hover:bg-slate-800/80 transition-colors gap-3">
+                                                            <div className="flex items-center gap-4 min-w-0">
+                                                                <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 shrink-0">
+                                                                    {ICONS.plus}
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-xs font-bold text-foreground uppercase tracking-tighter truncate">
+                                                                        Sale #{String(sale.saleNumber || sale.id || '').slice(-12)}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground font-medium italic">
+                                                                        {sale.createdAt ? new Date(sale.createdAt).toLocaleString() : '—'}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                                                        {CURRENCY} {Number(sale.grandTotal ?? 0).toLocaleString()}
+                                                                    </p>
+                                                                </div>
                                                             </div>
-                                                            <div>
-                                                                <p className="text-xs font-bold text-foreground uppercase tracking-tighter">Sale Ref: #{tx.referenceId.slice(-8)}</p>
-                                                                <p className="text-xs text-muted-foreground font-medium italic">{new Date(tx.timestamp).toLocaleString()}</p>
+                                                            <div className="text-right shrink-0">
+                                                                <p className="text-xs font-semibold font-mono text-emerald-600 dark:text-emerald-400">
+                                                                    +{pts.toLocaleString()} pts
+                                                                </p>
+                                                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-[0.1em]">POS</p>
                                                             </div>
                                                         </div>
-                                                        <div className="text-right">
-                                                            <p className={`text-xs font-semibold font-mono ${tx.type === 'Earn' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                                                {tx.type === 'Earn' ? '+' : '-'}{tx.points} Pts
-                                                            </p>
-                                                            <p className="text-xs text-muted-foreground font-bold uppercase tracking-[0.1em]">Verified</p>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         ) : (
                                             <div className="p-12 text-center text-slate-300">
-                                                <p className="text-xs font-semibold uppercase tracking-widest italic">No transactions recorded yet</p>
+                                                <p className="text-xs font-semibold uppercase tracking-widest italic">No POS sales linked to this member yet</p>
                                             </div>
                                         )}
                                     </div>
@@ -393,18 +440,36 @@ const MemberDirectory: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-2xl flex items-center gap-4 mt-4">
-                            <div className="p-3 bg-indigo-100 text-indigo-600 dark:bg-indigo-950/80 dark:text-indigo-400 rounded-xl">
-                                {ICONS.trophy}
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200 uppercase tracking-widest">Tier Evolution</p>
-                                <p className="text-xs text-indigo-700 dark:text-indigo-300/90 font-medium">Spending another <span className="font-semibold">$2,400</span> will upgrade this customer to <span className="font-semibold italic underline">Platinum Status</span>.</p>
-                            </div>
-                            <div className="w-48 h-2 bg-indigo-200 dark:bg-indigo-950 rounded-full overflow-hidden">
-                                <div className="h-full bg-indigo-600 dark:bg-indigo-500 w-3/4 rounded-full"></div>
-                            </div>
-                        </div>
+                        {selectedMember && (() => {
+                            const { next, remaining, pct } = tierProgress(selectedMember);
+                            return (
+                                <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-2xl flex flex-col sm:flex-row sm:items-center gap-4 mt-4">
+                                    <div className="p-3 bg-indigo-100 text-indigo-600 dark:bg-indigo-950/80 dark:text-indigo-400 rounded-xl shrink-0">
+                                        {ICONS.trophy}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-semibold text-indigo-900 dark:text-indigo-200 uppercase tracking-widest">Tier evolution</p>
+                                        {next && remaining > 0 ? (
+                                            <p className="text-xs text-indigo-700 dark:text-indigo-300/90 font-medium">
+                                                Spending another{' '}
+                                                <span className="font-semibold">{CURRENCY} {remaining.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>{' '}
+                                                will upgrade this customer to <span className="font-semibold italic underline">{next.tier}</span>.
+                                            </p>
+                                        ) : (
+                                            <p className="text-xs text-indigo-700 dark:text-indigo-300/90 font-medium">
+                                                This member is at the highest tier for current spend rules, or no higher tier is configured.
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="w-full sm:w-48 h-2 bg-indigo-200 dark:bg-indigo-950 rounded-full overflow-hidden shrink-0">
+                                        <div
+                                            className="h-full bg-indigo-600 dark:bg-indigo-500 rounded-full transition-all"
+                                            style={{ width: `${next ? pct : 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
                 )}
             </Modal>

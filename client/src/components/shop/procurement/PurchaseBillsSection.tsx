@@ -572,15 +572,14 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               {editBillId ? 'Edit purchase bill' : 'Create purchase bill'}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start">
-                <div ref={vendorDropdownRef} className="min-w-0">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:items-start">
+                <div ref={vendorDropdownRef} className="min-w-0 sm:col-span-2 lg:col-span-1">
                   <SupplierSelect
                     vendors={vendors}
                     supplierId={form.supplierId}
                     vendorSearch={vendorSearch}
                     vendorDisplayName={vendorDisplayName}
                     vendorDropdownOpen={vendorDropdownOpen}
-                    autoFocus={!editBillId}
                     disabled={!!editBillId}
                     loadingData={loadingData}
                     onVendorSearchChange={setVendorSearch}
@@ -609,6 +608,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                   />
                 </div>
                 <div>
+                  <label className="label mb-0.5 block">Due date</label>
+                  <input
+                    type="date"
+                    value={form.dueDate}
+                    onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                    aria-label="Due date"
+                    className="input input-text"
+                  />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-1">
                   <label className="label mb-0.5 block">Bill number</label>
                   <input
                     type="text"
@@ -617,16 +626,6 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                     onChange={(e) => setForm((f) => ({ ...f, billNumber: e.target.value }))}
                     aria-label="Bill number"
                     className="input input-text cursor-default bg-muted read-only:opacity-90"
-                  />
-                </div>
-                <div>
-                  <label className="label mb-0.5 block">Due date</label>
-                  <input
-                    type="date"
-                    value={form.dueDate}
-                    onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
-                    aria-label="Due date"
-                    className="input input-text"
                   />
                 </div>
               </div>

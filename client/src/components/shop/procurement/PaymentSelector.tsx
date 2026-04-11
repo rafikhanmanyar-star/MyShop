@@ -57,7 +57,7 @@ export default function PaymentSelector({
       </div>
 
       {(value === 'Paid' || value === 'Partial') && (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:items-end">
           {value === 'Partial' && (
             <div>
               <label className="label mb-0.5 block">Amount paid</label>
@@ -84,7 +84,7 @@ export default function PaymentSelector({
               />
             </div>
           )}
-          <div className={value === 'Partial' ? '' : 'md:col-span-1'}>
+          <div>
             <label className="label mb-0.5 block">Bank account</label>
             <Select value={bankAccountId} onChange={(e) => onBankAccountChange(e.target.value)} className="w-full">
               <option value="">Cash</option>

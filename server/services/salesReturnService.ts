@@ -557,6 +557,7 @@ export class SalesReturnService {
           await client.query(
             `UPDATE shop_loyalty_members
              SET points_balance = GREATEST(0, points_balance - $1),
+                 lifetime_points = GREATEST(0, lifetime_points - $1),
                  total_spend = GREATEST(0, total_spend - $2),
                  updated_at = NOW()
              WHERE id = $3 AND tenant_id = $4`,

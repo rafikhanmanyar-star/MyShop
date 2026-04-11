@@ -17,12 +17,17 @@ import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils
 import { showAppToast } from '../../../utils/appToast';
 
 export const POS_CATEGORY_TREE_VISIBLE_KEY = 'pos-category-tree-visible';
-const POS_CATEGORY_TREE_W_KEY = 'pos-category-tree-w-px';
+export const POS_CATEGORY_TREE_W_KEY = 'pos-category-tree-w-px';
 const POS_FAST_MOVING_VISIBLE_KEY = 'pos-fast-moving-visible';
 
 const MIN_TREE_W = 140;
 const MAX_TREE_W = 360;
 const DEFAULT_TREE_W = 220;
+
+/** Exported for POS outer layout (catalog column width when categories are open). */
+export const POS_CATEGORY_TREE_MIN_W = MIN_TREE_W;
+export const POS_CATEGORY_TREE_MAX_W = MAX_TREE_W;
+export const POS_CATEGORY_TREE_DEFAULT_W = DEFAULT_TREE_W;
 
 function loadTreeWidth(): number {
     try {
@@ -322,15 +327,28 @@ const ProductSearch: React.FC = () => {
     const [expandedCategoryIds, setExpandedCategoryIds] = useState<Set<string>>(new Set());
     const [categoryTreeWidthPx, setCategoryTreeWidthPx] = useState(loadTreeWidth);
 
-    const persistCategoryTreeWidth = useCallback((w: number) => {
-        const clamped = Math.min(MAX_TREE_W, Math.max(MIN_TREE_W, Math.round(w)));
-        setCategoryTreeWidthPx(clamped);
-        try {
-            localStorage.setItem(POS_CATEGORY_TREE_W_KEY, String(clamped));
-        } catch {
-            /* ignore */
-        }
+    const emitCategoryTreeLayout = useCallback((visible: boolean, treeW: number) => {
+        if (typeof window === 'undefined') return;
+        window.dispatchEvent(
+            new CustomEvent('pos:category-tree-visibility', {
+                detail: { visible, treeWidthPx: treeW }
+            })
+        );
     }, []);
+
+    const persistCategoryTreeWidth = useCallback(
+        (w: number) => {
+            const clamped = Math.min(MAX_TREE_W, Math.max(MIN_TREE_W, Math.round(w)));
+            setCategoryTreeWidthPx(clamped);
+            try {
+                localStorage.setItem(POS_CATEGORY_TREE_W_KEY, String(clamped));
+            } catch {
+                /* ignore */
+            }
+            emitCategoryTreeLayout(true, clamped);
+        },
+        [emitCategoryTreeLayout]
+    );
 
     const startResizeCategoryTree = useCallback(
         (e: React.MouseEvent) => {
@@ -355,17 +373,18 @@ const ProductSearch: React.FC = () => {
         [categoryTreeWidthPx, persistCategoryTreeWidth]
     );
 
-    const persistCategoryTreeVisible = useCallback((visible: boolean) => {
-        setCategoryTreeVisible(visible);
-        try {
-            localStorage.setItem(POS_CATEGORY_TREE_VISIBLE_KEY, String(visible));
-        } catch {
-            /* ignore */
-        }
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('pos:category-tree-visibility', { detail: { visible } }));
-        }
-    }, []);
+    const persistCategoryTreeVisible = useCallback(
+        (visible: boolean) => {
+            setCategoryTreeVisible(visible);
+            try {
+                localStorage.setItem(POS_CATEGORY_TREE_VISIBLE_KEY, String(visible));
+            } catch {
+                /* ignore */
+            }
+            emitCategoryTreeLayout(visible, categoryTreeWidthPx);
+        },
+        [categoryTreeWidthPx, emitCategoryTreeLayout]
+    );
 
     const [fastMovingVisible, setFastMovingVisible] = useState(() => {
         try {

@@ -194,7 +194,14 @@ export function generateReceiptHTML(
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 @page { size: ${pageSize}; margin: ${mt}mm ${mr}mm ${mb}mm ${ml}mm; }
-html, body { min-height: 100vh; overflow: visible; display: block; margin: 0; padding: 0; width: 100%; }
+html, body { min-height: 100vh; overflow: visible; display: block; margin: 0; width: 100%; box-sizing: border-box; }
+/* @page margins apply when printing; browsers ignore @page for normal screen layout — mirror margins as body padding so iframe/preview updates live. */
+@media screen {
+  body { padding: ${mt}mm ${mr}mm ${mb}mm ${ml}mm; }
+}
+@media print {
+  body { padding: 0 !important; }
+}
 body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 100%; font-size: ${fontSize}; line-height: 1.1; color: #000; background: #fff; box-sizing: border-box; }
 * { box-sizing: border-box; }
 .text-center { text-align: center; }

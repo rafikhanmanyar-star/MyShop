@@ -2,7 +2,13 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { usePOS } from '../../context/POSContext';
 import POSHeader from './pos/POSHeader';
-import ProductSearch, { POS_CATEGORY_TREE_VISIBLE_KEY } from './pos/ProductSearch';
+import ProductSearch, {
+    POS_CATEGORY_TREE_VISIBLE_KEY,
+    POS_CATEGORY_TREE_W_KEY,
+    POS_CATEGORY_TREE_MIN_W,
+    POS_CATEGORY_TREE_MAX_W,
+    POS_CATEGORY_TREE_DEFAULT_W
+} from './pos/ProductSearch';
 import CartGrid from './pos/CartGrid';
 import CheckoutPanel from './pos/CheckoutPanel';
 import ShortcutBar from './pos/ShortcutBar';
@@ -19,7 +25,8 @@ const STORAGE_POS_LEFT_W = 'pos-layout-left-w-px';
 const STORAGE_POS_RIGHT_W = 'pos-layout-right-w-px';
 
 const MIN_LEFT_W = 220;
-const MAX_LEFT_W = 520;
+/** Wide enough for catalog + category tree + product grid without capping typical tree widths. */
+const MAX_LEFT_W = 680;
 const MIN_RIGHT_W = 180;
 const MAX_RIGHT_W = 400;
 /** Default: slightly narrower than before so the bill / product grid column gains space. */
@@ -37,8 +44,10 @@ const CENTER_MIN_PX = 100;
  */
 const STACK_LAYOUT_BELOW_PX = 960;
 
-/** When the category tree is open, widen the catalog column and narrow checkout so the product grid stays usable. */
-const CATEGORY_OPEN_RIGHT_SCALE = 0.88;
+/** Matches `POSColumnResizeHandle` (`w-1.5`) between category list and product grid. */
+const CATEGORY_INNER_HANDLE_PX = 6;
+/** Narrow strip (`w-9`) shown when categories are collapsed; disappears when the tree opens. */
+const CATEGORY_COLLAPSED_STRIP_PX = 36;
 
 function loadCategoryTreeOpenFromStorage(): boolean {
     try {
@@ -105,6 +114,14 @@ const POSSalesContent: React.FC = () => {
     const layoutRowRef = useRef<HTMLDivElement>(null);
     const [layoutRowWidth, setLayoutRowWidth] = useState(0);
     const [categoryTreeOpen, setCategoryTreeOpen] = useState(loadCategoryTreeOpenFromStorage);
+    const [categoryTreeWidthPx, setCategoryTreeWidthPx] = useState(() =>
+        loadStoredWidth(
+            POS_CATEGORY_TREE_W_KEY,
+            POS_CATEGORY_TREE_DEFAULT_W,
+            POS_CATEGORY_TREE_MIN_W,
+            POS_CATEGORY_TREE_MAX_W
+        )
+    );
 
     const [leftColWidthPx, setLeftColWidthPx] = useState(() =>
         loadStoredWidth(STORAGE_POS_LEFT_W, DEFAULT_LEFT_W, MIN_LEFT_W, MAX_LEFT_W)
@@ -146,8 +163,16 @@ const POSSalesContent: React.FC = () => {
 
     useEffect(() => {
         const onCategoryTreeVisibility = (e: Event) => {
-            const ce = e as CustomEvent<{ visible?: boolean }>;
+            const ce = e as CustomEvent<{ visible?: boolean; treeWidthPx?: number }>;
             if (typeof ce.detail?.visible === 'boolean') setCategoryTreeOpen(ce.detail.visible);
+            if (typeof ce.detail?.treeWidthPx === 'number' && Number.isFinite(ce.detail.treeWidthPx)) {
+                setCategoryTreeWidthPx(
+                    Math.min(
+                        POS_CATEGORY_TREE_MAX_W,
+                        Math.max(POS_CATEGORY_TREE_MIN_W, Math.round(ce.detail.treeWidthPx))
+                    )
+                );
+            }
         };
         window.addEventListener('pos:category-tree-visibility', onCategoryTreeVisibility);
         return () => window.removeEventListener('pos:category-tree-visibility', onCategoryTreeVisibility);
@@ -169,20 +194,25 @@ const POSSalesContent: React.FC = () => {
         if (useStackedLayout || layoutRowWidth === 0) {
             return { displayLeftW: leftColWidthPx, displayRightW: rightColWidthPx };
         }
-        // Extra catalog width when categories are shown ( funded by narrower checkout + smaller bill column )
-        const leftBoost =
-            categoryTreeOpen
-                ? Math.min(80, Math.max(40, Math.round(layoutRowWidth * 0.034)))
-                : 0;
-        const boostedLeft = categoryTreeOpen
-            ? Math.min(MAX_LEFT_W, leftColWidthPx + leftBoost)
-            : leftColWidthPx;
-        const scaledRight = categoryTreeOpen
-            ? Math.max(MIN_RIGHT_W, Math.round(rightColWidthPx * CATEGORY_OPEN_RIGHT_SCALE))
-            : rightColWidthPx;
-        const { left, right } = clampSideWidths(layoutRowWidth, boostedLeft, scaledRight);
+        // Category tree + inner handle replace the collapsed strip; add (tree + handle − strip) to the
+        // catalog column so product grid width stays ~unchanged while the cart (flex center) narrows.
+        const catalogExtraPx = categoryTreeOpen
+            ? Math.max(
+                  0,
+                  categoryTreeWidthPx + CATEGORY_INNER_HANDLE_PX - CATEGORY_COLLAPSED_STRIP_PX
+              )
+            : 0;
+        const boostedLeft = Math.min(MAX_LEFT_W, leftColWidthPx + catalogExtraPx);
+        const { left, right } = clampSideWidths(layoutRowWidth, boostedLeft, rightColWidthPx);
         return { displayLeftW: left, displayRightW: right };
-    }, [useStackedLayout, layoutRowWidth, leftColWidthPx, rightColWidthPx, categoryTreeOpen]);
+    }, [
+        useStackedLayout,
+        layoutRowWidth,
+        leftColWidthPx,
+        rightColWidthPx,
+        categoryTreeOpen,
+        categoryTreeWidthPx
+    ]);
 
     const startResizeLeft = useCallback(
         (e: React.MouseEvent) => {
