@@ -854,6 +854,14 @@ export class MobileOrderService {
 
             return { success: true, orderId, from: currentStatus, to: newStatus };
         });
+        if (newStatus === 'Delivered') {
+            try {
+                const { getShopService } = await import('./shopService.js');
+                await getShopService().awardLoyaltyForMobileOrderDelivered(tenantId, orderId);
+            } catch (loyErr: any) {
+                console.error('awardLoyaltyForMobileOrderDelivered:', loyErr?.message || loyErr);
+            }
+        }
         const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
         notifyDailyReportUpdated(tenantId).catch(() => {});
         return result;

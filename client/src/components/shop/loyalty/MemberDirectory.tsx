@@ -60,8 +60,10 @@ const MemberDirectory: React.FC = () => {
 
     const salesForMember = useMemo(() => {
         if (!selectedMember?.id || !posSales) return [];
+        const statusOk = (st: string | undefined) =>
+            !st || st === 'Completed' || st === 'Delivered';
         return posSales
-            .filter((s: any) => s.loyaltyMemberId === selectedMember.id && (s.status === 'Completed' || !s.status))
+            .filter((s: any) => s.loyaltyMemberId === selectedMember.id && statusOk(s.status))
             .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }, [selectedMember?.id, posSales]);
 

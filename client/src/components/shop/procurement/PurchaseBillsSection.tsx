@@ -564,16 +564,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
 
         {showForm && (
           <div
-            className={`card p-4 sm:p-5 ${
+            className={`card p-3 sm:p-4 ${
               form.items.length > 0 ? 'pb-40 md:pb-5' : ''
             }`}
           >
-            <h3 className="card-title mb-3">
+            <h3 className="card-title mb-2">
               {editBillId ? 'Edit purchase bill' : 'Create purchase bill'}
             </h3>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:items-start">
-                <div ref={vendorDropdownRef} className="min-w-0 sm:col-span-2 lg:col-span-1">
+            <form onSubmit={handleSubmit} className="space-y-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
+                <div ref={vendorDropdownRef} className="min-w-0 sm:col-span-2 xl:col-span-1">
                   <SupplierSelect
                     vendors={vendors}
                     supplierId={form.supplierId}
@@ -617,7 +617,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                     className="input input-text"
                   />
                 </div>
-                <div className="sm:col-span-2 lg:col-span-1">
+                <div className="sm:col-span-2 xl:col-span-1">
                   <label className="label mb-0.5 block">Bill number</label>
                   <input
                     type="text"
@@ -717,34 +717,34 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               )}
 
               <details className="group rounded-lg border border-border bg-muted open:bg-card">
-                <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-foreground">
+                <summary className="cursor-pointer list-none px-2.5 py-1.5 text-sm font-semibold text-foreground">
                   <span className="text-muted-foreground">Notes</span>
                   <span className="ml-2 text-xs font-normal text-muted-foreground">(optional — click to expand)</span>
                 </summary>
-                <div className="border-t border-border px-3 pb-3 pt-2">
+                <div className="border-t border-border px-2.5 pb-2 pt-1.5">
                   <textarea
                     value={form.notes}
                     onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                    className="input input-text min-h-[72px] resize-y placeholder:text-muted-foreground"
+                    className="input input-text min-h-[52px] resize-y placeholder:text-muted-foreground"
                     placeholder="Add remarks for this purchase..."
-                    rows={3}
+                    rows={2}
                   />
                 </div>
               </details>
 
+              <div className="flex flex-col gap-2 border-t border-border pt-2 sm:flex-row sm:items-center sm:justify-between">
               {!editBillId && (
-                <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+                <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground sm:max-w-[min(100%,28rem)]">
                   <input
                     type="checkbox"
                     checked={sharePdfToWhatsAppAfterSave}
                     onChange={(e) => setSharePdfToWhatsAppAfterSave(e.target.checked)}
-                    className="mt-1 rounded border-border text-primary focus:ring-primary"
+                    className="mt-0.5 rounded border-border text-primary focus:ring-primary"
                   />
                   <span>After save, share purchase order as PDF on WhatsApp</span>
                 </label>
               )}
-
-              <div className="flex flex-col-reverse gap-2 border-t border-border pt-3 sm:flex-row sm:justify-end">
+              <div className={`flex flex-col-reverse gap-2 sm:flex-row sm:justify-end ${editBillId ? 'sm:ml-auto' : ''}`}>
                 <button
                   type="button"
                   onClick={() => closeForm()}
@@ -759,6 +759,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                 >
                   {loading ? 'Saving…' : editBillId ? 'Update purchase bill' : 'Save bill'}
                 </button>
+              </div>
               </div>
             </form>
           </div>

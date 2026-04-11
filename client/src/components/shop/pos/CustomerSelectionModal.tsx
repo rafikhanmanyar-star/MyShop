@@ -61,6 +61,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
             name: contact.name,
             phone: contact.contactNo || 'N/A',
             email: undefined, // Add if available
+            loyaltyMemberId: loyaltyMember?.id ?? null,
             points: loyaltyMember?.pointsBalance || 0,
             creditLimit: 0, // Default or fetch from somewhere
             balance: 0, // Default or fetch from somewhere
@@ -286,6 +287,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                         id: 'walk-in',
                                         name: 'Walk-in Customer',
                                         phone: '',
+                                        loyaltyMemberId: null,
                                         points: 0,
                                         creditLimit: 0,
                                         balance: 0,

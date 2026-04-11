@@ -54,9 +54,9 @@ export default function SupplierSelect({
   const inputValue = vendorDropdownOpen ? vendorSearch : vendorDisplayName || vendorSearch;
 
   return (
-    <div ref={containerRef} className="relative space-y-1">
+    <div ref={containerRef} className="relative space-y-0.5">
       <div className="flex items-end justify-between gap-2">
-        <label className="label">Supplier / Vendor *</label>
+        <label className="label mb-0.5 block">Supplier / Vendor *</label>
         <button
           type="button"
           onClick={() => {
@@ -73,12 +73,20 @@ export default function SupplierSelect({
       <input
         type="text"
         value={inputValue}
+        autoComplete="off"
         onChange={(e) => {
           if (disabled) return;
           onVendorSearchChange(e.target.value);
           onOpenChange(true);
         }}
-        onFocus={() => !disabled && onOpenChange(true)}
+        onClick={() => !disabled && onOpenChange(true)}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          if (!vendorDropdownOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault();
+            onOpenChange(true);
+          }
+        }}
         onBlur={(e) => {
           if (containerRef.current?.contains(e.relatedTarget as Node)) return;
           onOpenChange(false);

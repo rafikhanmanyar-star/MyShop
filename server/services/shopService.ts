@@ -1032,6 +1032,16 @@ export class ShopService {
     }
     const paymentDetails = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [];
     const barcodeValue = `SALE|${tenantId}|${saleData.saleNumber}`;
+
+    let resolvedLoyaltyMemberId: string | null = saleData.loyaltyMemberId ?? null;
+    if (!resolvedLoyaltyMemberId && saleData.customerId) {
+      const lm = await this.db.query(
+        'SELECT id FROM shop_loyalty_members WHERE tenant_id = $1 AND customer_id = $2 LIMIT 1',
+        [tenantId, saleData.customerId]
+      );
+      if (lm.length > 0) resolvedLoyaltyMemberId = lm[0].id as string;
+    }
+
     const result = await this.db.transaction(async (client) => {
       const saleRes = await client.query(`
         INSERT INTO shop_sales (
@@ -1047,7 +1057,7 @@ export class ShopService {
         saleData.terminalId ?? null,
         saleData.userId ?? null,
         saleData.customerId ?? null,
-        saleData.loyaltyMemberId ?? null,
+        resolvedLoyaltyMemberId,
         saleData.saleNumber,
         saleData.subtotal,
         saleData.taxTotal,
@@ -1118,7 +1128,7 @@ export class ShopService {
         }
       }
 
-      if (saleData.loyaltyMemberId) {
+      if (resolvedLoyaltyMemberId) {
         const pointsEarned = Math.floor(saleData.grandTotal / 100);
         await client.query(`
           UPDATE shop_loyalty_members
@@ -1127,7 +1137,7 @@ export class ShopService {
               total_spend = total_spend + $2,
               visit_count = visit_count + 1
           WHERE id = $3 AND tenant_id = $4
-        `, [pointsEarned, saleData.grandTotal, saleData.loyaltyMemberId, tenantId]);
+        `, [pointsEarned, saleData.grandTotal, resolvedLoyaltyMemberId, tenantId]);
         await client.query(`UPDATE shop_sales SET points_earned = $1 WHERE id = $2 AND tenant_id = $3`, [pointsEarned, saleId, tenantId]);
       }
 
@@ -1338,12 +1348,12 @@ export class ShopService {
       
       SELECT 
         o.id, o.tenant_id as "tenantId", o.branch_id as "branchId", NULL as "terminalId", 
-        NULL as "userId", o.customer_id as "customerId", NULL as "loyaltyMemberId", 
+        NULL as "userId", o.customer_id as "customerId", o.loyalty_member_id as "loyaltyMemberId", 
         o.order_number as "saleNumber", o.subtotal, o.tax_total as "taxTotal", 
         o.discount_total as "discountTotal", o.grand_total as "grandTotal", 
         o.grand_total as "totalPaid", 0 as "changeDue", 
         o.payment_method as "paymentMethod", NULL as "paymentDetails", 
-        o.status, 0 as "pointsEarned", 0 as "pointsRedeemed", 
+        o.status, COALESCE(o.points_earned, 0) as "pointsEarned", 0 as "pointsRedeemed", 
         o.created_at as "createdAt", o.updated_at as "updatedAt",
         NULL as "barcodeValue", 0 as "reprintCount", NULL as "printedAt",
         mc.name as "customerName", b.name as "branchName", NULL as "cashierName",
@@ -1597,6 +1607,71 @@ export class ShopService {
 
   async deleteLoyaltyMember(tenantId: string, memberId: string) {
     return this.db.query('DELETE FROM shop_loyalty_members WHERE id = $1 AND tenant_id = $2', [memberId, tenantId]);
+  }
+
+  /**
+   * When a mobile order is marked Delivered, award loyalty points (same rule as POS: floor(grandTotal/100)).
+   * Idempotent via mobile_orders.points_earned.
+   */
+  async awardLoyaltyForMobileOrderDelivered(tenantId: string, orderId: string) {
+    const orderRows = await this.db.query(
+      `SELECT id, customer_id, grand_total, status, COALESCE(points_earned, 0)::int AS points_earned
+       FROM mobile_orders WHERE id = $1 AND tenant_id = $2`,
+      [orderId, tenantId]
+    );
+    if (!orderRows.length) return { awarded: false as const, reason: 'order_not_found' };
+    const o = orderRows[0];
+    if (o.status !== 'Delivered') return { awarded: false as const, reason: 'not_delivered' };
+    if (o.points_earned > 0) return { awarded: false as const, reason: 'already_awarded' };
+
+    const grandTotal = parseFloat(String(o.grand_total));
+    if (!Number.isFinite(grandTotal) || grandTotal <= 0) return { awarded: false as const, reason: 'invalid_total' };
+
+    const mcRows = await this.db.query(
+      `SELECT phone, name FROM mobile_customers WHERE id = $1 AND tenant_id = $2`,
+      [o.customer_id, tenantId]
+    );
+    if (!mcRows.length || !String(mcRows[0].phone || '').trim()) {
+      return { awarded: false as const, reason: 'no_mobile_customer_phone' };
+    }
+
+    const memberId = await this.ensureLoyaltyMemberForMobileUser(tenantId, {
+      phone: mcRows[0].phone,
+      name: mcRows[0].name || 'Customer',
+      email: null,
+    });
+    if (!memberId) return { awarded: false as const, reason: 'no_loyalty_member' };
+
+    const pointsEarned = Math.floor(grandTotal / 100);
+
+    return this.db.transaction(async (client) => {
+      const lock = await client.query(
+        `SELECT status, COALESCE(points_earned, 0)::int AS points_earned FROM mobile_orders WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+        [orderId, tenantId]
+      );
+      if (!lock.length || lock[0].status !== 'Delivered' || lock[0].points_earned > 0) {
+        return { awarded: false as const, reason: 'race_or_duplicate' };
+      }
+
+      await client.query(
+        `
+          UPDATE shop_loyalty_members
+          SET points_balance = points_balance + $1,
+              lifetime_points = lifetime_points + $1,
+              total_spend = total_spend + $2,
+              visit_count = visit_count + 1
+          WHERE id = $3 AND tenant_id = $4
+        `,
+        [pointsEarned, grandTotal, memberId, tenantId]
+      );
+
+      await client.query(
+        `UPDATE mobile_orders SET points_earned = $1, loyalty_member_id = $2, updated_at = NOW() WHERE id = $3 AND tenant_id = $4`,
+        [pointsEarned, memberId, orderId, tenantId]
+      );
+
+      return { awarded: true as const, pointsEarned, loyaltyMemberId: memberId };
+    });
   }
 
   // --- Policy Methods ---

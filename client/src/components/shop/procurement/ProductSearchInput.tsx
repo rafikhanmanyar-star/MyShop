@@ -53,8 +53,8 @@ export default function ProductSearchInput({
   const enterTarget = exactBarcode ?? singleMatch;
 
   return (
-    <div ref={wrapRef} className="relative space-y-1">
-      <label className="label">Add products</label>
+    <div ref={wrapRef} className="relative space-y-0.5">
+      <label className="label mb-0.5 block">Add products</label>
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
@@ -69,9 +69,14 @@ export default function ProductSearchInput({
               e.preventDefault();
               onEnterAdd(enterTarget);
               onOpenChange(false);
+              return;
+            }
+            if (!dropdownOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+              e.preventDefault();
+              onOpenChange(true);
             }
           }}
-          onFocus={() => onOpenChange(true)}
+          onClick={() => onOpenChange(true)}
           onBlur={(e) => {
             if (wrapRef.current?.contains(e.relatedTarget as Node)) return;
             onOpenChange(false);
@@ -80,8 +85,8 @@ export default function ProductSearchInput({
           className="input input-text py-2 pl-9 pr-3 transition-all duration-200 placeholder:text-muted-foreground"
         />
       </div>
-      <p className="secondary-text leading-snug">
-        Same catalog as Stock Master. Press Enter to add when one product matches or barcode scans.
+      <p className="hidden text-xs leading-snug text-muted-foreground md:block">
+        Same catalog as Stock Master. Press Enter when one product matches or barcode scans.
       </p>
       {!loadingData && products.length === 0 && (
         <p className="text-xs text-warning">No products yet. Add SKUs in Inventory first.</p>

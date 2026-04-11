@@ -74,6 +74,8 @@ export interface POSHeldSale {
     reference: string;
     cart: POSCartItem[];
     customerId?: string;
+    /** Set when held customer is a loyalty member so recall + checkout still earn points. */
+    loyaltyMemberId?: string | null;
     heldAt: string;
     cashierId: string;
     total: number;
@@ -96,6 +98,8 @@ export interface POSCustomer {
     name: string;
     phone: string;
     email?: string;
+    /** `shop_loyalty_members.id` when this contact is enrolled; required for awarding points on sale. */
+    loyaltyMemberId?: string | null;
     points: number;
     creditLimit: number;
     balance: number;

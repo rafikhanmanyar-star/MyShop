@@ -485,6 +485,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             reference,
             cart: [...cart],
             customerId: customer?.id,
+            loyaltyMemberId: customer?.loyaltyMemberId ?? null,
             total: totals.grandTotal,
             heldAt: new Date().toISOString(),
             cashierId: currentUserId ?? 'Cashier'
@@ -505,15 +506,37 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     const contactsApi = new ContactsApiRepository();
                     const contact = await contactsApi.findById(heldSale.customerId);
                     if (contact) {
-                        // Map contact to POSCustomer
+                        const { shopApi } = await import('../services/shopApi');
+                        let loyaltyMemberId: string | null = null;
+                        let points = 0;
+                        let tier: POSCustomer['tier'] = 'Standard';
+                        try {
+                            const members = await shopApi.getLoyaltyMembers();
+                            if (Array.isArray(members)) {
+                                const m = members.find(
+                                    (row: any) =>
+                                        row.customer_id === contact.id ||
+                                        (row.contact_no && contact.contactNo &&
+                                            String(row.contact_no).replace(/\D/g, '') === String(contact.contactNo).replace(/\D/g, ''))
+                                );
+                                if (m) {
+                                    loyaltyMemberId = m.id;
+                                    points = parseInt(String(m.points_balance), 10) || 0;
+                                    tier = (m.tier as POSCustomer['tier']) || 'Standard';
+                                }
+                            }
+                        } catch {
+                            /* optional */
+                        }
                         const posCustomer: POSCustomer = {
                             id: contact.id,
                             name: contact.name,
                             phone: contact.contactNo || 'N/A',
-                            points: 0, // In a real app, fetch from loyalty
+                            loyaltyMemberId,
+                            points,
                             creditLimit: 0,
                             balance: 0,
-                            tier: 'Standard'
+                            tier
                         };
                         setCustomer(posCustomer);
                     }
@@ -555,7 +578,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 userId: currentUserId ?? undefined,
                 shiftId: currentShift?.id ?? undefined,
                 customerId: customer?.id,
-                loyaltyMemberId: null, // TODO: Link loyalty member
+                loyaltyMemberId: customer?.loyaltyMemberId ?? null,
                 saleNumber,
                 subtotal: totals.subtotal,
                 taxTotal: totals.taxTotal,
