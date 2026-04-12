@@ -1,4 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import {
+    isInstalledPWA,
+    isAppleTouchDevice,
+    isIPadLayout,
+    isLikelyRestrictedInAppBrowser,
+} from '../utils/pwaPlatform';
 
 interface BeforeInstallPromptEvent extends Event {
     prompt: () => Promise<void>;
@@ -11,10 +17,11 @@ const PWAInstallPrompt: React.FC = () => {
     const [isIOS, setIsIOS] = useState(false);
     const [showIOSGuide, setShowIOSGuide] = useState(false);
     const [isInstalled, setIsInstalled] = useState(false);
+    const [ipadLayout, setIpadLayout] = useState(false);
+    const [inAppBrowser, setInAppBrowser] = useState(false);
 
     useEffect(() => {
-        // Check if already installed
-        if (window.matchMedia('(display-mode: standalone)').matches) {
+        if (isInstalledPWA()) {
             setIsInstalled(true);
             return;
         }
@@ -27,15 +34,15 @@ const PWAInstallPrompt: React.FC = () => {
             if (daysPassed < 7) return;
         }
 
-        // Detect iOS
-        const userAgent = window.navigator.userAgent.toLowerCase();
-        const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
-        const isInStandaloneMode = ('standalone' in window.navigator) && (window.navigator as any).standalone;
+        const touchApple = isAppleTouchDevice();
+        const restricted = isLikelyRestrictedInAppBrowser();
+        setInAppBrowser(restricted);
+        setIpadLayout(isIPadLayout());
 
-        if (isIOSDevice && !isInStandaloneMode) {
+        if (touchApple) {
             setIsIOS(true);
-            // Show iOS prompt after a short delay
-            setTimeout(() => setShowPrompt(true), 3000);
+            const delayMs = restricted ? 1200 : 3000;
+            setTimeout(() => setShowPrompt(true), delayMs);
         }
 
         // Listen for beforeinstallprompt (Android/Chrome)
@@ -134,7 +141,20 @@ const PWAInstallPrompt: React.FC = () => {
                             }}>🛒</div>
                             <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Install MyShop</h3>
                             <p style={{ fontSize: 14, color: '#64748B' }}>Add to your home screen for the best experience</p>
+                            <p style={{ fontSize: 12, color: '#94A3B8', marginTop: 8, lineHeight: 1.45 }}>
+                                Use <strong style={{ color: '#475569' }}>Safari</strong> — “Add to Home Screen” is not available inside Instagram, Facebook, or some other in-app browsers.
+                            </p>
                         </div>
+
+                        {inAppBrowser && (
+                            <div style={{
+                                marginBottom: 20, padding: '12px 14px', borderRadius: 12,
+                                background: '#FFF7ED', border: '1px solid #FDBA74', color: '#9A3412',
+                                fontSize: 13, lineHeight: 1.5,
+                            }}>
+                                <strong>Open in Safari first.</strong> Tap the browser&apos;s menu (often <strong>···</strong> or <strong>Share</strong>), choose <strong>Open in Safari</strong>, then return here and tap <strong>Install</strong> again.
+                            </div>
+                        )}
 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -152,9 +172,13 @@ const PWAInstallPrompt: React.FC = () => {
                                 <div>
                                     <p style={{ fontSize: 14, fontWeight: 600 }}>
                                         Step 1: Tap the <span style={{ color: '#4F46E5' }}>Share</span> button
+                                        {' '}
+                                        <span style={{ fontWeight: 500, color: '#94A3B8' }}>(□↑)</span>
                                     </p>
                                     <p style={{ fontSize: 12, color: '#94A3B8' }}>
-                                        In the Safari toolbar at the bottom
+                                        {ipadLayout
+                                            ? 'In Safari — usually in the top-right toolbar on iPad.'
+                                            : 'In Safari — bottom toolbar on iPhone.'}
                                     </p>
                                 </div>
                             </div>
@@ -219,7 +243,9 @@ const PWAInstallPrompt: React.FC = () => {
                         }}>🛒</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Install MyShop App</p>
-                            <p style={{ fontSize: 11, color: '#94A3B8' }}>Add to home screen for quick access</p>
+                            <p style={{ fontSize: 11, color: '#94A3B8' }}>
+                                {inAppBrowser ? 'Open in Safari, then add to Home Screen' : 'Add to home screen for quick access'}
+                            </p>
                         </div>
                         <button
                             onClick={() => setShowIOSGuide(true)}
@@ -230,7 +256,7 @@ const PWAInstallPrompt: React.FC = () => {
                                 cursor: 'pointer', whiteSpace: 'nowrap',
                             }}
                         >
-                            Install
+                            {inAppBrowser ? 'How to' : 'Install'}
                         </button>
                         <button
                             onClick={handleDismiss}

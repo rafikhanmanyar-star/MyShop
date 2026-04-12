@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { isAppleTouchDevice, isInstalledPWA } from '../utils/pwaPlatform';
 
 interface BeforeInstallPromptEvent extends Event {
     prompt: () => Promise<void>;
@@ -13,15 +14,12 @@ export function usePWAInstall() {
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
-        if (window.matchMedia('(display-mode: standalone)').matches) {
+        if (isInstalledPWA()) {
             setIsInstalled(true);
             return;
         }
 
-        const ua = window.navigator.userAgent.toLowerCase();
-        const iosDevice = /iphone|ipad|ipod/.test(ua);
-        const standalone = 'standalone' in window.navigator && (window.navigator as unknown as { standalone?: boolean }).standalone;
-        if (iosDevice && !standalone) {
+        if (isAppleTouchDevice()) {
             setIsIOS(true);
         }
 

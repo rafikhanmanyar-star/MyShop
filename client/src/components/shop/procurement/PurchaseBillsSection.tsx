@@ -32,11 +32,18 @@ import TotalSummaryCard from './TotalSummaryCard';
 import PaymentSelector, { type PaymentStatus } from './PaymentSelector';
 import { showProcurementToast } from './utils/showProcurementToast';
 import Badge from '../../ui/Badge';
+import Modal from '../../ui/Modal';
 
 function normalizeList<T>(raw: unknown): T[] {
   if (Array.isArray(raw)) return raw;
   if (raw && typeof raw === 'object' && 'data' in raw && Array.isArray((raw as { data: T[] }).data)) return (raw as { data: T[] }).data;
   return [];
+}
+
+/** fetch-based apiClient surfaces `{ error }`; legacy axios used `response.data.error`. */
+function procurementHttpErr(err: unknown, fallback: string): string {
+  const e = err as { error?: string; message?: string; response?: { data?: { error?: string } } };
+  return e?.error || e?.response?.data?.error || e?.message || fallback;
 }
 
 export interface PurchaseBillsSectionHandle {
@@ -418,7 +425,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         const fn = `Purchase-order-${String(input.billNumber).replace(/[^\w.-]+/g, '_')}.pdf`;
         await sharePurchaseOrderPdfToWhatsApp(blob, fn, { vendorPhone: input.supplierPhone });
       } catch (err: any) {
-        alert(err?.response?.data?.error || err?.message || 'Could not share PDF');
+        alert(procurementHttpErr(err, 'Could not share PDF'));
       } finally {
         setSharingPdfBillId(null);
       }
@@ -549,7 +556,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           }
         }
       } catch (err: any) {
-        alert(err?.response?.data?.error || err?.message || (editBillId ? 'Failed to update purchase bill' : 'Failed to create purchase bill'));
+        alert(procurementHttpErr(err, editBillId ? 'Failed to update purchase bill' : 'Failed to create purchase bill'));
       } finally {
         setLoading(false);
       }
@@ -562,17 +569,19 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           <p className="body-text text-muted-foreground">Review and manage recorded purchase bills.</p>
         </div>
 
-        {showForm && (
-          <div
-            className={`card p-3 sm:p-4 ${
-              form.items.length > 0 ? 'pb-40 md:pb-5' : ''
-            }`}
-          >
-            <h3 className="card-title mb-2">
-              {editBillId ? 'Edit purchase bill' : 'Create purchase bill'}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-2">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
+        <Modal
+          isOpen={showForm}
+          onClose={() => {
+            if (!loading) closeForm();
+          }}
+          title={editBillId ? 'Edit purchase bill' : 'Create purchase bill'}
+          size="full"
+          disableScroll
+          className="!mx-0 w-full !max-w-none sm:!mx-auto sm:!max-w-[min(100vw-1rem,72rem)]"
+        >
+          <div className="flex h-full min-h-0 flex-1 flex-col p-3 sm:p-4 md:p-5">
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-2">
+              <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
                 <div ref={vendorDropdownRef} className="min-w-0 sm:col-span-2 xl:col-span-1">
                   <SupplierSelect
                     vendors={vendors}
@@ -630,7 +639,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                 </div>
               </div>
 
-              <div ref={productSearchRef}>
+              <div ref={productSearchRef} className="shrink-0">
                 <ProductSearchInput
                   currencyLabel={CURRENCY}
                   productSearch={productSearch}
@@ -647,8 +656,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               </div>
 
               {form.items.length > 0 && (
-                <div className="overflow-hidden rounded-xl border border-border bg-card">
-                  <div className="overflow-x-auto">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
+                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain [scrollbar-gutter:stable] max-h-[min(60vh,calc(100dvh-18rem))] sm:max-h-[min(65vh,calc(100dvh-16rem))]">
                     <table className="table-modern min-w-[960px]">
                       <thead className="sticky top-0 z-10 hidden border-b border-border bg-card shadow-erp md:table-header-group">
                         <tr>
@@ -691,32 +700,33 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                       </tbody>
                     </table>
                   </div>
-                  <div className="border-t border-border p-4">
+                  <div className="shrink-0 border-t border-border p-4">
                     <TotalSummaryCard
                       currencyLabel={CURRENCY}
                       subtotal={subtotal}
                       tax={taxTotal}
                       total={totalAmount}
-                      stickyMobile
                     />
                   </div>
                 </div>
               )}
 
               {!editBillId && (
-                <PaymentSelector
-                  value={form.paymentStatus}
-                  onChange={(v) => setForm((f) => ({ ...f, paymentStatus: v }))}
-                  paidAmount={form.paidAmount}
-                  onPaidAmountChange={(n) => setForm((f) => ({ ...f, paidAmount: n }))}
-                  totalAmount={totalAmount}
-                  bankAccountId={form.bankAccountId}
-                  onBankAccountChange={(id) => setForm((f) => ({ ...f, bankAccountId: id }))}
-                  bankAccounts={bankAccounts.map((b) => ({ id: b.id, name: b.name }))}
-                />
+                <div className="shrink-0">
+                  <PaymentSelector
+                    value={form.paymentStatus}
+                    onChange={(v) => setForm((f) => ({ ...f, paymentStatus: v }))}
+                    paidAmount={form.paidAmount}
+                    onPaidAmountChange={(n) => setForm((f) => ({ ...f, paidAmount: n }))}
+                    totalAmount={totalAmount}
+                    bankAccountId={form.bankAccountId}
+                    onBankAccountChange={(id) => setForm((f) => ({ ...f, bankAccountId: id }))}
+                    bankAccounts={bankAccounts.map((b) => ({ id: b.id, name: b.name }))}
+                  />
+                </div>
               )}
 
-              <details className="group rounded-lg border border-border bg-muted open:bg-card">
+              <details className="group shrink-0 rounded-lg border border-border bg-muted open:bg-card">
                 <summary className="cursor-pointer list-none px-2.5 py-1.5 text-sm font-semibold text-foreground">
                   <span className="text-muted-foreground">Notes</span>
                   <span className="ml-2 text-xs font-normal text-muted-foreground">(optional — click to expand)</span>
@@ -732,7 +742,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                 </div>
               </details>
 
-              <div className="flex flex-col gap-2 border-t border-border pt-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex shrink-0 flex-col gap-2 border-t border-border pt-2 sm:flex-row sm:items-center sm:justify-between">
               {!editBillId && (
                 <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground sm:max-w-[min(100%,28rem)]">
                   <input
@@ -763,7 +773,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               </div>
             </form>
           </div>
-        )}
+        </Modal>
 
         <div className="card overflow-hidden p-0">
           <div className="overflow-x-auto">
@@ -856,7 +866,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                                 setEditBillId(b.id);
                                 setShowForm(true);
                               } catch (err: any) {
-                                alert(err?.response?.data?.error || err?.message || 'Failed to load bill');
+                                alert(procurementHttpErr(err, 'Failed to load bill'));
                               }
                             }}
                             className="transition-all duration-200 rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-primary"
@@ -922,7 +932,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                       setBills(Array.isArray(list) ? list : []);
                       refreshItemsRef.current?.();
                     } catch (err: any) {
-                      alert(err?.response?.data?.error || err?.message || 'Failed to delete bill');
+                      alert(procurementHttpErr(err, 'Failed to delete bill'));
                     } finally {
                       setUpdating(false);
                     }

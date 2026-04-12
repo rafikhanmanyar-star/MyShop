@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRegisterInventoryPageHeader, type InventoryTabId } from '../../context/InventoryPageHeaderContext';
 import { InventoryProvider, useInventory } from '../../context/InventoryContext';
 import InventoryDashboard from './inventory/InventoryDashboard';
@@ -8,133 +8,15 @@ import StockAdjustments from './inventory/StockAdjustments';
 import InventoryCategories from './inventory/InventoryCategories';
 import IncompleteProductsTab from './inventory/IncompleteProductsTab';
 import { ICONS } from '../../constants';
-import Modal from '../ui/Modal';
-import Input from '../ui/Input';
-import Button from '../ui/Button';
-import { shopApi, ShopProductCategory } from '../../services/shopApi';
-import { getShopCategoriesOfflineFirst } from '../../services/categoriesOfflineCache';
-import { getFullImageUrl } from '../../config/apiUrl';
+import AddOrEditSkuModal from './pos/AddOrEditSkuModal';
 const InventoryContent: React.FC = () => {
-    const { items, addItem, refreshItems } = useInventory();
+    const { refreshItems } = useInventory();
     const [activeTab, setActiveTab] = useState<InventoryTabId>('dashboard');
     const [isNewSkuModalOpen, setIsNewSkuModalOpen] = useState(false);
-    const [shopCategories, setShopCategories] = useState<ShopProductCategory[]>([]);
-    const [newItemData, setNewItemData] = useState({
-        sku: '',
-        barcode: '',
-        name: '',
-        category: 'General',
-        retailPrice: 0,
-        costPrice: 0,
-        reorderPoint: 10,
-        unit: 'pcs',
-        imageUrl: ''
-    });
-    const [selectedImage, setSelectedImage] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-    const loadShopCategories = useCallback(async () => {
-        try {
-            const list = await getShopCategoriesOfflineFirst();
-            setShopCategories(Array.isArray(list) ? list : []);
-        } catch {
-            setShopCategories([]);
-        }
-    }, []);
-
-    // Refresh items and shop categories when component mounts
     useEffect(() => {
         refreshItems();
-        loadShopCategories();
-    }, [refreshItems, loadShopCategories]);
-
-    // When modal opens, refresh categories
-    useEffect(() => {
-        if (!isNewSkuModalOpen) return;
-        loadShopCategories();
-    }, [isNewSkuModalOpen, loadShopCategories]);
-
-    /** Main and sub categories with a display label (Parent › Sub) for the picker. */
-    const categoryPickerRows = useMemo(() => {
-        const byId = new Map(shopCategories.map((c) => [c.id, c]));
-        const rows = shopCategories.map((c) => {
-            const parent = c.parent_id ? byId.get(c.parent_id) : undefined;
-            const label = parent ? `${parent.name} › ${c.name}` : c.name;
-            return { id: c.id, name: c.name, label };
-        });
-        return [...rows].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
-    }, [shopCategories]);
-
-    // Real-time duplicate checks for barcode and product name
-    const barcodeConflictItems = React.useMemo(() => {
-        const barcodeNorm = (newItemData.barcode || '').trim().toLowerCase();
-        if (!barcodeNorm) return [];
-        return items.filter(
-            (i) => i.barcode && i.barcode.trim().toLowerCase() === barcodeNorm
-        );
-    }, [items, newItemData.barcode]);
-
-    const nameConflictItems = React.useMemo(() => {
-        const nameNorm = (newItemData.name || '').trim().toLowerCase();
-        if (!nameNorm) return [];
-        return items.filter(
-            (i) => i.name.trim().toLowerCase() === nameNorm
-        );
-    }, [items, newItemData.name]);
-
-    const hasConflict = barcodeConflictItems.length > 0 || nameConflictItems.length > 0;
-
-    const handleCreateSku = async () => {
-        if (hasConflict) return;
-        try {
-            let imageUrl = '';
-            let imageAlreadyUploaded = false;
-            if (selectedImage && typeof navigator !== 'undefined' && navigator.onLine) {
-                const uploadRes = await shopApi.uploadImage(selectedImage);
-                imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
-                imageAlreadyUploaded = true;
-            }
-
-            await addItem(
-                {
-                    id: '', // Will be generated
-                    sku: newItemData.sku || `SKU-${Date.now()}`,
-                    barcode: newItemData.barcode || undefined,
-                    name: newItemData.name,
-                    category: newItemData.category,
-                    retailPrice: Number(newItemData.retailPrice),
-                    costPrice: Number(newItemData.costPrice),
-                    onHand: 0,
-                    available: 0,
-                    reserved: 0,
-                    inTransit: 0,
-                    damaged: 0,
-                    reorderPoint: Number(newItemData.reorderPoint),
-                    unit: newItemData.unit,
-                    imageUrl,
-                    warehouseStock: {}
-                },
-                imageAlreadyUploaded ? undefined : selectedImage || undefined
-            );
-            setIsNewSkuModalOpen(false);
-            setNewItemData({
-                sku: '',
-                barcode: '',
-                name: '',
-                category: 'General',
-                retailPrice: 0,
-                costPrice: 0,
-                reorderPoint: 10,
-                unit: 'pcs',
-                imageUrl: ''
-            });
-            setSelectedImage(null);
-            setImagePreview(null);
-        } catch (error) {
-            // Error already handled in addItem
-            console.error('Failed to create SKU:', error);
-        }
-    };
+    }, [refreshItems]);
 
     const tabs = useMemo(
         () =>
@@ -183,182 +65,12 @@ const InventoryContent: React.FC = () => {
                 </div>
             </div>
 
-            <Modal
+            <AddOrEditSkuModal
                 isOpen={isNewSkuModalOpen}
                 onClose={() => setIsNewSkuModalOpen(false)}
-                title="Create New SKU"
-                size="lg"
-            >
-                <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="SKU Code"
-                            placeholder="Auto-generated if empty"
-                            value={newItemData.sku}
-                            onChange={(e) => setNewItemData({ ...newItemData, sku: e.target.value })}
-                        />
-                        <div className="space-y-1">
-                            <Input
-                                label="Barcode"
-                                placeholder="Scan or enter barcode"
-                                value={newItemData.barcode}
-                                onChange={(e) => setNewItemData({ ...newItemData, barcode: e.target.value })}
-                            />
-                            {barcodeConflictItems.length > 0 && (
-                            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-2.5 text-sm">
-                                <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-200 mb-1">
-                                        {React.cloneElement(ICONS.alertTriangle as React.ReactElement<{ size?: number }>, { size: 14 })}
-                                        <span>Barcode already in use</span>
-                                    </div>
-                                    <ul className="space-y-1 max-h-24 overflow-y-auto">
-                                        {barcodeConflictItems.map((item) => (
-                                            <li key={item.id} className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-                                                <div className="w-6 h-6 rounded bg-muted dark:bg-slate-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                                    {item.imageUrl ? (
-                                                        <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        React.cloneElement(ICONS.package as React.ReactElement<{ size?: number }>, { size: 12 })
-                                                    )}
-                                                </div>
-                                                <span className="font-medium truncate">{item.name}</span>
-                                                <span className="text-amber-600 dark:text-amber-400 text-xs flex-shrink-0">SKU: {item.sku}</span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <Input
-                            label="Product Name"
-                            placeholder="e.g. Cotton T-Shirt"
-                            value={newItemData.name}
-                            onChange={(e) => setNewItemData({ ...newItemData, name: e.target.value })}
-                        />
-                        {nameConflictItems.length > 0 && (
-                            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 p-2.5 text-sm">
-                                <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-200 mb-1">
-                                    {React.cloneElement(ICONS.alertTriangle as React.ReactElement<{ size?: number }>, { size: 14 })}
-                                    <span>Product name already in use</span>
-                                </div>
-                                <ul className="space-y-1 max-h-24 overflow-y-auto">
-                                    {nameConflictItems.map((item) => (
-                                        <li key={item.id} className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-                                            <div className="w-6 h-6 rounded bg-muted dark:bg-slate-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                                {item.imageUrl ? (
-                                                    <img src={item.imageUrl} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    React.cloneElement(ICONS.package as React.ReactElement<{ size?: number }>, { size: 12 })
-                                                )}
-                                            </div>
-                                            <span className="font-medium truncate">{item.name}</span>
-                                            <span className="text-amber-600 dark:text-amber-400 text-xs flex-shrink-0">SKU: {item.sku}</span>
-                                            {item.barcode && (
-                                                <span className="text-amber-600 dark:text-amber-400 text-xs flex-shrink-0">· {item.barcode}</span>
-                                            )}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                        <div>
-                            <label
-                                htmlFor="inventory-create-sku-category"
-                                className="block text-sm font-medium text-foreground dark:text-slate-300 mb-1"
-                            >
-                                Category
-                            </label>
-                            <select
-                                id="inventory-create-sku-category"
-                                className="block w-full rounded-md border border-gray-300 bg-card px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                                value={newItemData.category}
-                                onChange={(e) =>
-                                    setNewItemData({ ...newItemData, category: e.target.value })
-                                }
-                            >
-                                <option value="General">General</option>
-                                {categoryPickerRows.map((row) => (
-                                    <option key={row.id} value={row.id}>
-                                        {row.label}
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="text-xs text-muted-foreground dark:text-muted-foreground mt-1">
-                                Includes subcategories as &quot;Parent › Sub&quot;.
-                            </p>
-                        </div>
-                        <Input
-                            label="Unit"
-                            placeholder="pcs, kg, etc"
-                            value={newItemData.unit}
-                            onChange={(e) => setNewItemData({ ...newItemData, unit: e.target.value })}
-                        />
-                        <Input
-                            label="Reorder Point"
-                            type="number"
-                            value={newItemData.reorderPoint}
-                            onChange={(e) => setNewItemData({ ...newItemData, reorderPoint: Number(e.target.value) })}
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Cost Price"
-                            type="number"
-                            value={newItemData.costPrice}
-                            onChange={(e) => setNewItemData({ ...newItemData, costPrice: Number(e.target.value) })}
-                        />
-                        <Input
-                            label="Retail Price"
-                            type="number"
-                            value={newItemData.retailPrice}
-                            onChange={(e) => setNewItemData({ ...newItemData, retailPrice: Number(e.target.value) })}
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="block text-sm font-medium text-foreground dark:text-slate-300">Product Image</label>
-                        <div className="flex items-center gap-4">
-                            <div className="w-24 h-24 rounded-2xl bg-muted dark:bg-slate-700 border-2 border-dashed border-border dark:border-slate-600 flex items-center justify-center overflow-hidden text-slate-300 dark:text-muted-foreground">
-                                {imagePreview ? (
-                                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                                ) : (
-                                    React.cloneElement(ICONS.image as React.ReactElement, { size: 32 })
-                                )}
-                            </div>
-                            <div className="flex-1">
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                            setSelectedImage(file);
-                                            setImagePreview(URL.createObjectURL(file));
-                                        }
-                                    }}
-                                    className="hidden"
-                                    id="sku-image-upload"
-                                />
-                                <label
-                                    htmlFor="sku-image-upload"
-                                    className="inline-flex items-center px-4 py-2 bg-card dark:bg-slate-800 border border-border dark:border-slate-700 rounded-lg text-sm font-bold text-foreground dark:text-slate-300 hover:bg-muted/50 dark:hover:bg-slate-700 cursor-pointer transition-colors"
-                                >
-                                    {imagePreview ? 'Change Image' : 'Upload Image'}
-                                </label>
-                                <p className="text-xs text-muted-foreground dark:text-muted-foreground mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex justify-end gap-3 mt-6">
-                        <Button variant="secondary" onClick={() => setIsNewSkuModalOpen(false)}>Cancel</Button>
-                        <Button onClick={handleCreateSku} disabled={!newItemData.name || hasConflict}>Create Product</Button>
-                    </div>
-                </div>
-            </Modal>
+                openInAddMode
+                closeOnBackFromAdd
+            />
         </div>
     );
 };

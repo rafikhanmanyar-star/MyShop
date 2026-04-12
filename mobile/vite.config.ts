@@ -21,6 +21,9 @@ export default defineConfig({
         'icons/icon-192.svg',
         'icons/icon-512.svg',
         'icons/apple-touch-icon.svg',
+        'icons/icon-192.png',
+        'icons/icon-512.png',
+        'icons/apple-touch-icon.png',
       ],
       manifest: {
         name: 'MyShop — Order & Deliver',
@@ -35,21 +38,21 @@ export default defineConfig({
         categories: ['shopping', 'food', 'lifestyle'],
         icons: [
           {
-            src: '/icons/icon-192.svg',
+            src: '/icons/icon-192.png',
             sizes: '192x192',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/icons/icon-512.svg',
+            src: '/icons/icon-512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'any',
           },
           {
-            src: '/icons/icon-512.svg',
+            src: '/icons/icon-512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'maskable',
           },
         ],

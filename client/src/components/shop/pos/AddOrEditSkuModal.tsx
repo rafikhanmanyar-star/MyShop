@@ -19,8 +19,10 @@ interface AddOrEditSkuModalProps {
     onClose: () => void;
     /** Pre-fill when adding new (e.g. from POS search - barcode or SKU typed) */
     initialSkuOrBarcode?: string;
-    /** When true, open directly in Add New SKU mode (skip choice screen). Use with initialSkuOrBarcode for quick add. */
+    /** When true, open directly in Add New SKU mode (skip choice screen). Pre-fills from `initialSkuOrBarcode` when provided. */
     openInAddMode?: boolean;
+    /** When opening in add mode (e.g. Inventory → New SKU), Back closes the modal instead of returning to the search/create choice screen. */
+    closeOnBackFromAdd?: boolean;
     /**
      * When set while opening, skip the choice screen and edit this item (e.g. POS catalog right-click → Edit).
      * Parent should resolve from inventory when possible; ref is read when `isOpen` becomes true only.
@@ -74,6 +76,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     onClose,
     initialSkuOrBarcode = '',
     openInAddMode = false,
+    closeOnBackFromAdd = false,
     initialEditingItem = null,
     onItemReady
 }) => {
@@ -116,7 +119,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         }
 
         const skuOrBarcode = (initialSkuOrBarcode || '').trim();
-        const startInAddMode = openInAddMode && !!skuOrBarcode;
+        const startInAddMode = openInAddMode;
         setMode(startInAddMode ? 'add' : 'choice');
         setExistingSearch('');
         setEditingItem(null);
@@ -417,7 +420,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 : 'Edit SKU (e.g. add barcode)';
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title={title} size="lg">
+        <Modal isOpen={isOpen} onClose={handleClose} title={title} size="xl" maxContentHeight={720}>
             <div className="space-y-4">
                 {mode === 'choice' && (
                     <>
@@ -501,6 +504,9 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                         {!item.barcode && (
                                             <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-0.5 rounded">Add barcode</span>
                                         )}
+                                        {item.salesDeactivated && (
+                                            <span className="text-xs font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded">Sales off</span>
+                                        )}
                                         {React.cloneElement(ICONS.chevronRight as React.ReactElement<any>, { size: 16, className: 'text-slate-400 flex-shrink-0' })}
                                     </button>
                                 ))
@@ -516,333 +522,369 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 {(mode === 'add' || editingItem) && (
                     <>
                         {editingItem && (
-                            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                                Editing <strong>{editingItem.name}</strong>. Add or update the barcode so it can be scanned at POS.
+                            <p className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                                Editing <strong>{editingItem.name}</strong>. Barcodes must be unique so POS scans resolve to one product. Use{' '}
+                                <strong>Inventory → Stock Master</strong> to find SKUs marked <strong>Sales off</strong> and reactivate them below.
                             </p>
                         )}
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input
-                                label="SKU Code"
-                                placeholder="e.g. SKU-001"
-                                value={formData.sku}
-                                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                            />
-                            <div className="space-y-1">
-                                <Input
-                                    label="Barcode"
-                                    placeholder="Scan or enter barcode"
-                                    value={formData.barcode}
-                                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                                    helperText={barcodeConflictItems.length === 0 ? 'Must be unique across all products.' : undefined}
-                                />
-                                {barcodeConflictItems.length > 0 && (
-                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
-                                        <div className="flex items-center gap-1.5 font-semibold text-amber-800 mb-1">
-                                            {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 14 })}
-                                            <span>Barcode already in use</span>
-                                        </div>
-                                        <ul className="space-y-1 max-h-24 overflow-y-auto">
-                                            {barcodeConflictItems.map((item) => (
-                                                <li key={item.id} className="flex items-center gap-2 text-amber-800">
-                                                    <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0">
-                                                        {item.imageUrl ? (
-                                                            <CachedImage path={item.imageUrl} alt="" className="w-full h-full object-cover" />
-                                                        ) : (
-                                                            React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 12, className: 'm-1' })
-                                                        )}
-                                                    </div>
-                                                    <span className="font-medium truncate">{item.name}</span>
-                                                    <span className="text-amber-600 text-xs flex-shrink-0">SKU: {item.sku}</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="space-y-1">
-                            <Input
-                                label="Product Name"
-                                placeholder="e.g. Cotton T-Shirt"
-                                value={formData.name}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                helperText={nameConflictItems.length === 0 ? 'Must be unique across all products.' : undefined}
-                            />
-                            <div className="space-y-1">
-                                <label className="block text-sm font-medium text-slate-700">Description</label>
-                                <textarea
-                                    placeholder="e.g. Soft cotton t-shirt, available in multiple colors. Shown in the mobile app when customers open this product."
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    rows={3}
-                                    className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                />
-                                <p className="text-xs text-slate-500">Shown in the mobile app when the user opens this product.</p>
-                            </div>
-                            {nameConflictItems.length > 0 && (
-                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
-                                    <div className="flex items-center gap-1.5 font-semibold text-amber-800 mb-1">
-                                        {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 14 })}
-                                        <span>Product name already in use</span>
-                                    </div>
-                                    <ul className="space-y-1 max-h-24 overflow-y-auto">
-                                        {nameConflictItems.map((item) => (
-                                            <li key={item.id} className="flex items-center gap-2 text-amber-800">
-                                                <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0">
-                                                    {item.imageUrl ? (
-                                                        <CachedImage path={item.imageUrl} alt="" className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 12, className: 'm-1' })
-                                                    )}
-                                                </div>
-                                                <span className="font-medium truncate">{item.name}</span>
-                                                <span className="text-amber-600 text-xs flex-shrink-0">SKU: {item.sku}</span>
-                                                {item.barcode && (
-                                                    <span className="text-amber-600 text-xs flex-shrink-0">· {item.barcode}</span>
-                                                )}
-                                            </li>
-                                        ))}
-                                    </ul>
+                        {formData.salesDeactivated && (
+                            <div
+                                className="flex flex-col gap-3 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50/80 p-4 sm:flex-row sm:items-center sm:justify-between"
+                                role="status"
+                            >
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-amber-950">Sales are off for this product</p>
+                                    <p className="text-xs text-amber-900/90 mt-1 leading-snug">
+                                        It is hidden from POS and the mobile shop. Stock and past orders are unchanged. Reactivate to sell again, or
+                                        leave off to keep it out of sales channels.
+                                    </p>
                                 </div>
-                            )}
-                        </div>
-                        <div
-                            className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4"
-                            aria-label="Category selection"
-                        >
-                            <div>
-                                <p className="text-sm font-semibold text-slate-800">Category</p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    Step 1: pick the main category. Step 2: pick a subcategory under that main
-                                    (when available).
-                                </p>
+                                <button
+                                    type="button"
+                                    className="shrink-0 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                                    onClick={() => setFormData({ ...formData, salesDeactivated: false })}
+                                >
+                                    Reactivate for sales
+                                </button>
                             </div>
+                        )}
 
-                            <div className="space-y-1.5">
-                                <label
-                                    htmlFor="pos-add-edit-sku-main-category"
-                                    className="flex items-baseline gap-2 text-sm font-medium text-slate-700"
-                                >
-                                    <span
-                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-800"
-                                        aria-hidden
-                                    >
-                                        1
-                                    </span>
-                                    <span>Main category</span>
-                                </label>
-                                <select
-                                    id="pos-add-edit-sku-main-category"
-                                    className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                                    value={formData.category}
-                                    onChange={(e) => {
-                                        const next = e.target.value;
-                                        setFormData({
-                                            ...formData,
-                                            category: next,
-                                            subcategoryId: ''
-                                        });
-                                    }}
-                                >
-                                    <option value="General">General (uncategorized)</option>
-                                    {rootCategories.map((c) => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label
-                                    htmlFor="pos-add-edit-sku-subcategory"
-                                    className="flex items-baseline gap-2 text-sm font-medium text-slate-700"
-                                >
-                                    <span
-                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-800"
-                                        aria-hidden
-                                    >
-                                        2
-                                    </span>
-                                    <span>Subcategory</span>
-                                    {!subcategorySelectDisabled && (
-                                        <span className="text-xs font-normal text-slate-500">
-                                            (under “{mainCategoryLabel}”)
-                                        </span>
-                                    )}
-                                </label>
-                                <select
-                                    id="pos-add-edit-sku-subcategory"
-                                    aria-describedby="pos-add-edit-sku-subcategory-help"
-                                    disabled={subcategorySelectDisabled}
-                                    className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
-                                    value={formData.subcategoryId}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, subcategoryId: e.target.value })
-                                    }
-                                >
-                                    <option value="">
-                                        {formData.category === 'General'
-                                            ? 'Select a main category first…'
-                                            : subcategoriesForParent.length === 0
-                                              ? '— No subcategories for this main category'
-                                              : 'Main category only (no subcategory)'}
-                                    </option>
-                                    {subcategoriesForParent.map((c) => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.name}
-                                        </option>
-                                    ))}
-                                </select>
-                                <p
-                                    id="pos-add-edit-sku-subcategory-help"
-                                    className="text-xs text-slate-500 leading-snug"
-                                >
-                                    {subcategoryHelperText}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input
-                                label="Unit"
-                                value={formData.unit}
-                                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                            />
-                            <Input
-                                label="Reorder Point"
-                                type="number"
-                                value={formData.reorderPoint}
-                                onChange={(e) => setFormData({ ...formData, reorderPoint: Number(e.target.value) })}
-                            />
-                        </div>
-                        <div className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/90 dark:bg-slate-800/50 px-3 py-2.5 flex items-start gap-2.5">
-                            <input
-                                id="pos-sku-sales-deactivated"
-                                type="checkbox"
-                                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                checked={formData.salesDeactivated}
-                                onChange={(e) => setFormData({ ...formData, salesDeactivated: e.target.checked })}
-                            />
-                            <label htmlFor="pos-sku-sales-deactivated" className="text-sm text-slate-700 dark:text-slate-300 leading-snug cursor-pointer">
-                                <span className="font-medium">Deactivate for sales</span>
-                                <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                    Hides this SKU from the mobile shop and from POS product selection. Past orders and stock are unchanged; you can turn sales back on anytime.
-                                </span>
-                            </label>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input
-                                label="Cost Price"
-                                type="number"
-                                value={formData.costPrice}
-                                onChange={(e) => {
-                                    const cost = Number(e.target.value);
-                                    const next = { ...formData, costPrice: cost };
-                                    if (formData.retailPriceMode === 'percentage') {
-                                        next.retailPrice = Math.round((cost * (1 + formData.retailMarkupPercent / 100)) * 100) / 100;
-                                    }
-                                    setFormData(next);
-                                }}
-                            />
-                            <div className="space-y-2">
-                                <label className="block text-sm font-medium text-slate-700">Retail Price</label>
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData({ ...formData, retailPriceMode: 'fixed' })}
-                                        className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${formData.retailPriceMode === 'fixed' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
-                                    >
-                                        Fixed
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const cost = formData.costPrice;
-                                            const pct = cost > 0 ? Math.round(((formData.retailPrice - cost) / cost) * 100) : 0;
-                                            setFormData({
-                                                ...formData,
-                                                retailPriceMode: 'percentage',
-                                                retailMarkupPercent: Math.max(0, pct),
-                                                retailPrice: cost * (1 + Math.max(0, pct) / 100)
-                                            });
-                                        }}
-                                        className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${formData.retailPriceMode === 'percentage' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
-                                    >
-                                        Markup %
-                                    </button>
-                                </div>
-                                {formData.retailPriceMode === 'fixed' ? (
+                        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3 xl:gap-5 items-start">
+                            {/* Column 1 — identification */}
+                            <div className="space-y-4 min-w-0">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Product details</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 xl:grid-cols-1 xl:gap-4">
                                     <Input
-                                        type="number"
-                                        placeholder="e.g. 107"
-                                        value={formData.retailPrice}
-                                        onChange={(e) => setFormData({ ...formData, retailPrice: Number(e.target.value) })}
+                                        label="SKU Code"
+                                        placeholder="e.g. SKU-001"
+                                        value={formData.sku}
+                                        onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                                     />
-                                ) : (
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="flex-1 min-w-0">
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="e.g. 7"
-                                                        value={formData.retailMarkupPercent}
-                                                        onChange={(e) => {
-                                                            const pct = Number(e.target.value);
-                                                            const cost = formData.costPrice;
-                                                            const retail = Math.round((cost * (1 + pct / 100)) * 100) / 100;
-                                                            setFormData({ ...formData, retailMarkupPercent: pct, retailPrice: retail });
-                                                        }}
-                                                    />
+                                    <div className="space-y-1 sm:col-span-2 xl:col-span-1">
+                                        <Input
+                                            label="Barcode"
+                                            placeholder="Scan or enter barcode"
+                                            value={formData.barcode}
+                                            onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                                            helperText={barcodeConflictItems.length === 0 ? 'Must be unique across all products.' : undefined}
+                                        />
+                                        {barcodeConflictItems.length > 0 && (
+                                            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
+                                                <div className="flex items-center gap-1.5 font-semibold text-amber-800 mb-1">
+                                                    {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 14 })}
+                                                    <span>Barcode already in use</span>
                                                 </div>
-                                                <span className="text-slate-600 font-medium flex-shrink-0">%</span>
+                                                <ul className="space-y-1 max-h-24 overflow-y-auto">
+                                                    {barcodeConflictItems.map((item) => (
+                                                        <li key={item.id} className="flex items-center gap-2 text-amber-800">
+                                                            <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0">
+                                                                {item.imageUrl ? (
+                                                                    <CachedImage path={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                                ) : (
+                                                                    React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 12, className: 'm-1' })
+                                                                )}
+                                                            </div>
+                                                            <span className="font-medium truncate">{item.name}</span>
+                                                            <span className="text-amber-600 text-xs flex-shrink-0">SKU: {item.sku}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             </div>
-                                            <p className="text-xs text-slate-500 mt-0.5">% added to cost price</p>
-                                        </div>
-                                        <div className="flex flex-col justify-end pb-1">
-                                            <p className="text-xs font-bold uppercase opacity-80">Sale price</p>
-                                            <p className="text-lg font-semibold text-slate-800">
-                                                {Number(formData.retailPrice).toFixed(2)}
-                                            </p>
-                                        </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-slate-700">Product Image</label>
-                            <div className="flex items-center gap-4">
-                                <div className="w-24 h-24 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden text-slate-300">
-                                    {imagePreview ? (
-                                        imagePreview.startsWith('blob:') ? (
-                                            <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <CachedImage path={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                                        )
-                                    ) : (
-                                        React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 32 })
+                                </div>
+                                <div className="space-y-1">
+                                    <Input
+                                        label="Product Name"
+                                        placeholder="e.g. Cotton T-Shirt"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                        helperText={nameConflictItems.length === 0 ? 'Must be unique across all products.' : undefined}
+                                    />
+                                    <div className="space-y-1">
+                                        <label className="block text-sm font-medium text-slate-700">Description</label>
+                                        <textarea
+                                            placeholder="e.g. Soft cotton t-shirt, available in multiple colors. Shown in the mobile app when customers open this product."
+                                            value={formData.description}
+                                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                            rows={4}
+                                            className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-h-[100px]"
+                                        />
+                                        <p className="text-xs text-slate-500">Shown in the mobile app when the user opens this product.</p>
+                                    </div>
+                                    {nameConflictItems.length > 0 && (
+                                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm">
+                                            <div className="flex items-center gap-1.5 font-semibold text-amber-800 mb-1">
+                                                {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 14 })}
+                                                <span>Product name already in use</span>
+                                            </div>
+                                            <ul className="space-y-1 max-h-24 overflow-y-auto">
+                                                {nameConflictItems.map((item) => (
+                                                    <li key={item.id} className="flex items-center gap-2 text-amber-800">
+                                                        <div className="w-6 h-6 rounded bg-slate-100 overflow-hidden flex-shrink-0">
+                                                            {item.imageUrl ? (
+                                                                <CachedImage path={item.imageUrl} alt="" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 12, className: 'm-1' })
+                                                            )}
+                                                        </div>
+                                                        <span className="font-medium truncate">{item.name}</span>
+                                                        <span className="text-amber-600 text-xs flex-shrink-0">SKU: {item.sku}</span>
+                                                        {item.barcode && (
+                                                            <span className="text-amber-600 text-xs flex-shrink-0">· {item.barcode}</span>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
                                     )}
                                 </div>
-                                <div className="flex-1">
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) {
-                                                setSelectedImage(file);
-                                                setImagePreview(URL.createObjectURL(file));
-                                            }
-                                        }}
-                                        className="hidden"
-                                        id="add-edit-sku-image"
+                            </div>
+
+                            {/* Column 2 — category & inventory & sales */}
+                            <div className="space-y-4 min-w-0">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Category &amp; stock settings</p>
+                                <div
+                                    className="rounded-xl border border-sky-200 bg-sky-50/60 p-4 space-y-4 shadow-sm"
+                                    aria-label="Category selection"
+                                >
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-800">Category</p>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            Step 1: pick the main category. Step 2: pick a subcategory under that main (when available).
+                                        </p>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label
+                                            htmlFor="pos-add-edit-sku-main-category"
+                                            className="flex items-baseline gap-2 text-sm font-medium text-slate-700"
+                                        >
+                                            <span
+                                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-800"
+                                                aria-hidden
+                                            >
+                                                1
+                                            </span>
+                                            <span>Main category</span>
+                                        </label>
+                                        <select
+                                            id="pos-add-edit-sku-main-category"
+                                            className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                                            value={formData.category}
+                                            onChange={(e) => {
+                                                const next = e.target.value;
+                                                setFormData({
+                                                    ...formData,
+                                                    category: next,
+                                                    subcategoryId: ''
+                                                });
+                                            }}
+                                        >
+                                            <option value="General">General (uncategorized)</option>
+                                            {rootCategories.map((c) => (
+                                                <option key={c.id} value={c.id}>
+                                                    {c.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label
+                                            htmlFor="pos-add-edit-sku-subcategory"
+                                            className="flex items-baseline gap-2 text-sm font-medium text-slate-700"
+                                        >
+                                            <span
+                                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-800"
+                                                aria-hidden
+                                            >
+                                                2
+                                            </span>
+                                            <span>Subcategory</span>
+                                            {!subcategorySelectDisabled && (
+                                                <span className="text-xs font-normal text-slate-500">(under “{mainCategoryLabel}”)</span>
+                                            )}
+                                        </label>
+                                        <select
+                                            id="pos-add-edit-sku-subcategory"
+                                            aria-describedby="pos-add-edit-sku-subcategory-help"
+                                            disabled={subcategorySelectDisabled}
+                                            className="block w-full rounded-lg border border-slate-300 bg-white py-2 px-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                                            value={formData.subcategoryId}
+                                            onChange={(e) => setFormData({ ...formData, subcategoryId: e.target.value })}
+                                        >
+                                            <option value="">
+                                                {formData.category === 'General'
+                                                    ? 'Select a main category first…'
+                                                    : subcategoriesForParent.length === 0
+                                                      ? '— No subcategories for this main category'
+                                                      : 'Main category only (no subcategory)'}
+                                            </option>
+                                            {subcategoriesForParent.map((c) => (
+                                                <option key={c.id} value={c.id}>
+                                                    {c.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p id="pos-add-edit-sku-subcategory-help" className="text-xs text-slate-500 leading-snug">
+                                            {subcategoryHelperText}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Input
+                                        label="Unit"
+                                        value={formData.unit}
+                                        onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                                     />
-                                    <label
-                                        htmlFor="add-edit-sku-image"
-                                        className="inline-flex items-center px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                                    >
-                                        {imagePreview ? 'Change Image' : 'Upload Image'}
-                                    </label>
+                                    <Input
+                                        label="Reorder Point"
+                                        type="number"
+                                        value={formData.reorderPoint}
+                                        onChange={(e) => setFormData({ ...formData, reorderPoint: Number(e.target.value) })}
+                                    />
+                                </div>
+
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-slate-600 dark:bg-slate-800/50">
+                                    <div className="flex items-start gap-2.5">
+                                        <input
+                                            id="pos-sku-available-for-sale"
+                                            type="checkbox"
+                                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            checked={!formData.salesDeactivated}
+                                            onChange={(e) => setFormData({ ...formData, salesDeactivated: !e.target.checked })}
+                                        />
+                                        <label htmlFor="pos-sku-available-for-sale" className="text-sm text-slate-700 dark:text-slate-300 leading-snug cursor-pointer">
+                                            <span className="font-medium">Available for sale (POS &amp; mobile)</span>
+                                            <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                                When off, the SKU stays in inventory but is hidden from checkout. Turn it back on here or in Stock
+                                                Master (look for the &quot;Sales off&quot; tag).
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Column 3 — pricing & image */}
+                            <div className="space-y-4 min-w-0">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pricing &amp; image</p>
+                                <div className="grid grid-cols-1 gap-4">
+                                    <Input
+                                        label="Cost Price"
+                                        type="number"
+                                        value={formData.costPrice}
+                                        onChange={(e) => {
+                                            const cost = Number(e.target.value);
+                                            const next = { ...formData, costPrice: cost };
+                                            if (formData.retailPriceMode === 'percentage') {
+                                                next.retailPrice = Math.round(cost * (1 + formData.retailMarkupPercent / 100) * 100) / 100;
+                                            }
+                                            setFormData(next);
+                                        }}
+                                    />
+                                    <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-700">Retail Price</label>
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, retailPriceMode: 'fixed' })}
+                                                className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${formData.retailPriceMode === 'fixed' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
+                                            >
+                                                Fixed
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const cost = formData.costPrice;
+                                                    const pct = cost > 0 ? Math.round(((formData.retailPrice - cost) / cost) * 100) : 0;
+                                                    setFormData({
+                                                        ...formData,
+                                                        retailPriceMode: 'percentage',
+                                                        retailMarkupPercent: Math.max(0, pct),
+                                                        retailPrice: cost * (1 + Math.max(0, pct) / 100)
+                                                    });
+                                                }}
+                                                className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${formData.retailPriceMode === 'percentage' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'}`}
+                                            >
+                                                Markup %
+                                            </button>
+                                        </div>
+                                        {formData.retailPriceMode === 'fixed' ? (
+                                            <Input
+                                                type="number"
+                                                placeholder="e.g. 107"
+                                                value={formData.retailPrice}
+                                                onChange={(e) => setFormData({ ...formData, retailPrice: Number(e.target.value) })}
+                                            />
+                                        ) : (
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="flex-1 min-w-0">
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="e.g. 7"
+                                                                value={formData.retailMarkupPercent}
+                                                                onChange={(e) => {
+                                                                    const pct = Number(e.target.value);
+                                                                    const cost = formData.costPrice;
+                                                                    const retail = Math.round((cost * (1 + pct / 100)) * 100) / 100;
+                                                                    setFormData({ ...formData, retailMarkupPercent: pct, retailPrice: retail });
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-slate-600 font-medium flex-shrink-0">%</span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 mt-0.5">% added to cost price</p>
+                                                </div>
+                                                <div className="flex flex-col justify-end pb-1">
+                                                    <p className="text-xs font-bold uppercase opacity-80">Sale price</p>
+                                                    <p className="text-lg font-semibold text-slate-800">
+                                                        {Number(formData.retailPrice).toFixed(2)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-medium text-slate-700">Product Image</label>
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                                        <div className="w-24 h-24 shrink-0 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden text-slate-300 mx-auto sm:mx-0">
+                                            {imagePreview ? (
+                                                imagePreview.startsWith('blob:') ? (
+                                                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <CachedImage path={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                                                )
+                                            ) : (
+                                                React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 32 })
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        setSelectedImage(file);
+                                                        setImagePreview(URL.createObjectURL(file));
+                                                    }
+                                                }}
+                                                className="hidden"
+                                                id="add-edit-sku-image"
+                                            />
+                                            <label
+                                                htmlFor="add-edit-sku-image"
+                                                className="inline-flex items-center px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                                            >
+                                                {imagePreview ? 'Change Image' : 'Upload Image'}
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -918,6 +960,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     if (editingItem) {
                                         setEditingItem(null);
                                         setMode('search');
+                                    } else if (closeOnBackFromAdd) {
+                                        handleClose();
                                     } else {
                                         setMode('choice');
                                     }

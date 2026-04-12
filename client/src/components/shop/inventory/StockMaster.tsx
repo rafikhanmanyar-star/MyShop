@@ -10,8 +10,8 @@ import Button from '../../ui/Button';
 import Select from '../../ui/Select';
 import { shopApi } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
-import { getFullImageUrl } from '../../../config/apiUrl';
 import type { InventoryItem, StockMovement } from '../../../types/inventory';
+import AddOrEditSkuModal from '../pos/AddOrEditSkuModal';
 
 const ROW_H = 72;
 const LIST_OVERSCAN = 10;
@@ -28,20 +28,19 @@ function isExpiringWithinDays(item: InventoryItem, days: number): boolean {
 }
 
 const StockMaster: React.FC = () => {
-    const { items, warehouses, updateStock, requestTransfer, deleteItem, updateItem } = useInventory();
+    const { items, warehouses, updateStock, requestTransfer, deleteItem } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [stockFilter, setStockFilter] = useState<'all' | 'in' | 'low' | 'out' | 'expiring'>('all');
+    const [stockFilter, setStockFilter] = useState<'all' | 'in' | 'low' | 'out' | 'expiring' | 'sales_off'>('all');
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
     const [selectedItem, setSelectedItem] = useState<any>(null);
 
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isSkuEditorOpen, setIsSkuEditorOpen] = useState(false);
     const [historyMovements, setHistoryMovements] = useState<StockMovement[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
-    const [editData, setEditData] = useState<any>(null);
     const [categories, setCategories] = useState<any[]>([]);
 
     React.useEffect(() => {
@@ -100,28 +99,11 @@ const StockMaster: React.FC = () => {
         };
     }, [isHistoryModalOpen, selectedItem?.id]);
 
-    // Initialize edit data when selected item changes
     React.useEffect(() => {
-        if (selectedItem) {
-            setEditData({
-                name: selectedItem.name,
-                sku: selectedItem.sku,
-                barcode: selectedItem.barcode || '',
-                category: selectedItem.category,
-                unit: selectedItem.unit,
-                retailPrice: selectedItem.retailPrice,
-                costPrice: selectedItem.costPrice,
-                reorderPoint: selectedItem.reorderPoint,
-                imageUrl: selectedItem.imageUrl
-            });
-            setImagePreview(selectedItem.imageUrl || null);
-            console.log('🖼️ [StockMaster] Preview URL:', selectedItem.imageUrl);
-            setSelectedImage(null);
-        }
-    }, [selectedItem]);
-
-    const [selectedImage, setSelectedImage] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(null);
+        if (!selectedItem?.id) return;
+        const next = items.find((i) => i.id === selectedItem.id);
+        if (next) setSelectedItem(next);
+    }, [items, selectedItem?.id]);
     const [deleting, setDeleting] = useState(false);
 
     const handleDeleteSku = async () => {
@@ -138,25 +120,6 @@ const StockMaster: React.FC = () => {
             alert(e?.message ?? 'This SKU has been used in transactions. Please delete the transactions first if you want to delete the SKU.');
         } finally {
             setDeleting(false);
-        }
-    };
-
-    const handleUpdateItem = async () => {
-        if (!selectedItem || !editData) return;
-        try {
-            let imageUrl = editData.imageUrl;
-            if (selectedImage) {
-                const uploadRes = await shopApi.uploadImage(selectedImage);
-                imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
-            }
-
-            await updateItem(selectedItem.id, { ...editData, imageUrl });
-            setIsEditModalOpen(false);
-            // Re-select item to refresh side panel
-            const updated = items.find(i => i.id === selectedItem.id);
-            if (updated) setSelectedItem({ ...updated, imageUrl });
-        } catch (error) {
-            console.error(error);
         }
     };
 
@@ -238,6 +201,7 @@ const StockMaster: React.FC = () => {
             if (stockFilter === 'out') return item.onHand <= 0;
             if (stockFilter === 'low') return item.onHand <= item.reorderPoint;
             if (stockFilter === 'expiring') return isExpiringWithinDays(item, 30);
+            if (stockFilter === 'sales_off') return item.salesDeactivated === true;
             return true;
         });
     }, [items, debouncedSearch, selectedCategoryId, categories, stockFilter]);
@@ -370,6 +334,7 @@ const StockMaster: React.FC = () => {
                                 { id: 'low' as const, label: 'Low stock' },
                                 { id: 'out' as const, label: 'Out of stock' },
                                 { id: 'expiring' as const, label: 'Expiring (30d)' },
+                                { id: 'sales_off' as const, label: 'Sales off' },
                             ] as const
                         ).map((f) => (
                             <button
@@ -422,20 +387,39 @@ const StockMaster: React.FC = () => {
             {selectedItem && (
                 <div className="flex-shrink-0 w-[420px] min-w-[360px] min-h-0 flex flex-col animate-slide-in-right">
                     <Card className="h-full min-h-0 border-none shadow-xl flex flex-col p-8 gap-8 overflow-y-auto bg-card border-l border-indigo-100 dark:border-slate-700 rounded-none rounded-l-3xl">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h2 className="text-xl font-semibold text-foreground">{selectedItem.name}</h2>
-                                <p className="text-xs font-semibold uppercase text-indigo-500 dark:text-indigo-400 tracking-widest mt-1">SKU ID: {selectedItem.sku}</p>
-                                {selectedItem.barcode && (
-                                    <p className="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-400 tracking-widest mt-0.5">📊 BARCODE: {selectedItem.barcode}</p>
-                                )}
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-start gap-3">
+                                <div className="min-w-0">
+                                    <h2 className="text-xl font-semibold text-foreground">{selectedItem.name}</h2>
+                                    <p className="text-xs font-semibold uppercase text-indigo-500 dark:text-indigo-400 tracking-widest mt-1">SKU ID: {selectedItem.sku}</p>
+                                    {selectedItem.barcode && (
+                                        <p className="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-400 tracking-widest mt-0.5">📊 BARCODE: {selectedItem.barcode}</p>
+                                    )}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedItem(null)}
+                                    className="p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground shrink-0"
+                                >
+                                    {ICONS.x}
+                                </button>
                             </div>
-                            <button
-                                onClick={() => setSelectedItem(null)}
-                                className="p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground"
-                            >
-                                {ICONS.x}
-                            </button>
+                            {selectedItem.salesDeactivated && (
+                                <div className="rounded-xl border-2 border-amber-400 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:bg-amber-950/30 dark:border-amber-600 dark:text-amber-100">
+                                    <p className="font-semibold">Hidden from POS &amp; mobile checkout</p>
+                                    <p className="text-xs mt-1 opacity-90 leading-snug">
+                                        This SKU is still in inventory. Open <strong>Edit SKU (full form)</strong> below and turn on &quot;Available for
+                                        sale&quot;, or use the <strong>Sales off</strong> filter in the list to find similar products.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsSkuEditorOpen(true)}
+                                        className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-700"
+                                    >
+                                        Reactivate for sales
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Product Image Preview */}
@@ -499,10 +483,10 @@ const StockMaster: React.FC = () => {
                                 </button>
                             </div>
                             <button
-                                onClick={() => setIsEditModalOpen(true)}
+                                onClick={() => setIsSkuEditorOpen(true)}
                                 className="w-full py-4 bg-indigo-50 text-indigo-600 rounded-2xl font-semibold text-xs hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/60 dark:border-indigo-800/50 transition-all uppercase tracking-widest shadow-sm border border-indigo-100 dark:border-indigo-800/50 mb-3"
                             >
-                                Edit Product Details
+                                Edit SKU (full form)
                             </button>
                             <button
                                 onClick={() => setIsHistoryModalOpen(true)}
@@ -702,110 +686,15 @@ const StockMaster: React.FC = () => {
                 </div>
             </Modal>
 
-            {/* Edit Product Modal */}
-            <Modal
-                isOpen={isEditModalOpen}
-                onClose={() => setIsEditModalOpen(false)}
-                title={`Edit Product - ${selectedItem?.name}`}
-            >
-                {editData && (
-                    <div className="space-y-4">
-                        <Input
-                            label="Product Name"
-                            value={editData.name}
-                            onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                        />
-                        <Select
-                            label="Category"
-                            value={editData.category || 'General'}
-                            onChange={(e) => setEditData({ ...editData, category: e.target.value })}
-                        >
-                            <option value="General">General</option>
-                            {categories.map(cat => (
-                                <option key={cat.id} value={cat.id}>{cat.name}</option>
-                            ))}
-                        </Select>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input
-                                label="SKU"
-                                value={editData.sku}
-                                onChange={(e) => setEditData({ ...editData, sku: e.target.value })}
-                            />
-                            <Input
-                                label="Barcode"
-                                value={editData.barcode}
-                                onChange={(e) => setEditData({ ...editData, barcode: e.target.value })}
-                            />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input
-                                label="Retail Price"
-                                type="number"
-                                value={editData.retailPrice}
-                                onChange={(e) => setEditData({ ...editData, retailPrice: Number(e.target.value) })}
-                            />
-                            <Input
-                                label="Cost Price"
-                                type="number"
-                                value={editData.costPrice}
-                                onChange={(e) => setEditData({ ...editData, costPrice: Number(e.target.value) })}
-                            />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Input
-                                label="Unit"
-                                value={editData.unit}
-                                onChange={(e) => setEditData({ ...editData, unit: e.target.value })}
-                            />
-                            <Input
-                                label="Reorder Point"
-                                type="number"
-                                value={editData.reorderPoint}
-                                onChange={(e) => setEditData({ ...editData, reorderPoint: Number(e.target.value) })}
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-foreground">Product Image</label>
-                            <div className="flex items-center gap-4">
-                                <div className="w-24 h-24 rounded-2xl bg-muted border-2 border-dashed border-border flex items-center justify-center overflow-hidden text-slate-300 dark:text-slate-500">
-                                    {imagePreview ? (
-                                        <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                                    ) : (
-                                        React.cloneElement(ICONS.image as React.ReactElement, { size: 32 })
-                                    )}
-                                </div>
-                                <div className="flex-1">
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) {
-                                                setSelectedImage(file);
-                                                setImagePreview(URL.createObjectURL(file));
-                                            }
-                                        }}
-                                        className="hidden"
-                                        id="sku-image-edit-upload"
-                                    />
-                                    <label
-                                        htmlFor="sku-image-edit-upload"
-                                        className="inline-flex items-center px-4 py-2 bg-card border border-border rounded-lg text-sm font-bold text-foreground hover:bg-muted/50 dark:border-slate-600 cursor-pointer transition-colors"
-                                    >
-                                        {imagePreview ? 'Change Image' : 'Upload Image'}
-                                    </label>
-                                    <p className="text-xs text-muted-foreground mt-1 uppercase font-bold tracking-wider">JPG, PNG or WEBP (Max 2MB)</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex justify-end gap-3 mt-6">
-                            <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
-                            <Button onClick={handleUpdateItem}>Save Changes</Button>
-                        </div>
-                    </div>
-                )}
-            </Modal>
+            <AddOrEditSkuModal
+                isOpen={isSkuEditorOpen && !!selectedItem}
+                onClose={() => setIsSkuEditorOpen(false)}
+                initialEditingItem={selectedItem}
+                onItemReady={(item) => {
+                    setSelectedItem(item);
+                    setIsSkuEditorOpen(false);
+                }}
+            />
         </div>
     );
 };

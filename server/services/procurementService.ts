@@ -67,6 +67,26 @@ export class ProcurementService {
     }
   }
 
+  /**
+   * Each save appends a new main journal (Dr Inv / Cr AP) plus optional reversal rows, all with the same
+   * source_id. Reversals use reference "Reversal-...". We must target the latest main journal only.
+   */
+  private async getLatestMainPurchaseBillJournalId(
+    client: any,
+    tenantId: string,
+    billId: string
+  ): Promise<string | null> {
+    const res = await client.query(
+      `SELECT id FROM journal_entries
+       WHERE tenant_id = $1 AND source_module = 'Purchases' AND source_id = $2
+         AND COALESCE(reference, '') NOT LIKE 'Reversal-%'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [tenantId, billId]
+    );
+    return res.length > 0 ? (res[0].id as string) : null;
+  }
+
   private async getOrCreateAccount(
     client: any,
     tenantId: string,
@@ -387,15 +407,11 @@ export class ProcurementService {
       );
 
       // 1) Reverse journal: only the main purchase lines (Dr Inv, Cr AP) for old total
-      const jeRows = await client.query(
-        `SELECT id FROM journal_entries WHERE tenant_id = $1 AND source_module = 'Purchases' AND source_id = $2`,
-        [tenantId, billId]
-      );
-      if (jeRows.length > 0) {
-        const journalId = jeRows[0].id;
+      const priorMainJournalId = await this.getLatestMainPurchaseBillJournalId(client, tenantId, billId);
+      if (priorMainJournalId) {
         const ledgers = await client.query(
           `SELECT account_id, debit, credit FROM ledger_entries WHERE tenant_id = $1 AND journal_entry_id = $2`,
-          [tenantId, journalId]
+          [tenantId, priorMainJournalId]
         );
         // Reverse only Inv (debit) and AP (credit) that equal oldTotal
         const revJournalRes = await client.query(
@@ -609,17 +625,12 @@ export class ProcurementService {
       const paidNow = parseFloat(bill.paid_amount) || 0;
       const bankId = bill.initial_payment_bank_account_id;
 
-      // 1) Reverse journal: find journal for this bill and post reversing entry
-      const jeRows = await client.query(
-        `SELECT id, date, reference FROM journal_entries
-         WHERE tenant_id = $1 AND source_module = 'Purchases' AND source_id = $2`,
-        [tenantId, billId]
-      );
-      if (jeRows.length > 0) {
-        const journalId = jeRows[0].id;
+      // 1) Reverse journal: unwind the latest main posting for this bill (see getLatestMainPurchaseBillJournalId)
+      const priorMainJournalId = await this.getLatestMainPurchaseBillJournalId(client, tenantId, billId);
+      if (priorMainJournalId) {
         const ledgers = await client.query(
           `SELECT account_id, debit, credit FROM ledger_entries WHERE tenant_id = $1 AND journal_entry_id = $2`,
-          [tenantId, journalId]
+          [tenantId, priorMainJournalId]
         );
         const revRef = `Reversal-${bill.bill_number || billId}`;
         const revJournalRes = await client.query(

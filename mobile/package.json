@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "generate-icons": "node scripts/generate-pwa-icons.mjs",
+    "build": "npm run generate-icons && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -15,6 +16,7 @@
     "react-router-dom": "^7.13.0"
   },
   "devDependencies": {
+    "sharp": "^0.34.5",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
