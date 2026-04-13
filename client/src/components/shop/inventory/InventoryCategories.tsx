@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { shopApi, ShopProductCategory } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import { createCategoryOfflineFirst } from '../../../services/categorySyncService';
+import { getBaseUrl } from '../../../config/apiUrl';
 import { ICONS } from '../../../constants';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
@@ -26,6 +27,9 @@ const InventoryCategories: React.FC = () => {
     const [parentId, setParentId] = useState('');
     const [saving, setSaving] = useState(false);
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+    const [formMobileIconUrl, setFormMobileIconUrl] = useState<string | null>(null);
+    const [iconUploading, setIconUploading] = useState(false);
+    const iconFileRef = useRef<HTMLInputElement>(null);
 
     const mainCategories = useMemo(
         () =>
@@ -96,6 +100,7 @@ const InventoryCategories: React.FC = () => {
     const openAdd = (presetParentId?: string) => {
         setEditingId(null);
         setFormName('');
+        setFormMobileIconUrl(null);
         if (presetParentId) {
             setCategoryKind('sub');
             setParentId(presetParentId);
@@ -109,10 +114,34 @@ const InventoryCategories: React.FC = () => {
     const openEdit = (cat: ShopProductCategory) => {
         setEditingId(cat.id);
         setFormName(cat.name);
+        setFormMobileIconUrl(cat.mobile_icon_url ?? null);
         const isSub = Boolean(cat.parent_id);
         setCategoryKind(isSub ? 'sub' : 'main');
         setParentId(isSub && cat.parent_id ? cat.parent_id : '');
         setIsModalOpen(true);
+    };
+
+    const resolveIconPreviewUrl = (path: string | null) => {
+        if (!path || !path.trim()) return null;
+        const p = path.trim();
+        if (p.startsWith('http://') || p.startsWith('https://')) return p;
+        return `${getBaseUrl()}${p.startsWith('/') ? p : `/${p}`}`;
+    };
+
+    const handleIconFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || !editingId) return;
+        setIconUploading(true);
+        setError(null);
+        try {
+            const { imageUrl } = await shopApi.uploadCategoryIcon(file);
+            setFormMobileIconUrl(imageUrl);
+        } catch (err: any) {
+            setError(err?.message || err?.error || 'Could not upload icon');
+        } finally {
+            setIconUploading(false);
+        }
     };
 
     const handleSave = async () => {
@@ -123,7 +152,11 @@ const InventoryCategories: React.FC = () => {
         setSaving(true);
         try {
             if (editingId) {
-                await shopApi.updateShopCategory(editingId, { name, parentId: resolvedParentId });
+                await shopApi.updateShopCategory(editingId, {
+                    name,
+                    parentId: resolvedParentId,
+                    mobileIconUrl: formMobileIconUrl,
+                });
             } else {
                 const result = await createCategoryOfflineFirst(name, resolvedParentId);
                 if (!result.synced && result.localId) {
@@ -175,7 +208,7 @@ const InventoryCategories: React.FC = () => {
                 <div>
                     <h2 className="text-lg font-bold text-foreground">Product Categories</h2>
                     <p className="text-muted-foreground text-sm mt-0.5">
-                        Manage categories and subcategories used when creating SKUs.
+                        Manage categories and subcategories used when creating SKUs. Upload a square icon when editing a category to show it in the mobile app category list.
                     </p>
                 </div>
                 <Button onClick={() => openAdd()}>{ICONS.plus} Add Category</Button>
@@ -233,7 +266,23 @@ const InventoryCategories: React.FC = () => {
                                                 ) : (
                                                     <span className="w-5 flex-shrink-0" />
                                                 )}
-                                                <span className="font-medium text-foreground">{main.name}</span>
+                                                <span className="flex items-center gap-2 min-w-0">
+                                                    <span
+                                                        className="flex-shrink-0 w-9 h-9 rounded-lg border border-border bg-muted/50 overflow-hidden flex items-center justify-center text-xs text-muted-foreground"
+                                                        title="Mobile app icon"
+                                                    >
+                                                        {main.mobile_icon_url ? (
+                                                            <img
+                                                                src={resolveIconPreviewUrl(main.mobile_icon_url) ?? undefined}
+                                                                alt=""
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        ) : (
+                                                            '—'
+                                                        )}
+                                                    </span>
+                                                    <span className="font-medium text-foreground truncate">{main.name}</span>
+                                                </span>
                                                 {hasSubs && (
                                                     <span className="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-medium bg-muted text-muted-foreground rounded-full">
                                                         {subs.length}
@@ -342,6 +391,59 @@ const InventoryCategories: React.FC = () => {
                             </label>
                         </div>
                     </div>
+                    {editingId && (
+                        <div className="space-y-2">
+                            <div className="block text-sm font-medium text-foreground">Mobile app icon</div>
+                            <p className="text-xs text-muted-foreground">
+                                JPEG, PNG, or WebP — resized to 256×256 for the customer app. Optional for subcategories.
+                            </p>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="w-16 h-16 rounded-lg border border-border bg-muted/40 overflow-hidden flex items-center justify-center">
+                                    {formMobileIconUrl ? (
+                                        <img
+                                            src={resolveIconPreviewUrl(formMobileIconUrl) || undefined}
+                                            alt=""
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        <span className="text-xs text-muted-foreground">No icon</span>
+                                    )}
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <input
+                                        ref={iconFileRef}
+                                        type="file"
+                                        accept="image/jpeg,image/png,image/webp,image/gif"
+                                        className="hidden"
+                                        aria-label="Upload category icon image"
+                                        onChange={handleIconFile}
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        disabled={iconUploading}
+                                        onClick={() => iconFileRef.current?.click()}
+                                    >
+                                        {iconUploading ? 'Uploading…' : 'Upload icon'}
+                                    </Button>
+                                    {formMobileIconUrl && (
+                                        <button
+                                            type="button"
+                                            className="text-xs text-rose-600 hover:underline text-left"
+                                            onClick={() => setFormMobileIconUrl(null)}
+                                        >
+                                            Remove icon
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {!editingId && (
+                        <p className="text-xs text-muted-foreground">
+                            Save the new category first, then use Edit to upload a mobile app icon.
+                        </p>
+                    )}
                     {categoryKind === 'sub' && (
                         <div className="space-y-1">
                             <Select

@@ -345,7 +345,7 @@ export class MobileOrderService {
 
     async getCategoriesForMobile(tenantId: string) {
         const categories = await this.db.query(
-            `SELECT id, name, parent_id
+            `SELECT id, name, parent_id, mobile_icon_url
        FROM categories
        WHERE tenant_id = $1 AND type = 'product' AND deleted_at IS NULL
        ORDER BY name ASC`,

@@ -8,9 +8,11 @@ export interface LineItem {
   unitCost: number;
   taxAmount: number;
   subtotal: number;
-  /** YYYY-MM-DD */
+  /** YYYY-MM-DD (may be empty until user sets — only for malformed loaded rows) */
   expiryDate: string;
   batchNo?: string;
+  /** True for lines just added in the form: default expiry may need correction; cleared when user edits expiry */
+  expiryHighlight?: boolean;
 }
 
 export interface PurchaseItemRowProps {
@@ -113,9 +115,11 @@ export default function PurchaseItemRow({
         <td className="px-4 py-3">
           <input
             type="date"
-            value={line.expiryDate.slice(0, 10)}
+            value={(line.expiryDate || '').slice(0, 10)}
             onChange={(e) => onExpiryChange(e.target.value)}
-            className="input input-text w-[9.5rem] rounded-lg px-2 py-1.5 text-sm"
+            className={`input input-text w-[9.5rem] rounded-lg px-2 py-1.5 text-sm ${
+              line.expiryHighlight ? 'text-destructive font-semibold' : ''
+            }`}
             required
             aria-label="Expiry date"
           />
@@ -219,9 +223,11 @@ export default function PurchaseItemRow({
                 <span className="text-xs text-muted-foreground">Expiry date *</span>
                 <input
                   type="date"
-                  value={line.expiryDate.slice(0, 10)}
+                  value={(line.expiryDate || '').slice(0, 10)}
                   onChange={(e) => onExpiryChange(e.target.value)}
-                  className="input input-text mt-1 w-full rounded-lg px-2 py-1.5"
+                  className={`input input-text mt-1 w-full rounded-lg px-2 py-1.5 ${
+                    line.expiryHighlight ? 'text-destructive font-semibold' : ''
+                  }`}
                   required
                 />
               </div>

@@ -1950,6 +1950,21 @@ img {
   line-height: 1;
 }
 
+.category-nav-item__icon--img {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0;
+}
+
+.category-nav-item__icon-img {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
+  display: block;
+}
+
 .browse-toolbar-row {
   display: flex;
   flex-wrap: wrap;

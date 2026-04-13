@@ -5,6 +5,7 @@ import { publicApi, getProductImagePath } from '../api';
 import FilterPanel from '../components/FilterPanel';
 import ProductListCard, { type ProductListProduct } from '../components/ProductListCard';
 import VirtualizedProductGrid from '../components/VirtualizedProductGrid';
+import CategoryRailIcon from '../components/CategoryRailIcon';
 import { useOnline } from '../hooks/useOnline';
 import { getProducts as getCachedProducts, getCategories as getCachedCategories, getBrands as getCachedBrands } from '../services/offlineCache';
 
@@ -559,9 +560,7 @@ export default function Products() {
                             className={`category-nav-item ${navSelected(c.id) ? 'selected' : ''}`}
                             onClick={() => setBrowse(null, c.id)}
                         >
-                            <span className="category-nav-item__icon" aria-hidden>
-                                📦
-                            </span>
+                            <CategoryRailIcon mobile_icon_url={c.mobile_icon_url} />
                             <span>{c.name}</span>
                         </button>
                     ))}

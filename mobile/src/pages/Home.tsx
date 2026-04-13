@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi, getProductImagePath } from '../api';
 import ProductListCard, { type ProductListProduct } from '../components/ProductListCard';
+import CategoryRailIcon from '../components/CategoryRailIcon';
 
 export default function Home() {
     const { shopSlug } = useParams();
@@ -214,9 +215,7 @@ export default function Home() {
                             className="category-nav-item category-nav-item--link"
                             role="tab"
                         >
-                            <span className="category-nav-item__icon" aria-hidden>
-                                📦
-                            </span>
+                            <CategoryRailIcon mobile_icon_url={c.mobile_icon_url} />
                             <span>{c.name}</span>
                         </Link>
                     ))}

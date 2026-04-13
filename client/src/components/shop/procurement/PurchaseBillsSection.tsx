@@ -18,6 +18,11 @@ import { useClickOutside } from '../../../hooks/useClickOutside';
 import SupplierSelect, { type VendorOption } from './SupplierSelect';
 import ProductSearchInput, { type ProductOption } from './ProductSearchInput';
 import PurchaseItemRow, { type LineItem } from './PurchaseItemRow';
+import TotalSummaryCard from './TotalSummaryCard';
+import PaymentSelector, { type PaymentStatus } from './PaymentSelector';
+import { showProcurementToast } from './utils/showProcurementToast';
+import Badge from '../../ui/Badge';
+import Modal from '../../ui/Modal';
 
 function newLineId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -28,11 +33,24 @@ function newLineId(): string {
 function defaultExpiryDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
-import TotalSummaryCard from './TotalSummaryCard';
-import PaymentSelector, { type PaymentStatus } from './PaymentSelector';
-import { showProcurementToast } from './utils/showProcurementToast';
-import Badge from '../../ui/Badge';
-import Modal from '../../ui/Modal';
+
+/** Normalize expiry from API (string, ISO datetime, or Date) without defaulting to today — used when loading existing bill lines */
+function isoDateFromPurchaseApi(value: unknown): string {
+  if (value == null || value === '') return '';
+  if (typeof value === 'string') {
+    const t = value.trim();
+    const ymd = t.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (ymd) return ymd[1];
+    return '';
+  }
+  if (value instanceof Date && !Number.isNaN(value.valueOf())) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return '';
+}
 
 function normalizeList<T>(raw: unknown): T[] {
   if (Array.isArray(raw)) return raw;
@@ -281,6 +299,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
             taxAmount: 0,
             subtotal: unitCost,
             expiryDate: defaultExpiryDate(),
+            expiryHighlight: true,
             batchNo: '',
           },
         ],
@@ -297,6 +316,9 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           const next = { ...i, [field]: value } as LineItem;
           if (field === 'quantity' || field === 'unitCost') {
             next.subtotal = next.quantity * next.unitCost;
+          }
+          if (field === 'expiryDate') {
+            next.expiryHighlight = false;
           }
           return next;
         }),
@@ -852,9 +874,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                                     unitCost: Number(it.unit_cost ?? it.unitCost) || 0,
                                     taxAmount: Number(it.tax_amount ?? it.taxAmount) || 0,
                                     subtotal: Number(it.subtotal) || 0,
-                                    expiryDate: String(
-                                      it.expiry_date ?? it.expiryDate ?? defaultExpiryDate()
-                                    ).slice(0, 10),
+                                    expiryDate: isoDateFromPurchaseApi(it.expiry_date ?? it.expiryDate),
+                                    expiryHighlight: false,
                                     batchNo: String(it.batch_no ?? it.batchNo ?? ''),
                                   })),
                                   paymentStatus: 'Credit',

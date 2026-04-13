@@ -6,6 +6,7 @@ import { checkRole } from '../../middleware/roleMiddleware.js';
 import * as fs from 'fs';
 import multer from 'multer';
 import path from 'path';
+import sharp from 'sharp';
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -29,6 +30,16 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+/** Square WebP icons for mobile category rail (POS Inventory → Categories). */
+const categoryIconUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = /^image\/(jpeg|pjpeg|png|webp|gif)$/i.test(file.mimetype);
+    cb(null, ok);
+  },
+});
 
 const router = express.Router();
 
@@ -317,6 +328,39 @@ router.post('/upload-image', (req, res, next) => {
     } catch (error: any) {
       console.error('❌ Post-upload error:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+});
+
+router.post('/upload-category-icon', (req, res, next) => {
+  categoryIconUpload.single('image')(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: `Upload error: ${err.message}` });
+    }
+    if (err) {
+      return res.status(500).json({ error: err.message || 'Upload failed' });
+    }
+    try {
+      const file = (req as any).file as { buffer: Buffer } | undefined;
+      if (!file?.buffer?.length) {
+        return res.status(400).json({ error: 'No image uploaded (use JPEG, PNG, WebP, or GIF).' });
+      }
+      const uploadDir = path.resolve(process.cwd(), 'uploads/category');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      const filename = `cat-${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
+      const outPath = path.join(uploadDir, filename);
+      await sharp(file.buffer)
+        .rotate()
+        .resize(256, 256, { fit: 'cover', position: 'centre' })
+        .webp({ quality: 86 })
+        .toFile(outPath);
+      const imageUrl = `/uploads/category/${filename}`;
+      res.json({ imageUrl });
+    } catch (error: any) {
+      console.error('Category icon processing error:', error);
+      res.status(500).json({ error: error.message || 'Could not process image' });
     }
   });
 });

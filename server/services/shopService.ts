@@ -1708,7 +1708,7 @@ export class ShopService {
   // --- Category Methods ---
   async getShopCategories(tenantId: string) {
     return this.db.query(
-      `SELECT id, name, type, parent_id, created_at FROM categories
+      `SELECT id, name, type, parent_id, mobile_icon_url, created_at FROM categories
        WHERE tenant_id = $1 AND type = 'product' AND deleted_at IS NULL ORDER BY name`,
       [tenantId]
     );
@@ -1736,7 +1736,11 @@ export class ShopService {
     return id;
   }
 
-  async updateShopCategory(tenantId: string, categoryId: string, data: { name: string; parentId?: string | null }) {
+  async updateShopCategory(
+    tenantId: string,
+    categoryId: string,
+    data: { name: string; parentId?: string | null; mobileIconUrl?: string | null }
+  ) {
     if ('parentId' in data) {
       const parentId = data.parentId ?? null;
       if (parentId && parentId === categoryId) {
@@ -1754,18 +1758,24 @@ export class ShopService {
           throw err;
         }
       }
-      await this.db.query(
-        `UPDATE categories SET name = $1, parent_id = $2, updated_at = NOW()
-         WHERE id = $3 AND tenant_id = $4 AND type = 'product'`,
-        [data.name, parentId, categoryId, tenantId]
-      );
-    } else {
-      await this.db.query(
-        `UPDATE categories SET name = $1, updated_at = NOW()
-         WHERE id = $2 AND tenant_id = $3 AND type = 'product'`,
-        [data.name, categoryId, tenantId]
-      );
     }
+
+    let q = 'UPDATE categories SET name = $1';
+    const params: (string | null)[] = [data.name];
+    let n = 2;
+    if ('parentId' in data) {
+      q += `, parent_id = $${n}`;
+      params.push(data.parentId ?? null);
+      n++;
+    }
+    if (data.mobileIconUrl !== undefined) {
+      q += `, mobile_icon_url = $${n}`;
+      params.push(data.mobileIconUrl);
+      n++;
+    }
+    q += `, updated_at = NOW() WHERE id = $${n} AND tenant_id = $${n + 1} AND type = 'product'`;
+    params.push(categoryId, tenantId);
+    await this.db.query(q, params);
   }
 
   async deleteShopCategory(tenantId: string, categoryId: string) {

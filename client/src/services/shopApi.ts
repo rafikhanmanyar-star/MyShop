@@ -25,6 +25,8 @@ export interface ShopProductCategory {
   type: string;
   /** Parent category id when this row is a subcategory */
   parent_id?: string | null;
+  /** Resized WebP path for mobile app category rail; set in Inventory → Categories */
+  mobile_icon_url?: string | null;
   created_at?: string;
 }
 
@@ -94,7 +96,7 @@ export const shopApi = {
   getShopCategories: () => apiClient.get<ShopProductCategory[]>('/shop/categories'),
   createShopCategory: (data: { name: string; parentId?: string | null }) =>
     apiClient.post<{ id: string }>('/shop/categories', data),
-  updateShopCategory: (id: string, data: { name: string; parentId?: string | null }) =>
+  updateShopCategory: (id: string, data: { name: string; parentId?: string | null; mobileIconUrl?: string | null }) =>
     apiClient.put(`/shop/categories/${id}`, data),
   deleteShopCategory: (id: string) => apiClient.delete(`/shop/categories/${id}`),
 
@@ -109,6 +111,12 @@ export const shopApi = {
     const formData = new FormData();
     formData.append('image', file);
     return apiClient.post<{ imageUrl: string }>('/shop/upload-image', formData);
+  },
+  /** Server resizes to 256×256 WebP for the mobile category rail */
+  uploadCategoryIcon: (file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return apiClient.post<{ imageUrl: string }>('/shop/upload-category-icon', formData);
   },
 
   getInventory: () => apiClient.get<any[]>('/shop/inventory'),

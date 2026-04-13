@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext';
 import { authApi, getFullImageUrl } from '../api';
 import { useOnline } from '../hooks/useOnline';
+import { parsePakistanMobile } from '../utils/pakistanMobile';
 
 type Mode = 'login' | 'register';
 
@@ -27,10 +28,12 @@ export default function Login() {
             showToast('Connect to sign in or register.');
             return;
         }
-        if (!phone || phone.length < 10) {
-            showToast('Please enter a valid phone number');
+        const parsedPhone = parsePakistanMobile(phone);
+        if (!parsedPhone.ok) {
+            showToast(parsedPhone.message);
             return;
         }
+        const phoneDigits = parsedPhone.digits;
         if (!password || password.length < 4) {
             showToast('Password must be at least 4 characters');
             return;
@@ -45,10 +48,10 @@ export default function Login() {
                     setLoading(false);
                     return;
                 }
-                result = await authApi.register(phone, password, name, addressLine1, shopSlug!);
+                result = await authApi.register(phoneDigits, password, name, addressLine1, shopSlug!);
                 showToast('Registration successful!');
             } else {
-                result = await authApi.login(phone, password, shopSlug!);
+                result = await authApi.login(phoneDigits, password, shopSlug!);
                 showToast('Login successful!');
             }
 
@@ -128,11 +131,22 @@ export default function Login() {
                     <input
                         className="input"
                         type="tel"
-                        placeholder="e.g. +123456789"
+                        inputMode="numeric"
+                        autoComplete="tel"
+                        placeholder="923*********"
                         value={phone}
                         onChange={e => setPhone(e.target.value)}
+                        onBlur={() => {
+                            const parsed = parsePakistanMobile(phone);
+                            if (parsed.ok) setPhone(parsed.digits);
+                        }}
                         autoFocus
                     />
+                    {mode === 'register' && (
+                        <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                            Format: 92 followed by 10 digits (e.g. 923*********). Local 03… numbers are saved without the leading 0.
+                        </p>
+                    )}
                 </div>
 
                 {mode === 'register' && (
