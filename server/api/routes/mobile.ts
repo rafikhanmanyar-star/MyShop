@@ -177,7 +177,14 @@ router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, r
             cursor, limit, search, category,
             categoryIds, subcategoryIds, brandIds,
             minPrice, maxPrice, availability,
-            onSale, minRating, sortBy
+            onSale, minRating, sortBy,
+            page,
+            showUnavailable,
+            filterInStock,
+            filterPopular,
+            filterLowPrice,
+            lowPriceMax,
+            deals,
         } = req.query;
 
         // Support both single 'category' and multiple 'categoryIds'
@@ -188,8 +195,10 @@ router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, r
             finalCategoryIds = [category as string];
         }
 
+        const pageNum = page ? parseInt(page as string, 10) : undefined;
         const result = await getMobileOrderService().getProductsForMobile(req.tenantId, {
             cursor: cursor as string,
+            page: pageNum && pageNum > 0 ? pageNum : undefined,
             limit: parseInt(limit as string) || 20,
             search: search as string,
             categoryIds: finalCategoryIds,
@@ -198,9 +207,14 @@ router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, r
             minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
             maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
             availability: availability as string,
-            onSale: onSale === 'true',
+            onSale: onSale === 'true' || deals === 'true',
             minRating: minRating ? parseFloat(minRating as string) : undefined,
             sortBy: sortBy as string,
+            showUnavailable: showUnavailable === 'true',
+            filterInStock: filterInStock === 'true',
+            filterPopular: filterPopular === 'true',
+            filterLowPrice: filterLowPrice === 'true',
+            lowPriceMax: lowPriceMax ? parseFloat(lowPriceMax as string) : undefined,
         });
         res.json(result);
     } catch (error: any) {

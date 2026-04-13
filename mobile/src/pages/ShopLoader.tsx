@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { publicApi } from '../api';
 import BottomNav from '../components/BottomNav';
 import Header from '../components/Header';
+import FloatingCartBar from '../components/FloatingCartBar';
 import { getShop, setShop } from '../services/offlineCache';
 import { syncCatalogForShop } from '../services/catalogSync';
 
@@ -24,7 +25,7 @@ function applyBranding(shopData: { shop: { company_name?: string; name: string; 
 
 export default function ShopLoader() {
     const { shopSlug } = useParams<{ shopSlug: string }>();
-    const { state, dispatch } = useApp();
+    const { state, dispatch, cartCount } = useApp();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -123,7 +124,10 @@ export default function ShopLoader() {
     return (
         <>
             <Header />
-            <Outlet />
+            <div className={cartCount > 0 ? 'shop-outlet shop-outlet--cart-pad' : 'shop-outlet'}>
+                <Outlet />
+            </div>
+            <FloatingCartBar />
             <BottomNav />
         </>
     );

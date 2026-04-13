@@ -58,6 +58,8 @@ export class MobileOrderService {
 
     async getProductsForMobile(tenantId: string, opts: {
         cursor?: string;
+        /** 1-based page; when set, uses OFFSET and ignores cursor (use with showUnavailable or any full-list paging). */
+        page?: number;
         limit?: number;
         categoryIds?: string[];
         subcategoryIds?: string[];
@@ -69,7 +71,16 @@ export class MobileOrderService {
         onSale?: boolean;
         minRating?: number;
         sortBy?: string;
+        /** When false (default), exclude zero-stock items unless pre-order. */
+        showUnavailable?: boolean;
+        filterInStock?: boolean;
+        filterPopular?: boolean;
+        filterLowPrice?: boolean;
+        /** Upper bound for "Low Price" chip (default 500). */
+        lowPriceMax?: number;
     } = {}) {
+        const LOW_STOCK_THRESHOLD = 5;
+        const DEFAULT_LOW_PRICE_MAX = 500;
         const limit = Math.min(opts.limit || 20, 50);
         const params: any[] = [tenantId];
         let paramIdx = 2;
@@ -145,6 +156,29 @@ export class MobileOrderService {
           WHERE i.tenant_id = $1 AND i.product_id = p.id
         ), 0)`;
 
+        const showUnavailable = opts.showUnavailable === true;
+        if (!showUnavailable) {
+            where += ` AND (${stockSubquery} > 0 OR COALESCE(p.is_pre_order, FALSE) = TRUE)`;
+        }
+
+        if (opts.filterInStock) {
+            where += ` AND ${stockSubquery} > 0`;
+        }
+
+        if (opts.filterPopular) {
+            where += ` AND (COALESCE(p.popularity_score, 0) > 0 OR COALESCE(p.total_sales, 0) > 0)`;
+        }
+
+        if (opts.filterLowPrice) {
+            const cap =
+                opts.lowPriceMax != null && Number.isFinite(opts.lowPriceMax)
+                    ? opts.lowPriceMax
+                    : DEFAULT_LOW_PRICE_MAX;
+            where += ` AND COALESCE(p.mobile_price, p.retail_price) <= $${paramIdx}`;
+            params.push(cap);
+            paramIdx++;
+        }
+
         if (opts.availability === 'in_stock') {
             where += ` AND ${stockSubquery} > 0`;
         } else if (opts.availability === 'out_of_stock') {
@@ -184,13 +218,18 @@ export class MobileOrderService {
             }
         }
 
-        if (opts.cursor) {
+        const oosOrderExpr = `(CASE WHEN (${stockSubquery}) <= 0 AND NOT COALESCE(p.is_pre_order, FALSE) THEN 1 ELSE 0 END)`;
+        if (showUnavailable) {
+            orderBy = `${oosOrderExpr} ASC, ${orderBy}`;
+        }
+
+        const usePage = opts.page != null && opts.page > 0;
+        const useCursor = !usePage && Boolean(opts.cursor) && !showUnavailable;
+
+        if (useCursor && opts.cursor) {
             try {
                 const decoded = Buffer.from(opts.cursor, 'base64').toString('utf-8');
                 const [cValue, cId] = decoded.split('|');
-                // For simplicity, we'll only support cursor for default sort or created_at sort.
-                // For other sorts, we might need a more complex cursor.
-                // But let's assume if cursor is provided, it matches the current sort.
                 if (opts.sortBy?.startsWith('price')) {
                     const op = opts.sortBy === 'price_low_high' ? '>' : '<';
                     where += ` AND (COALESCE(p.mobile_price, p.retail_price), p.id) ${op} ($${paramIdx}, $${paramIdx + 1})`;
@@ -199,7 +238,17 @@ export class MobileOrderService {
                 }
                 params.push(cValue, cId);
                 paramIdx += 2;
-            } catch { }
+            } catch { /* ignore bad cursor */ }
+        }
+
+        let limitSql = `LIMIT $${paramIdx}`;
+        params.push(limit + 1);
+        paramIdx++;
+
+        if (usePage) {
+            limitSql += ` OFFSET $${paramIdx}`;
+            params.push((opts.page! - 1) * limit);
+            paramIdx++;
         }
 
         const query = `
@@ -215,30 +264,42 @@ export class MobileOrderService {
       LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
       ${where}
       ORDER BY ${orderBy}
-      LIMIT $${paramIdx}
+      ${limitSql}
     `;
-        params.push(limit + 1);
 
         const rows = await this.db.query(query, params);
         const hasMore = rows.length > limit;
-        const items = rows.slice(0, limit).map((r: any) => ({
-            ...r,
-            price: r.mobile_price != null ? (parseFloat(r.mobile_price) || 0) : (parseFloat(r.retail_price) || 0),
-            available_stock: parseFloat(r.available_stock) || 0,
-            rating_avg: parseFloat(r.rating_avg) || 0,
-        }));
+        const items = rows.slice(0, limit).map((r: any) => {
+            const stock = parseFloat(r.available_stock) || 0;
+            const isPre = Boolean(r.is_pre_order);
+            return {
+                ...r,
+                price: r.mobile_price != null ? (parseFloat(r.mobile_price) || 0) : (parseFloat(r.retail_price) || 0),
+                available_stock: stock,
+                stock,
+                image: r.image_url,
+                is_low_stock: stock > 0 && stock <= LOW_STOCK_THRESHOLD,
+                is_out_of_stock: stock <= 0 && !isPre,
+                rating_avg: parseFloat(r.rating_avg) || 0,
+            };
+        });
 
         let nextCursor: string | null = null;
-        if (hasMore && items.length > 0) {
+        if (!usePage && hasMore && items.length > 0) {
             const last = items[items.length - 1];
-            // Cursor value must be PostgreSQL-friendly: use ISO timestamp for dates
             const cursorVal = opts.sortBy?.startsWith('price')
                 ? last.price
                 : (last.created_at instanceof Date ? last.created_at.toISOString() : new Date(last.created_at).toISOString());
             nextCursor = Buffer.from(`${cursorVal}|${last.id}`).toString('base64');
         }
 
-        return { items, nextCursor, hasMore };
+        return {
+            items,
+            nextCursor,
+            hasMore,
+            page: usePage ? opts.page : undefined,
+            nextPage: usePage && hasMore ? (opts.page! + 1) : undefined,
+        };
     }
 
     async getProductDetailForMobile(tenantId: string, productId: string) {

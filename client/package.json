@@ -1,7 +1,7 @@
 {
   "name": "myshop-client",
   "private": true,
-  "version": "1.0.120",
+  "version": "1.0.121",
   "type": "module",
   "scripts": {
     "check:typography": "node scripts/check-typography.mjs",
