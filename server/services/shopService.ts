@@ -2104,13 +2104,33 @@ export class ShopService {
     const marginBottom = clampMm(data.margin_bottom_mm, 2);
     const marginLeft = clampMm(data.margin_left_mm, 2);
     const marginRight = clampMm(data.margin_right_mm, 4);
+    const allowedPrintFonts = new Set(['roboto_mono', 'courier_new', 'roboto', 'inter']);
+    const printFontFamily = data.print_font_family && allowedPrintFonts.has(String(data.print_font_family))
+      ? String(data.print_font_family)
+      : 'roboto_mono';
+    const clampPrintSize = (v: unknown) => {
+      const n = typeof v === 'number' ? v : parseInt(String(v ?? ''), 10);
+      if (!Number.isFinite(n)) return 12;
+      return Math.min(18, Math.max(10, Math.round(n)));
+    };
+    const printFontSize = clampPrintSize(data.print_font_size);
+    const printFontWeight = (data.print_font_weight && ['normal', 'medium', 'bold'].includes(String(data.print_font_weight)))
+      ? String(data.print_font_weight)
+      : 'normal';
+    const clampSpacing = (v: unknown) => {
+      const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+      if (!Number.isFinite(n)) return 1.2;
+      return Math.min(2, Math.max(1, Math.round(n * 100) / 100));
+    };
+    const printLineSpacing = clampSpacing(data.print_line_spacing);
     const res = await this.db.query(
       `INSERT INTO pos_receipt_settings (
         tenant_id, show_logo, show_barcode, barcode_type, barcode_position, barcode_size,
         receipt_width, show_tax_breakdown, show_cashier_name, show_shift_number,
         footer_message, shop_name, shop_address, shop_phone, tax_id, logo_url, show_mobile_url_qr,
-        margin_top_mm, margin_bottom_mm, margin_left_mm, margin_right_mm, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW())
+        margin_top_mm, margin_bottom_mm, margin_left_mm, margin_right_mm,
+        print_font_family, print_font_size, print_font_weight, print_line_spacing, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW())
       ON CONFLICT (tenant_id) DO UPDATE SET
         show_logo = EXCLUDED.show_logo,
         show_barcode = EXCLUDED.show_barcode,
@@ -2132,6 +2152,10 @@ export class ShopService {
         margin_bottom_mm = EXCLUDED.margin_bottom_mm,
         margin_left_mm = EXCLUDED.margin_left_mm,
         margin_right_mm = EXCLUDED.margin_right_mm,
+        print_font_family = EXCLUDED.print_font_family,
+        print_font_size = EXCLUDED.print_font_size,
+        print_font_weight = EXCLUDED.print_font_weight,
+        print_line_spacing = EXCLUDED.print_line_spacing,
         updated_at = NOW()
       RETURNING *`,
       [
@@ -2156,6 +2180,10 @@ export class ShopService {
         marginBottom,
         marginLeft,
         marginRight,
+        printFontFamily,
+        printFontSize,
+        printFontWeight,
+        printLineSpacing,
       ]
     );
     return res[0];

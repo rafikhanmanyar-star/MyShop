@@ -1213,22 +1213,24 @@ img {
 }
 
 .header-logo {
-  height: 32px;
+  height: 40px;
   width: auto;
-  max-height: 32px;
-  border-radius: 6px;
+  max-width: 120px;
+  max-height: 40px;
+  object-fit: contain;
+  border-radius: 8px;
 }
 
 .header-logo-initial {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--primary);
   color: white;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 800;
 }
 

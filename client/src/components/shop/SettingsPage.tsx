@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 // MyShop Settings Page - Reorganized Chart of Accounts
 import { Smartphone, Printer } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -15,6 +15,7 @@ import { MobileSettingsPanel } from './MobileOrdersPage';
 import DataExportImportSection from './settings/DataExportImportSection';
 import BackupRestoreSection from './settings/BackupRestoreSection';
 import { useSettingsEditLock } from '../../hooks/useSettingsEditLock';
+import { getFullImageUrl } from '../../config/apiUrl';
 
 function toState(v: ShopVendor) {
     return {
@@ -28,7 +29,7 @@ function toState(v: ShopVendor) {
     };
 }
 
-import { generateReceiptHTML, ReceiptSaleData } from '../../services/receipt/receiptBuilder';
+import { generateReceiptHTML, ReceiptSaleData, RECEIPT_PRINT_FONT_OPTIONS } from '../../services/receipt/receiptBuilder';
 import QRCode from 'qrcode';
 
 /** Stable hash so iframe `key` changes whenever preview HTML changes (forces remount; some browsers ignore `srcDoc` updates). */
@@ -41,7 +42,10 @@ function previewContentKey(html: string): string {
     return `${html.length}:${h >>> 0}`;
 }
 
-const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettings }) => {
+const ReceiptPreviewPanel: React.FC<{ receiptSettings: any; logoUrlOverride?: string | null }> = ({
+    receiptSettings,
+    logoUrlOverride
+}) => {
     const [mobileQrDataUrl, setMobileQrDataUrl] = useState<string | null>(null);
     useEffect(() => {
         if (receiptSettings?.show_mobile_url_qr && receiptSettings?.mobile_order_url) {
@@ -59,7 +63,11 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettin
             storeAddress: receiptSettings.shop_address || '123 Fake Street',
             storePhone: receiptSettings.shop_phone || '021-1234567',
             taxId: receiptSettings.tax_id || '',
-            logoUrl: receiptSettings.logo_url || null,
+            logoUrl:
+                logoUrlOverride ??
+                getFullImageUrl(receiptSettings.logo_url?.trim()) ??
+                receiptSettings.logo_url ??
+                null,
             receiptNumber: 'SALE-TEST-001',
             date: new Date().toLocaleDateString(),
             time: new Date().toLocaleTimeString(),
@@ -89,10 +97,10 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any }> = ({ receiptSettin
             iframeKey: previewContentKey(html),
             containerWidth: width
         };
-    }, [receiptSettings, mobileQrDataUrl]);
+    }, [receiptSettings, mobileQrDataUrl, logoUrlOverride]);
 
     return (
-        <Card className="border-none shadow-sm p-6 bg-muted flex flex-col items-center overflow-hidden">
+        <Card id="pos-receipt-live-preview" className="border-none shadow-sm p-6 bg-muted flex flex-col items-center overflow-hidden">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 self-start">Live Preview</h3>
             <div className="bg-card shadow-xl border border-border transition-all overflow-hidden relative" style={{ width: containerWidth }}>
                 <iframe
@@ -140,9 +148,22 @@ const SettingsContent: React.FC = () => {
         margin_top_mm: 2,
         margin_bottom_mm: 2,
         margin_left_mm: 2,
-        margin_right_mm: 4
+        margin_right_mm: 4,
+        print_font_family: 'roboto_mono',
+        print_font_size: 12,
+        print_font_weight: 'normal',
+        print_line_spacing: 1.2
     });
     const [receiptSettingsLoading, setReceiptSettingsLoading] = useState(false);
+    const receiptLogoFileInputRef = useRef<HTMLInputElement>(null);
+    const [receiptLogoBlobUrl, setReceiptLogoBlobUrl] = useState<string | null>(null);
+    const [receiptLogoUploading, setReceiptLogoUploading] = useState(false);
+
+    useEffect(() => {
+        return () => {
+            if (receiptLogoBlobUrl) URL.revokeObjectURL(receiptLogoBlobUrl);
+        };
+    }, [receiptLogoBlobUrl]);
 
     const [vendors, setVendors] = useState<ShopVendor[]>([]);
     const [vendorsLoading, setVendorsLoading] = useState(true);
@@ -239,7 +260,16 @@ const SettingsContent: React.FC = () => {
         try {
             setReceiptSettingsLoading(true);
             const data = await shopApi.getReceiptSettings();
-            if (data) setReceiptSettings(data);
+            if (data) {
+                setReceiptSettings((prev) => ({
+                    ...prev,
+                    ...data,
+                    print_font_family: data.print_font_family ?? 'roboto_mono',
+                    print_font_size: data.print_font_size != null ? Number(data.print_font_size) : 12,
+                    print_font_weight: data.print_font_weight ?? 'normal',
+                    print_line_spacing: data.print_line_spacing != null ? Number(data.print_line_spacing) : 1.2
+                }));
+            }
         } catch (e: any) {
             console.error('Failed to load receipt settings', e);
         } finally {
@@ -279,6 +309,33 @@ const SettingsContent: React.FC = () => {
             loadReceiptSettings();
         }
     };
+
+    const handleReceiptLogoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            alert('Please choose an image file (PNG, JPEG, WebP, or GIF).');
+            e.target.value = '';
+            return;
+        }
+        const objectUrl = URL.createObjectURL(file);
+        setReceiptLogoBlobUrl(objectUrl);
+        try {
+            setReceiptLogoUploading(true);
+            const res = await shopApi.uploadImage(file);
+            const payload = { ...receiptSettings, logo_url: res.imageUrl, show_logo: true };
+            const saved = await shopApi.updateReceiptSettings(payload);
+            setReceiptSettings(saved);
+            setReceiptLogoBlobUrl(null);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to upload or save logo. Try a smaller file or click Save receipt template after choosing a file.');
+            setReceiptLogoBlobUrl(null);
+        } finally {
+            setReceiptLogoUploading(false);
+            e.target.value = '';
+        }
+    }, [receiptSettings]);
 
     const openNewVendor = () => {
         setEditingVendor(null);
@@ -442,7 +499,7 @@ const SettingsContent: React.FC = () => {
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8">
+            <div className={`flex-1 overflow-y-auto ${!isCashier && activeTab === 'mobileBranding' ? 'p-4 sm:p-6' : 'p-8'}`}>
 
                 {!isCashier && activeTab === 'coa' && (
                     <ChartOfAccounts />
@@ -817,6 +874,100 @@ const SettingsContent: React.FC = () => {
                                 </Card>
                             </div>
                             <Card className="border-none shadow-sm p-5">
+                                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">🧾 Receipt Print Settings</h3>
+                                <p className="text-xs text-muted-foreground mb-4">Monospace fonts keep columns aligned on thermal paper. If a web font cannot load, text falls back to Courier New.</p>
+                                {receiptSettingsLoading ? (
+                                    <p className="text-muted-foreground text-sm">Loading...</p>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                                            <div className="sm:col-span-2 xl:col-span-1">
+                                                <label htmlFor="pos-print-font-family" className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Font family</label>
+                                                <select
+                                                    id="pos-print-font-family"
+                                                    className="w-full h-10 px-3 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground"
+                                                    value={receiptSettings.print_font_family || 'roboto_mono'}
+                                                    onChange={e => setReceiptSettings({ ...receiptSettings, print_font_family: e.target.value })}
+                                                >
+                                                    {RECEIPT_PRINT_FONT_OPTIONS.map((opt) => (
+                                                        <option key={opt.value} value={opt.value}>
+                                                            {opt.label}{opt.monospace ? ' — best for alignment (recommended)' : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <Input
+                                                label="Font size (px)"
+                                                type="number"
+                                                min={10}
+                                                max={18}
+                                                compact
+                                                value={String(receiptSettings.print_font_size ?? 12)}
+                                                onChange={e => {
+                                                    const n = parseInt(e.target.value, 10);
+                                                    setReceiptSettings({
+                                                        ...receiptSettings,
+                                                        print_font_size: Number.isFinite(n) ? Math.min(18, Math.max(10, n)) : 12
+                                                    });
+                                                }}
+                                            />
+                                            <div>
+                                                <label htmlFor="pos-print-font-weight" className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Font weight</label>
+                                                <select
+                                                    id="pos-print-font-weight"
+                                                    className="w-full h-10 px-3 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground"
+                                                    value={receiptSettings.print_font_weight || 'normal'}
+                                                    onChange={e => setReceiptSettings({ ...receiptSettings, print_font_weight: e.target.value })}
+                                                >
+                                                    <option value="normal">Normal</option>
+                                                    <option value="medium">Medium</option>
+                                                    <option value="bold">Bold</option>
+                                                </select>
+                                            </div>
+                                            <Input
+                                                label="Line spacing"
+                                                type="number"
+                                                min={1}
+                                                max={2}
+                                                step={0.05}
+                                                compact
+                                                helperText="line height"
+                                                value={String(receiptSettings.print_line_spacing ?? 1.2)}
+                                                onChange={e => {
+                                                    const n = parseFloat(e.target.value);
+                                                    setReceiptSettings({
+                                                        ...receiptSettings,
+                                                        print_line_spacing: Number.isFinite(n) ? Math.min(2, Math.max(1, n)) : 1.2
+                                                    });
+                                                }}
+                                            />
+                                        </div>
+                                        {(() => {
+                                            const sel = RECEIPT_PRINT_FONT_OPTIONS.find((o) => o.value === (receiptSettings.print_font_family || 'roboto_mono'));
+                                            if (sel?.monospace) {
+                                                return <p className="text-[11px] text-muted-foreground">Monospace fonts keep quantity and price columns aligned.</p>;
+                                            }
+                                            return (
+                                                <p className="text-[11px] text-amber-700 dark:text-amber-400/90">
+                                                    Proportional fonts can make narrow thermal columns look uneven; fixed column widths still help. Unsupported fonts fall back to Courier New.
+                                                </p>
+                                            );
+                                        })()}
+                                        <div className="flex flex-wrap gap-2 items-center">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => document.getElementById('pos-receipt-live-preview')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}
+                                            >
+                                                Preview sample receipt
+                                            </Button>
+                                            <span className="text-[11px] text-muted-foreground">Scrolls to the live preview (right, or below on small screens).</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </Card>
+                            <Card className="border-none shadow-sm p-5">
                                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Store on receipt</h3>
                                 {receiptSettingsLoading ? (
                                     <p className="text-muted-foreground text-sm">Loading...</p>
@@ -828,7 +979,65 @@ const SettingsContent: React.FC = () => {
                                             <Input label="Address" placeholder="Street, city" compact value={receiptSettings.shop_address || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_address: e.target.value })} />
                                         </div>
                                         <Input label="Tax ID / registration" placeholder="Optional" compact value={receiptSettings.tax_id || ''} onChange={e => setReceiptSettings({ ...receiptSettings, tax_id: e.target.value })} />
-                                        <Input label="Logo URL" placeholder="https://..." compact value={receiptSettings.logo_url || ''} onChange={e => setReceiptSettings({ ...receiptSettings, logo_url: e.target.value })} />
+                                        <div className="sm:col-span-2">
+                                            <span className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Receipt logo</span>
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-muted/80 rounded-2xl border-2 border-dashed border-border">
+                                                <div className="w-20 h-20 rounded-xl bg-card shadow-sm border border-border overflow-hidden flex items-center justify-center shrink-0">
+                                                    {(receiptLogoBlobUrl || receiptSettings.logo_url) ? (
+                                                        <img
+                                                            src={receiptLogoBlobUrl || getFullImageUrl(receiptSettings.logo_url) || receiptSettings.logo_url}
+                                                            alt="Receipt logo"
+                                                            className="w-full h-full object-contain"
+                                                        />
+                                                    ) : (
+                                                        <span className="text-2xl text-muted-foreground" aria-hidden>🧾</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0 space-y-2">
+                                                    <p className="text-xs text-muted-foreground">PNG, JPG, or WebP from your computer. Shown at the top of the receipt when &quot;Show logo&quot; is on. The preview updates as soon as you choose a file.</p>
+                                                    <input
+                                                        ref={receiptLogoFileInputRef}
+                                                        type="file"
+                                                        className="hidden"
+                                                        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                                                        aria-label="Upload receipt logo image from your computer"
+                                                        onChange={handleReceiptLogoUpload}
+                                                    />
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <Button
+                                                            type="button"
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            disabled={receiptLogoUploading}
+                                                            onClick={() => receiptLogoFileInputRef.current?.click()}
+                                                        >
+                                                            {receiptLogoUploading ? 'Uploading…' : 'Upload logo'}
+                                                        </Button>
+                                                        {(receiptSettings.logo_url || receiptLogoBlobUrl) && (
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                disabled={receiptLogoUploading}
+                                                                onClick={async () => {
+                                                                    setReceiptLogoBlobUrl(null);
+                                                                    try {
+                                                                        const next = { ...receiptSettings, logo_url: '' };
+                                                                        const saved = await shopApi.updateReceiptSettings(next);
+                                                                        setReceiptSettings(saved);
+                                                                    } catch {
+                                                                        setReceiptSettings({ ...receiptSettings, logo_url: '' });
+                                                                        alert('Could not save. Use Save receipt template to clear the logo on the server.');
+                                                                    }
+                                                                }}
+                                                            >
+                                                                Remove logo
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <label className="flex items-center gap-2 cursor-pointer sm:col-span-2">
                                             <input type="checkbox" checked={!!receiptSettings.show_logo} onChange={e => setReceiptSettings({ ...receiptSettings, show_logo: e.target.checked })} className="rounded border-slate-300" />
                                             <span className="text-sm font-bold text-foreground">Show logo</span>
@@ -920,7 +1129,7 @@ const SettingsContent: React.FC = () => {
                         </div>
                         <div className="w-full xl:w-[400px] xl:max-w-[400px] flex-shrink-0">
                             <div className="xl:sticky xl:top-6">
-                                <ReceiptPreviewPanel receiptSettings={receiptSettings} />
+                                <ReceiptPreviewPanel receiptSettings={receiptSettings} logoUrlOverride={receiptLogoBlobUrl} />
                             </div>
                         </div>
                     </div>

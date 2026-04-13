@@ -65,8 +65,27 @@ function allIssueLabels(item: InventoryItem): string[] {
     return [...missingLabels(item), ...pricingIssueLabels(item)];
 }
 
+/** Issues shown in the table; includes sales status so deactivated SKUs are visible when filtered. */
+function rowIssueLabels(item: InventoryItem): string[] {
+    const base = allIssueLabels(item);
+    if (item.salesDeactivated) {
+        return ['Sales off', ...base];
+    }
+    return base;
+}
+
 function isPricingIssueLabel(label: string): boolean {
     return label === 'Retail ≤ cost' || label === 'Margin < 5%';
+}
+
+function issueBadgeClass(label: string): string {
+    if (label === 'Sales off') {
+        return 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100';
+    }
+    if (isPricingIssueLabel(label)) {
+        return 'bg-orange-100 text-orange-900 dark:bg-orange-950/60 dark:text-orange-200';
+    }
+    return 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200';
 }
 
 function isIncompleteServerProduct(item: InventoryItem): boolean {
@@ -75,12 +94,13 @@ function isIncompleteServerProduct(item: InventoryItem): boolean {
 }
 
 /** Which summary card is active; drives table filtering (Incomplete SKUs tab). */
-type SummaryIssueFilter = 'all' | 'image' | 'barcode' | 'name' | 'sku' | 'unit' | 'weak_pricing';
+type SummaryIssueFilter = 'all' | 'image' | 'barcode' | 'name' | 'sku' | 'unit' | 'weak_pricing' | 'deactivated';
 
 function matchesSummaryFilter(item: InventoryItem, filter: SummaryIssueFilter): boolean {
     if (filter === 'all') return true;
     if (filter === 'weak_pricing') return pricingIssueLabels(item).length > 0;
-    const labelByFilter: Record<Exclude<SummaryIssueFilter, 'all' | 'weak_pricing'>, string> = {
+    if (filter === 'deactivated') return false;
+    const labelByFilter: Record<Exclude<SummaryIssueFilter, 'all' | 'weak_pricing' | 'deactivated'>, string> = {
         image: 'Image',
         barcode: 'Barcode',
         name: 'Name',
@@ -114,6 +134,7 @@ const IncompleteProductsTab: React.FC = () => {
         retailPrice: number;
         reorderPoint: number;
         imageUrl?: string;
+        salesDeactivated: boolean;
     } | null>(null);
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -126,6 +147,11 @@ const IncompleteProductsTab: React.FC = () => {
     }, []);
 
     const incomplete = useMemo(() => items.filter(isIncompleteServerProduct), [items]);
+
+    const deactivatedSkus = useMemo(
+        () => items.filter((i) => !i.id.startsWith('pending-') && i.salesDeactivated === true),
+        [items]
+    );
 
     const issueStats = useMemo(() => {
         let missingImage = 0;
@@ -159,11 +185,15 @@ const IncompleteProductsTab: React.FC = () => {
             pricingLowMargin,
             pricingSkus: pricingRetailLteCost + pricingLowMargin,
             totalIssueFlags,
+            deactivatedCount: deactivatedSkus.length,
         };
-    }, [incomplete]);
+    }, [incomplete, deactivatedSkus]);
 
     const filtered = useMemo(() => {
-        const byCard = incomplete.filter((i) => matchesSummaryFilter(i, summaryIssueFilter));
+        const byCard =
+            summaryIssueFilter === 'deactivated'
+                ? deactivatedSkus
+                : incomplete.filter((i) => matchesSummaryFilter(i, summaryIssueFilter));
         const q = search.trim().toLowerCase();
         if (!q) return byCard;
         return byCard.filter(
@@ -172,7 +202,7 @@ const IncompleteProductsTab: React.FC = () => {
                 i.name.toLowerCase().includes(q) ||
                 (i.barcode && i.barcode.toLowerCase().includes(q))
         );
-    }, [incomplete, search, summaryIssueFilter]);
+    }, [incomplete, deactivatedSkus, search, summaryIssueFilter]);
 
     const sorted = useMemo(() => {
         const dir = sortDir === 'asc' ? 1 : -1;
@@ -209,7 +239,7 @@ const IncompleteProductsTab: React.FC = () => {
                 case 'onHand':
                     return num(a.onHand, b.onHand);
                 case 'missing':
-                    return allIssueLabels(a).join(', ').localeCompare(allIssueLabels(b).join(', '), undefined, {
+                    return rowIssueLabels(a).join(', ').localeCompare(rowIssueLabels(b).join(', '), undefined, {
                         sensitivity: 'base',
                     }) * dir;
                 default:
@@ -239,6 +269,7 @@ const IncompleteProductsTab: React.FC = () => {
             retailPrice: item.retailPrice,
             reorderPoint: item.reorderPoint,
             imageUrl: item.imageUrl,
+            salesDeactivated: item.salesDeactivated === true,
         });
         setImageFile(null);
         setImagePreview(item.imageUrl || null);
@@ -275,6 +306,7 @@ const IncompleteProductsTab: React.FC = () => {
                 retailPrice: draft.retailPrice,
                 reorderPoint: draft.reorderPoint,
                 imageUrl,
+                salesDeactivated: draft.salesDeactivated,
             });
             cancelEdit();
         } catch {
@@ -307,7 +339,7 @@ const IncompleteProductsTab: React.FC = () => {
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-4">
-            <div className="grid flex-shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+            <div className="grid flex-shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
                 <button
                     type="button"
                     aria-pressed={summaryIssueFilter === 'all'}
@@ -435,10 +467,28 @@ const IncompleteProductsTab: React.FC = () => {
                             : `${issueStats.pricingRetailLteCost} retail ≤ cost · ${issueStats.pricingLowMargin} margin under 5%`}
                     </p>
                 </button>
+                <button
+                    type="button"
+                    aria-pressed={summaryIssueFilter === 'deactivated'}
+                    aria-label="Filter by deactivated for sales"
+                    onClick={() => setSummaryIssueFilter('deactivated')}
+                    className={`rounded-xl border p-4 text-left shadow-sm transition hover:brightness-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:brightness-110 ${
+                        summaryIssueFilter === 'deactivated'
+                            ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-background dark:ring-offset-slate-800 border-slate-400 dark:border-slate-600'
+                            : 'border-slate-200/80 bg-slate-50/80 dark:border-slate-700/80 dark:bg-slate-950/40'
+                    }`}
+                >
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200/90">Deactivated SKU</p>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-950 dark:text-slate-100">
+                        {issueStats.deactivatedCount}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-700/85 dark:text-slate-300/80">Hidden from POS &amp; mobile</p>
+                </button>
             </div>
             <p className="flex-shrink-0 text-xs text-muted-foreground">
                 Per-issue counts can add up to more than “SKUs to fix” because one product may have several gaps at once. Weak
                 pricing applies when cost and retail are set: retail at or below cost, or gross margin on retail is under 5%.
+                Deactivated SKU counts products turned off for sales (still in stock); use Edit to turn sales back on.
             </p>
             <div className="flex flex-shrink-0 flex-wrap items-start gap-4">
                 <p className="max-w-2xl text-sm text-muted-foreground">
@@ -485,19 +535,21 @@ const IncompleteProductsTab: React.FC = () => {
                             {sorted.length === 0 ? (
                                 <tr>
                                     <td colSpan={12} className="px-6 py-16 text-center text-sm text-muted-foreground">
-                                        {incomplete.length === 0
-                                            ? 'No issues — field data is complete and retail is above cost with at least 5% gross margin on retail (where prices apply).'
-                                            : search.trim() !== ''
-                                              ? 'No rows match your search.'
-                                              : summaryIssueFilter !== 'all'
-                                                ? 'No SKUs match this issue filter.'
-                                                : 'No rows match your search.'}
+                                        {summaryIssueFilter === 'deactivated' && deactivatedSkus.length === 0
+                                            ? 'No SKUs are deactivated for sales.'
+                                            : incomplete.length === 0 && summaryIssueFilter !== 'deactivated'
+                                              ? 'No issues — field data is complete and retail is above cost with at least 5% gross margin on retail (where prices apply).'
+                                              : search.trim() !== ''
+                                                ? 'No rows match your search.'
+                                                : summaryIssueFilter !== 'all'
+                                                  ? 'No SKUs match this issue filter.'
+                                                  : 'No rows match your search.'}
                                     </td>
                                 </tr>
                             ) : (
                                 sorted.map((item) => {
                                     const editing = editingId === item.id && draft;
-                                    const issues = allIssueLabels(item);
+                                    const issues = rowIssueLabels(item);
                                     return (
                                         <tr key={item.id} className="align-top hover:bg-muted/30">
                                             <td className="px-3 py-3">
@@ -656,12 +708,10 @@ const IncompleteProductsTab: React.FC = () => {
                                                 <div className="flex max-w-[220px] flex-wrap gap-1">
                                                     {issues.map((label) => (
                                                         <span
-                                                            key={label}
-                                                            className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                                                                isPricingIssueLabel(label)
-                                                                    ? 'bg-orange-100 text-orange-900 dark:bg-orange-950/60 dark:text-orange-200'
-                                                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200'
-                                                            }`}
+                                                            key={`${item.id}-${label}`}
+                                                            className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${issueBadgeClass(
+                                                                label
+                                                            )}`}
                                                         >
                                                             {label}
                                                         </span>
@@ -670,13 +720,37 @@ const IncompleteProductsTab: React.FC = () => {
                                             </td>
                                             <td className="px-3 py-3 text-right whitespace-nowrap">
                                                 {editing ? (
-                                                    <div className="flex justify-end gap-2">
-                                                        <Button type="button" variant="secondary" size="sm" onClick={cancelEdit} disabled={saving}>
-                                                            Cancel
-                                                        </Button>
-                                                        <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
-                                                            {saving ? 'Saving…' : 'Save'}
-                                                        </Button>
+                                                    <div className="flex max-w-[200px] flex-col items-end gap-2">
+                                                        <label className="flex cursor-pointer items-start gap-2 text-left text-xs text-foreground">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border"
+                                                                checked={!draft.salesDeactivated}
+                                                                onChange={(e) =>
+                                                                    setDraft({ ...draft, salesDeactivated: !e.target.checked })
+                                                                }
+                                                            />
+                                                            <span>
+                                                                <span className="font-medium">Available for sale</span>
+                                                                <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                                                                    POS &amp; mobile shop
+                                                                </span>
+                                                            </span>
+                                                        </label>
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button
+                                                                type="button"
+                                                                variant="secondary"
+                                                                size="sm"
+                                                                onClick={cancelEdit}
+                                                                disabled={saving}
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                            <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
+                                                                {saving ? 'Saving…' : 'Save'}
+                                                            </Button>
+                                                        </div>
                                                     </div>
                                                 ) : (
                                                     <Button type="button" variant="secondary" size="sm" onClick={() => startEdit(item)}>

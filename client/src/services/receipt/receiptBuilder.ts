@@ -26,6 +26,80 @@ export interface ReceiptSettings {
   margin_bottom_mm?: number;
   margin_left_mm?: number;
   margin_right_mm?: number;
+  /** Preset key: roboto_mono (default), courier_new, roboto, inter */
+  print_font_family?: string;
+  /** Base font size in px (clamped 10–18 in UI and server) */
+  print_font_size?: number;
+  /** normal | medium | bold */
+  print_font_weight?: string;
+  /** Line height multiplier (e.g. 1.2) */
+  print_line_spacing?: number;
+}
+
+export const RECEIPT_PRINT_FONT_OPTIONS = [
+  { value: 'roboto_mono', label: 'Roboto Mono', monospace: true },
+  { value: 'courier_new', label: 'Courier New', monospace: true },
+  { value: 'roboto', label: 'Roboto', monospace: false },
+  { value: 'inter', label: 'Inter', monospace: false },
+] as const;
+
+export type ReceiptPrintFontFamily = (typeof RECEIPT_PRINT_FONT_OPTIONS)[number]['value'];
+
+const PRINT_FONT_FAMILY_SET: Set<string> = new Set(RECEIPT_PRINT_FONT_OPTIONS.map((o) => o.value));
+
+function resolveReceiptFont(key: string): { cssFamily: string; webFont: 'none' | 'roboto_mono' | 'roboto' | 'inter' } {
+  switch (key) {
+    case 'courier_new':
+      return { cssFamily: "'Courier New', Courier, monospace", webFont: 'none' };
+    case 'roboto':
+      return { cssFamily: "'Roboto', 'Courier New', monospace", webFont: 'roboto' };
+    case 'inter':
+      return { cssFamily: "'Inter', 'Courier New', monospace", webFont: 'inter' };
+    case 'roboto_mono':
+    default:
+      return { cssFamily: "'Roboto Mono', 'Courier New', monospace", webFont: 'roboto_mono' };
+  }
+}
+
+function receiptFontLinkTags(webFont: 'none' | 'roboto_mono' | 'roboto' | 'inter'): string {
+  if (webFont === 'none') return '';
+  const preconnect =
+    '<link rel="preconnect" href="https://fonts.googleapis.com">' +
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
+  if (webFont === 'roboto_mono') {
+    return (
+      preconnect +
+      '<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">'
+    );
+  }
+  if (webFont === 'roboto') {
+    return (
+      preconnect +
+      '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">'
+    );
+  }
+  return (
+    preconnect +
+    '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">'
+  );
+}
+
+function clampPrintFontSize(px: unknown): number {
+  const n = typeof px === 'number' ? px : parseInt(String(px ?? ''), 10);
+  if (!Number.isFinite(n)) return 12;
+  return Math.min(18, Math.max(10, Math.round(n)));
+}
+
+function clampLineSpacing(v: unknown): number {
+  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+  if (!Number.isFinite(n)) return 1.2;
+  return Math.min(2, Math.max(1, Math.round(n * 100) / 100));
+}
+
+function weightToCss(w: string | undefined): string {
+  if (w === 'bold') return '700';
+  if (w === 'medium') return '500';
+  return '400';
 }
 
 export interface ReceiptSaleData {
@@ -72,6 +146,10 @@ const DEFAULT_SETTINGS: ReceiptSettings = {
   margin_bottom_mm: 2,
   margin_left_mm: 2,
   margin_right_mm: 4,
+  print_font_family: 'roboto_mono',
+  print_font_size: 12,
+  print_font_weight: 'normal',
+  print_line_spacing: 1.2,
 };
 
 function clampMarginMm(v: unknown, fallback: number): number {
@@ -105,6 +183,13 @@ export function generateReceiptHTML(
   const mb = clampMarginMm(s.margin_bottom_mm, DEFAULT_SETTINGS.margin_bottom_mm!);
   const ml = clampMarginMm(s.margin_left_mm, DEFAULT_SETTINGS.margin_left_mm!);
   const contentWidthMm = Math.max(24, widthMm - ml - mr);
+  const rawFontKey = String(s.print_font_family ?? 'roboto_mono');
+  const fontKey = PRINT_FONT_FAMILY_SET.has(rawFontKey) ? rawFontKey : 'roboto_mono';
+  const font = resolveReceiptFont(fontKey);
+  const fontSizePx = clampPrintFontSize(s.print_font_size);
+  const lineHeightMul = clampLineSpacing(s.print_line_spacing);
+  const fontWeightCss = weightToCss(s.print_font_weight);
+  const fontLinks = receiptFontLinkTags(font.webFont);
   const reprintLabel = (saleData.reprint_count ?? 0) > 0 ? '*** DUPLICATE COPY ***' : '';
 
   let barcodeDataUrl: string | null = null;
@@ -124,7 +209,7 @@ export function generateReceiptHTML(
 
   const barcodeBlock =
     showBarcode && barcodeDataUrl
-      ? `<div style="text-align:center;margin:1mm 0;"><img src="${barcodeDataUrl}" alt="Barcode" style="max-width:${barcodeMaxWidth}mm;width:100%;height:auto;min-height:${barcodeMinHeight};" /><div style="font-size:7px;margin-top:0.5mm;">${escapeHtml(saleData.barcode_value || '')}</div></div>`
+      ? `<div style="text-align:center;margin:1mm 0;"><img src="${barcodeDataUrl}" alt="Barcode" style="max-width:${barcodeMaxWidth}mm;width:100%;height:auto;min-height:${barcodeMinHeight};" /><div style="font-size:0.58em;margin-top:0.5mm;">${escapeHtml(saleData.barcode_value || '')}</div></div>`
       : '';
 
   const headerBarcode = barcodePosition === 'header' ? barcodeBlock : '';
@@ -141,7 +226,7 @@ export function generateReceiptHTML(
   const taxId = saleData.taxId ? `<div style="text-align:center;font-size:0.9em;">Tax ID: ${escapeHtml(saleData.taxId)}</div>` : '';
 
   const duplicateBlock = reprintLabel
-    ? `<div style="text-align:center;font-weight:bold;font-size:9px;margin-bottom:1mm;">${reprintLabel}</div>`
+    ? `<div style="text-align:center;font-weight:700;font-size:0.85em;margin-bottom:1mm;">${reprintLabel}</div>`
     : '';
 
   const cashierLine = s.show_cashier_name
@@ -157,7 +242,7 @@ export function generateReceiptHTML(
   const itemsRows = saleData.items
     .map(
       (item) =>
-        `<tr><td style="padding:0.5mm 0;line-height:1.1;word-wrap:break-word;max-width:${contentWidthMm * 0.42}mm;">${escapeHtml(item.name)}</td><td style="text-align:center;padding:0.5mm 0;">${item.quantity}</td><td style="text-align:right;padding:0.5mm 0;">${Number(item.unitPrice).toLocaleString()}</td><td style="text-align:right;padding:0.5mm 0;">${Number(item.total).toLocaleString()}</td></tr>`
+        `<tr><td class="ri-name">${escapeHtml(item.name)}</td><td class="ri-qty">${item.quantity}</td><td class="ri-rate">${Number(item.unitPrice).toLocaleString()}</td><td class="ri-total">${Number(item.total).toLocaleString()}</td></tr>`
     )
     .join('');
 
@@ -175,7 +260,7 @@ export function generateReceiptHTML(
     ? `<div class="info-row" style="font-weight:bold;"><span>Change:</span><span>${Number(saleData.change).toLocaleString()}</span></div>`
     : '';
   const transactionLine = saleData.transactionId
-    ? `<div class="info-row" style="font-size:8px;"><span>Tx ID:</span><span>${escapeHtml(saleData.transactionId)}</span></div>`
+    ? `<div class="info-row info-row--micro"><span>Tx ID:</span><span>${escapeHtml(saleData.transactionId)}</span></div>`
     : '';
 
   const footerMessage = (s.footer_message && s.footer_message.trim()) ? escapeHtml(s.footer_message.trim()) : 'Thank you for your business!';
@@ -190,9 +275,8 @@ export function generateReceiptHTML(
     : '';
 
   const pageSize = s.receipt_width === '58mm' ? '58mm auto' : '80mm auto';
-  const fontSize = widthMm === 58 ? '9px' : '10px';
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">${fontLinks}<style>
 @page { size: ${pageSize}; margin: ${mt}mm ${mr}mm ${mb}mm ${ml}mm; }
 html, body { min-height: 100vh; overflow: visible; display: block; margin: 0; width: 100%; box-sizing: border-box; }
 /* @page margins apply when printing; browsers ignore @page for normal screen layout — mirror margins as body padding so iframe/preview updates live. */
@@ -202,19 +286,23 @@ html, body { min-height: 100vh; overflow: visible; display: block; margin: 0; wi
 @media print {
   body { padding: 0 !important; }
 }
-body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 100%; font-size: ${fontSize}; line-height: 1.1; color: #000; background: #fff; box-sizing: border-box; }
+body { font-family: ${font.cssFamily}; font-weight: ${fontWeightCss}; width: 100%; max-width: 100%; font-size: ${fontSizePx}px; line-height: ${lineHeightMul}; color: #000; background: #fff; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 * { box-sizing: border-box; }
 .text-center { text-align: center; }
 .font-bold { font-weight: bold; }
 .border-top { border-top: 1px dashed #000; margin-top: 1mm; padding-top: 1mm; }
-table { width: 100%; border-collapse: collapse; margin: 1mm 0; }
-th { text-align: left; font-weight: bold; padding: 0.5mm 0; font-size: 0.9em; border-bottom: 1px solid #000; }
-th:nth-child(2), th:nth-child(3), th:nth-child(4) { text-align: center; }
-th:nth-child(4) { text-align: right; }
-td:nth-child(2), td:nth-child(3) { text-align: center; }
-td:nth-child(4) { text-align: right; }
-.total-row { font-size: 1.1em; font-weight: bold; margin-top: 1mm; }
-.info-row { display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 0.5mm; }
+table.receipt-items { table-layout: fixed; width: 100%; border-collapse: collapse; margin: 1mm 0; }
+table.receipt-items th { text-align: left; font-weight: 700; padding: 0.5mm 0; font-size: 0.9em; border-bottom: 1px solid #000; vertical-align: bottom; }
+table.receipt-items td { padding: 0.5mm 0; vertical-align: top; word-wrap: break-word; overflow-wrap: anywhere; }
+table.receipt-items .ri-name { width: 40%; }
+table.receipt-items .ri-qty { width: 12%; text-align: center; }
+table.receipt-items .ri-rate { width: 23%; text-align: right; }
+table.receipt-items .ri-total { width: 25%; text-align: right; }
+.total-row { font-size: 1.1em; font-weight: 700; margin-top: 1mm; }
+.info-row { display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 0.5mm; gap: 2mm; }
+.info-row span:first-child { flex: 1 1 auto; min-width: 0; }
+.info-row span:last-child { flex: 0 0 auto; text-align: right; }
+.info-row--micro { font-size: 0.67em; }
 </style></head><body>
 ${duplicateBlock}
 ${logoBlock}
@@ -230,8 +318,8 @@ ${cashierLine}
 ${shiftLine}
 ${customerLine}
 </div>
-<table>
-<thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+<table class="receipt-items">
+<thead><tr><th class="ri-name">Item</th><th class="ri-qty">Qty</th><th class="ri-rate">Rate</th><th class="ri-total">Total</th></tr></thead>
 <tbody>${itemsRows}</tbody>
 </table>
 <div class="border-top">

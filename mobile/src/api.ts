@@ -40,13 +40,23 @@ export function getBaseUrl(): string {
 
 export function getFullImageUrl(path: string | undefined): string | undefined {
     if (!path) return undefined;
-    if (path.startsWith('http') || path.startsWith('data:') || path.startsWith('blob:')) return path;
+    const raw = String(path).trim();
+    if (!raw) return undefined;
+    if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:') || raw.startsWith('blob:')) {
+        return raw;
+    }
+
+    const cleanPath = raw.startsWith('/') ? raw : `/${raw}`;
+
+    // Prefer API origin from VITE_API_URL so /uploads/* resolves when the PWA is on a different host than the API (e.g. Render static + API).
+    const envApi = import.meta.env.VITE_API_URL as string | undefined;
+    if (envApi && typeof envApi === 'string') {
+        const origin = envApi.replace(/\/?api\/?$/i, '').replace(/\/$/, '');
+        if (origin) return `${origin}${cleanPath}`;
+    }
 
     const base = getBaseUrl();
-    // Ensure we don't end up with "//uploads"
     const cleanBase = base === '/' ? '' : base;
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
-
     return `${cleanBase}${cleanPath}`;
 }
 

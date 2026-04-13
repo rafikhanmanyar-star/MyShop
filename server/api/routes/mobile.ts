@@ -96,13 +96,15 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
             return res.status(404).json({ error: 'Mobile ordering is not available for this shop.' });
         }
 
-        // Prefer shop address/phone from tenant_branding (App Branding form) when set
+        // Prefer shop address / logo from tenant_branding (Mobile App Branding) when set; fallback to tenants row
         let address = req.shop.address ?? null;
         let phone = req.shop.phone ?? null;
+        let logoUrl = req.shop.logo_url ?? null;
         try {
             const { getShopService } = await import('../../services/shopService.js');
             const branding = await getShopService().getTenantBranding(req.tenantId);
             if (branding?.address) address = branding.address;
+            if (branding?.logo_url) logoUrl = branding.logo_url;
             // phone stays from tenants unless we add it to tenant_branding later
         } catch (_) { /* ignore */ }
 
@@ -116,7 +118,7 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
             shop: {
                 name: req.shop.name,
                 company_name: req.shop.company_name,
-                logo_url: req.shop.logo_url,
+                logo_url: logoUrl,
                 brand_color: req.shop.brand_color,
                 slug: req.shop.slug,
                 address: address ?? null,
@@ -144,7 +146,8 @@ router.get('/:shopSlug/branding', publicTenantMiddleware(db), async (req: any, r
     try {
         const { getShopService } = await import('../../services/shopService.js');
         const branding = await getShopService().getTenantBranding(req.tenantId);
-        res.json(branding);
+        const mergedLogo = branding?.logo_url || req.shop?.logo_url || null;
+        res.json({ ...branding, logo_url: mergedLogo });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

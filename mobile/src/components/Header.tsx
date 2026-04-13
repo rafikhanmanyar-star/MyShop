@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { usePWAInstall } from '../hooks/usePWAInstall';
@@ -64,10 +64,20 @@ export default function Header() {
         setShowMenu(false);
     };
 
+    /** App Branding (tenant_branding) logo takes priority; shop info may mirror tenants.logo_url */
+    const logoPath = state.branding?.logo_url || state.shop?.logo_url || null;
+    const logoSrc = useMemo(() => getFullImageUrl(logoPath || undefined), [logoPath]);
+    const [logoFailed, setLogoFailed] = useState(false);
+    useEffect(() => {
+        setLogoFailed(false);
+    }, [logoSrc]);
+
     if (!shopSlug) return null;
 
     // Use name if available, otherwise phone, otherwise 'U'
     const avatarChar = (state.customerName || state.customerPhone || 'U')[0].toUpperCase();
+
+    const shopInitial = (state.shop?.company_name || state.shop?.name || 'M').charAt(0).toUpperCase();
 
     return (
         <header className="main-header">
@@ -75,27 +85,17 @@ export default function Header() {
                 <div className="header-brand">
                     <div className="header-brand-main">
                         <Link to={`/${shopSlug}`} className="shop-logo-link">
-                            {(state.branding?.logo_url || state.shop?.logo_url) ? (
+                            {logoSrc && !logoFailed ? (
                                 <img
-                                    src={getFullImageUrl(state.branding?.logo_url || state.shop?.logo_url || undefined)}
+                                    key={logoSrc}
+                                    src={logoSrc}
                                     alt=""
                                     className="header-logo"
-                                    onError={(e) => {
-                                        (e.target as HTMLImageElement).style.display = 'none';
-                                        const parent = (e.target as HTMLImageElement).parentElement;
-                                        if (parent) {
-                                            const initial = (state.shop?.company_name || state.shop?.name || 'M').charAt(0).toUpperCase();
-                                            const span = document.createElement('span');
-                                            span.className = 'header-logo-initial';
-                                            span.innerText = initial;
-                                            parent.appendChild(span);
-                                        }
-                                    }}
+                                    decoding="async"
+                                    onError={() => setLogoFailed(true)}
                                 />
                             ) : (
-                                <span className="header-logo-initial">
-                                    {(state.shop?.company_name || state.shop?.name || 'M').charAt(0).toUpperCase()}
-                                </span>
+                                <span className="header-logo-initial">{shopInitial}</span>
                             )}
                         </Link>
                         <div className="header-shop-details">

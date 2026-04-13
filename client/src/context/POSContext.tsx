@@ -20,6 +20,7 @@ import { useShifts } from './ShiftsContext';
 import { useInventory } from './InventoryContext';
 import { getAppContext, setAppContext, clearAppContextBranch } from '../services/appContext';
 import { apiClient } from '../services/apiClient';
+import { getFullImageUrl } from '../config/apiUrl';
 import { isApiConnectivityFailure, userMessageForApiError } from '../utils/apiConnectivity';
 import { showAppToast } from '../utils/appToast';
 
@@ -287,7 +288,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 storeAddress: receiptSettings?.shop_address?.trim() || state.printSettings?.posShopAddress || '',
                 storePhone: receiptSettings?.shop_phone?.trim() || state.printSettings?.posShopPhone || '',
                 taxId: receiptSettings?.tax_id?.trim() || state.printSettings?.taxId || '',
-                logoUrl: receiptSettings?.logo_url?.trim() || state.printSettings?.logoUrl || undefined,
+                logoUrl: getFullImageUrl(receiptSettings?.logo_url?.trim()) || receiptSettings?.logo_url?.trim() || state.printSettings?.logoUrl || undefined,
                 receiptNumber: dataToUse.saleNumber,
                 date: new Date(dataToUse.createdAt || Date.now()).toLocaleDateString(),
                 time: new Date(dataToUse.createdAt || Date.now()).toLocaleTimeString(),
