@@ -10,7 +10,7 @@ type PaymentChoice = 'COD' | 'SelfCollection' | 'EasypaisaJazzcashOnline';
 export default function Checkout() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
-    const { state, dispatch, cartTotal, cartTax, showToast } = useApp();
+    const { state, dispatch, cartTotal, cartTax, showToast, refreshLoyalty } = useApp();
     const online = useOnline();
 
     const [address, setAddress] = useState('');
@@ -82,6 +82,7 @@ export default function Checkout() {
 
             if (result.synced && result.orderId) {
                 dispatch({ type: 'CLEAR_CART' });
+                void refreshLoyalty({ force: true });
                 const q =
                     paymentMethod === 'SelfCollection'
                         ? '?pickup=1'
@@ -269,6 +270,16 @@ export default function Checkout() {
                 ))}
 
                 <div style={{ borderTop: '1px solid var(--border-light)', marginTop: 8, paddingTop: 8 }}>
+                    {state.isLoggedIn && (
+                        <div className="summary-row" style={{ marginBottom: 6 }}>
+                            <span>Available points</span>
+                            <span style={{ fontWeight: 700 }}>
+                                {state.loyalty.fetchFailed && state.loyalty.totalPoints == null
+                                    ? '—'
+                                    : (state.loyalty.totalPoints ?? 0).toLocaleString()}
+                            </span>
+                        </div>
+                    )}
                     <div className="summary-row">
                         <span>Subtotal</span>
                         <span>{formatPrice(Math.round(cartTotal * 100) / 100)}</span>

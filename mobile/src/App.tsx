@@ -24,8 +24,18 @@ import OfflineBanner from './components/OfflineBanner';
 import { processOrderQueue, subscribeToOnline } from './services/orderSyncService';
 import { processPendingProductQueue } from './services/productSyncService';
 
+function LoyaltyBootstrap() {
+  const { state, refreshLoyalty } = useApp();
+  useEffect(() => {
+    if (state.isLoggedIn && state.customerId) {
+      void refreshLoyalty();
+    }
+  }, [state.isLoggedIn, state.customerId, refreshLoyalty]);
+  return null;
+}
+
 function SyncOnOnline() {
-  const { showToast } = useApp();
+  const { showToast, refreshLoyalty } = useApp();
   const processedRef = useRef(false);
 
   useEffect(() => {
@@ -35,6 +45,7 @@ function SyncOnOnline() {
         processPendingProductQueue(),
       ]);
       if (orderResult.succeeded > 0) {
+        void refreshLoyalty({ force: true });
         showToast(orderResult.succeeded === 1 ? 'Order sent!' : `${orderResult.succeeded} orders sent!`);
       }
       if (productResult.succeeded > 0) {
@@ -49,7 +60,7 @@ function SyncOnOnline() {
       runSync();
     }
     return unsub;
-  }, [showToast]);
+  }, [showToast, refreshLoyalty]);
 
   return null;
 }
@@ -58,6 +69,7 @@ export default function App() {
   return (
     <AppProvider>
       <OfflineBanner />
+      <LoyaltyBootstrap />
       <SyncOnOnline />
       <Routes>
         {/* Shop slug entry point — loads shop branding */}

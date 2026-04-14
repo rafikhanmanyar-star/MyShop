@@ -1,10 +1,15 @@
+import { useEffect } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 export default function OrderConfirm() {
     const { shopSlug, orderId } = useParams();
     const [searchParams] = useSearchParams();
-    const { state } = useApp();
+    const { state, refreshLoyalty } = useApp();
+
+    useEffect(() => {
+        void refreshLoyalty({ force: true });
+    }, [refreshLoyalty]);
     const isPickup = searchParams.get('pickup') === '1';
     const isOnlinePayment = searchParams.get('online') === '1';
 

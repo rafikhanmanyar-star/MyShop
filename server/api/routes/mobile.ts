@@ -347,6 +347,19 @@ router.put('/profile', mobileAuthMiddleware(db), async (req: any, res) => {
     }
 });
 
+// Loyalty points (same balance as POS; value uses shop redemption ratio)
+const loyaltyPointsHandler = async (req: any, res: express.Response) => {
+    try {
+        const { getShopService } = await import('../../services/shopService.js');
+        const data = await getShopService().getLoyaltyPointsForMobileCustomer(req.tenantId, req.customerId);
+        res.json(data);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+};
+router.get('/loyalty-points', mobileAuthMiddleware(db), loyaltyPointsHandler);
+router.get('/user/loyalty-points', mobileAuthMiddleware(db), loyaltyPointsHandler);
+
 // Place order — shop and branch are the same entity: server uses tenant's default (first) branch when branchId omitted
 router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     try {
@@ -486,6 +499,30 @@ router.post('/budgets/:id/clone', mobileAuthMiddleware(db), async (req: any, res
         res.json(budget);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
+    }
+});
+
+// Auto-suggest budget based on last month's purchases
+router.get('/budget-suggestions', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getBudgetService } = await import('../../services/budgetService.js');
+        const month = parseInt(req.query.month as string) || (new Date().getMonth() + 1);
+        const year = parseInt(req.query.year as string) || (new Date().getFullYear());
+        const result = await getBudgetService().getAutoSuggestedBudget(req.tenantId, req.customerId, month, year);
+        res.json(result);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Budget alerts / notifications
+router.get('/budget-alerts', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getBudgetService } = await import('../../services/budgetService.js');
+        const result = await getBudgetService().getBudgetAlerts(req.tenantId, req.customerId);
+        res.json(result);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
     }
 });
 

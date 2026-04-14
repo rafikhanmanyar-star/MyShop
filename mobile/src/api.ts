@@ -171,4 +171,14 @@ export const customerApi = {
             method: 'POST',
             body: JSON.stringify({ targetMonth, targetYear })
         }),
+    getBudgetSuggestions: (month?: number, year?: number) => {
+        const params = new URLSearchParams();
+        if (month) params.append('month', month.toString());
+        if (year) params.append('year', year.toString());
+        const qs = params.toString();
+        return request(`${API_BASE}/budget-suggestions${qs ? `?${qs}` : ''}`);
+    },
+    getBudgetAlerts: () => request(`${API_BASE}/budget-alerts`),
+    /** Loyalty balance (backend-calculated; same source as POS) */
+    getLoyaltyPoints: () => request(`${API_BASE}/loyalty-points`),
 };

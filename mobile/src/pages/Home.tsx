@@ -9,6 +9,7 @@ export default function Home() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
     const { state, dispatch, showToast } = useApp();
+    const loyalty = state.loyalty;
     const [categories, setCategories] = useState<any[]>([]);
     const [bestSellers, setBestSellers] = useState<any[]>([]);
     const [deals, setDeals] = useState<any[]>([]);
@@ -176,6 +177,49 @@ export default function Home() {
                         autoComplete="off"
                     />
                 </form>
+
+                {state.isLoggedIn && (
+                    <div className="home-loyalty-card">
+                        <div className="home-loyalty-card__main">
+                            <span className="home-loyalty-card__icon" aria-hidden>🎁</span>
+                            <div className="home-loyalty-card__text">
+                                {loyalty.fetchFailed && loyalty.totalPoints == null ? (
+                                    <p className="home-loyalty-card__points">Points unavailable</p>
+                                ) : loyalty.totalPoints == null && !loyalty.fetchFailed ? (
+                                    <p className="home-loyalty-card__points home-loyalty-card__loading">
+                                        Loading points…
+                                    </p>
+                                ) : (
+                                    <>
+                                        <p className="home-loyalty-card__points">
+                                            You have{' '}
+                                            <strong>
+                                                {(loyalty.totalPoints ?? 0).toLocaleString()} points
+                                            </strong>
+                                        </p>
+                                        {loyalty.fetchFailed && (
+                                            <p className="home-loyalty-card__hint home-loyalty-card__hint--muted">
+                                                Showing last saved balance
+                                            </p>
+                                        )}
+                                        {loyalty.pointsValue != null && loyalty.pointsValue > 0 && !loyalty.fetchFailed && (
+                                            <p className="home-loyalty-card__hint">
+                                                ≈ Rs. {loyalty.pointsValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} value
+                                            </p>
+                                        )}
+                                        <p className="home-loyalty-card__tagline">Keep shopping to earn more!</p>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        <Link
+                            to={`/${shopSlug}/account#loyalty`}
+                            className="home-loyalty-card__cta"
+                        >
+                            View Details →
+                        </Link>
+                    </div>
+                )}
 
                 <div className="category-nav-rail category-nav-rail--home" role="tablist" aria-label="Categories">
                     <Link

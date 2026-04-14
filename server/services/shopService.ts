@@ -1610,6 +1610,75 @@ export class ShopService {
   }
 
   /**
+   * Current loyalty balance for a mobile customer (phone → contact → shop_loyalty_members).
+   * points_value uses shop_policies.loyalty_redemption_ratio (PKR equivalent for outstanding points).
+   */
+  async getLoyaltyPointsForMobileCustomer(
+    tenantId: string,
+    mobileCustomerId: string
+  ): Promise<{
+    user_id: string;
+    total_points: number;
+    points_value: number;
+    redemption_ratio: number;
+    last_updated: string | null;
+  }> {
+    const mcRows = await this.db.query(
+      `SELECT phone FROM mobile_customers WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, mobileCustomerId]
+    );
+    if (!mcRows.length) {
+      throw new Error('Customer not found');
+    }
+    const phone = String(mcRows[0].phone ?? '').trim();
+
+    let totalPoints = 0;
+    let lastUpdated: string | null = null;
+    if (phone) {
+      const memberRows = await this.db.query(
+        `SELECT m.points_balance, m.updated_at
+         FROM shop_loyalty_members m
+         INNER JOIN contacts c ON c.id = m.customer_id AND c.tenant_id = m.tenant_id
+         WHERE m.tenant_id = $1
+           AND (
+             c.contact_no = $2
+             OR (
+               length(regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')) > 0
+               AND regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+                 = regexp_replace($2, '[^0-9]', '', 'g')
+             )
+           )
+         ORDER BY m.updated_at DESC NULLS LAST
+         LIMIT 1`,
+        [tenantId, phone]
+      );
+      if (memberRows.length) {
+        totalPoints = Math.max(0, parseInt(String(memberRows[0].points_balance), 10) || 0);
+        const u = memberRows[0].updated_at;
+        lastUpdated = u ? new Date(u).toISOString() : null;
+      }
+    }
+
+    const policyRows = await this.db.query(
+      `SELECT loyalty_redemption_ratio FROM shop_policies WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    const ratio =
+      policyRows.length && policyRows[0].loyalty_redemption_ratio != null
+        ? parseFloat(String(policyRows[0].loyalty_redemption_ratio)) || 0.01
+        : 0.01;
+    const pointsValue = Math.round(totalPoints * ratio * 100) / 100;
+
+    return {
+      user_id: mobileCustomerId,
+      total_points: totalPoints,
+      points_value: pointsValue,
+      redemption_ratio: ratio,
+      last_updated: lastUpdated,
+    };
+  }
+
+  /**
    * When a mobile order is marked Delivered, award loyalty points (same rule as POS: floor(grandTotal/100)).
    * Idempotent via mobile_orders.points_earned.
    */

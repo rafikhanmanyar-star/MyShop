@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useReducer, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useRef } from 'react';
+import { customerApi } from '../api';
 
 // ─── Types ─────────────────────────────────────────────────
 // Shop and branch are the same entity in the mobile app: one shop (tenant) = one default branch for orders.
@@ -70,6 +71,7 @@ interface AppState {
     customerPhone: string | null;
     customerName: string | null;
     toast: string | null;
+    loyalty: LoyaltyState;
 }
 
 type Action =
@@ -85,13 +87,76 @@ type Action =
     | { type: 'LOGOUT' }
     | { type: 'UPDATE_CUSTOMER_PROFILE'; name: string | null }
     | { type: 'SHOW_TOAST'; message: string }
-    | { type: 'HIDE_TOAST' };
+    | { type: 'HIDE_TOAST' }
+    | {
+          type: 'SET_LOYALTY';
+          totalPoints: number;
+          pointsValue: number;
+          lastUpdated: string | null;
+          redemptionRatio: number;
+      }
+    | { type: 'LOYALTY_FETCH_FAILED' }
+    | { type: 'CLEAR_LOYALTY' };
 
 const CART_KEY = 'myshop_cart';
 const OFFER_CART_KEY = 'myshop_offer_bundles';
 const AUTH_KEY = 'mobile_token';
 const CUSTOMER_KEY = 'mobile_customer';
 const LAST_SHOP_SLUG_KEY = 'myshop_last_shop_slug';
+const LOYALTY_SESSION_KEY = 'myshop_loyalty_session';
+
+export interface LoyaltyState {
+    totalPoints: number | null;
+    pointsValue: number | null;
+    lastUpdated: string | null;
+    redemptionRatio: number | null;
+    /** Last request failed; UI may still show cached totals */
+    fetchFailed: boolean;
+}
+
+const emptyLoyalty: LoyaltyState = {
+    totalPoints: null,
+    pointsValue: null,
+    lastUpdated: null,
+    redemptionRatio: null,
+    fetchFailed: false,
+};
+
+function readLoyaltySession(customerId: string | null): LoyaltyState | null {
+    if (!customerId || typeof sessionStorage === 'undefined') return null;
+    try {
+        const raw = sessionStorage.getItem(LOYALTY_SESSION_KEY);
+        if (!raw) return null;
+        const o = JSON.parse(raw) as Record<string, unknown>;
+        if (o.customerId !== customerId) return null;
+        return {
+            totalPoints: typeof o.totalPoints === 'number' ? o.totalPoints : null,
+            pointsValue: typeof o.pointsValue === 'number' ? o.pointsValue : null,
+            lastUpdated: typeof o.lastUpdated === 'string' ? o.lastUpdated : null,
+            redemptionRatio: typeof o.redemptionRatio === 'number' ? o.redemptionRatio : null,
+            fetchFailed: false,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function writeLoyaltySession(customerId: string, loyalty: LoyaltyState) {
+    try {
+        sessionStorage.setItem(
+            LOYALTY_SESSION_KEY,
+            JSON.stringify({
+                customerId,
+                totalPoints: loyalty.totalPoints,
+                pointsValue: loyalty.pointsValue,
+                lastUpdated: loyalty.lastUpdated,
+                redemptionRatio: loyalty.redemptionRatio,
+            })
+        );
+    } catch {
+        /* ignore */
+    }
+}
 
 /** Coerce API/pg values (DECIMAL often arrives as string) so totals use numeric + not string concat. */
 function toFiniteNumber(value: unknown, fallback = 0): number {
@@ -148,6 +213,7 @@ function loadAuth(): { isLoggedIn: boolean; customerId: string | null; phone: st
 }
 
 const initialAuth = loadAuth();
+const initialLoyalty = readLoyaltySession(initialAuth.customerId) ?? emptyLoyalty;
 
 const initialState: AppState = {
     shopSlug: null,
@@ -162,6 +228,7 @@ const initialState: AppState = {
     customerPhone: initialAuth.phone,
     customerName: initialAuth.name,
     toast: null,
+    loyalty: initialLoyalty,
 };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -272,12 +339,34 @@ function reducer(state: AppState, action: Action): AppState {
         case 'LOGIN':
             localStorage.setItem(AUTH_KEY, action.token);
             localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ id: action.customerId, phone: action.phone, name: action.name }));
-            return { ...state, isLoggedIn: true, customerId: action.customerId, customerPhone: action.phone, customerName: action.name };
+            {
+                const cached = readLoyaltySession(action.customerId);
+                return {
+                    ...state,
+                    isLoggedIn: true,
+                    customerId: action.customerId,
+                    customerPhone: action.phone,
+                    customerName: action.name,
+                    loyalty: cached ?? emptyLoyalty,
+                };
+            }
 
         case 'LOGOUT':
             localStorage.removeItem(AUTH_KEY);
             localStorage.removeItem(CUSTOMER_KEY);
-            return { ...state, isLoggedIn: false, customerId: null, customerPhone: null, customerName: null };
+            try {
+                sessionStorage.removeItem(LOYALTY_SESSION_KEY);
+            } catch {
+                /* ignore */
+            }
+            return {
+                ...state,
+                isLoggedIn: false,
+                customerId: null,
+                customerPhone: null,
+                customerName: null,
+                loyalty: emptyLoyalty,
+            };
 
         case 'UPDATE_CUSTOMER_PROFILE': {
             const customer = localStorage.getItem(CUSTOMER_KEY);
@@ -297,6 +386,32 @@ function reducer(state: AppState, action: Action): AppState {
         case 'HIDE_TOAST':
             return { ...state, toast: null };
 
+        case 'SET_LOYALTY':
+            return {
+                ...state,
+                loyalty: {
+                    totalPoints: action.totalPoints,
+                    pointsValue: action.pointsValue,
+                    lastUpdated: action.lastUpdated,
+                    redemptionRatio: action.redemptionRatio,
+                    fetchFailed: false,
+                },
+            };
+
+        case 'LOYALTY_FETCH_FAILED':
+            return {
+                ...state,
+                loyalty: { ...state.loyalty, fetchFailed: true },
+            };
+
+        case 'CLEAR_LOYALTY':
+            try {
+                sessionStorage.removeItem(LOYALTY_SESSION_KEY);
+            } catch {
+                /* ignore */
+            }
+            return { ...state, loyalty: emptyLoyalty };
+
         default:
             return state;
     }
@@ -310,12 +425,68 @@ interface AppContextType {
     cartTax: number;
     cartCount: number;
     showToast: (message: string) => void;
+    /** Fetches loyalty from API; throttled unless force */
+    refreshLoyalty: (opts?: { force?: boolean }) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType>(null!);
 
+const LOYALTY_MIN_FETCH_GAP_MS = 10_000;
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
     const [state, dispatch] = useReducer(reducer, initialState);
+    const lastLoyaltyFetchAt = useRef(0);
+    const loyaltyFetchInFlight = useRef(false);
+
+    const refreshLoyalty = useCallback(
+        async (opts?: { force?: boolean }) => {
+            if (!state.isLoggedIn || !state.customerId) return;
+            if (loyaltyFetchInFlight.current) return;
+            const now = Date.now();
+            if (!opts?.force && now - lastLoyaltyFetchAt.current < LOYALTY_MIN_FETCH_GAP_MS) {
+                return;
+            }
+            const customerId = state.customerId;
+            loyaltyFetchInFlight.current = true;
+            try {
+                const data = (await customerApi.getLoyaltyPoints()) as {
+                    total_points: number;
+                    points_value?: number;
+                    last_updated?: string | null;
+                    redemption_ratio?: number;
+                };
+                const total = Math.max(0, Math.floor(Number(data.total_points) || 0));
+                const ratio = typeof data.redemption_ratio === 'number' && Number.isFinite(data.redemption_ratio)
+                    ? data.redemption_ratio
+                    : 0.01;
+                const pVal =
+                    data.points_value != null && Number.isFinite(Number(data.points_value))
+                        ? Math.round(Number(data.points_value) * 100) / 100
+                        : Math.round(total * ratio * 100) / 100;
+                const loyaltySlice: LoyaltyState = {
+                    totalPoints: total,
+                    pointsValue: pVal,
+                    lastUpdated: data.last_updated ?? null,
+                    redemptionRatio: ratio,
+                    fetchFailed: false,
+                };
+                dispatch({
+                    type: 'SET_LOYALTY',
+                    totalPoints: total,
+                    pointsValue: pVal,
+                    lastUpdated: data.last_updated ?? null,
+                    redemptionRatio: ratio,
+                });
+                writeLoyaltySession(customerId, loyaltySlice);
+                lastLoyaltyFetchAt.current = Date.now();
+            } catch {
+                dispatch({ type: 'LOYALTY_FETCH_FAILED' });
+            } finally {
+                loyaltyFetchInFlight.current = false;
+            }
+        },
+        [state.isLoggedIn, state.customerId]
+    );
 
     const cartMerch =
         state.cart.reduce((sum, i) => sum + i.price * i.quantity, 0) +
@@ -338,7 +509,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     return (
-        <AppContext.Provider value={{ state, dispatch, cartTotal, cartTax: cartTaxRounded, cartCount, showToast }}>
+        <AppContext.Provider
+            value={{ state, dispatch, cartTotal, cartTax: cartTaxRounded, cartCount, showToast, refreshLoyalty }}
+        >
             {children}
             {state.toast && <div className="toast">{state.toast}</div>}
         </AppContext.Provider>

@@ -17,7 +17,7 @@ interface Profile {
 export default function AccountSettings() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
-    const { state, dispatch, showToast } = useApp();
+    const { state, dispatch, showToast, refreshLoyalty } = useApp();
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -33,6 +33,7 @@ export default function AccountSettings() {
             navigate(`/${shopSlug}/login?redirect=account`, { replace: true });
             return;
         }
+        void refreshLoyalty();
         customerApi.getProfile()
             .then((profile: Profile) => {
                 setName(profile.name ?? '');
@@ -44,7 +45,7 @@ export default function AccountSettings() {
             })
             .catch(() => showToast('Could not load profile'))
             .finally(() => setLoading(false));
-    }, [state.isLoggedIn, state.customerId, shopSlug, navigate, showToast]);
+    }, [state.isLoggedIn, state.customerId, shopSlug, navigate, showToast, refreshLoyalty]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -92,6 +93,57 @@ export default function AccountSettings() {
                 <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
                     Update your name, email and delivery address.
                 </p>
+
+                <div
+                    id="loyalty"
+                    style={{
+                        scrollMarginTop: 80,
+                        background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(255,255,255,0.95) 100%)',
+                        border: '1px solid var(--border-light)',
+                        borderRadius: 'var(--radius-lg)',
+                        padding: 16,
+                        marginBottom: 20,
+                    }}
+                >
+                    <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span aria-hidden>🎁</span> Loyalty points
+                    </h2>
+                    {state.loyalty.fetchFailed && state.loyalty.totalPoints == null ? (
+                        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Points unavailable right now.</p>
+                    ) : (
+                        <>
+                            <p style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 4 }}>
+                                {(state.loyalty.totalPoints ?? 0).toLocaleString()}{' '}
+                                <span style={{ fontSize: 15, fontWeight: 600 }}>points</span>
+                            </p>
+                            {state.loyalty.fetchFailed && (
+                                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                                    Showing last saved balance.
+                                </p>
+                            )}
+                            {state.loyalty.pointsValue != null && state.loyalty.pointsValue > 0 && (
+                                <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
+                                    ≈ Rs.{' '}
+                                    {state.loyalty.pointsValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}{' '}
+                                    redeemable value (shop policy)
+                                </p>
+                            )}
+                            <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                                {state.loyalty.redemptionRatio != null ? (
+                                    <>
+                                        100 points ≈ Rs.{' '}
+                                        {(100 * state.loyalty.redemptionRatio).toLocaleString(undefined, {
+                                            maximumFractionDigits: 2,
+                                        })}{' '}
+                                        (redemption ratio set by the shop)
+                                    </>
+                                ) : (
+                                    'Redemption value follows your shop’s loyalty policy.'
+                                )}
+                            </p>
+                        </>
+                    )}
+                </div>
 
                 <form onSubmit={handleSubmit}>
                     <div className="input-group" style={{ textAlign: 'left' }}>
