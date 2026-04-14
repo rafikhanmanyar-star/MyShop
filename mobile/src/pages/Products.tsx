@@ -84,7 +84,7 @@ export default function Products() {
                 brandIds: filters.brandIds,
                 minPrice: filters.minPrice,
                 maxPrice: filters.maxPrice,
-                availability: filters.availability,
+                availability: filters.availability || undefined,
                 sortBy: effectiveSortBy,
                 search: searchTerm,
                 showUnavailable: showUnavailable ? 'true' : undefined,
@@ -232,6 +232,10 @@ export default function Products() {
             const s = new Set(filters.categoryIds);
             list = list.filter((p: any) => p.category_id && s.has(String(p.category_id)));
         }
+        if (filters.subcategoryIds?.length) {
+            const s = new Set(filters.subcategoryIds);
+            list = list.filter((p: any) => p.subcategory_id && s.has(String(p.subcategory_id)));
+        }
         if (filters.brandIds?.length) {
             const s = new Set(filters.brandIds);
             list = list.filter((p: any) => p.brand_id && s.has(String(p.brand_id)));
@@ -247,6 +251,13 @@ export default function Products() {
         if (filters.filterDeals) list = list.filter((p: any) => p.is_on_sale);
         if (filters.filterInStock) {
             list = list.filter((p: any) => Number(p.stock ?? p.available_stock) > 0);
+        }
+        if (filters.availability === 'out_of_stock') {
+            list = list.filter(
+                (p: any) => Number(p.stock ?? p.available_stock) <= 0 && !p.is_pre_order
+            );
+        } else if (filters.availability === 'pre_order') {
+            list = list.filter((p: any) => p.is_pre_order);
         }
         if (filters.filterPopular) {
             list = list.filter(
@@ -307,17 +318,37 @@ export default function Products() {
         }, 300);
     };
 
-    const applyFilters = (newFilters: any) => {
+    const applyFilters = (newFilters: Record<string, unknown>) => {
         setSearchParams((prev) => {
-            const keysToDelete = ['categoryIds[]', 'subcategoryIds[]', 'brandIds[]', 'category'];
+            const keysToDelete = [
+                'categoryIds[]',
+                'subcategoryIds[]',
+                'brandIds[]',
+                'category',
+                'browse',
+                'minPrice',
+                'maxPrice',
+                'sortBy',
+                'availability',
+                'onSale',
+                'filterDeals',
+                'filterInStock',
+                'filterPopular',
+                'filterLowPrice',
+                'lowPriceMax',
+            ];
             keysToDelete.forEach((k) => prev.delete(k));
-            Object.entries(newFilters).forEach(([key, value]) => {
+
+            const entries = Object.entries(newFilters).filter(([k]) => k !== 'search');
+            entries.forEach(([key, value]) => {
                 if (Array.isArray(value)) {
-                    value.forEach((v) => prev.append(`${key}[]`, v));
-                } else if (value) {
-                    prev.set(key, value.toString());
-                } else {
-                    prev.delete(key);
+                    value.forEach((v) => prev.append(`${key}[]`, String(v)));
+                } else if (value !== undefined && value !== null && value !== '') {
+                    if (typeof value === 'boolean') {
+                        if (value) prev.set(key, 'true');
+                    } else {
+                        prev.set(key, String(value));
+                    }
                 }
             });
             return prev;
@@ -441,12 +472,44 @@ export default function Products() {
     const filterPanelFilters = {
         ...filters,
         sortBy: effectiveSortBy,
+        onSale: filters.filterDeals,
+    };
+
+    const activeFilterCount = useMemo(() => {
+        let n = 0;
+        n += filters.categoryIds.length;
+        n += filters.subcategoryIds.length;
+        n += filters.brandIds.length;
+        if (filters.minPrice || filters.maxPrice) n += 1;
+        if (filters.filterDeals) n += 1;
+        if (filters.filterInStock) n += 1;
+        if (filters.filterPopular) n += 1;
+        if (filters.filterLowPrice) n += 1;
+        if (filters.availability) n += 1;
+        const sortIsDefault = filters.sortBy === 'newest' || !searchParams.get('sortBy');
+        if (!sortIsDefault && !browse) n += 1;
+        return n;
+    }, [filters, browse, searchParams]);
+
+    const sortChipLabel = (sort: string): string => {
+        const map: Record<string, string> = {
+            price_low_high: 'Price ↑',
+            price_high_low: 'Price ↓',
+            newest: 'Newest',
+            popularity: 'Popular',
+            best_selling: 'Best selling',
+            top_rated: 'Top rated',
+            a_z: 'A–Z',
+            z_a: 'Z–A',
+        };
+        return map[sort] || sort;
     };
 
     const selectedCategoryId = filters.categoryIds[0] ?? null;
     const navSelected = (id: string) => {
         if (id === 'all') return !browse && !selectedCategoryId;
-        if (id === 'popular') return browse === 'popular' && !selectedCategoryId;
+        if (id === 'popular')
+            return (browse === 'popular' || filters.sortBy === 'popularity') && !selectedCategoryId;
         if (id === 'new') return browse === 'new' && !selectedCategoryId;
         return selectedCategoryId === id;
     };
@@ -454,27 +517,52 @@ export default function Products() {
     return (
         <div className="page page--browse fade-in">
             <div className="browse-sticky">
-                <div className="search-bar">
-                    <svg
-                        className="search-icon"
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
+                <div className="browse-search-row">
+                    <button
+                        type="button"
+                        className={`browse-filter-trigger ${activeFilterCount > 0 ? 'active' : ''}`}
+                        onClick={() => setIsFilterOpen(true)}
+                        aria-expanded={isFilterOpen ? 'true' : 'false'}
+                        aria-label="Open filters"
                     >
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="m21 21-4.3-4.3" />
-                    </svg>
-                    <input
-                        type="search"
-                        placeholder="Search products..."
-                        value={searchTerm}
-                        onChange={(e) => handleSearchChange(e.target.value)}
-                        autoComplete="off"
-                    />
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="22"
+                            height="22"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            aria-hidden
+                        >
+                            <line x1="4" y1="6" x2="20" y2="6" />
+                            <line x1="4" y1="12" x2="20" y2="12" />
+                            <line x1="4" y1="18" x2="14" y2="18" />
+                        </svg>
+                        <span>Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
+                    </button>
+                    <div className="search-bar search-bar--browse">
+                        <svg
+                            className="search-icon"
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                        >
+                            <circle cx="11" cy="11" r="8" />
+                            <path d="m21 21-4.3-4.3" />
+                        </svg>
+                        <input
+                            type="search"
+                            placeholder="Search products..."
+                            value={searchTerm}
+                            onChange={(e) => handleSearchChange(e.target.value)}
+                            autoComplete="off"
+                        />
+                    </div>
                 </div>
 
                 <div className="filter-chips-row" role="toolbar" aria-label="Quick filters">
@@ -574,52 +662,10 @@ export default function Products() {
                     >
                         Show unavailable items
                     </button>
-                    <button
-                        type="button"
-                        className={`filter-btn ${filters.categoryIds.length > 0 || filters.brandIds.length > 0 || filters.minPrice || filters.maxPrice || filters.onSale ? 'active' : ''}`}
-                        onClick={() => setIsFilterOpen(true)}
-                    >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                        >
-                            <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
-                        </svg>
-                        Filters
-                    </button>
-                    <select
-                        className="sort-btn"
-                        value={filters.sortBy}
-                        onChange={(e) => {
-                            setSearchParams((prev) => {
-                                prev.set('sortBy', e.target.value);
-                                prev.delete('browse');
-                                return prev;
-                            });
-                        }}
-                    >
-                        <option value="newest">Newest First</option>
-                        <option value="popularity">Most Popular</option>
-                        <option value="price_low_high">Price: Low to High</option>
-                        <option value="price_high_low">Price: High to Low</option>
-                        <option value="top_rated">Highest Rated</option>
-                        <option value="best_selling">Best Selling</option>
-                        <option value="a_z">A-Z</option>
-                        <option value="z_a">Z-A</option>
-                    </select>
                 </div>
             </div>
 
-            {(filters.categoryIds.length > 0 ||
-                filters.brandIds.length > 0 ||
-                filters.minPrice ||
-                filters.maxPrice ||
-                filters.onSale) && (
+            {activeFilterCount > 0 && (
                 <div className="active-filters">
                     {filters.categoryIds.map((id) => {
                         const cat = categories.find((c) => c.id === id);
@@ -646,6 +692,19 @@ export default function Products() {
                             )
                         );
                     })}
+                    {filters.subcategoryIds.map((id: string) => {
+                        const sub = categories.find((c) => c.id === id);
+                        return (
+                            sub && (
+                                <div key={`sub-${id}`} className="filter-chip">
+                                    {sub.name}
+                                    <button type="button" onClick={() => removeFilter('subcategoryIds[]', id)}>
+                                        ×
+                                    </button>
+                                </div>
+                            )
+                        );
+                    })}
                     {filters.brandIds.map((id) => {
                         const brand = brands.find((b) => b.id === id);
                         return (
@@ -661,8 +720,8 @@ export default function Products() {
                     })}
                     {(filters.minPrice || filters.maxPrice) && (
                         <div className="filter-chip">
-                            {filters.minPrice ? `> Rs.${filters.minPrice}` : ''}{' '}
-                            {filters.maxPrice ? `< Rs.${filters.maxPrice}` : ''}
+                            {filters.minPrice ? `≥ Rs.${filters.minPrice}` : ''}{' '}
+                            {filters.maxPrice ? `≤ Rs.${filters.maxPrice}` : ''}
                             <button
                                 type="button"
                                 onClick={() => {
@@ -674,10 +733,70 @@ export default function Products() {
                             </button>
                         </div>
                     )}
-                    {filters.onSale && (
+                    {filters.filterInStock && (
                         <div className="filter-chip">
-                            On Sale
-                            <button type="button" onClick={() => removeFilter('onSale')}>
+                            In stock
+                            <button type="button" onClick={() => removeFilter('filterInStock')}>
+                                ×
+                            </button>
+                        </div>
+                    )}
+                    {filters.availability === 'out_of_stock' && (
+                        <div className="filter-chip">
+                            Out of stock
+                            <button type="button" onClick={() => removeFilter('availability')}>
+                                ×
+                            </button>
+                        </div>
+                    )}
+                    {filters.availability === 'pre_order' && (
+                        <div className="filter-chip">
+                            Pre-order
+                            <button type="button" onClick={() => removeFilter('availability')}>
+                                ×
+                            </button>
+                        </div>
+                    )}
+                    {filters.filterPopular && (
+                        <div className="filter-chip">
+                            Popular
+                            <button type="button" onClick={() => removeFilter('filterPopular')}>
+                                ×
+                            </button>
+                        </div>
+                    )}
+                    {filters.filterLowPrice && (
+                        <div className="filter-chip">
+                            Low price (≤ Rs.{filters.lowPriceMax || DEFAULT_LOW_PRICE_MAX})
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    removeFilter('filterLowPrice');
+                                    removeFilter('lowPriceMax');
+                                }}
+                            >
+                                ×
+                            </button>
+                        </div>
+                    )}
+                    {filters.filterDeals && (
+                        <div className="filter-chip">
+                            Deals
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    removeFilter('onSale');
+                                    removeFilter('filterDeals');
+                                }}
+                            >
+                                ×
+                            </button>
+                        </div>
+                    )}
+                    {!browse && filters.sortBy && filters.sortBy !== 'newest' && (
+                        <div className="filter-chip">
+                            {sortChipLabel(filters.sortBy)}
+                            <button type="button" onClick={() => removeFilter('sortBy')}>
                                 ×
                             </button>
                         </div>

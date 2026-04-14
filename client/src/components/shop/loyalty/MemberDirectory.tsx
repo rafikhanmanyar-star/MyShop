@@ -509,7 +509,7 @@ const MemberDirectory: React.FC = () => {
                                 value={newPw}
                                 onChange={e => setNewPw(e.target.value)}
                                 className="w-full px-3 py-2 rounded-xl border border-border dark:border-slate-600 bg-background dark:bg-slate-800/80 text-foreground text-sm focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none"
-                                placeholder="At least 6 characters"
+                                placeholder="4 characters (letters or digits)"
                             />
                         </div>
                         <div>
@@ -536,8 +536,8 @@ const MemberDirectory: React.FC = () => {
                             <button
                                 type="button"
                                 onClick={async () => {
-                                    if (newPw.length < 6) {
-                                        alert('Password must be at least 6 characters.');
+                                    if (newPw.length !== 4 || !/^[a-zA-Z0-9]+$/.test(newPw)) {
+                                        alert('Password must be exactly 4 letters or digits.');
                                         return;
                                     }
                                     if (newPw !== confirmPw) {

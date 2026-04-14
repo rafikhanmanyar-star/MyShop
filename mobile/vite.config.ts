@@ -26,8 +26,8 @@ export default defineConfig({
         'icons/apple-touch-icon.png',
       ],
       manifest: {
-        name: 'MyShop — Order & Deliver',
-        short_name: 'MyShop',
+        name: 'oBo stores',
+        short_name: 'oBo stores',
         description: 'Order from your favorite shop — browse products, add to cart, track deliveries and manage budgets!',
         theme_color: '#4F46E5',
         background_color: '#F8FAFC',

@@ -77,9 +77,33 @@ function MobileOrdersPageContent() {
     const [paymentModal, setPaymentModal] = useState<{ orderId: string; orderNumber: string; grandTotal: number } | null>(null);
     const [selectedBankAccount, setSelectedBankAccount] = useState('');
     const [paymentLoading, setPaymentLoading] = useState(false);
+    const [passwordResetRequests, setPasswordResetRequests] = useState<
+        { id: string; phone_number: string; status: string; created_at: string }[]
+    >([]);
+    const [passwordResetActionId, setPasswordResetActionId] = useState<string | null>(null);
 
     useEffect(() => {
         shopApi.getBankAccounts().then(setBankAccounts).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        const load = () => {
+            mobileOrdersApi
+                .getPasswordResetRequests()
+                .then((rows) => {
+                    if (!cancelled) setPasswordResetRequests(Array.isArray(rows) ? rows : []);
+                })
+                .catch(() => {
+                    if (!cancelled) setPasswordResetRequests([]);
+                });
+        };
+        load();
+        const interval = window.setInterval(load, 45_000);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
     }, []);
 
     useEffect(() => {
@@ -272,6 +296,48 @@ function MobileOrdersPageContent() {
 
             {/* Content: list + bill — scrollbars only when content overflows */}
             <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden px-4 sm:px-6 lg:px-8 py-4">
+                {passwordResetRequests.length > 0 && (
+                    <div className="mb-4 rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/95 dark:bg-amber-950/40 px-4 py-3 shrink-0">
+                        <p className="text-sm font-bold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
+                            <Bell className="w-4 h-4 shrink-0" />
+                            Password reset requests (mobile app)
+                        </p>
+                        <ul className="space-y-2">
+                            {passwordResetRequests.map((r) => (
+                                <li
+                                    key={r.id}
+                                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-amber-950 dark:text-amber-50"
+                                >
+                                    <span>
+                                        Request from{' '}
+                                        <span className="font-mono font-semibold">{r.phone_number}</span>
+                                    </span>
+                                    <button
+                                        type="button"
+                                        disabled={passwordResetActionId === r.id}
+                                        onClick={async () => {
+                                            setPasswordResetActionId(r.id);
+                                            try {
+                                                const res = await mobileOrdersApi.completePasswordResetRequest(r.id);
+                                                alert(
+                                                    `Password reset completed.\nNew password: ${res.newPassword}\n\nCustomer was notified (WhatsApp hook if configured).`
+                                                );
+                                                setPasswordResetRequests((prev) => prev.filter((x) => x.id !== r.id));
+                                            } catch (err: any) {
+                                                alert(err?.error || err?.message || 'Reset failed');
+                                            } finally {
+                                                setPasswordResetActionId(null);
+                                            }
+                                        }}
+                                        className="shrink-0 px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold disabled:opacity-50"
+                                    >
+                                        {passwordResetActionId === r.id ? 'Working…' : 'Reset password'}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
                 <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6">
                 {/* Orders List */}
                 <div className="flex min-h-0 min-w-0 flex-[1.15] flex-col lg:max-w-[min(100%,52%)]">

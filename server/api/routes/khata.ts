@@ -101,7 +101,8 @@ router.post('/receive-payment', checkRole(['admin', 'pos_cashier', 'accountant']
 
 router.get('/customers', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
-    const customers = await getKhataService().listCustomers(req.tenantId);
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    const customers = await getKhataService().listCustomers(req.tenantId, q ? { q } : undefined);
     res.json(customers);
   } catch (error: any) {
     res.status(500).json({ error: error.message });

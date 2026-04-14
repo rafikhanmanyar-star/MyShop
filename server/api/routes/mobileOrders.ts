@@ -2,6 +2,7 @@ import express from 'express';
 import { getDatabaseService } from '../../services/databaseService.js';
 import { getMobileOrderService } from '../../services/mobileOrderService.js';
 import { getMobileCustomerService } from '../../services/mobileCustomerService.js';
+import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
 
 const router = express.Router();
@@ -256,6 +257,25 @@ router.put('/products/:id/mobile', checkRole(['admin']), async (req: any, res) =
         res.json({ success: true, message: 'Product mobile settings updated' });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// ─── Password reset queue (mobile → POS) — before /:id ───────────────
+router.get('/password-reset-requests', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const rows = await getCustomerIdentityService().listPendingPasswordResets(req.tenantId);
+        res.json(rows);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/password-reset-requests/:id/complete', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const result = await getCustomerIdentityService().completePasswordResetFromPOS(req.tenantId, req.params.id);
+        res.json({ success: true, ...result });
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
     }
 });
 

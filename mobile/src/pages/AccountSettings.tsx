@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { customerApi } from '../api';
+import { authApi, customerApi } from '../api';
 
 interface Profile {
     id: string;
@@ -27,6 +27,10 @@ export default function AccountSettings() {
     const [addressLine2, setAddressLine2] = useState('');
     const [city, setCity] = useState('');
     const [postalCode, setPostalCode] = useState('');
+    const [oldPassword, setOldPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmNewPassword, setConfirmNewPassword] = useState('');
+    const [pwSaving, setPwSaving] = useState(false);
 
     useEffect(() => {
         if (!state.isLoggedIn || !state.customerId) {
@@ -68,6 +72,30 @@ export default function AccountSettings() {
             showToast(err.message || 'Failed to update profile');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleChangePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newPassword.length !== 4 || !/^[a-zA-Z0-9]+$/.test(newPassword)) {
+            showToast('New password must be exactly 4 letters or digits');
+            return;
+        }
+        if (newPassword !== confirmNewPassword) {
+            showToast('New passwords do not match');
+            return;
+        }
+        setPwSaving(true);
+        try {
+            await authApi.changePassword(oldPassword, newPassword);
+            setOldPassword('');
+            setNewPassword('');
+            setConfirmNewPassword('');
+            showToast('Password updated');
+        } catch (err: any) {
+            showToast(err.message || 'Could not change password');
+        } finally {
+            setPwSaving(false);
         }
     };
 
@@ -232,6 +260,49 @@ export default function AccountSettings() {
                         style={{ marginTop: 24, padding: 16, fontSize: 16 }}
                     >
                         {saving ? <span className="spinner" style={{ width: 20, height: 20 }} /> : 'Save changes'}
+                    </button>
+                </form>
+
+                <form onSubmit={handleChangePassword} style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border-light)' }}>
+                    <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>Change password</h2>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                        Use exactly 4 letters or digits (same as login).
+                    </p>
+                    <div className="input-group" style={{ textAlign: 'left' }}>
+                        <label>Current password</label>
+                        <input
+                            className="input"
+                            type="password"
+                            autoComplete="current-password"
+                            value={oldPassword}
+                            onChange={(e) => setOldPassword(e.target.value)}
+                        />
+                    </div>
+                    <div className="input-group" style={{ textAlign: 'left' }}>
+                        <label>New password</label>
+                        <input
+                            className="input"
+                            type="password"
+                            autoComplete="new-password"
+                            maxLength={4}
+                            placeholder="4 characters"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                        />
+                    </div>
+                    <div className="input-group" style={{ textAlign: 'left' }}>
+                        <label>Confirm new password</label>
+                        <input
+                            className="input"
+                            type="password"
+                            autoComplete="new-password"
+                            maxLength={4}
+                            value={confirmNewPassword}
+                            onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        />
+                    </div>
+                    <button type="submit" className="btn btn-secondary btn-full" disabled={pwSaving} style={{ marginTop: 12, padding: 14 }}>
+                        {pwSaving ? <span className="spinner" style={{ width: 18, height: 18 }} /> : 'Update password'}
                     </button>
                 </form>
             </div>

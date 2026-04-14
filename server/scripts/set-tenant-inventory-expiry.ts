@@ -1,19 +1,25 @@
 /**
- * Set expiry_date on every inventory_batches row for one tenant (e.g. OBO Stores).
+ * Set expiry_date on every inventory_batches row for one tenant. Overwrites any
+ * existing value (including NULL) for all batch rows — there is no filter on the
+ * previous expiry_date.
+ *
+ * Default tenant (Rafi / oBo): tenant_1771421546228_u8adklhuj — used when you pass
+ * no --tenant-id, TENANT_ID, or TENANT_NAME. Change DEFAULT_TENANT_ID for another shop.
  *
  * Usage (from server/):
+ *   npx tsx scripts/set-tenant-inventory-expiry.ts
  *   npx tsx scripts/set-tenant-inventory-expiry.ts --tenant-id=<uuid>
  *   npx tsx scripts/set-tenant-inventory-expiry.ts --tenant-id <uuid>
  *   TENANT_ID=<uuid> npx tsx scripts/set-tenant-inventory-expiry.ts
  *   npx tsx scripts/set-tenant-inventory-expiry.ts --tenant-name="obo"
- *   DRY_RUN=1 npx tsx scripts/set-tenant-inventory-expiry.ts --tenant-id=<uuid>
+ *   DRY_RUN=1 npx tsx scripts/set-tenant-inventory-expiry.ts
  *   npx tsx scripts/set-tenant-inventory-expiry.ts --list-tenants
  *
  * Env:
  *   DATABASE_URL — required (same as API)
  *   TENANT_ID — target tenant (if not passed on CLI)
  *   TENANT_NAME — partial case-insensitive match on tenants.name (single match required)
- *   EXPIRY_DATE — default 2028-01-01
+ *   EXPIRY_DATE — default 2028-01-01 (US date 1/1/2028)
  *   DRY_RUN=1 — print counts only, no updates
  */
 
@@ -24,6 +30,18 @@ import { getDatabaseService } from '../services/databaseService.js';
 dotenv.config();
 
 const DEFAULT_EXPIRY = '2028-01-01';
+
+/** Default tenant when no --tenant-id / TENANT_ID / TENANT_NAME (Rafi oBo). */
+const DEFAULT_TENANT_ID = 'tenant_1771421546228_u8adklhuj';
+
+/** Accept full id or shorthand `1771421546228_u8adklhuj` (prepends `tenant_`). */
+function normalizeTenantId(raw: string): string {
+  const id = raw.trim();
+  if (!id) return id;
+  if (id.startsWith('tenant_')) return id;
+  if (/^\d+_[a-z0-9]+$/i.test(id)) return `tenant_${id}`;
+  return id;
+}
 
 function takeOptionalValue(argv: string[], i: number, fromEquals: string): { value: string; nextI: number } {
   let v = fromEquals.trim();
@@ -80,7 +98,7 @@ async function resolveTenantIdPg(
   tenantId: string | undefined,
   tenantName: string | undefined
 ): Promise<string> {
-  if (tenantId) return tenantId;
+  if (tenantId) return normalizeTenantId(tenantId);
 
   if (!tenantName) {
     throw new Error(
@@ -106,10 +124,35 @@ async function main() {
   const dryRun = process.env.DRY_RUN === '1' || process.env.DRY_RUN === 'true';
   const { tenantId: argTenantId, tenantName, expiryDate, listTenants } = parseArgs(process.argv.slice(2));
 
+  const explicitTenantId =
+    argTenantId?.trim() ||
+    process.env.TENANT_ID?.trim() ||
+    (!tenantName && !listTenants ? DEFAULT_TENANT_ID : undefined);
+
   const db = getDatabaseService();
 
+  const usedDefaultTenant =
+    !argTenantId?.trim() && !process.env.TENANT_ID?.trim() && !tenantName && !listTenants;
+
+  if (listTenants) {
+    if (db.getType() !== 'postgres') {
+      throw new Error('--list-tenants requires PostgreSQL.');
+    }
+    const poolLt = db.getPool();
+    if (!poolLt) throw new Error('PostgreSQL pool not available');
+    const r = await poolLt.query<{ id: string; name: string; company_name: string | null }>(
+      `SELECT id, name, company_name FROM tenants ORDER BY name`
+    );
+    console.log('id\tname\tcompany_name');
+    for (const row of r.rows) {
+      console.log(`${row.id}\t${row.name}\t${row.company_name ?? ''}`);
+    }
+    await db.close();
+    return;
+  }
+
   if (db.getType() === 'sqlite') {
-    const tid = argTenantId || process.env.TENANT_ID?.trim();
+    const tid = explicitTenantId ? normalizeTenantId(explicitTenantId) : undefined;
     if (!tid) {
       throw new Error('SQLite: set TENANT_ID or --tenant-id=<id> (name lookup is not supported).');
     }
@@ -119,6 +162,7 @@ async function main() {
       [tid]
     );
     const total = Number((cntRows[0] as { c?: number })?.c ?? 0);
+    if (usedDefaultTenant) console.log(`Using default tenant: ${DEFAULT_TENANT_ID}`);
     console.log(`SQLite: tenant ${tid} — ${total} inventory_batches row(s) → ${expiryDate} (${dryRun ? 'DRY RUN' : 'APPLY'})`);
     if (total === 0 || dryRun) {
       if (dryRun && total > 0) console.log('DRY_RUN set — no UPDATE executed.');
@@ -139,19 +183,7 @@ async function main() {
   const pool = db.getPool();
   if (!pool) throw new Error('PostgreSQL pool not available');
 
-  if (listTenants) {
-    const r = await pool.query<{ id: string; name: string; company_name: string | null }>(
-      `SELECT id, name, company_name FROM tenants ORDER BY name`
-    );
-    console.log('id\tname\tcompany_name');
-    for (const row of r.rows) {
-      console.log(`${row.id}\t${row.name}\t${row.company_name ?? ''}`);
-    }
-    await db.close();
-    return;
-  }
-
-  const resolvedId = await resolveTenantIdPg(pool, argTenantId, tenantName);
+  const resolvedId = await resolveTenantIdPg(pool, explicitTenantId, tenantName);
 
   const client = await pool.connect();
   try {
@@ -163,8 +195,9 @@ async function main() {
       [resolvedId]
     );
     const n = parseInt(countRes.rows[0]?.c ?? '0', 10) || 0;
+    if (usedDefaultTenant) console.log(`Using default tenant: ${DEFAULT_TENANT_ID}`);
     console.log(
-      `tenant ${resolvedId}: ${n} inventory_batches row(s) → ${expiryDate} (${dryRun ? 'DRY RUN' : 'APPLY'})`
+      `tenant ${resolvedId}: ${n} inventory_batches row(s) → ${expiryDate} (all batch rows, any prior expiry or NULL) (${dryRun ? 'DRY RUN' : 'APPLY'})`
     );
 
     if (dryRun || n === 0) {

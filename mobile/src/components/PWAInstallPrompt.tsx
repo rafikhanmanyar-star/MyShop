@@ -139,7 +139,7 @@ const PWAInstallPrompt: React.FC = () => {
                                 margin: '0 auto 16px', display: 'flex', alignItems: 'center',
                                 justifyContent: 'center', fontSize: 28,
                             }}>🛒</div>
-                            <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Install MyShop</h3>
+                            <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Install oBo stores</h3>
                             <p style={{ fontSize: 14, color: '#64748B' }}>Add to your home screen for the best experience</p>
                             <p style={{ fontSize: 12, color: '#94A3B8', marginTop: 8, lineHeight: 1.45 }}>
                                 Use <strong style={{ color: '#475569' }}>Safari</strong> — “Add to Home Screen” is not available inside Instagram, Facebook, or some other in-app browsers.
@@ -242,7 +242,7 @@ const PWAInstallPrompt: React.FC = () => {
                             fontSize: 22, flexShrink: 0,
                         }}>🛒</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Install MyShop App</p>
+                            <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Install oBo stores</p>
                             <p style={{ fontSize: 11, color: '#94A3B8' }}>
                                 {inAppBrowser ? 'Open in Safari, then add to Home Screen' : 'Add to home screen for quick access'}
                             </p>
@@ -292,7 +292,7 @@ const PWAInstallPrompt: React.FC = () => {
                 fontSize: 22, flexShrink: 0,
             }}>🛒</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Install MyShop App</p>
+                <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Install oBo stores</p>
                 <p style={{ fontSize: 11, color: '#94A3B8' }}>Fast access • Works offline • No app store needed</p>
             </div>
             <button

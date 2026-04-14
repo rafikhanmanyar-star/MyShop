@@ -97,6 +97,17 @@ export const mobileOrdersApi = {
             newPassword,
         }),
 
+    getPasswordResetRequests: () =>
+        apiClient.get<{ id: string; phone_number: string; status: string; created_at: string }[]>(
+            '/shop/mobile-orders/password-reset-requests'
+        ),
+
+    completePasswordResetRequest: (requestId: string) =>
+        apiClient.post<{ success: boolean; newPassword: string; phoneE164: string }>(
+            `/shop/mobile-orders/password-reset-requests/${encodeURIComponent(requestId)}/complete`,
+            {}
+        ),
+
     // Settings
     getSettings: () =>
         apiClient.get<MobileOrderingSettings>('/shop/mobile-orders/settings'),

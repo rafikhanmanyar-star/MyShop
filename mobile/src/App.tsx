@@ -7,6 +7,7 @@ import Products from './pages/Products';
 import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
 import Checkout from './pages/Checkout';
 import OrderConfirm from './pages/OrderConfirm';
 import Orders from './pages/Orders';
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="offers/:id" element={<OfferDetail />} />
           <Route path="cart" element={<Cart />} />
           <Route path="login" element={<Login />} />
+          <Route path="forgot-password" element={<ForgotPassword />} />
           <Route path="checkout" element={<Checkout />} />
           <Route path="order-confirmed/:orderId" element={<OrderConfirm />} />
           <Route path="orders" element={<Orders />} />

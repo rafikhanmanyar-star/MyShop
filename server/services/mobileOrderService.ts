@@ -157,7 +157,9 @@ export class MobileOrderService {
         ), 0)`;
 
         const showUnavailable = opts.showUnavailable === true;
-        if (!showUnavailable) {
+        /** Explicit "out of stock" filter must not be combined with the default hide-OOS rule (would yield no rows). */
+        const hideOosByDefault = !showUnavailable && opts.availability !== 'out_of_stock';
+        if (hideOosByDefault) {
             where += ` AND (${stockSubquery} > 0 OR COALESCE(p.is_pre_order, FALSE) = TRUE)`;
         }
 

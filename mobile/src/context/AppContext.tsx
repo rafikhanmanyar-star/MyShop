@@ -83,7 +83,17 @@ type Action =
     | { type: 'ADD_OFFER_BUNDLE'; item: OfferCartItem }
     | { type: 'UPDATE_OFFER_QTY'; offerId: string; quantity: number }
     | { type: 'REMOVE_OFFER_BUNDLE'; offerId: string }
-    | { type: 'LOGIN'; customerId: string; phone: string; name: string | null; token: string }
+    | {
+          type: 'LOGIN';
+          customerId: string;
+          phone: string;
+          name: string | null;
+          token: string;
+          loyaltyTotalPoints?: number;
+          loyaltyPointsValue?: number;
+          loyaltyRedemptionRatio?: number;
+          loyaltyLastUpdated?: string | null;
+      }
     | { type: 'LOGOUT' }
     | { type: 'UPDATE_CUSTOMER_PROFILE'; name: string | null }
     | { type: 'SHOW_TOAST'; message: string }
@@ -341,13 +351,30 @@ function reducer(state: AppState, action: Action): AppState {
             localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ id: action.customerId, phone: action.phone, name: action.name }));
             {
                 const cached = readLoyaltySession(action.customerId);
+                const fromApi =
+                    action.loyaltyTotalPoints != null
+                        ? {
+                              totalPoints: toFiniteNumber(action.loyaltyTotalPoints, 0),
+                              pointsValue: toFiniteNumber(action.loyaltyPointsValue, 0),
+                              lastUpdated: action.loyaltyLastUpdated ?? null,
+                              redemptionRatio:
+                                  action.loyaltyRedemptionRatio != null
+                                      ? toFiniteNumber(action.loyaltyRedemptionRatio, 0.01)
+                                      : null,
+                              fetchFailed: false,
+                          }
+                        : null;
+                const loyalty = fromApi ?? cached ?? emptyLoyalty;
+                if (fromApi) {
+                    writeLoyaltySession(action.customerId, loyalty);
+                }
                 return {
                     ...state,
                     isLoggedIn: true,
                     customerId: action.customerId,
                     customerPhone: action.phone,
                     customerName: action.name,
-                    loyalty: cached ?? emptyLoyalty,
+                    loyalty,
                 };
             }
 

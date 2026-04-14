@@ -240,7 +240,9 @@ export class SalesReturnService {
     );
 
     const notDelivered = order.status !== 'Delivered';
-    const notPaid = order.payment_status !== 'Paid';
+    // Row uses AS "paymentStatus" — not payment_status (which would be undefined).
+    const paymentStatus = order.paymentStatus ?? order.payment_status;
+    const notPaid = paymentStatus !== 'Paid';
 
     return {
       source: 'mobile' as const,

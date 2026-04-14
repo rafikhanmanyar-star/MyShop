@@ -17,15 +17,11 @@ export class ContactsApiRepository {
   }
 
   async searchContacts(query: string): Promise<Contact[]> {
-    const all = await this.findAll();
-    const q = query.toLowerCase().trim();
-    if (!q) return all;
-    return all.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.contactNo && c.contactNo.includes(query)) ||
-        (c.companyName && c.companyName.toLowerCase().includes(q))
-    );
+    const q = query.trim();
+    if (q.length >= 1) {
+      return this.findAll(q);
+    }
+    return this.findAll();
   }
 
   async createContact(data: { name: string; type?: ContactType; contactNo?: string; companyName?: string }): Promise<Contact> {
@@ -37,8 +33,9 @@ export class ContactsApiRepository {
     return toContact(created);
   }
 
-  async findAll(): Promise<Contact[]> {
-    const rows = await khataApi.getCustomers();
+  async findAll(searchQuery?: string): Promise<Contact[]> {
+    const q = searchQuery?.trim();
+    const rows = await khataApi.getCustomers(q ? { q } : undefined);
     return (Array.isArray(rows) ? rows : []).map(toContact);
   }
 

@@ -257,7 +257,10 @@ export const khataApi = {
     /** Settles this debit row (partial or full); omit for unallocated payment */
     applyToLedgerId?: string;
   }) => apiClient.post<{ id: string }>('/shop/khata/receive-payment', data),
-  getCustomers: () => apiClient.get<{ id: string; name: string; contact_no: string | null; company_name?: string | null }[]>('/shop/khata/customers'),
+  getCustomers: (params?: { q?: string }) =>
+    apiClient.get<{ id: string; name: string; contact_no: string | null; company_name?: string | null; address?: string | null }[]>(
+      `/shop/khata/customers${params?.q != null && String(params.q).trim() !== '' ? `?q=${encodeURIComponent(String(params.q).trim())}` : ''}`
+    ),
   createCustomer: (data: { name: string; contactNo?: string; companyName?: string }) =>
     apiClient.post<{ id: string; name: string; contact_no: string | null; company_name?: string | null }>('/shop/khata/customers', {
       name: data.name,

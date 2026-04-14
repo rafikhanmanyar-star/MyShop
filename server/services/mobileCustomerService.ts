@@ -1,18 +1,12 @@
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { getDatabaseService } from './databaseService.js';
+import { getCustomerIdentityService, assertMobilePasswordValid } from './customerIdentityService.js';
 
 const JWT_EXPIRY = '30d';
-const OTP_EXPIRY_MINUTES = 5;
-const OTP_LENGTH = 6;
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-}
-
-function generateOTP(): string {
-    return crypto.randomInt(100000, 999999).toString();
 }
 
 function slugify(text: string): string {
@@ -30,9 +24,13 @@ function slugify(text: string): string {
 
 export class MobileCustomerService {
     private db = getDatabaseService();
+    private identity = getCustomerIdentityService();
+
+    private phoneDigits(raw: string): string {
+        return String(raw || '').replace(/\D/g, '');
+    }
 
     // ─── Tenant / Shop Discovery ────────────────────────────────────────
-    // Resolve by branch slug first (QR at branch door), then by tenant slug (legacy).
     async resolveShopBySlug(slug: string): Promise<{ id: string; name: string; company_name: string; logo_url?: string; brand_color?: string; slug: string; branchId?: string } | null> {
         const { getShopService } = await import('./shopService.js');
         const branch = await getShopService().getBranchBySlug(slug);
@@ -75,7 +73,6 @@ export class MobileCustomerService {
         const tenant = tenants[0];
         if (tenant.slug) return tenant.slug;
 
-        // Auto-generate slug from company_name
         let baseSlug = slugify(tenant.company_name || tenant.name || 'shop');
         let slug = baseSlug;
         let counter = 1;
@@ -103,7 +100,6 @@ export class MobileCustomerService {
         brand_color?: string;
     }) {
         if (data.slug) {
-            // Validate slug format
             if (!/^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/.test(data.slug)) {
                 throw new Error('Invalid slug format. Use lowercase letters, numbers, and hyphens (3-50 chars).');
             }
@@ -127,15 +123,12 @@ export class MobileCustomerService {
         );
     }
 
-    // ─── Mobile Ordering Settings ───────────────────────────────────────
-
     async getMobileSettings(tenantId: string) {
         const rows = await this.db.query(
             'SELECT * FROM mobile_ordering_settings WHERE tenant_id = $1',
             [tenantId]
         );
         if (rows.length === 0) {
-            // Return defaults without inserting
             return {
                 tenant_id: tenantId,
                 is_enabled: false,
@@ -191,70 +184,115 @@ export class MobileCustomerService {
     // ─── Authentication ─────────────────────────────────────────────
 
     async register(tenantId: string, phone: string, name: string, addressLine1: string, passwordString: string) {
-        const existing = await this.db.query(
-            'SELECT id FROM mobile_customers WHERE tenant_id = $1 AND phone = $2',
-            [tenantId, phone]
+        const phoneE164 = this.identity.normalizeInputToE164(phone);
+        if (!phoneE164) {
+            throw new Error('Invalid phone number format.');
+        }
+        assertMobilePasswordValid(passwordString);
+
+        const wantDigits = this.phoneDigits(phoneE164);
+        const mcRows = await this.db.query(
+            `SELECT mc.id, c.phone_number FROM mobile_customers mc
+       INNER JOIN customers c ON c.id = mc.id AND c.tenant_id = mc.tenant_id
+       WHERE mc.tenant_id = $1`,
+            [tenantId]
         );
-        if (existing.length > 0) {
+        if ((mcRows as any[]).some((r) => this.phoneDigits(r.phone_number) === wantDigits)) {
             throw new Error('PHONE_ALREADY_REGISTERED');
         }
 
-        const customerId = generateId('mcust');
-        const hashedPassword = await bcrypt.hash(passwordString, 10);
+        let cust = await this.identity.findCustomerByTenantPhoneLoose(tenantId, phoneE164);
 
-        await this.db.execute(
-            `INSERT INTO mobile_customers (id, tenant_id, phone, name, address_line1, password, is_verified, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, TRUE, NOW())`,
-            [customerId, tenantId, phone, name, addressLine1, hashedPassword]
-        );
+        if (cust) {
+            await this.identity.setCustomerPasswordHash(cust.id, tenantId, passwordString);
+            await this.db.execute(
+                `UPDATE customers SET name = $1, address = $2, updated_at = NOW() WHERE id = $3 AND tenant_id = $4`,
+                [name, addressLine1, cust.id, tenantId]
+            );
+            await this.identity.ensureMobileExtensionRow(tenantId, cust.id, {
+                name,
+                addressLine1,
+            });
+            await this.db.execute(
+                `UPDATE mobile_customers SET phone = $1, name = $2, address_line1 = $3, updated_at = NOW()
+         WHERE id = $4 AND tenant_id = $5`,
+                [phoneE164, name, addressLine1, cust.id, tenantId]
+            );
+        } else {
+            const customerId = generateId('mcust');
+            const hashedPassword = await bcrypt.hash(passwordString, 10);
+            try {
+                await this.db.execute(
+                    `INSERT INTO customers (
+            id, tenant_id, name, phone_number, password, address, is_loyalty_member, created_from, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, TRUE, 'MOBILE', NOW())`,
+                    [customerId, tenantId, name, phoneE164, hashedPassword, addressLine1]
+                );
+            } catch (e: any) {
+                const msg = String(e?.message || e || '');
+                if (e?.code === '23505' || /unique|duplicate/i.test(msg)) {
+                    throw new Error('PHONE_ALREADY_REGISTERED');
+                }
+                throw e;
+            }
+            await this.db.execute(
+                `INSERT INTO mobile_customers (id, tenant_id, phone, name, address_line1, password, is_verified, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, TRUE, NOW())`,
+                [customerId, tenantId, phoneE164, name, addressLine1, hashedPassword]
+            );
+        }
 
-        // Auto-enroll in loyalty (contact + member), idempotent
         try {
             const { getShopService } = await import('./shopService.js');
             await getShopService().ensureLoyaltyMemberForMobileUser(tenantId, {
-                name,
-                phone,
+                phone: phoneE164,
+                name: name || 'Customer',
                 email: null,
             });
         } catch (_loyaltyErr) {
-            // Loyalty enrollment is best-effort; don't block registration
+            // best-effort
         }
 
         return this.login(tenantId, phone, passwordString);
     }
 
     async login(tenantId: string, phone: string, passwordString: string) {
-        const customers = await this.db.query(
-            `SELECT id, password, is_blocked, name
-       FROM mobile_customers
-       WHERE tenant_id = $1 AND phone = $2`,
-            [tenantId, phone]
-        );
-
-        if (customers.length === 0) {
-            throw new Error('Phone number not found. Please register first.');
+        const phoneE164 = this.identity.normalizeInputToE164(phone);
+        if (!phoneE164) {
+            throw new Error('Invalid phone number or password');
         }
 
-        const customer = customers[0];
+        const wantDigits = this.phoneDigits(phoneE164);
+        const rows = await this.db.query(
+            `SELECT mc.id, mc.is_blocked, mc.name, c.password AS cust_password, c.phone_number
+       FROM mobile_customers mc
+       INNER JOIN customers c ON c.id = mc.id AND c.tenant_id = mc.tenant_id
+       WHERE mc.tenant_id = $1`,
+            [tenantId]
+        );
+        const customer = (rows as any[]).find((r) => this.phoneDigits(r.phone_number) === wantDigits);
+        if (!customer) {
+            throw new Error('Invalid phone number or password');
+        }
 
         if (customer.is_blocked) {
             throw new Error('This account has been blocked. Contact the shop for assistance.');
         }
 
-        if (!customer.password) {
-            throw new Error('Please register again to set up a password.');
+        const pw = customer.cust_password;
+        if (!pw) {
+            throw new Error('Invalid phone number or password');
         }
 
-        const isValid = await bcrypt.compare(passwordString, customer.password);
+        const isValid = await bcrypt.compare(passwordString, pw);
         if (!isValid) {
-            throw new Error('Invalid password. Please try again.');
+            throw new Error('Invalid phone number or password');
         }
 
-        // Ensure loyalty directory + password reset from shop (idempotent)
         try {
             const { getShopService } = await import('./shopService.js');
             await getShopService().ensureLoyaltyMemberForMobileUser(tenantId, {
-                phone,
+                phone: phoneE164,
                 name: customer.name || 'Customer',
                 email: null,
             });
@@ -262,35 +300,66 @@ export class MobileCustomerService {
             // best-effort
         }
 
-        // Generate JWT
+        const tokenPhone = String(customer.phone_number || phoneE164);
+
         const token = jwt.sign(
             {
                 type: 'mobile_customer',
                 customerId: customer.id,
                 tenantId,
-                phone,
+                phone: tokenPhone,
             },
             process.env.JWT_SECRET!,
             { expiresIn: JWT_EXPIRY }
         );
 
+        let loyalty: { total_points?: number; points_value?: number; redemption_ratio?: number; last_updated?: string | null } = {};
+        try {
+            const { getShopService } = await import('./shopService.js');
+            loyalty = await getShopService().getLoyaltyPointsForMobileCustomer(tenantId, customer.id);
+        } catch {
+            loyalty = {};
+        }
+
         return {
             token,
             customerId: customer.id,
             tenantId,
-            phone,
+            phone: tokenPhone,
             name: customer.name || null,
+            loyalty_points: loyalty.total_points ?? 0,
+            loyalty_points_value: loyalty.points_value ?? 0,
+            loyalty_redemption_ratio: loyalty.redemption_ratio,
+            loyalty_last_updated: loyalty.last_updated ?? null,
         };
     }
 
-    // ─── Customer Profile ───────────────────────────────────────────────
+    async changePassword(tenantId: string, customerId: string, oldPassword: string, newPassword: string) {
+        assertMobilePasswordValid(newPassword);
+        const rows = await this.db.query(
+            `SELECT c.password FROM customers c
+       INNER JOIN mobile_customers mc ON mc.id = c.id AND mc.tenant_id = c.tenant_id
+       WHERE c.tenant_id = $1 AND c.id = $2`,
+            [tenantId, customerId]
+        );
+        if (!rows.length || !rows[0].password) {
+            throw new Error('Invalid phone number or password');
+        }
+        const ok = await bcrypt.compare(oldPassword, rows[0].password);
+        if (!ok) {
+            throw new Error('Invalid phone number or password');
+        }
+        await this.identity.setCustomerPasswordHash(customerId, tenantId, newPassword);
+        return { success: true };
+    }
 
     async getProfile(tenantId: string, customerId: string) {
         const rows = await this.db.query(
-            `SELECT id, phone, name, email, address_line1, address_line2,
-              city, postal_code, lat, lng, is_verified, created_at
-       FROM mobile_customers
-       WHERE tenant_id = $1 AND id = $2`,
+            `SELECT mc.id, c.phone_number AS phone, mc.name, mc.email, mc.address_line1, mc.address_line2,
+              mc.city, mc.postal_code, mc.lat, mc.lng, mc.is_verified, mc.created_at
+       FROM mobile_customers mc
+       INNER JOIN customers c ON c.id = mc.id AND c.tenant_id = mc.tenant_id
+       WHERE mc.tenant_id = $1 AND mc.id = $2`,
             [tenantId, customerId]
         );
         if (rows.length === 0) throw new Error('Customer not found');
@@ -325,45 +394,52 @@ export class MobileCustomerService {
                 tenantId, customerId,
             ]
         );
+        if (data.name !== undefined || data.address_line1 !== undefined) {
+            await this.db.execute(
+                `UPDATE customers SET name = COALESCE($1, name), address = COALESCE($2, address), updated_at = NOW()
+         WHERE id = $3 AND tenant_id = $4`,
+                [data.name ?? null, data.address_line1 ?? null, customerId, tenantId]
+            );
+        }
         return this.getProfile(tenantId, customerId);
     }
 
-    /** Set a new login password for a mobile customer (shop staff, in-person support). */
-    /** Accepts mobile_customers.id or contacts.id (loyalty member customer_id) when phones match. */
+    /** POS or in-person support: set mobile login password (unified customers.password). */
     async resetPasswordByShop(tenantId: string, customerId: string, newPassword: string) {
-        if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
-            throw new Error('Password must be at least 6 characters.');
-        }
+        assertMobilePasswordValid(newPassword);
+
         let rows = await this.db.query(
-            'SELECT id FROM mobile_customers WHERE tenant_id = $1 AND id = $2',
+            'SELECT c.id FROM customers c WHERE c.tenant_id = $1 AND c.id = $2',
             [tenantId, customerId]
         );
         if (rows.length === 0) {
             rows = await this.db.query(
-                `SELECT mc.id FROM mobile_customers mc
-         INNER JOIN contacts c ON c.tenant_id = mc.tenant_id AND c.contact_no = mc.phone
-         WHERE mc.tenant_id = $1 AND c.id = $2`,
+                `SELECT c.id FROM customers c
+         INNER JOIN contacts ct ON ct.id = c.pos_contact_id AND ct.tenant_id = c.tenant_id
+         WHERE c.tenant_id = $1 AND ct.id = $2`,
                 [tenantId, customerId]
             );
         }
         if (rows.length === 0) {
             rows = await this.db.query(
-                `SELECT mc.id FROM mobile_customers mc
-         INNER JOIN contacts c ON c.tenant_id = mc.tenant_id
-           AND regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
-           AND length(regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g')) > 0
-         WHERE mc.tenant_id = $1 AND c.id = $2`,
+                `SELECT c.id FROM customers c
+         INNER JOIN contacts ct ON ct.tenant_id = c.tenant_id
+         WHERE c.tenant_id = $1 AND ct.id = $2
+           AND regexp_replace(COALESCE(c.phone_number, ''), '[^0-9]', '', 'g')
+             = regexp_replace(COALESCE(ct.contact_no, ''), '[^0-9]', '', 'g')`,
                 [tenantId, customerId]
             );
         }
         if (rows.length === 0) {
             throw new Error('Customer not found.');
         }
-        const mobileCustomerId = rows[0].id;
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const cid = rows[0].id;
+        await this.identity.setCustomerPasswordHash(cid, tenantId, newPassword);
+
         await this.db.execute(
-            'UPDATE mobile_customers SET password = $1, updated_at = NOW() WHERE tenant_id = $2 AND id = $3',
-            [hashedPassword, tenantId, mobileCustomerId]
+            `UPDATE mobile_customers SET password = (SELECT password FROM customers WHERE id = $1 AND tenant_id = $2), updated_at = NOW()
+       WHERE id = $1 AND tenant_id = $2`,
+            [cid, tenantId]
         );
         return { success: true };
     }

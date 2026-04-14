@@ -34,3 +34,19 @@ export function parsePakistanMobile(raw: string):
   }
   return { ok: true, digits: n };
 }
+
+/** E.164 storage form for Pakistan mobile: +923XXXXXXXXX (from 12-digit 92… string). */
+export function pakistanMobileDigitsToE164(digits: string): string {
+  const d = (digits || '').replace(/\D/g, '');
+  if (!PK_MOBILE_92_DIGITS_REGEX.test(d)) {
+    throw new Error('Invalid Pakistan mobile digits');
+  }
+  return `+${d}`;
+}
+
+/** Parse flexible input to a single E.164 value for DB, or null. */
+export function normalizePakistanPhoneForStorage(raw: string): string | null {
+  const p = parsePakistanMobile(raw);
+  if (!p.ok) return null;
+  return pakistanMobileDigitsToE164(p.digits);
+}

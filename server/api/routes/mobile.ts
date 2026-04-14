@@ -7,6 +7,7 @@ import { getMobileCustomerService } from '../../services/mobileCustomerService.j
 import { getMobileOrderService } from '../../services/mobileOrderService.js';
 import { getOfferService } from '../../services/offerService.js';
 import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/mobileMiddleware.js';
+import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
 
 const router = express.Router();
 const db = getDatabaseService();
@@ -284,6 +285,10 @@ router.post('/auth/register', async (req: any, res) => {
         if (error.message === 'PHONE_ALREADY_REGISTERED') {
             return res.status(409).json({ error: 'This mobile number is already registered. Please login instead.' });
         }
+        const msg = String(error?.message || '');
+        if (msg.includes('Password must') || msg.includes('letters and digits')) {
+            return res.status(400).json({ error: msg });
+        }
         res.status(400).json({ error: error.message });
     }
 });
@@ -301,7 +306,55 @@ router.post('/auth/login', async (req: any, res) => {
         const result = await getMobileCustomerService().login(shop.id, phone, password);
         res.json(result);
     } catch (error: any) {
-        res.status(401).json({ error: error.message });
+        const msg = String(error?.message || '');
+        const generic = msg.includes('blocked') ? msg : 'Invalid phone number or password';
+        res.status(401).json({ error: generic });
+    }
+});
+
+router.post('/auth/forgot-password', async (req: any, res) => {
+    try {
+        const { phone, shopSlug } = req.body;
+        if (!phone || !shopSlug) {
+            return res.status(400).json({ error: 'Phone and shop are required' });
+        }
+        const shop = await getMobileCustomerService().resolveShopBySlug(shopSlug);
+        if (!shop) return res.status(404).json({ error: 'Shop not found' });
+        const e164 = getCustomerIdentityService().normalizeInputToE164(phone);
+        if (!e164) {
+            return res.status(400).json({ error: 'Invalid phone number' });
+        }
+        try {
+            await getCustomerIdentityService().requestPasswordReset(shop.id, e164);
+        } catch {
+            // Do not reveal whether the number is registered
+        }
+        res.json({
+            ok: true,
+            message: 'If an account exists for this number, the shop will receive a reset request.',
+        });
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.put('/auth/change-password', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { oldPassword, newPassword } = req.body || {};
+        if (oldPassword === undefined || newPassword === undefined) {
+            return res.status(400).json({ error: 'oldPassword and newPassword are required' });
+        }
+        await getMobileCustomerService().changePassword(
+            req.tenantId,
+            req.customerId,
+            String(oldPassword),
+            String(newPassword)
+        );
+        res.json({ ok: true });
+    } catch (error: any) {
+        const msg = String(error?.message || '');
+        const generic = msg.includes('blocked') ? msg : 'Invalid phone number or password';
+        res.status(400).json({ error: generic });
     }
 });
 

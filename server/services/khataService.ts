@@ -329,12 +329,36 @@ export class KhataService {
     };
   }
 
-  async listCustomers(tenantId: string): Promise<{ id: string; name: string; contact_no: string | null; company_name?: string | null }[]> {
+  async listCustomers(
+    tenantId: string,
+    options?: { q?: string }
+  ): Promise<{ id: string; name: string; contact_no: string | null; company_name?: string | null; address?: string | null }[]> {
+    const q = (options?.q || '').trim();
+    const params: any[] = [tenantId];
+    let searchClause = '';
+    if (q.length > 0) {
+      params.push(`%${q}%`);
+      const p = params.length;
+      searchClause = ` AND (
+        LOWER(name) LIKE LOWER($${p})
+        OR LOWER(COALESCE(contact_no, '')) LIKE LOWER($${p})
+        OR LOWER(COALESCE(company_name, '')) LIKE LOWER($${p})
+        OR LOWER(COALESCE(address, '')) LIKE LOWER($${p})
+      )`;
+    }
     const rows = await this.db.query(
-      `SELECT id, name, contact_no, company_name FROM contacts WHERE tenant_id = $1 AND type IN ('Customer', 'Client') ORDER BY name`,
-      [tenantId]
+      `SELECT id, name, contact_no, company_name, address FROM contacts
+       WHERE tenant_id = $1 AND type IN ('Customer', 'Client') ${searchClause}
+       ORDER BY name`,
+      params
     );
-    return rows.map((r: any) => ({ id: r.id, name: r.name, contact_no: r.contact_no, company_name: r.company_name }));
+    return rows.map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      contact_no: r.contact_no,
+      company_name: r.company_name,
+      address: r.address ?? null,
+    }));
   }
 
   async createCustomer(tenantId: string, data: { name: string; contact_no?: string; company_name?: string }): Promise<{ id: string; name: string; contact_no: string | null; company_name?: string | null }> {
@@ -346,6 +370,17 @@ export class KhataService {
       [id, tenantId, data.name, data.contact_no ?? null, data.company_name ?? null]
     );
     const r = rows[0];
+    try {
+      const { getCustomerIdentityService } = await import('./customerIdentityService.js');
+      await getCustomerIdentityService().upsertFromPosContact(tenantId, {
+        id: r.id,
+        name: r.name,
+        contact_no: r.contact_no,
+        address: null,
+      });
+    } catch (err) {
+      console.warn('[khata] customer identity upsert skipped:', err);
+    }
     return { id: r.id, name: r.name, contact_no: r.contact_no, company_name: r.company_name };
   }
 

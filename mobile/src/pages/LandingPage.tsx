@@ -89,7 +89,7 @@ export default function LandingPage() {
             {/* Header */}
             <div style={{ fontSize: 56, marginBottom: 12 }}>🛍️</div>
             <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 4, color: 'var(--text-primary)' }}>
-                MyShop Mobile
+                oBo stores
             </h1>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', maxWidth: 300, textAlign: 'center', marginBottom: 32, lineHeight: 1.5 }}>
                 Order from your favorite shop. Scan a QR code or select a shop below.
@@ -226,7 +226,7 @@ export default function LandingPage() {
 
             {/* Version */}
             <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 24, opacity: 0.8 }}>
-                MyShop Mobile v{__APP_VERSION__}
+                oBo stores v{__APP_VERSION__}
             </p>
         </div>
     );

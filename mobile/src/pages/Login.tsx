@@ -34,8 +34,8 @@ export default function Login() {
             return;
         }
         const phoneDigits = parsedPhone.digits;
-        if (!password || password.length < 4) {
-            showToast('Password must be at least 4 characters');
+        if (!password || password.length !== 4 || !/^[a-zA-Z0-9]+$/.test(password)) {
+            showToast('Password must be exactly 4 letters or digits');
             return;
         }
 
@@ -61,6 +61,10 @@ export default function Login() {
                 phone: result.phone,
                 name: result.name || null,
                 token: result.token,
+                loyaltyTotalPoints: result.loyalty_points,
+                loyaltyPointsValue: result.loyalty_points_value,
+                loyaltyRedemptionRatio: result.loyalty_redemption_ratio,
+                loyaltyLastUpdated: result.loyalty_last_updated ?? null,
             });
             navigate(`/${shopSlug}/${redirect || ''}`, { replace: true });
         } catch (err: any) {
@@ -179,11 +183,28 @@ export default function Login() {
                     <input
                         className="input"
                         type="password"
-                        placeholder="••••••••"
+                        inputMode="text"
+                        autoComplete="current-password"
+                        placeholder="4 characters"
+                        maxLength={4}
                         value={password}
                         onChange={e => setPassword(e.target.value)}
                     />
+                    <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+                        Exactly 4 characters (letters or digits).
+                    </p>
                 </div>
+
+                {mode === 'login' && shopSlug && (
+                    <div style={{ textAlign: 'left', marginTop: 12 }}>
+                        <Link
+                            to={`/${shopSlug}/forgot-password`}
+                            style={{ fontSize: 14, color: 'var(--primary)', fontWeight: 600 }}
+                        >
+                            Forgot password?
+                        </Link>
+                    </div>
+                )}
 
                 <button
                     className="btn btn-primary btn-full"

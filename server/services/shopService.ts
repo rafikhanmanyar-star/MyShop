@@ -4,7 +4,7 @@ import { notifyDailyReportUpdated } from './dailyReportNotify.js';
 import { insertSystemLog } from './systemLogService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
-import { parsePakistanMobile } from '../utils/pakistanMobile.js';
+import { parsePakistanMobile, pakistanMobileDigitsToE164 } from '../utils/pakistanMobile.js';
 import { deductInventoryFefo, insertReturnRestockBatch } from './inventoryBatchService.js';
 
 /** Strip absolute URLs (e.g. http://localhost:3000/uploads/...) to relative paths for DB storage. */
@@ -1435,7 +1435,7 @@ export class ShopService {
     if (!phoneParsed.ok) {
       throw new Error(`Invalid phone: ${phoneParsed.message}`);
     }
-    const phone = phoneParsed.digits;
+    const phone = pakistanMobileDigitsToE164(phoneParsed.digits);
 
     return this.db.transaction(async (client) => {
       let customerId = data.customerId;
@@ -1492,7 +1492,9 @@ export class ShopService {
     tenantId: string,
     data: { phone: string; name: string; email?: string | null }
   ): Promise<string | null> {
-    const phone = (data.phone || '').trim();
+    const { getCustomerIdentityService } = await import('./customerIdentityService.js');
+    const e164 = getCustomerIdentityService().normalizeInputToE164(data.phone || '');
+    const phone = (e164 || (data.phone || '').trim()).trim();
     if (!phone) return null;
 
     return this.db.transaction(async (client: any) => {
@@ -1624,7 +1626,10 @@ export class ShopService {
     last_updated: string | null;
   }> {
     const mcRows = await this.db.query(
-      `SELECT phone FROM mobile_customers WHERE tenant_id = $1 AND id = $2`,
+      `SELECT COALESCE(c.phone_number, mc.phone) AS phone
+       FROM mobile_customers mc
+       LEFT JOIN customers c ON c.id = mc.id AND c.tenant_id = mc.tenant_id
+       WHERE mc.tenant_id = $1 AND mc.id = $2`,
       [tenantId, mobileCustomerId]
     );
     if (!mcRows.length) {

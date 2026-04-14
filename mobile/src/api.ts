@@ -137,6 +137,16 @@ export const authApi = {
             method: 'POST',
             body: JSON.stringify({ phone, password, shopSlug }),
         }),
+    forgotPassword: (phone: string, shopSlug: string) =>
+        request(`${API_BASE}/auth/forgot-password`, {
+            method: 'POST',
+            body: JSON.stringify({ phone, shopSlug }),
+        }),
+    changePassword: (oldPassword: string, newPassword: string) =>
+        request(`${API_BASE}/auth/change-password`, {
+            method: 'PUT',
+            body: JSON.stringify({ oldPassword, newPassword }),
+        }),
 };
 
 // ─── Customer (authenticated) ────────────────────────

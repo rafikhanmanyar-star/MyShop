@@ -29,28 +29,34 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
     const contactsApi = new ContactsApiRepository();
 
     useEffect(() => {
-        if (isOpen) {
-            fetchContacts();
-            setShowRegisterForm(false);
-            setRegisterForm({ name: '', contactNo: '', companyName: '' });
-            setRegisterError(null);
-        }
-    }, [isOpen]);
-
-    const fetchContacts = async () => {
-        setLoading(true);
-        try {
-            const data = await contactsApi.findAll();
-            setContacts(data);
-        } catch (error) {
-            console.error('Failed to fetch contacts:', error);
-            if (isApiConnectivityFailure(error)) {
-                showAppToast(userMessageForApiError(error, 'Could not load customers from the server.'), 'error');
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
+        if (!isOpen) return;
+        setShowRegisterForm(false);
+        setRegisterForm({ name: '', contactNo: '', companyName: '' });
+        setRegisterError(null);
+        let cancelled = false;
+        const delay = searchQuery.trim() ? 300 : 0;
+        const t = window.setTimeout(() => {
+            void (async () => {
+                setLoading(true);
+                try {
+                    const q = searchQuery.trim();
+                    const data = await contactsApi.findAll(q || undefined);
+                    if (!cancelled) setContacts(data);
+                } catch (error) {
+                    console.error('Failed to fetch contacts:', error);
+                    if (!cancelled && isApiConnectivityFailure(error)) {
+                        showAppToast(userMessageForApiError(error, 'Could not load customers from the server.'), 'error');
+                    }
+                } finally {
+                    if (!cancelled) setLoading(false);
+                }
+            })();
+        }, delay);
+        return () => {
+            cancelled = true;
+            clearTimeout(t);
+        };
+    }, [isOpen, searchQuery]);
 
     const handleSelect = (contact: Contact) => {
         // Find if this contact is a loyalty member
@@ -105,10 +111,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
         }
     };
 
-    const filteredContacts = contacts.filter(c =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (c.contactNo && c.contactNo.includes(searchQuery))
-    );
+    const filteredContacts = contacts;
 
     return (
         <Modal
