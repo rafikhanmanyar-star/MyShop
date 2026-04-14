@@ -59,12 +59,6 @@ export default function BudgetDashboard() {
 
     const isCurrentMonth = selectedMonth === new Date().getMonth() + 1 && selectedYear === new Date().getFullYear();
 
-    const getProgressColor = (progress: number) => {
-        if (progress >= 100) return '#EF4444';
-        if (progress >= 80) return '#F59E0B';
-        return '#10B981';
-    };
-
     if (loading) return (
         <div className="page fade-in">
             <div className="skeleton" style={{ height: 48, borderRadius: 'var(--radius-lg)', marginBottom: 16 }} />

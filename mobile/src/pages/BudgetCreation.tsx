@@ -34,9 +34,9 @@ export default function BudgetCreation() {
     const [mode, setMode] = useState<CreationMode>(paramMode || 'quick');
     const [view, setView] = useState<'setup' | 'browse' | 'review'>(paramMode === 'manual' ? 'browse' : 'setup');
 
-    // Budget target
-    const [month, setMonth] = useState(paramMonth);
-    const [year, setYear] = useState(paramYear);
+    // Budget target (from query string; read-only for this flow)
+    const month = paramMonth;
+    const year = paramYear;
 
     // Browse state
     const [search, setSearch] = useState('');
