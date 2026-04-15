@@ -1,17 +1,22 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMobileOrders } from '../../context/MobileOrdersContext';
-import { mobileOrdersApi, MobileOrder } from '../../services/mobileOrdersApi';
+import { mobileOrdersApi, MobileOrder, PosRidersOverview } from '../../services/mobileOrdersApi';
 import { QRCodeSVG } from 'qrcode.react';
 import {
     Smartphone, RefreshCw, Package, Truck, Check, X, Clock,
     ChevronRight, WifiOff, Wifi, QrCode, Settings as SettingsIcon,
     Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
     Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
-    Banknote, Building2, Wallet, ExternalLink, Navigation,
+    Banknote, Building2, Wallet, ExternalLink,     Navigation, Users,
 } from 'lucide-react';
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
+import {
+    formatPasswordResetWhatsAppMessage,
+    openWhatsAppDesktopWithMessage,
+    buildWhatsAppWebSendUrl,
+} from '../../utils/whatsappManualSend';
 
 interface ShopBranchOption {
     id: string;
@@ -79,6 +84,12 @@ function formatRiderOperationalStatus(s: string | null | undefined): string {
     return map[u] || s;
 }
 
+/** Home delivery with a courier assignment — fulfillment steps are driven by the rider app. */
+function isRiderAssignedDelivery(order: Pick<MobileOrder, 'payment_method' | 'rider_id' | 'delivery_order_id'>): boolean {
+    if (order.payment_method === 'SelfCollection') return false;
+    return !!(order.rider_id || order.delivery_order_id);
+}
+
 const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Unpaid', 'Cancelled'];
 
 // ─── Main Page ────────────────────────────────────────────
@@ -107,10 +118,34 @@ function MobileOrdersPageContent() {
         { id: string; phone_number: string; status: string; created_at: string }[]
     >([]);
     const [passwordResetActionId, setPasswordResetActionId] = useState<string | null>(null);
+    const [passwordResetWhatsAppAssist, setPasswordResetWhatsAppAssist] = useState<{
+        phoneE164: string;
+        newPassword: string;
+        message: string;
+    } | null>(null);
+    const [ridersOverview, setRidersOverview] = useState<PosRidersOverview | null>(null);
+    const [ridersOverviewLoading, setRidersOverviewLoading] = useState(false);
+    const [assignLoadingOrderId, setAssignLoadingOrderId] = useState<string | null>(null);
+
+    const loadRidersOverview = useCallback(async () => {
+        setRidersOverviewLoading(true);
+        try {
+            const data = await mobileOrdersApi.getRidersOverview();
+            setRidersOverview(data);
+        } catch {
+            setRidersOverview(null);
+        } finally {
+            setRidersOverviewLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
         shopApi.getBankAccounts().then(setBankAccounts).catch(() => {});
     }, []);
+
+    useEffect(() => {
+        loadRidersOverview();
+    }, [loadRidersOverview]);
 
     useEffect(() => {
         let cancelled = false;
@@ -180,6 +215,26 @@ function MobileOrdersPageContent() {
             return p;
         }, { replace: true });
     }, [setSearchParams]);
+
+    const handleAssignRider = async (orderId: string, riderId: string) => {
+        if (!riderId) {
+            alert('Select a rider');
+            return;
+        }
+        setAssignLoadingOrderId(orderId);
+        try {
+            await mobileOrdersApi.assignRider(orderId, riderId);
+            await loadRidersOverview();
+            await loadOrders(statusFilter === 'All' ? undefined : statusFilter);
+            if (detailOrder?.id === orderId) {
+                setDetailOrder(await mobileOrdersApi.getOrder(orderId));
+            }
+        } catch (err: any) {
+            alert(err.error || err.message || 'Failed to assign rider');
+        } finally {
+            setAssignLoadingOrderId(null);
+        }
+    };
 
     const handleStatusUpdate = async (orderId: string, newStatus: string) => {
         setActionLoading(orderId);
@@ -295,15 +350,71 @@ function MobileOrdersPageContent() {
                         <div className="flex items-center justify-end gap-2 shrink-0 lg:pt-1">
                             <button
                                 type="button"
-                                onClick={() => loadOrders(statusFilter === 'All' ? undefined : statusFilter)}
+                                onClick={() => {
+                                    loadOrders(statusFilter === 'All' ? undefined : statusFilter);
+                                    loadRidersOverview();
+                                }}
                                 className="p-2.5 bg-muted/80 dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl hover:bg-muted dark:hover:bg-slate-700/80 transition-colors"
                                 title="Refresh"
                             >
-                                <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading ? 'animate-spin' : ''}`} />
+                                <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading || ridersOverviewLoading ? 'animate-spin' : ''}`} />
                             </button>
                         </div>
                     </div>
                 </div>
+                {ridersOverview?.stats && (
+                    <div className="px-4 sm:px-6 lg:px-8 pb-3">
+                        <div
+                            className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border/80 bg-muted/40 dark:bg-slate-800/60 dark:border-slate-600/80 px-3 py-2.5 sm:px-4"
+                            title="Delivery rider availability (same pool as the rider mobile app)"
+                        >
+                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-foreground dark:text-slate-200 shrink-0">
+                                <Users className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                Riders
+                            </span>
+                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
+                                <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+                                    {ridersOverview.stats.available}
+                                </span>{' '}
+                                available
+                            </span>
+                            <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
+                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
+                                <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-300">
+                                    {ridersOverview.stats.busy}
+                                </span>{' '}
+                                busy
+                            </span>
+                            <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
+                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
+                                <span className="font-semibold tabular-nums text-slate-600 dark:text-slate-300">
+                                    {ridersOverview.stats.offline}
+                                </span>{' '}
+                                offline
+                            </span>
+                            <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
+                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
+                                <span className="font-semibold tabular-nums text-foreground">{ridersOverview.stats.active_accounts}</span> active
+                                accounts
+                            </span>
+                            {ridersOverview.stats.inactive_accounts > 0 && (
+                                <>
+                                    <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
+                                    <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
+                                        {ridersOverview.stats.inactive_accounts} disabled
+                                    </span>
+                                </>
+                            )}
+                            <span className="text-border dark:text-slate-600 hidden md:inline">·</span>
+                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
+                                <span className="font-semibold tabular-nums text-indigo-700 dark:text-indigo-300">
+                                    {ridersOverview.stats.open_deliveries}
+                                </span>{' '}
+                                open deliveries
+                            </span>
+                        </div>
+                    </div>
+                )}
                 <div className="border-t border-border/70 dark:border-slate-700/80 px-4 sm:px-6 lg:px-8 py-2.5 -mt-px">
                     <div className="flex gap-2 overflow-x-auto overflow-y-hidden pb-0.5 custom-scrollbar [scrollbar-gutter:stable]">
                         {filterCounts.map(({ key: s, label, count }) => (
@@ -334,6 +445,69 @@ function MobileOrdersPageContent() {
 
             {/* Content: list + bill — scrollbars only when content overflows */}
             <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden px-4 sm:px-6 lg:px-8 py-4">
+                {passwordResetWhatsAppAssist && (
+                    <div className="mb-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/95 dark:bg-emerald-950/35 px-4 py-3 shrink-0">
+                        <p className="text-sm font-bold text-emerald-900 dark:text-emerald-100 mb-1">
+                            Password reset ready — send in WhatsApp
+                        </p>
+                        <p className="text-xs text-emerald-800/90 dark:text-emerald-200/90 mb-3">
+                            Your installed WhatsApp should open with the message ready. If nothing opened, use{' '}
+                            <span className="font-semibold">Open WhatsApp again</span> or{' '}
+                            <span className="font-semibold">Open in browser (wa.me)</span>.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-900/80 dark:text-emerald-200/80">
+                                New password
+                            </span>
+                            <code className="px-2 py-1 rounded-md bg-white/80 dark:bg-emerald-950/80 text-sm font-mono font-bold text-emerald-950 dark:text-emerald-50 border border-emerald-200/80 dark:border-emerald-800">
+                                {passwordResetWhatsAppAssist.newPassword}
+                            </code>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    void navigator.clipboard.writeText(passwordResetWhatsAppAssist.newPassword);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-emerald-700 text-white hover:bg-emerald-800"
+                            >
+                                <Copy className="w-3.5 h-3.5" />
+                                Copy
+                            </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    openWhatsAppDesktopWithMessage(
+                                        passwordResetWhatsAppAssist.phoneE164,
+                                        passwordResetWhatsAppAssist.message
+                                    )
+                                }
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold"
+                            >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                Open WhatsApp again
+                            </button>
+                            <a
+                                href={buildWhatsAppWebSendUrl(
+                                    passwordResetWhatsAppAssist.phoneE164,
+                                    passwordResetWhatsAppAssist.message
+                                )}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-600/40 dark:border-emerald-500/40 text-emerald-900 dark:text-emerald-100 text-xs font-bold hover:bg-emerald-100/80 dark:hover:bg-emerald-900/40"
+                            >
+                                Open in browser (wa.me)
+                            </a>
+                            <button
+                                type="button"
+                                onClick={() => setPasswordResetWhatsAppAssist(null)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 dark:text-emerald-200 hover:underline"
+                            >
+                                Dismiss
+                            </button>
+                        </div>
+                    </div>
+                )}
                 {passwordResetRequests.length > 0 && (
                     <div className="mb-4 rounded-2xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/95 dark:bg-amber-950/40 px-4 py-3 shrink-0">
                         <p className="text-sm font-bold text-amber-900 dark:text-amber-100 mb-2 flex items-center gap-2">
@@ -357,9 +531,14 @@ function MobileOrdersPageContent() {
                                             setPasswordResetActionId(r.id);
                                             try {
                                                 const res = await mobileOrdersApi.completePasswordResetRequest(r.id);
-                                                alert(
-                                                    `Password reset completed.\nNew password: ${res.newPassword}\n\nCustomer was notified (WhatsApp hook if configured).`
-                                                );
+                                                const message = formatPasswordResetWhatsAppMessage(res.newPassword);
+                                                const phone = res.phoneE164 || r.phone_number || '';
+                                                setPasswordResetWhatsAppAssist({
+                                                    phoneE164: phone,
+                                                    newPassword: res.newPassword,
+                                                    message,
+                                                });
+                                                openWhatsAppDesktopWithMessage(phone, message);
                                                 setPasswordResetRequests((prev) => prev.filter((x) => x.id !== r.id));
                                             } catch (err: any) {
                                                 alert(err?.error || err?.message || 'Reset failed');
@@ -448,8 +627,8 @@ function MobileOrdersPageContent() {
                                         </span>
                                     </div>
 
-                                    {/* Quick action buttons */}
-                                    {nextStatus && (
+                                    {/* Quick action buttons — hidden when a rider is assigned (rider app drives status) */}
+                                    {nextStatus && !isRiderAssignedDelivery(order) && (
                                         <div className="flex gap-2 mt-3 pt-3 border-t border-border/60">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, nextStatus); }}
@@ -475,6 +654,11 @@ function MobileOrdersPageContent() {
                                                 </button>
                                             )}
                                         </div>
+                                    )}
+                                    {isRiderAssignedDelivery(order) && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+                                        <p className="mt-3 pt-3 border-t border-border/60 text-xs text-muted-foreground leading-snug">
+                                            Rider assigned — order status is updated from the rider app.
+                                        </p>
                                     )}
                                     {/* Collect Payment button for Delivered + Unpaid */}
                                     {order.status === 'Delivered' && order.payment_status !== 'Paid' && (
@@ -517,6 +701,13 @@ function MobileOrdersPageContent() {
                             actionLoading={actionLoading}
                             formatPrice={formatPrice}
                             formatDate={formatFullDate}
+                            assignableRiders={
+                                (ridersOverview?.riders || []).filter(
+                                    (r) => r.is_active && String(r.status).toUpperCase() === 'AVAILABLE'
+                                )
+                            }
+                            onAssignRider={handleAssignRider}
+                            assignLoadingOrderId={assignLoadingOrderId}
                         />
                     ) : (
                         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground min-h-[12rem] lg:min-h-0">
@@ -632,6 +823,7 @@ function MobileOrdersPageContent() {
 // ─── Order Detail Panel ───────────────────────────────────
 function OrderDetailPanel({
     order, onStatusUpdate, onCollectPayment, actionLoading, formatPrice, formatDate,
+    assignableRiders, onAssignRider, assignLoadingOrderId,
 }: {
     order: MobileOrder;
     onStatusUpdate: (id: string, status: string) => void;
@@ -639,11 +831,25 @@ function OrderDetailPanel({
     actionLoading: string;
     formatPrice: (p: any) => string;
     formatDate: (d: string) => string;
+    assignableRiders: { id: string; name: string }[];
+    onAssignRider: (orderId: string, riderId: string) => void | Promise<void>;
+    assignLoadingOrderId: string | null;
 }) {
     const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Pending;
     const DetailStatusIcon = cfg.icon;
     const nextStatus = getNextMobileOrderStatus(order);
     const isUnpaid = order.status === 'Delivered' && order.payment_status !== 'Paid';
+    const riderLocked = isRiderAssignedDelivery(order);
+    const canManualAssign =
+        order.payment_method !== 'SelfCollection' &&
+        !riderLocked &&
+        order.status !== 'Delivered' &&
+        order.status !== 'Cancelled';
+    const [manualRiderId, setManualRiderId] = useState('');
+
+    useEffect(() => {
+        setManualRiderId('');
+    }, [order.id]);
 
     return (
         <div className="flex h-full min-h-0 flex-col">
@@ -672,6 +878,11 @@ function OrderDetailPanel({
             {/* Scrollable body — customer, delivery, bill lines, history */}
             <div className="min-h-0 flex-1 overflow-auto custom-scrollbar [scrollbar-gutter:stable] px-4 py-4 sm:px-5">
                 <div className="space-y-5">
+                    {riderLocked && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+                        <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/70 px-3 py-2.5 text-sm text-indigo-950 dark:border-indigo-800/60 dark:bg-indigo-950/40 dark:text-indigo-100">
+                            A rider is assigned. Fulfillment status is updated only from the rider mobile app (pickup and delivery steps).
+                        </div>
+                    )}
                     <div>
                         <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-2">Customer</h4>
                         <div className="space-y-2 text-sm sm:text-base text-foreground">
@@ -748,6 +959,46 @@ function OrderDetailPanel({
                                     )}
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {canManualAssign && (
+                        <div className="rounded-xl border border-dashed border-indigo-300/80 bg-indigo-50/40 px-3 py-3 dark:border-indigo-700/50 dark:bg-indigo-950/25">
+                            <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                                <Truck className="w-3.5 h-3.5 shrink-0" />
+                                Manual rider assignment
+                            </h4>
+                            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                                If no rider was auto-assigned at checkout, choose an available rider here. Only riders marked Available in the rider app can be selected.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                                <select
+                                    aria-label="Choose rider for manual assignment"
+                                    value={manualRiderId}
+                                    onChange={(e) => setManualRiderId(e.target.value)}
+                                    className="flex-1 min-w-0 rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground dark:bg-slate-900 dark:border-slate-600"
+                                >
+                                    <option value="">Select rider…</option>
+                                    {assignableRiders.map((r) => (
+                                        <option key={r.id} value={r.id}>
+                                            {r.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    disabled={!manualRiderId || assignLoadingOrderId === order.id}
+                                    onClick={() => onAssignRider(order.id, manualRiderId)}
+                                    className="shrink-0 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    {assignLoadingOrderId === order.id ? 'Assigning…' : 'Assign'}
+                                </button>
+                            </div>
+                            {assignableRiders.length === 0 && (
+                                <p className="text-xs text-amber-800 dark:text-amber-200/90 mt-2">
+                                    No riders are currently Available. Riders must go on shift in the rider app, or finish their current delivery.
+                                </p>
+                            )}
                         </div>
                     )}
 
@@ -884,7 +1135,7 @@ function OrderDetailPanel({
                 </div>
             </div>
 
-            {nextStatus && (
+            {nextStatus && !riderLocked && (
                 <div className="shrink-0 border-t border-border p-3 sm:p-4 flex gap-2">
                     <button
                         type="button"

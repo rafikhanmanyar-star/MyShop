@@ -76,6 +76,28 @@ export interface MobileOrderingSettings {
     estimated_delivery_minutes: number;
 }
 
+/** POS Mobile Orders — rider roster + aggregate availability (from GET /shop/mobile-orders/riders-overview). */
+export interface PosRidersOverview {
+    riders: {
+        id: string;
+        name: string;
+        phone_number: string;
+        is_active: boolean;
+        status: string;
+        current_latitude?: string | number | null;
+        current_longitude?: string | number | null;
+    }[];
+    stats: {
+        total: number;
+        active_accounts: number;
+        inactive_accounts: number;
+        available: number;
+        busy: number;
+        offline: number;
+        open_deliveries: number;
+    };
+}
+
 export interface ShopBranding {
     slug: string | null;
     logo_url: string | null;
@@ -103,6 +125,12 @@ export const mobileOrdersApi = {
         apiClient.get<MobileOrder[]>('/shop/mobile-orders/unsynced'),
     getOrder: (id: string) =>
         apiClient.get<MobileOrder>(`/shop/mobile-orders/${id}`),
+    getRidersOverview: () =>
+        apiClient.get<PosRidersOverview>('/shop/mobile-orders/riders-overview'),
+    assignRider: (orderId: string, riderId: string) =>
+        apiClient.post<{ success: boolean; orderId: string }>(`/shop/mobile-orders/${encodeURIComponent(orderId)}/assign-rider`, {
+            riderId,
+        }),
     updateStatus: (id: string, status: string, note?: string) =>
         apiClient.put(`/shop/mobile-orders/${id}/status`, { status, note }),
     collectPayment: (id: string, bankAccountId: string) =>

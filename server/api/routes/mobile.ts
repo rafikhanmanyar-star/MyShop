@@ -84,6 +84,80 @@ router.get('/discover', async (_req: any, res) => {
 });
 
 // ╔══════════════════════════════════════════════════════════════════╗
+// ║  Customer-wide SSE — order / delivery updates for notifications  ║
+// ╚══════════════════════════════════════════════════════════════════╝
+// Must be registered before `/:shopSlug/*` routes. Filters PG NOTIFY by tenant + customer.
+router.get('/notifications/stream', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        });
+        res.write(`data: ${JSON.stringify({ type: 'connected', customerId: req.customerId })}\n\n`);
+
+        const heartbeat = setInterval(() => {
+            res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+        }, 30000);
+
+        const pool = db.getPool();
+        let pgClient: any = null;
+
+        const forwardIfCustomerOrder = async (payload: any) => {
+            if (!payload || payload.tenantId !== req.tenantId || !payload.orderId) return;
+            let belongs = false;
+            if (payload.customerId && payload.customerId === req.customerId) {
+                belongs = true;
+            } else {
+                const rows = await db.query(
+                    'SELECT customer_id FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
+                    [payload.orderId, req.tenantId]
+                );
+                belongs = rows[0]?.customer_id === req.customerId;
+            }
+            if (!belongs) return;
+            res.write(`data: ${JSON.stringify({ type: 'order_event', payload })}\n\n`);
+        };
+
+        if (pool) {
+            try {
+                pgClient = await pool.connect();
+                await pgClient.query('LISTEN mobile_order_updated');
+                await pgClient.query('LISTEN new_mobile_order');
+                pgClient.on('notification', (msg: any) => {
+                    if (msg.channel !== 'mobile_order_updated' && msg.channel !== 'new_mobile_order') return;
+                    try {
+                        const payload = JSON.parse(msg.payload);
+                        void forwardIfCustomerOrder(payload).catch((e) => {
+                            console.error('[mobile notifications SSE] forward error:', e);
+                        });
+                    } catch (e) {
+                        console.error('[mobile notifications SSE] parse error:', e);
+                    }
+                });
+            } catch (err) {
+                console.error('[mobile notifications SSE] LISTEN error:', err);
+            }
+        }
+
+        req.on('close', () => {
+            clearInterval(heartbeat);
+            if (pgClient) {
+                pgClient.query('UNLISTEN mobile_order_updated').catch(() => {});
+                pgClient.query('UNLISTEN new_mobile_order').catch(() => {});
+                pgClient.release();
+            }
+        });
+    } catch (error: any) {
+        console.error('[mobile notifications SSE]', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: error.message || 'Stream failed' });
+        }
+    }
+});
+
+// ╔══════════════════════════════════════════════════════════════════╗
 // ║  PUBLIC ROUTES — No auth required (resolved via shop slug)      ║
 // ╚══════════════════════════════════════════════════════════════════╝
 

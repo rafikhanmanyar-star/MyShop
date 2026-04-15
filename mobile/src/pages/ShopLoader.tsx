@@ -5,6 +5,7 @@ import { publicApi } from '../api';
 import BottomNav from '../components/BottomNav';
 import Header from '../components/Header';
 import FloatingCartBar from '../components/FloatingCartBar';
+import CustomerNotificationsBridge from '../components/CustomerNotificationsBridge';
 import { getShop, setShop } from '../services/offlineCache';
 import { syncCatalogForShop } from '../services/catalogSync';
 
@@ -123,6 +124,7 @@ export default function ShopLoader() {
 
     return (
         <>
+            <CustomerNotificationsBridge />
             <Header />
             <div className={cartCount > 0 ? 'shop-outlet shop-outlet--cart-pad' : 'shop-outlet'}>
                 <Outlet />

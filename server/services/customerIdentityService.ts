@@ -251,13 +251,6 @@ export class CustomerIdentityService {
       );
     });
 
-    try {
-      const { sendPasswordResetWhatsApp } = await import('./whatsappCustomerNotify.js');
-      await sendPasswordResetWhatsApp(tenantId, phoneE164, newPassword);
-    } catch {
-      // optional
-    }
-
     return { newPassword, phoneE164 };
   }
 }

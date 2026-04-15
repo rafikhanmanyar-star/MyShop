@@ -5,7 +5,7 @@ import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 import { deductInventoryFefo, getSellableQuantityForWarehouse } from './inventoryBatchService.js';
 import { aggregateQuantitiesFromOfferLines, prepareOfferBundlesForOrder } from './mobileOfferCheckout.js';
 import { resolveBranchWarehouseForPlaceOrder } from './mobileOrderBranchRouting.js';
-import { tryAutoAssignRiderForMobileOrder } from './deliveryAssignment.js';
+import { tryAutoAssignRiderForMobileOrder, manuallyAssignRiderForMobileOrder } from './deliveryAssignment.js';
 import { haversineDistanceKm } from '../utils/haversine.js';
 import { getDrivingDurationSeconds } from './googleDirectionsEtaService.js';
 
@@ -879,6 +879,18 @@ export class MobileOrderService {
         );
         if (orders.length === 0) throw new Error('Order not found');
 
+        if (changedByType === 'shop_user') {
+            const assigned = await this.db.query(
+                'SELECT 1 FROM delivery_orders WHERE order_id = $1 AND tenant_id = $2 LIMIT 1',
+                [orderId, tenantId]
+            );
+            if (assigned.length > 0) {
+                throw new Error(
+                    'A rider is assigned to this order. Fulfillment status is updated from the rider app only.'
+                );
+            }
+        }
+
         const currentStatus = orders[0].status;
         const paymentMethod = orders[0].payment_method || 'COD';
 
@@ -979,6 +991,66 @@ export class MobileOrderService {
         const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
         notifyDailyReportUpdated(tenantId).catch(() => {});
         return result;
+    }
+
+    /**
+     * POS: manually assign an AVAILABLE rider when the order has no delivery_orders row yet (e.g. auto-assign missed).
+     */
+    async assignRiderManually(tenantId: string, orderId: string, riderId: string) {
+        const rows = await this.db.query(
+            `SELECT id, status, payment_method, delivery_lat, delivery_lng, assigned_branch_id
+       FROM mobile_orders WHERE id = $1 AND tenant_id = $2`,
+            [orderId, tenantId]
+        );
+        if (rows.length === 0) throw new Error('Order not found');
+        const o = rows[0] as any;
+        if (String(o.payment_method) === 'SelfCollection') {
+            throw new Error('Self-collection orders do not use riders.');
+        }
+        if (o.status === 'Delivered' || o.status === 'Cancelled') {
+            throw new Error('Cannot assign a rider to a completed or cancelled order.');
+        }
+        const existing = await this.db.query(
+            `SELECT id FROM delivery_orders WHERE order_id = $1 AND tenant_id = $2 LIMIT 1`,
+            [orderId, tenantId]
+        );
+        if (existing.length > 0) {
+            throw new Error('This order already has a rider assignment.');
+        }
+
+        await this.db.transaction(async (client: any) => {
+            await manuallyAssignRiderForMobileOrder(client, tenantId, orderId, riderId, {
+                deliveryLat: o.delivery_lat,
+                deliveryLng: o.delivery_lng,
+                assignedBranchId: o.assigned_branch_id,
+            });
+        });
+
+        const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+        notifyDailyReportUpdated(tenantId).catch(() => {});
+        return { success: true, orderId };
+    }
+
+    /** POS Mobile Orders page: rider list + availability counts + open delivery jobs. */
+    async getPosRidersOverview(tenantId: string) {
+        const { getRiderService } = await import('./riderService.js');
+        const riders = await getRiderService().listByTenant(tenantId);
+        const openRows = await this.db.query(
+            `SELECT COUNT(*) AS c FROM delivery_orders WHERE tenant_id = $1 AND status != 'DELIVERED'`,
+            [tenantId]
+        );
+        const openDeliveries = parseInt(String((openRows[0] as any)?.c ?? 0), 10) || 0;
+        const active = riders.filter((r) => r.is_active === true || (r as any).is_active === 1);
+        const stats = {
+            total: riders.length,
+            active_accounts: active.length,
+            inactive_accounts: riders.length - active.length,
+            available: active.filter((r) => r.status === 'AVAILABLE').length,
+            busy: active.filter((r) => r.status === 'BUSY').length,
+            offline: active.filter((r) => r.status === 'OFFLINE').length,
+            open_deliveries: openDeliveries,
+        };
+        return { riders, stats };
     }
 
     private async adjustInventoryForOrder(client: any, tenantId: string, orderId: string, action: 'confirm' | 'cancel') {

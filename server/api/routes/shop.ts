@@ -99,7 +99,7 @@ router.delete('/branches/:id', checkRole(['admin']), async (req: any, res) => {
 });
 
 // --- Delivery riders (Stage 6 rider app): admin manages accounts & passwords ---
-router.get('/riders', checkRole(['admin']), async (req: any, res) => {
+router.get('/riders', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
   try {
     const riders = await getRiderService().listByTenant(req.tenantId);
     res.json(riders);

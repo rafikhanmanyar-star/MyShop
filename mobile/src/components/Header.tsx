@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { getFullImageUrl, customerApi } from '../api';
+import { unreadCount, subscribeCustomerNotifications } from '../services/customerNotifications';
 
 type BranchItem = { id: string; name: string; code?: string; slug: string | null };
 
@@ -15,6 +16,16 @@ export default function Header() {
     const [showBranchPicker, setShowBranchPicker] = useState(false);
     const [branches, setBranches] = useState<BranchItem[]>([]);
     const [branchesLoading, setBranchesLoading] = useState(false);
+    const [notifVersion, setNotifVersion] = useState(0);
+
+    useEffect(() => {
+        return subscribeCustomerNotifications(() => setNotifVersion((v) => v + 1));
+    }, []);
+
+    const unreadNotifications = useMemo(
+        () => (shopSlug && state.isLoggedIn ? unreadCount(shopSlug) : 0),
+        [shopSlug, state.isLoggedIn, notifVersion],
+    );
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -112,6 +123,19 @@ export default function Header() {
                 </div>
 
                 <div className="user-section">
+                    <Link
+                        to={`/${shopSlug}/notifications`}
+                        className="header-bell-btn"
+                        aria-label={unreadNotifications ? `Notifications, ${unreadNotifications} unread` : 'Notifications'}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                        </svg>
+                        {unreadNotifications > 0 && (
+                            <span className="header-bell-badge">{unreadNotifications > 99 ? '99+' : unreadNotifications}</span>
+                        )}
+                    </Link>
                     {canInstall && (
                         <button
                             type="button"

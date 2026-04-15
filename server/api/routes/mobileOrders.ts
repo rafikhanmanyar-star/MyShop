@@ -317,6 +317,27 @@ router.get('/', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: a
     }
 });
 
+// ─── Riders overview + manual assignment (POS) — before GET /:id ─────
+router.get('/riders-overview', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+    try {
+        const data = await getMobileOrderService().getPosRidersOverview(req.tenantId);
+        res.json(data);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/assign-rider', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const riderId = req.body?.riderId as string | undefined;
+        if (!riderId) return res.status(400).json({ error: 'riderId is required' });
+        const result = await getMobileOrderService().assignRiderManually(req.tenantId, req.params.id, riderId);
+        res.json(result);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 // ─── Collect Payment (Delivered → Paid) ─────────────────────────────
 router.put('/:id/collect-payment', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
     try {
