@@ -15,6 +15,9 @@ export interface PendingOrderPayload {
     items: Array<{ productId: string; quantity: number }>;
     offerBundles?: Array<{ offerId: string; quantity: number }>;
     deliveryAddress: string;
+    /** Customer GPS — stored on mobile_orders as delivery_lat / delivery_lng */
+    deliveryLat?: number;
+    deliveryLng?: number;
     deliveryNotes?: string;
     paymentMethod: string;
     idempotencyKey: string;

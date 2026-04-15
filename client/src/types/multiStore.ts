@@ -10,6 +10,11 @@ export interface StoreBranch {
     type: StoreType;
     status: StoreStatus;
     location: string;
+    /** Full delivery/street address for routing (Stage 2); optional */
+    address?: string | null;
+    /** WGS84 — set in admin for nearest-branch logic */
+    latitude?: number | null;
+    longitude?: number | null;
     region: string;
     manager: string;
     contact: string;

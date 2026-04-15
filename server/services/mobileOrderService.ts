@@ -4,6 +4,8 @@ import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 import { deductInventoryFefo, getSellableQuantityForWarehouse } from './inventoryBatchService.js';
 import { aggregateQuantitiesFromOfferLines, prepareOfferBundlesForOrder } from './mobileOfferCheckout.js';
+import { resolveBranchWarehouseForPlaceOrder } from './mobileOrderBranchRouting.js';
+import { tryAutoAssignRiderForMobileOrder } from './deliveryAssignment.js';
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -382,16 +384,6 @@ export class MobileOrderService {
             }
         }
 
-        // Shop = branch: use tenant's default (first) branch when not specified, so the app's "shop" is one entity
-        let effectiveBranchId: string | null = input.branchId || null;
-        if (!effectiveBranchId) {
-            const defaultBranch = await this.db.query(
-                'SELECT id FROM shop_branches WHERE tenant_id = $1 ORDER BY name ASC LIMIT 1',
-                [tenantId]
-            );
-            if (defaultBranch.length > 0) effectiveBranchId = defaultBranch[0].id;
-        }
-
         const placed = await this.db.transaction(async (client: any) => {
             const regularItems = input.items || [];
             const { merged: offerMerged, flatLines: offerLines } = await prepareOfferBundlesForOrder(
@@ -440,41 +432,12 @@ export class MobileOrderService {
                 [tenantId, productIds]
             );
 
-            // 2. Resolve warehouse: use effective branch (shop = branch) so one that has enough stock for ALL items
-            let warehouseId: string | null = null;
-            if (effectiveBranchId) {
-                const whRes = await client.query(
-                    'SELECT id FROM shop_warehouses WHERE id = $1 AND tenant_id = $2',
-                    [effectiveBranchId, tenantId]
-                );
-                if (whRes.length > 0) warehouseId = whRes[0].id;
-                if (!warehouseId) {
-                    throw new Error(
-                        'This shop cannot fulfill your order from its current location. Try different items or quantities.'
-                    );
-                }
-            }
-            if (!warehouseId) {
-                const warehouses = await client.query(
-                    'SELECT id FROM shop_warehouses WHERE tenant_id = $1 ORDER BY id',
-                    [tenantId]
-                );
-                for (const wh of warehouses) {
-                    const wid = wh.id;
-                    let canFulfill = true;
-                    for (const [productId, qty] of demand) {
-                        const sellable = await getSellableQuantityForWarehouse(client, tenantId, productId, wid);
-                        if (sellable < qty) {
-                            canFulfill = false;
-                            break;
-                        }
-                    }
-                    if (canFulfill) {
-                        warehouseId = wid;
-                        break;
-                    }
-                }
-            }
+            // 2. Resolve branch + warehouse (Stage 3: Haversine nearest fulfillable when delivery + customer coords)
+            const routed = await resolveBranchWarehouseForPlaceOrder(client, tenantId, input, demand);
+            const effectiveBranchId = routed.effectiveBranchId;
+            const warehouseId = routed.warehouseId;
+            const assignedBranchId = routed.assignedBranchId;
+            const distanceKm = routed.distanceKm;
 
             const resolvedItems: any[] = [];
             let subtotalGross = 0;
@@ -611,14 +574,17 @@ export class MobileOrderService {
           subtotal, tax_total, discount_total, delivery_fee, grand_total,
           payment_method, payment_status,
           delivery_address, delivery_lat, delivery_lng, delivery_notes,
+          assigned_branch_id, distance_km,
           idempotency_key, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,'Pending',$6,$7,$8,$9,$10,$11,'Unpaid',$12,$13,$14,$15,$16,NOW(),NOW())`,
+        ) VALUES ($1,$2,$3,$4,$5,'Pending',$6,$7,$8,$9,$10,$11,'Unpaid',$12,$13,$14,$15,$16,$17,$18,NOW(),NOW())`,
                 [
                     orderId, tenantId, input.customerId, effectiveBranchId,
                     orderNumber, subtotalGross, taxTotal, discountTotal, deliveryFee, grandTotal,
                     paymentMethod,
                     input.deliveryAddress || null, input.deliveryLat || null,
                     input.deliveryLng || null, input.deliveryNotes || null,
+                    assignedBranchId,
+                    distanceKm != null && Number.isFinite(distanceKm) ? Math.round(distanceKm * 10000) / 10000 : null,
                     input.idempotencyKey || null,
                 ]
             );
@@ -677,6 +643,19 @@ export class MobileOrderService {
                 [generateId('mosh'), tenantId, orderId]
             );
 
+            let deliveryAssign: {
+                riderId: string;
+                riderDistanceKm: number | null;
+                deliveryOrderId: string;
+            } | null = null;
+            if (paymentMethod !== 'SelfCollection') {
+                deliveryAssign = await tryAutoAssignRiderForMobileOrder(client, tenantId, orderId, {
+                    deliveryLat: input.deliveryLat,
+                    deliveryLng: input.deliveryLng,
+                    assignedBranchId: assignedBranchId ?? effectiveBranchId,
+                });
+            }
+
             return {
                 order: {
                     id: orderId,
@@ -687,6 +666,16 @@ export class MobileOrderService {
                     discount_total: discountTotal,
                     delivery_fee: deliveryFee,
                     grand_total: grandTotal,
+                    branch_id: effectiveBranchId,
+                    assigned_branch_id: assignedBranchId,
+                    distance_km: distanceKm != null && Number.isFinite(distanceKm) ? Math.round(distanceKm * 10000) / 10000 : null,
+                    ...(deliveryAssign
+                        ? {
+                              rider_id: deliveryAssign.riderId,
+                              delivery_order_id: deliveryAssign.deliveryOrderId,
+                              rider_distance_km: deliveryAssign.riderDistanceKm,
+                          }
+                        : {}),
                     items: resolvedItems,
                 },
                 duplicate: false,
@@ -767,9 +756,13 @@ export class MobileOrderService {
 
     async getOrderDetail(tenantId: string, orderId: string) {
         const orders = await this.db.query(
-            `SELECT o.*, mc.phone as customer_phone, mc.name as customer_name
+            `SELECT o.*, mc.phone as customer_phone, mc.name as customer_name,
+              d.id AS delivery_order_id, d.status AS delivery_status,
+              r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone
        FROM mobile_orders o
        LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $2
+       LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
+       LEFT JOIN riders r ON r.id = d.rider_id AND r.tenant_id = o.tenant_id
        WHERE o.id = $1 AND o.tenant_id = $2`,
             [orderId, tenantId]
         );
@@ -1076,9 +1069,13 @@ export class MobileOrderService {
 
     async getMobileOrdersForPOS(tenantId: string, status?: string) {
         let query = `
-      SELECT o.*, mc.phone as customer_phone, mc.name as customer_name
+      SELECT o.*, mc.phone as customer_phone, mc.name as customer_name,
+        d.id AS delivery_order_id, d.status AS delivery_status,
+        r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone
       FROM mobile_orders o
       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $1
+      LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
+      LEFT JOIN riders r ON r.id = d.rider_id AND r.tenant_id = o.tenant_id
       WHERE o.tenant_id = $1
     `;
         const params: any[] = [tenantId];

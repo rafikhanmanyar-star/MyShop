@@ -93,17 +93,34 @@ export class ShopService {
       const contactNo = data.contactNo || data.contact || '';
       const branchCode = data.code || `BR-${Date.now().toString().slice(-4)}`;
 
+      const lat =
+        data.latitude !== undefined && data.latitude !== null && data.latitude !== ''
+          ? Number(data.latitude)
+          : null;
+      const lng =
+        data.longitude !== undefined && data.longitude !== null && data.longitude !== ''
+          ? Number(data.longitude)
+          : null;
+      const addr =
+        data.address !== undefined && data.address !== null
+          ? String(data.address).trim() || null
+          : null;
+
       const res = await client.query(`
         INSERT INTO shop_branches (
           tenant_id, name, code, type, region,
-          manager_name, contact_no, timezone, open_time, close_time, location, slug
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          manager_name, contact_no, timezone, open_time, close_time, location, slug,
+          latitude, longitude, address
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING id
       `, [
         tenantId, data.name, branchCode, data.type || 'Express', data.region || '',
         managerName, contactNo, data.timezone || 'GMT+5',
         data.openTime || '09:00', data.closeTime || '21:00', data.location || '',
-        data.slug || null
+        data.slug || null,
+        Number.isFinite(lat as number) ? lat : null,
+        Number.isFinite(lng as number) ? lng : null,
+        addr,
       ]);
 
       const branchId = res[0].id;
@@ -155,17 +172,33 @@ export class ShopService {
         );
       }
 
+      const latU =
+        data.latitude !== undefined && data.latitude !== null && data.latitude !== ''
+          ? Number(data.latitude)
+          : null;
+      const lngU =
+        data.longitude !== undefined && data.longitude !== null && data.longitude !== ''
+          ? Number(data.longitude)
+          : null;
+      const addrU =
+        data.address !== undefined && data.address !== null ? String(data.address).trim() || null : null;
+
       await client.query(`
         UPDATE shop_branches
         SET name = COALESCE($1, name), code = COALESCE($2, code), type = COALESCE($3, type),
             region = COALESCE($4, region), manager_name = COALESCE($5, manager_name),
             contact_no = COALESCE($6, contact_no), timezone = COALESCE($7, timezone),
             open_time = COALESCE($8, open_time), close_time = COALESCE($9, close_time),
-            location = COALESCE($10, location), status = COALESCE($11, status), updated_at = NOW()
-        WHERE id = $12 AND tenant_id = $13
+            location = COALESCE($10, location), status = COALESCE($11, status),
+            latitude = COALESCE($12, latitude), longitude = COALESCE($13, longitude),
+            address = COALESCE($14, address), updated_at = NOW()
+        WHERE id = $15 AND tenant_id = $16
       `, [
         data.name, data.code, data.type, data.region, managerName, contactNo,
         data.timezone, data.openTime, data.closeTime, data.location, data.status,
+        Number.isFinite(latU as number) ? latU : null,
+        Number.isFinite(lngU as number) ? lngU : null,
+        addrU,
         branchId, tenantId
       ]);
       return branchId;
@@ -173,12 +206,30 @@ export class ShopService {
   }
 
   /** Resolve branch by globally unique slug (for mobile QR URL). */
-  async getBranchBySlug(slug: string): Promise<{ id: string; tenant_id: string; name: string; code: string; location: string; slug: string | null } | null> {
+  async getBranchBySlug(slug: string): Promise<{
+    id: string;
+    tenant_id: string;
+    name: string;
+    code: string;
+    location: string;
+    slug: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    address: string | null;
+  } | null> {
     const rows = await this.db.query(
-      'SELECT id, tenant_id, name, code, location, slug FROM shop_branches WHERE slug = $1',
+      `SELECT id, tenant_id, name, code, location, slug,
+              latitude, longitude, address
+       FROM shop_branches WHERE slug = $1`,
       [slug]
     );
-    return rows.length > 0 ? rows[0] : null;
+    if (rows.length === 0) return null;
+    const r = rows[0] as any;
+    return {
+      ...r,
+      latitude: r.latitude != null ? parseFloat(r.latitude) : null,
+      longitude: r.longitude != null ? parseFloat(r.longitude) : null,
+    };
   }
 
   /** Check if a branch can be deleted: no transactions, no linked terminals, no inventory in its warehouse. */

@@ -9,6 +9,7 @@ import authRoutes from './routes/auth.js';
 import shopRoutes from './routes/shop.js';
 import forecastRoutes from './routes/forecast.js';
 import mobileRoutes from './routes/mobile.js';
+import riderRoutes from './routes/rider.js';
 import mobileOrdersRoutes from './routes/mobileOrders.js';
 import accountingRoutes from './routes/accounting.js';
 import expensesRoutes from './routes/expenses.js';
@@ -31,7 +32,7 @@ const HOST = '0.0.0.0';
 // CORS
 const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-  : ['http://localhost:5173', 'http://localhost:5174'];
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5180'];
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -81,6 +82,7 @@ app.use('/api/auth', authRoutes);
 
 // Mobile ordering routes (mix of public + customer-authenticated)
 app.use('/api/mobile', mobileRoutes);
+app.use('/api/rider', riderRoutes);
 
 app.get('/api/shop-test', (_req, res) => {
   res.json({ message: 'Public shop test works' });

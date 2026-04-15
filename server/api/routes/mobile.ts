@@ -374,6 +374,9 @@ router.get('/branches', mobileAuthMiddleware(db), async (req: any, res) => {
             name: b.name,
             code: b.code || undefined,
             slug: b.slug || (index === 0 && tenantSlug ? tenantSlug : null),
+            address: b.address || b.location || null,
+            latitude: b.latitude != null ? parseFloat(b.latitude) : null,
+            longitude: b.longitude != null ? parseFloat(b.longitude) : null,
         }));
         res.json({ branches: list });
     } catch (error: any) {

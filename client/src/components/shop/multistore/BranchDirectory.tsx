@@ -150,6 +150,11 @@ const BranchDirectory: React.FC = () => {
                                             <div>
                                                 <div className="font-bold text-foreground text-sm">{store.name}</div>
                                                 <div className="text-xs text-muted-foreground font-mono italic">{store.location}, {store.region}</div>
+                                                {store.latitude != null && store.longitude != null && (
+                                                    <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
+                                                        Geo set · {store.latitude.toFixed(4)}, {store.longitude.toFixed(4)}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </td>
@@ -235,6 +240,49 @@ const BranchDirectory: React.FC = () => {
                             label="Location"
                             value={editData.location || ''}
                             onChange={(e) => setEditData({ ...editData, location: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Delivery address (routing)
+                        </label>
+                        <textarea
+                            className="w-full min-h-[72px] rounded-xl border border-border dark:border-slate-600 bg-card dark:bg-slate-800/80 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Full street address for distance-based delivery assignment"
+                            value={editData.address ?? ''}
+                            onChange={(e) => setEditData({ ...editData, address: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Latitude (WGS84)"
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 24.8607"
+                            value={editData.latitude != null && !Number.isNaN(editData.latitude) ? String(editData.latitude) : ''}
+                            onChange={(e) => {
+                                const v = e.target.value.trim();
+                                setEditData({
+                                    ...editData,
+                                    latitude: v === '' ? null : parseFloat(v),
+                                });
+                            }}
+                        />
+                        <Input
+                            label="Longitude (WGS84)"
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 67.0011"
+                            value={editData.longitude != null && !Number.isNaN(editData.longitude) ? String(editData.longitude) : ''}
+                            onChange={(e) => {
+                                const v = e.target.value.trim();
+                                setEditData({
+                                    ...editData,
+                                    longitude: v === '' ? null : parseFloat(v),
+                                });
+                            }}
                         />
                     </div>
 

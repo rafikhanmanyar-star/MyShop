@@ -13,6 +13,18 @@ export interface MobileOrder {
     payment_method: string;
     payment_status: string;
     delivery_address: string;
+    /** Stage 3: Haversine routing metadata */
+    assigned_branch_id?: string | null;
+    distance_km?: number | null;
+    /** Stage 5: rider assignment */
+    rider_id?: string | null;
+    delivery_order_id?: string | null;
+    delivery_status?: string | null;
+    rider_name?: string | null;
+    rider_phone?: string | null;
+    rider_distance_km?: number | null;
+    delivery_lat?: number | null;
+    delivery_lng?: number | null;
     delivery_notes?: string;
     customer_phone: string;
     customer_name: string;

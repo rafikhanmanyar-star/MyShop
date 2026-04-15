@@ -4,6 +4,8 @@ import { useApp } from '../context/AppContext';
 import { customerApi } from '../api';
 import { useOnline } from '../hooks/useOnline';
 import { placeOrderOfflineFirst } from '../services/orderSyncService';
+import { getCurrentGeoPosition, reverseGeocodeApprox } from '../utils/deliveryLocation';
+import GoogleMapPickerModal from '../components/GoogleMapPickerModal';
 
 type PaymentChoice = 'COD' | 'SelfCollection' | 'EasypaisaJazzcashOnline';
 
@@ -17,7 +19,13 @@ export default function Checkout() {
     const [notes, setNotes] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>('COD');
     const [loading, setLoading] = useState(false);
+    const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
+    const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
+    const [locating, setLocating] = useState(false);
+    const [mapOpen, setMapOpen] = useState(false);
     const defaultAddressFetched = useRef(false);
+
+    const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 
     // Populate delivery address with user's default address from registration (only when online)
     useEffect(() => {
@@ -36,6 +44,13 @@ export default function Checkout() {
             })
             .catch(() => {});
     }, [online, state.customerId]);
+
+    useEffect(() => {
+        if (paymentMethod === 'SelfCollection') {
+            setDeliveryLat(null);
+            setDeliveryLng(null);
+        }
+    }, [paymentMethod]);
 
     const deliveryFee = state.settings?.delivery_fee || 0;
     const freeAbove = state.settings?.free_delivery_above;
@@ -58,6 +73,29 @@ export default function Checkout() {
         return `Self collection — ${branch}.${loc}`.trim();
     };
 
+    const clearDeliveryPin = () => {
+        setDeliveryLat(null);
+        setDeliveryLng(null);
+    };
+
+    const handleUseGps = async () => {
+        setLocating(true);
+        try {
+            const pos = await getCurrentGeoPosition();
+            setDeliveryLat(pos.latitude);
+            setDeliveryLng(pos.longitude);
+            if (!address.trim()) {
+                const approx = await reverseGeocodeApprox(pos.latitude, pos.longitude);
+                if (approx) setAddress(approx);
+            }
+            showToast('Location captured');
+        } catch (e: unknown) {
+            showToast(e instanceof Error ? e.message : 'Could not get location');
+        } finally {
+            setLocating(false);
+        }
+    };
+
     const handlePlaceOrder = async () => {
         if (!isPickup && !address.trim()) {
             showToast('Please enter your delivery address');
@@ -76,6 +114,13 @@ export default function Checkout() {
                 paymentMethod,
                 idempotencyKey,
                 ...(state.branchId ? { branchId: state.branchId } : {}),
+                ...(!isPickup &&
+                deliveryLat != null &&
+                deliveryLng != null &&
+                Number.isFinite(deliveryLat) &&
+                Number.isFinite(deliveryLng)
+                    ? { deliveryLat, deliveryLng }
+                    : {}),
             };
 
             const result = await placeOrderOfflineFirst(shopSlug!, payload);
@@ -239,6 +284,58 @@ export default function Checkout() {
                         Your default address from registration is shown. You can edit it for this order.
                     </p>
 
+                    <div
+                        style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: 8,
+                            marginTop: 12,
+                            alignItems: 'center',
+                        }}
+                    >
+                        <button
+                            type="button"
+                            className="btn"
+                            onClick={() => void handleUseGps()}
+                            disabled={locating}
+                            style={{ fontSize: 13, padding: '8px 12px' }}
+                        >
+                            {locating ? 'Getting location…' : 'Use my location'}
+                        </button>
+                        {mapsApiKey ? (
+                            <button
+                                type="button"
+                                className="btn"
+                                onClick={() => setMapOpen(true)}
+                                style={{ fontSize: 13, padding: '8px 12px' }}
+                            >
+                                Choose on map
+                            </button>
+                        ) : null}
+                        {deliveryLat != null && deliveryLng != null && (
+                            <button
+                                type="button"
+                                onClick={clearDeliveryPin}
+                                style={{
+                                    fontSize: 12,
+                                    color: 'var(--text-muted)',
+                                    background: 'none',
+                                    border: 'none',
+                                    textDecoration: 'underline',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                }}
+                            >
+                                Clear pin
+                            </button>
+                        )}
+                    </div>
+                    {deliveryLat != null && deliveryLng != null && (
+                        <p style={{ fontSize: 12, color: 'var(--accent)', marginTop: 8, marginBottom: 0 }}>
+                            Delivery pin set ({deliveryLat.toFixed(5)}, {deliveryLng.toFixed(5)})
+                        </p>
+                    )}
+
                     <div className="input-group" style={{ marginTop: 12, marginBottom: 0 }}>
                         <label>Delivery Notes (optional)</label>
                         <input
@@ -332,6 +429,27 @@ export default function Checkout() {
                     `Save for when online — ${formatPrice(Math.round(grandTotal * 100) / 100)}`
                 )}
             </button>
+
+            {mapsApiKey && !isPickup && (
+                <GoogleMapPickerModal
+                    apiKey={mapsApiKey}
+                    open={mapOpen}
+                    initialLat={deliveryLat}
+                    initialLng={deliveryLng}
+                    onClose={() => setMapOpen(false)}
+                    onConfirm={(lat, lng) => {
+                        setDeliveryLat(lat);
+                        setDeliveryLng(lng);
+                        void (async () => {
+                            if (!address.trim()) {
+                                const approx = await reverseGeocodeApprox(lat, lng);
+                                if (approx) setAddress(approx);
+                            }
+                            showToast('Location saved from map');
+                        })();
+                    }}
+                />
+            )}
         </div>
     );
 }

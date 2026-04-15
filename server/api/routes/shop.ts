@@ -1,5 +1,7 @@
 import express from 'express';
 import { getShopService } from '../../services/shopService.js';
+import { getRiderService } from '../../services/riderService.js';
+import { getRiderAuthService } from '../../services/riderAuthService.js';
 import { getSalesReturnService } from '../../services/salesReturnService.js';
 import { getOfferService } from '../../services/offerService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
@@ -90,6 +92,40 @@ router.delete('/branches/:id', checkRole(['admin']), async (req: any, res) => {
   try {
     await getShopService().deleteBranch(req.tenantId, req.params.id);
     res.json({ success: true, message: 'Branch deleted successfully' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// --- Delivery riders (Stage 6 rider app): admin manages accounts & passwords ---
+router.get('/riders', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const riders = await getRiderService().listByTenant(req.tenantId);
+    res.json(riders);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/riders', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const { name, phone, password } = req.body;
+    if (!name || !phone || !password) {
+      return res.status(400).json({ error: 'name, phone, and password are required' });
+    }
+    const created = await getRiderAuthService().createRiderWithPassword(req.tenantId, { name, phone, password });
+    res.status(201).json(created);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.put('/riders/:id/password', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: 'password is required' });
+    await getRiderAuthService().setPassword(req.tenantId, req.params.id, password);
+    res.json({ success: true });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }

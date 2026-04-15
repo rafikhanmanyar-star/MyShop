@@ -37,6 +37,9 @@ const MultiStoreContent: React.FC = () => {
         code: '',
         type: 'Express' as any,
         location: '',
+        address: '',
+        latitude: '' as string,
+        longitude: '' as string,
         region: '',
         manager: '',
         contact: '',
@@ -47,11 +50,16 @@ const MultiStoreContent: React.FC = () => {
 
     const handleRegisterStore = async () => {
         try {
+            const latStr = newStoreData.latitude.trim();
+            const lngStr = newStoreData.longitude.trim();
             await addStore({
                 name: newStoreData.name,
                 code: newStoreData.code || `BR-${Date.now().toString().slice(-4)}`,
                 type: newStoreData.type,
                 location: newStoreData.location,
+                address: newStoreData.address.trim() || null,
+                latitude: latStr === '' ? null : parseFloat(latStr),
+                longitude: lngStr === '' ? null : parseFloat(lngStr),
                 region: newStoreData.region,
                 manager: newStoreData.manager,
                 contact: newStoreData.contact,
@@ -65,6 +73,9 @@ const MultiStoreContent: React.FC = () => {
                 code: '',
                 type: 'Express',
                 location: '',
+                address: '',
+                latitude: '',
+                longitude: '',
                 region: '',
                 manager: '',
                 contact: '',
@@ -180,6 +191,37 @@ const MultiStoreContent: React.FC = () => {
                             placeholder="Address/Area"
                             value={newStoreData.location}
                             onChange={(e) => setNewStoreData({ ...newStoreData, location: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                            Delivery address (routing)
+                        </label>
+                        <textarea
+                            className="w-full min-h-[72px] rounded-xl border border-border dark:border-slate-600 bg-card dark:bg-slate-800/80 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Optional: full street address for nearest-branch delivery"
+                            value={newStoreData.address}
+                            onChange={(e) => setNewStoreData({ ...newStoreData, address: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Latitude"
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 24.8607"
+                            value={newStoreData.latitude}
+                            onChange={(e) => setNewStoreData({ ...newStoreData, latitude: e.target.value })}
+                        />
+                        <Input
+                            label="Longitude"
+                            type="number"
+                            step="any"
+                            placeholder="e.g. 67.0011"
+                            value={newStoreData.longitude}
+                            onChange={(e) => setNewStoreData({ ...newStoreData, longitude: e.target.value })}
                         />
                     </div>
 
