@@ -17,8 +17,13 @@ import procurementRoutes from './routes/procurement.js';
 import shiftsRoutes from './routes/shifts.js';
 import khataRoutes from './routes/khata.js';
 import dataRoutes from './routes/data.js';
+import platformTenantsRoutes from './routes/platformTenants.js';
+import platformAuthRoutes from './routes/platformAuth.js';
+import { platformAdminMiddleware } from '../middleware/platformAdminMiddleware.js';
 import { runMigrations } from '../scripts/run-migrations.js';
+import { getPlatformAuthService } from '../services/platformAuthService.js';
 import { fileURLToPath } from 'url';
+import fs from 'node:fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -82,6 +87,10 @@ app.get('/api/test', (_req, res) => {
 // Public routes (no auth required)
 app.use('/api/auth', authRoutes);
 
+// Platform super admin auth + tenant management (JWT from /api/platform/auth/login or optional X-Platform-Admin-Secret)
+app.use('/api/platform/auth', platformAuthRoutes);
+app.use('/api/platform/tenants', platformAdminMiddleware, platformTenantsRoutes);
+
 // Mobile ordering routes (mix of public + customer-authenticated)
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/rider', riderRoutes);
@@ -101,6 +110,16 @@ app.use('/api/shop/shifts', tenantMiddleware(dbService), shiftsRoutes);
 app.use('/api/shop/khata', tenantMiddleware(dbService), khataRoutes);
 app.use('/api/shop/data', tenantMiddleware(dbService), dataRoutes);
 app.use('/api/shop', tenantMiddleware(dbService), shopRoutes);
+
+// Platform admin UI (static HTML; auth is X-Platform-Admin-Secret on API calls)
+const platformAdminDir = path.resolve(process.cwd(), 'public', 'platform-admin');
+if (fs.existsSync(platformAdminDir)) {
+  app.get('/platform-admin', (_req, res) => {
+    res.redirect(308, '/platform-admin/');
+  });
+  app.use('/platform-admin', express.static(platformAdminDir, { index: 'index.html' }));
+  console.log('🖥️  Platform admin UI: /platform-admin/');
+}
 
 // Serve static client (Electron mode)
 if (clientDistPath) {
@@ -135,6 +154,14 @@ async function start() {
       console.log('🔄 Running database migrations...');
       await runMigrations();
       console.log('✅ Migrations complete');
+      try {
+        await getPlatformAuthService().ensureDefaultSuperAdmin();
+      } catch (seedErr) {
+        console.warn(
+          '⚠️ Platform super admin seed skipped:',
+          seedErr instanceof Error ? seedErr.message : seedErr
+        );
+      }
     } catch (migError) {
       console.error('⚠️ Migration failed - skipping for now:', migError instanceof Error ? migError.message : migError);
     }

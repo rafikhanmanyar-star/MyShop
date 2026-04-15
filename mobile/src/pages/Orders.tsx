@@ -95,6 +95,13 @@ export default function Orders() {
                                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{formatOrderPaymentMethod(order.payment_method)}</span>
                                 <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--primary)' }}>{formatPrice(order.grand_total)}</span>
                             </div>
+                            {/* Stage 9: courier assigned / out for delivery (list API includes rider summary) */}
+                            {order.payment_method !== 'SelfCollection' && order.delivery_order_id && order.status === 'OutForDelivery' && (
+                                <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: '#047857' }}>
+                                    🛵 {order.rider_name ? `${order.rider_name} · ` : ''}
+                                    {String(order.delivery_status || '').toUpperCase() === 'ON_THE_WAY' ? 'On the way' : 'Out for delivery'}
+                                </div>
+                            )}
                         </Link>
                     ))}
 

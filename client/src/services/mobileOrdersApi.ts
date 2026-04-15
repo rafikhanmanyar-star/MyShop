@@ -23,6 +23,11 @@ export interface MobileOrder {
     rider_name?: string | null;
     rider_phone?: string | null;
     rider_distance_km?: number | null;
+    /** Stage 8: live rider GPS + distance to drop-off (POS) */
+    rider_latitude?: number | null;
+    rider_longitude?: number | null;
+    rider_operational_status?: 'AVAILABLE' | 'BUSY' | 'OFFLINE' | string | null;
+    rider_to_dropoff_km?: number | null;
     delivery_lat?: number | null;
     delivery_lng?: number | null;
     delivery_notes?: string;

@@ -8,7 +8,7 @@ import {
     ChevronRight, WifiOff, Wifi, QrCode, Settings as SettingsIcon,
     Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
     Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
-    Banknote, Building2, Wallet,
+    Banknote, Building2, Wallet, ExternalLink, Navigation,
 } from 'lucide-react';
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
@@ -51,6 +51,32 @@ function formatMobilePaymentMethod(pm: string | undefined): string {
     if (pm === 'COD') return 'Cash on delivery';
     if (pm === 'EasypaisaJazzcashOnline') return 'Easypaisa/Jazzcash/Online';
     return pm || '—';
+}
+
+/** Stage 8: poll order detail while courier delivery is in progress. */
+function shouldPollDetailDelivery(order: MobileOrder | null): boolean {
+    if (!order?.delivery_order_id) return false;
+    const ds = String(order.delivery_status || '').toUpperCase();
+    return ds !== 'DELIVERED';
+}
+
+function formatCourierDeliveryStatus(ds: string | null | undefined): string {
+    if (!ds) return '—';
+    const u = ds.toUpperCase();
+    const map: Record<string, string> = {
+        ASSIGNED: 'Assigned',
+        PICKED: 'Picked up',
+        ON_THE_WAY: 'On the way',
+        DELIVERED: 'Delivered',
+    };
+    return map[u] || ds.replace(/_/g, ' ');
+}
+
+function formatRiderOperationalStatus(s: string | null | undefined): string {
+    if (!s) return '—';
+    const u = s.toUpperCase();
+    const map: Record<string, string> = { AVAILABLE: 'Available', BUSY: 'Busy', OFFLINE: 'Offline' };
+    return map[u] || s;
 }
 
 const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Unpaid', 'Cancelled'];
@@ -134,6 +160,18 @@ function MobileOrdersPageContent() {
         });
         return () => { cancelled = true; };
     }, [orderIdFromUrl]);
+
+    useEffect(() => {
+        if (!orderIdFromUrl || !detailOrder || detailOrder.id !== orderIdFromUrl) return;
+        if (!shouldPollDetailDelivery(detailOrder)) return;
+
+        const load = () => {
+            mobileOrdersApi.getOrder(orderIdFromUrl).then(setDetailOrder).catch(() => {});
+        };
+        load();
+        const id = window.setInterval(load, 12_000);
+        return () => clearInterval(id);
+    }, [orderIdFromUrl, detailOrder?.id, detailOrder?.delivery_order_id, detailOrder?.delivery_status]);
 
     const handleViewDetail = useCallback((order: MobileOrder) => {
         setSearchParams((prev) => {
@@ -373,6 +411,17 @@ function MobileOrdersPageContent() {
                                                     <StatusIcon className="w-3 h-3 shrink-0" />
                                                     {cfg.label}
                                                 </span>
+                                                {(order.rider_name || order.delivery_order_id) && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.65rem] sm:text-xs font-semibold border shrink-0 bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-300">
+                                                        <Truck className="w-3 h-3 shrink-0" />
+                                                        {order.rider_name || 'Courier'}
+                                                        {order.rider_to_dropoff_km != null && Number.isFinite(order.rider_to_dropoff_km) && (
+                                                            <span className="tabular-nums opacity-90">
+                                                                · {order.rider_to_dropoff_km.toFixed(1)} km
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                )}
                                             </div>
                                             <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
                                             <div className="flex flex-col gap-2 text-xs sm:text-sm text-muted-foreground">
@@ -668,6 +717,68 @@ function OrderDetailPanel({
                                         </p>
                                     )}
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {(order.rider_id || order.delivery_order_id) && (
+                        <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 px-3 py-3 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+                            <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-emerald-900/80 dark:text-emerald-300/90 mb-2 flex items-center gap-1.5">
+                                <Truck className="w-3.5 h-3.5 shrink-0" />
+                                Rider and courier
+                            </h4>
+                            <div className="space-y-2 text-sm text-foreground">
+                                {(order.rider_name || order.rider_phone) && (
+                                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                        {order.rider_name && (
+                                            <span className="flex items-center gap-1.5 min-w-0">
+                                                <User className="w-4 h-4 text-muted-foreground shrink-0" />
+                                                <span className="font-medium break-words">{order.rider_name}</span>
+                                            </span>
+                                        )}
+                                        {order.rider_phone && (
+                                            <span className="flex items-center gap-1.5 min-w-0">
+                                                <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+                                                <span className="break-all">{order.rider_phone}</span>
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs sm:text-sm">
+                                    <span>
+                                        <span className="text-muted-foreground">Courier status: </span>
+                                        <span className="font-semibold">{formatCourierDeliveryStatus(order.delivery_status)}</span>
+                                    </span>
+                                    <span>
+                                        <span className="text-muted-foreground">Rider: </span>
+                                        <span className="font-semibold">{formatRiderOperationalStatus(order.rider_operational_status)}</span>
+                                    </span>
+                                </div>
+                                {order.rider_to_dropoff_km != null && Number.isFinite(order.rider_to_dropoff_km) && (
+                                    <p className="flex items-center gap-2 text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                                        <Navigation className="w-4 h-4 shrink-0" />
+                                        ~{order.rider_to_dropoff_km.toFixed(2)} km to drop-off
+                                    </p>
+                                )}
+                                {(() => {
+                                    const rlat = order.rider_latitude != null ? Number(order.rider_latitude) : NaN;
+                                    const rlng = order.rider_longitude != null ? Number(order.rider_longitude) : NaN;
+                                    const dlat = order.delivery_lat != null ? Number(order.delivery_lat) : NaN;
+                                    const dlng = order.delivery_lng != null ? Number(order.delivery_lng) : NaN;
+                                    if (![rlat, rlng, dlat, dlng].every((n) => Number.isFinite(n))) return null;
+                                    const href = `https://www.google.com/maps/dir/?api=1&origin=${rlat},${rlng}&destination=${dlat},${dlng}`;
+                                    return (
+                                        <a
+                                            href={href}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
+                                        >
+                                            <ExternalLink className="w-4 h-4 shrink-0" />
+                                            Open directions (rider → customer)
+                                        </a>
+                                    );
+                                })()}
                             </div>
                         </div>
                     )}

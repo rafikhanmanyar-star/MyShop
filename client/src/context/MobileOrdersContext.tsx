@@ -167,6 +167,9 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
                                             playNotificationSound();
                                             // Auto-refresh orders list
                                             loadOrders();
+                                        } else if (payload.type === 'order_updated') {
+                                            // Stage 11: shop/rider/customer order or delivery status changed — refresh list (no bell)
+                                            loadOrders();
                                         } else if (payload.type === 'connected') {
                                             setSseConnected(true);
                                         }

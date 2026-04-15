@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { customerApi } from '../api';
+import { customerApi, getApiBaseUrl } from '../api';
 
 const DELIVERY_STEPS = ['Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
 const PICKUP_STEPS = ['Pending', 'Confirmed', 'Packed', 'Delivered'];
@@ -18,6 +18,35 @@ const statusLabel = (s: string, isPickup: boolean): string => {
     return labels[s] || s;
 };
 
+/** Stage 9 — live courier tracking in the customer PWA (API shares rider fields with POS Stage 8). */
+function formatCourierDeliveryStatus(ds: string | null | undefined): string {
+    if (!ds) return '—';
+    const u = ds.toUpperCase();
+    const map: Record<string, string> = {
+        ASSIGNED: 'Assigned',
+        PICKED: 'Picked up',
+        ON_THE_WAY: 'On the way',
+        DELIVERED: 'Delivered',
+    };
+    return map[u] || ds.replace(/_/g, ' ');
+}
+
+function formatRiderOperationalStatus(s: string | null | undefined): string {
+    if (!s) return '—';
+    const u = String(s).toUpperCase();
+    const map: Record<string, string> = { AVAILABLE: 'Available', BUSY: 'Busy', OFFLINE: 'Offline' };
+    return map[u] || String(s);
+}
+
+function buildRiderToCustomerMapsUrl(
+    rlat: number,
+    rlng: number,
+    dlat: number,
+    dlng: number
+): string {
+    return `https://www.google.com/maps/dir/?api=1&origin=${rlat},${rlng}&destination=${dlat},${dlng}`;
+}
+
 export default function OrderDetail() {
     const { shopSlug, id } = useParams();
     const navigate = useNavigate();
@@ -27,27 +56,76 @@ export default function OrderDetail() {
     const [loading, setLoading] = useState(true);
     const [cancelling, setCancelling] = useState(false);
 
-    useEffect(() => {
-        if (!state.isLoggedIn) {
-            navigate(`/${shopSlug}/login?redirect=orders/${id}`, { replace: true });
-            return;
-        }
-        loadOrder();
-        // Poll for status updates
-        const interval = setInterval(loadOrder, 10000);
-        return () => clearInterval(interval);
-    }, [id, state.isLoggedIn]);
-
-    const loadOrder = async () => {
+    const loadOrder = useCallback(async () => {
+        if (!id) return;
         try {
-            const data = await customerApi.getOrder(id!);
+            const data = await customerApi.getOrder(id);
             setOrder(data);
         } catch (err: any) {
             showToast(err.message);
         } finally {
             setLoading(false);
         }
-    };
+    }, [id, showToast]);
+
+    useEffect(() => {
+        if (!state.isLoggedIn) {
+            navigate(`/${shopSlug}/login?redirect=orders/${id}`, { replace: true });
+            return;
+        }
+        if (!id) return;
+        setLoading(true);
+        setOrder(null);
+        void loadOrder();
+    }, [id, state.isLoggedIn, shopSlug, navigate, loadOrder]);
+
+    /** Stage 10: server-sent events when order or courier status changes (PostgreSQL LISTEN; polling remains for live GPS). */
+    useEffect(() => {
+        if (!state.isLoggedIn || !id) return;
+        const token = localStorage.getItem('mobile_token');
+        if (!token) return;
+
+        const base = getApiBaseUrl();
+        const qs = new URLSearchParams({ access_token: token });
+        const url = `${base}/mobile/orders/${encodeURIComponent(id)}/stream?${qs.toString()}`;
+
+        const es = new EventSource(url);
+        es.onmessage = (ev) => {
+            try {
+                const d = JSON.parse(ev.data);
+                if (d.type === 'order_updated') void loadOrder();
+            } catch {
+                /* ignore non-JSON */
+            }
+        };
+        es.onerror = () => {
+            /* browser reconnects automatically */
+        };
+        return () => {
+            es.close();
+        };
+    }, [id, state.isLoggedIn, loadOrder]);
+
+    useEffect(() => {
+        if (!state.isLoggedIn || !id) return;
+        const fastPoll =
+            order &&
+            order.payment_method !== 'SelfCollection' &&
+            order.delivery_order_id &&
+            order.status === 'OutForDelivery' &&
+            String(order.delivery_status || '').toUpperCase() !== 'DELIVERED';
+        const ms = fastPoll ? 12_000 : 15_000;
+        const t = window.setInterval(() => void loadOrder(), ms);
+        return () => clearInterval(t);
+    }, [
+        id,
+        state.isLoggedIn,
+        order?.payment_method,
+        order?.delivery_order_id,
+        order?.status,
+        order?.delivery_status,
+        loadOrder,
+    ]);
 
     const handleCancel = async () => {
         if (!confirm('Are you sure you want to cancel this order?')) return;
@@ -144,6 +222,67 @@ export default function OrderDetail() {
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+            )}
+
+            {/* Stage 9: live courier — same data as shop POS (distance + map when coords exist) */}
+            {!isPickup && order.delivery_order_id && order.status !== 'Cancelled' && order.status !== 'Delivered' && (
+                <div style={{
+                    background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid #a7f3d0',
+                    padding: 16,
+                    marginBottom: 16,
+                }}>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: '#065f46' }}>
+                        🛵 Your courier
+                    </h3>
+                    <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                        {order.rider_name && (
+                            <p style={{ margin: '0 0 6px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                {order.rider_name}
+                            </p>
+                        )}
+                        {order.rider_phone && (
+                            <p style={{ margin: '0 0 8px' }}>
+                                <a href={`tel:${order.rider_phone}`} style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                                    {order.rider_phone}
+                                </a>
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>Tap to call</span>
+                            </p>
+                        )}
+                        <p style={{ margin: '0 0 4px' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Delivery: </span>
+                            <span style={{ fontWeight: 600 }}>{formatCourierDeliveryStatus(order.delivery_status)}</span>
+                        </p>
+                        <p style={{ margin: '0 0 8px' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Rider status: </span>
+                            <span style={{ fontWeight: 600 }}>{formatRiderOperationalStatus(order.rider_operational_status)}</span>
+                        </p>
+                        {order.rider_to_dropoff_km != null && Number.isFinite(Number(order.rider_to_dropoff_km)) && (
+                            <p style={{ margin: '0 0 10px', fontWeight: 700, color: '#047857' }}>
+                                ~{Number(order.rider_to_dropoff_km).toFixed(2)} km to your address
+                            </p>
+                        )}
+                        {(() => {
+                            const rlat = order.rider_latitude != null ? Number(order.rider_latitude) : NaN;
+                            const rlng = order.rider_longitude != null ? Number(order.rider_longitude) : NaN;
+                            const dlat = order.delivery_lat != null ? Number(order.delivery_lat) : NaN;
+                            const dlng = order.delivery_lng != null ? Number(order.delivery_lng) : NaN;
+                            if (![rlat, rlng, dlat, dlng].every((n) => Number.isFinite(n))) return null;
+                            return (
+                                <a
+                                    href={buildRiderToCustomerMapsUrl(rlat, rlng, dlat, dlng)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn btn-outline btn-sm"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4 }}
+                                >
+                                    Open in Maps
+                                </a>
+                            );
+                        })()}
                     </div>
                 </div>
             )}

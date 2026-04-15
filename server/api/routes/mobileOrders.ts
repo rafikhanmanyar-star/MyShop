@@ -14,7 +14,7 @@ console.log('✅ Mobile-orders POS router initialized');
 //    wildcard route, otherwise Express will match "settings" etc as IDs.
 // ════════════════════════════════════════════════════════════════════
 
-// ─── SSE: Real-time order stream for POS ─────────────────────────────
+// ─── SSE: Real-time order stream for POS (Stage 11: + order/delivery status updates) ───
 router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
     const tenantId = req.tenantId;
 
@@ -22,7 +22,7 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
         'X-Accel-Buffering': 'no', // Disable nginx buffering
     });
 
@@ -43,13 +43,17 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
         try {
             pgClient = await pool.connect();
             await pgClient.query('LISTEN new_mobile_order');
+            await pgClient.query('LISTEN mobile_order_updated');
 
             pgClient.on('notification', (msg: any) => {
                 try {
                     const payload = JSON.parse(msg.payload);
-                    // Only forward notifications for this tenant
-                    if (payload.tenantId === tenantId) {
+                    if (payload.tenantId !== tenantId) return;
+
+                    if (msg.channel === 'new_mobile_order') {
                         res.write(`data: ${JSON.stringify({ type: 'new_order', ...payload })}\n\n`);
+                    } else if (msg.channel === 'mobile_order_updated') {
+                        res.write(`data: ${JSON.stringify({ type: 'order_updated', ...payload })}\n\n`);
                     }
                 } catch (err) {
                     console.error('SSE notification parse error:', err);
@@ -65,6 +69,7 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
         clearInterval(heartbeat);
         if (pgClient) {
             pgClient.query('UNLISTEN new_mobile_order').catch(() => { });
+            pgClient.query('UNLISTEN mobile_order_updated').catch(() => { });
             pgClient.release();
         }
     });

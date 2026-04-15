@@ -29,5 +29,5 @@ CREATE POLICY tenant_isolation ON riders FOR ALL
     USING (tenant_id = get_current_tenant_id())
     WITH CHECK (tenant_id = get_current_tenant_id());
 
-COMMENT ON TABLE riders IS 'Delivery riders per tenant; location updated by rider app (Stage 7)';
+COMMENT ON TABLE riders IS 'Delivery riders per tenant; current_* updated by POST /api/rider/location (Stage 7 rider app GPS)';
 COMMENT ON COLUMN riders.status IS 'AVAILABLE | BUSY | OFFLINE';

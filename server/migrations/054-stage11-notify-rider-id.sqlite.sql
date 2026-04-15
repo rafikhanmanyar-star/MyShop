@@ -1,0 +1,1 @@
+-- SQLite: Stage 11 NOTIFY payload changes are PostgreSQL-only.

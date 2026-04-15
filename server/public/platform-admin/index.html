@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tenant management — MyShop</title>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #151a22;
+      --border: #2a3344;
+      --text: #e8edf4;
+      --muted: #8b98a8;
+      --accent: #5b9fd4;
+      --danger: #e07070;
+      --ok: #6bc98a;
+      --font: "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    a { color: var(--accent); }
+    header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem 1rem;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    header .sub {
+      color: var(--muted);
+      font-size: 0.85rem;
+      width: 100%;
+      flex-basis: 100%;
+    }
+    @media (min-width: 720px) {
+      header .sub { width: auto; flex-basis: auto; margin-left: auto; }
+    }
+    .secret-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .secret-row label { font-size: 0.8rem; color: var(--muted); }
+    input[type="password"], input[type="text"], textarea {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 0.6rem;
+      border-radius: 6px;
+      font: inherit;
+      min-width: 12rem;
+    }
+    textarea { min-height: 7rem; width: 100%; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+    button {
+      font: inherit;
+      cursor: pointer;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      padding: 0.45rem 0.85rem;
+    }
+    button.primary {
+      background: #1e3a52;
+      border-color: #3d6a8c;
+      color: #dbeaf7;
+    }
+    button.danger {
+      background: #3a1e1e;
+      border-color: #6a3a3a;
+      color: #ffc9c9;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    main { padding: 1rem 1.25rem 2rem; max-width: 1200px; margin: 0 auto; }
+    .banner {
+      padding: 0.65rem 0.85rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .banner.err { border-color: #6a3535; color: #f0b4b4; }
+    .banner.ok { border-color: #355a40; color: #b8e8c8; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.5rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 500; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .mono { font-family: ui-monospace, monospace; font-size: 0.82rem; word-break: break-all; }
+    .actions { white-space: nowrap; }
+    .actions button { margin-right: 0.35rem; margin-bottom: 0.25rem; }
+    dialog {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 0;
+      max-width: min(520px, 94vw);
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.55); }
+    .dlg-head {
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+    .dlg-body { padding: 1rem; }
+    .dlg-foot {
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+    .field { margin-bottom: 0.75rem; }
+    .field label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 0.25rem;
+    }
+    .pager { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .pager input[type="number"] { width: 4.5rem; min-width: unset; }
+    .login-wrap { max-width: 400px; margin: 2rem auto; padding: 0 1rem; }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+    }
+    .login-card h2 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+    #appPanel[hidden] { display: none !important; }
+    #loginPanel[hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="loginPanel">
+    <header>
+      <h1>Platform admin</h1>
+      <p class="sub">Sign in to manage tenants</p>
+    </header>
+    <div class="login-wrap">
+      <div class="login-card">
+        <h2>Super admin login</h2>
+        <p class="muted" style="margin: 0 0 1rem; font-size: 0.85rem;">
+          Default account (change password after first login): <span class="mono">Admin</span> / <span class="mono">Admin123</span>
+        </p>
+        <div class="field"><label for="loginUser">Username</label><input type="text" id="loginUser" autocomplete="username" value="Admin" /></div>
+        <div class="field"><label for="loginPass">Password</label><input type="password" id="loginPass" autocomplete="current-password" /></div>
+        <button type="button" class="primary" id="doLogin" style="width:100%; margin-top:0.5rem;">Sign in</button>
+        <details style="margin-top:1rem;">
+          <summary class="muted" style="cursor:pointer; font-size:0.85rem;">Automation: API secret header</summary>
+          <p class="muted" style="font-size:0.8rem; margin:0.5rem 0 0;">Optional <code>X-Platform-Admin-Secret</code> if <code>PLATFORM_ADMIN_SECRET</code> is set on the server.</p>
+          <div class="secret-row" style="margin-top:0.5rem;">
+            <input id="secret" type="password" autocomplete="off" placeholder="Optional secret" style="flex:1; min-width:0;" />
+            <button type="button" id="saveSecret">Store</button>
+            <button type="button" id="clearSecret">Clear</button>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <div id="appPanel" hidden>
+  <header>
+    <h1>Tenant management</h1>
+    <p class="sub">Signed in as <strong id="whoami">—</strong></p>
+    <div class="secret-row">
+      <button type="button" id="changePwdBtn">Change password</button>
+      <button type="button" id="logoutBtn">Sign out</button>
+    </div>
+  </header>
+  <main>
+    <div id="msg"></div>
+    <div class="toolbar">
+      <button type="button" class="primary" id="reload">Refresh list</button>
+      <span class="muted" id="totalHint"></span>
+    </div>
+    <div class="pager">
+      <span class="muted">Page size</span>
+      <input type="number" id="pageSize" min="5" max="200" value="50" />
+      <span class="muted">Offset</span>
+      <input type="number" id="offset" min="0" value="0" />
+      <button type="button" id="applyPage">Apply</button>
+    </div>
+    <div style="overflow-x: auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Company</th>
+            <th>Email</th>
+            <th>Slug</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </main>
+  </div>
+
+  <dialog id="pwdDlg">
+    <div class="dlg-head">Change password</div>
+    <div class="dlg-body">
+      <div class="field"><label>Current password</label><input type="password" id="pwd_cur" autocomplete="current-password" /></div>
+      <div class="field"><label>New password (min 8 characters)</label><input type="password" id="pwd_new" autocomplete="new-password" /></div>
+      <div class="field"><label>Confirm new password</label><input type="password" id="pwd_new2" autocomplete="new-password" /></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="pwdCancel">Cancel</button>
+      <button type="button" class="primary" id="pwdSave">Update</button>
+    </div>
+  </dialog>
+
+  <dialog id="editDlg">
+    <div class="dlg-head">Edit tenant</div>
+    <div class="dlg-body">
+      <div class="field"><label>Name</label><input type="text" id="f_name" /></div>
+      <div class="field"><label>Company name</label><input type="text" id="f_company" /></div>
+      <div class="field"><label>Email</label><input type="text" id="f_email" /></div>
+      <div class="field"><label>Phone</label><input type="text" id="f_phone" /></div>
+      <div class="field"><label>Address</label><input type="text" id="f_address" /></div>
+      <div class="field"><label>Slug</label><input type="text" id="f_slug" /></div>
+      <div class="field"><label>Logo URL</label><input type="text" id="f_logo" /></div>
+      <div class="field"><label>Brand color</label><input type="text" id="f_color" placeholder="#4F46E5" /></div>
+      <div class="field"><label>Settings (JSON object)</label><textarea id="f_settings"></textarea></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="editCancel">Cancel</button>
+      <button type="button" class="primary" id="editSave">Save</button>
+    </div>
+  </dialog>
+
+  <dialog id="delDlg">
+    <div class="dlg-head">Delete tenant</div>
+    <div class="dlg-body">
+      <p class="muted">This removes the tenant and <strong>all</strong> related data (users, sales, inventory, …).</p>
+      <p>Type the tenant id to confirm:</p>
+      <p class="mono" id="delIdDisplay"></p>
+      <div class="field"><label>Confirm tenant id</label><input type="text" id="delConfirm" autocomplete="off" /></div>
+    </div>
+    <div class="dlg-foot">
+      <button type="button" id="delCancel">Cancel</button>
+      <button type="button" class="danger" id="delDo">Delete permanently</button>
+    </div>
+  </dialog>
+
+  <script>
+    const JWT_KEY = 'myshop_platform_jwt';
+    const STORAGE_KEY = 'myshop_platform_admin_secret';
+    const secretEl = document.getElementById('secret');
+    const msgEl = document.getElementById('msg');
+    const rowsEl = document.getElementById('rows');
+    const totalHint = document.getElementById('totalHint');
+    const editDlg = document.getElementById('editDlg');
+    const delDlg = document.getElementById('delDlg');
+    const pwdDlg = document.getElementById('pwdDlg');
+    const loginPanel = document.getElementById('loginPanel');
+    const appPanel = document.getElementById('appPanel');
+    let editingId = null;
+    let deletingId = null;
+
+    function getToken() {
+      return (sessionStorage.getItem(JWT_KEY) || '').trim();
+    }
+
+    function getSecret() {
+      if (!secretEl) return sessionStorage.getItem(STORAGE_KEY) || '';
+      return (secretEl.value || '').trim() || sessionStorage.getItem(STORAGE_KEY) || '';
+    }
+
+    function hasPlatformAuth() {
+      return !!(getToken() || getSecret());
+    }
+
+    /** @param {boolean} [withJson] default true — set false for DELETE without body */
+    function headersJson(withJson) {
+      const h = {};
+      if (withJson !== false) h['Content-Type'] = 'application/json';
+      const t = getToken();
+      if (t) h['Authorization'] = 'Bearer ' + t;
+      else {
+        const s = getSecret();
+        if (s) h['X-Platform-Admin-Secret'] = s;
+      }
+      return h;
+    }
+
+    function updateShell() {
+      const tok = getToken();
+      const el = document.getElementById('whoami');
+      if (tok) {
+        try {
+          const part = tok.split('.')[1];
+          const payload = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
+          el.textContent = payload.username || 'platform admin';
+        } catch {
+          el.textContent = 'platform admin';
+        }
+      } else if (getSecret()) {
+        el.textContent = 'automation (shared secret)';
+      } else {
+        el.textContent = '—';
+      }
+      const pwdBtn = document.getElementById('changePwdBtn');
+      if (pwdBtn) pwdBtn.style.display = getToken() ? '' : 'none';
+    }
+
+    function showApp(show) {
+      loginPanel.hidden = show;
+      appPanel.hidden = !show;
+      if (show) updateShell();
+    }
+
+    function showMsg(text, kind) {
+      msgEl.innerHTML = '';
+      if (!text) return;
+      const d = document.createElement('div');
+      d.className = 'banner ' + (kind === 'err' ? 'err' : kind === 'ok' ? 'ok' : '');
+      d.textContent = text;
+      msgEl.appendChild(d);
+    }
+
+    async function api(path, opts) {
+      const isDelete = opts && opts.method === 'DELETE';
+      const baseHeaders = headersJson(!isDelete);
+      const res = await fetch(path, {
+        ...opts,
+        headers: { ...baseHeaders, ...(opts && opts.headers) },
+      });
+      const text = await res.text();
+      let data;
+      try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+      if (!res.ok) {
+        const err = (data && data.error) || text || res.statusText;
+        const e = new Error(err);
+        e.status = res.status;
+        e.data = data;
+        throw e;
+      }
+      return data;
+    }
+
+    function renderRows(tenants) {
+      rowsEl.innerHTML = '';
+      for (const t of tenants) {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td class="mono">' + escapeHtml(t.id) + '</td>' +
+          '<td>' + escapeHtml(t.company_name || t.name || '—') + '</td>' +
+          '<td>' + escapeHtml(t.email || '') + '</td>' +
+          '<td class="mono">' + escapeHtml(t.slug || '—') + '</td>' +
+          '<td class="actions">' +
+            '<button type="button" data-act="edit" data-id="' + escapeAttr(t.id) + '">Edit</button>' +
+            '<button type="button" data-act="del" data-id="' + escapeAttr(t.id) + '">Delete</button>' +
+          '</td>';
+        rowsEl.appendChild(tr);
+      }
+      rowsEl.querySelectorAll('button[data-act]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-id');
+          if (btn.getAttribute('data-act') === 'edit') openEdit(id);
+          else openDelete(id);
+        });
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+    function escapeAttr(s) {
+      return escapeHtml(s).replace(/'/g, '&#39;');
+    }
+
+    async function loadList() {
+      showMsg('');
+      const limit = Math.max(5, Math.min(200, parseInt(document.getElementById('pageSize').value, 10) || 50));
+      const offset = Math.max(0, parseInt(document.getElementById('offset').value, 10) || 0);
+      document.getElementById('pageSize').value = String(limit);
+      document.getElementById('offset').value = String(offset);
+      try {
+        const data = await api('/api/platform/tenants?limit=' + limit + '&offset=' + offset);
+        totalHint.textContent = 'Total tenants: ' + data.total + ' · showing ' + data.tenants.length;
+        renderRows(data.tenants || []);
+      } catch (e) {
+        showMsg(e.message || String(e), 'err');
+        rowsEl.innerHTML = '';
+        totalHint.textContent = '';
+      }
+    }
+
+    async function openEdit(id) {
+      editingId = id;
+      showMsg('');
+      try {
+        const t = await api('/api/platform/tenants/' + encodeURIComponent(id));
+        document.getElementById('f_name').value = t.name || '';
+        document.getElementById('f_company').value = t.company_name || '';
+        document.getElementById('f_email').value = t.email || '';
+        document.getElementById('f_phone').value = t.phone || '';
+        document.getElementById('f_address').value = t.address || '';
+        document.getElementById('f_slug').value = t.slug || '';
+        document.getElementById('f_logo').value = t.logo_url || '';
+        document.getElementById('f_color').value = t.brand_color || '';
+        document.getElementById('f_settings').value =
+          t.settings && typeof t.settings === 'object'
+            ? JSON.stringify(t.settings, null, 2)
+            : '{}';
+        editDlg.showModal();
+      } catch (e) {
+        showMsg(e.message || String(e), 'err');
+      }
+    }
+
+    document.getElementById('editSave').addEventListener('click', async () => {
+      if (!editingId) return;
+      let settingsObj = {};
+      const raw = document.getElementById('f_settings').value.trim();
+      if (raw) {
+        try {
+          settingsObj = JSON.parse(raw);
+          if (typeof settingsObj !== 'object' || settingsObj === null || Array.isArray(settingsObj)) {
+            throw new Error('Settings must be a JSON object');
+          }
+        } catch (err) {
+          showMsg('Invalid JSON in settings: ' + (err.message || err), 'err');
+          return;
+        }
+      }
+      const body = {
+        name: document.getElementById('f_name').value,
+        company_name: document.getElementById('f_company').value || null,
+        email: document.getElementById('f_email').value,
+        phone: document.getElementById('f_phone').value || null,
+        address: document.getElementById('f_address').value || null,
+        slug: document.getElementById('f_slug').value || null,
+        logo_url: document.getElementById('f_logo').value || null,
+        brand_color: document.getElementById('f_color').value || null,
+        settings: settingsObj,
+      };
+      try {
+        await api('/api/platform/tenants/' + encodeURIComponent(editingId), {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
+        editDlg.close();
+        showMsg('Tenant updated.', 'ok');
+        loadList();
+      } catch (e) {
+        showMsg(e.message || String(e), 'err');
+      }
+    });
+
+    document.getElementById('editCancel').addEventListener('click', () => editDlg.close());
+
+    function openDelete(id) {
+      deletingId = id;
+      document.getElementById('delIdDisplay').textContent = id;
+      document.getElementById('delConfirm').value = '';
+      delDlg.showModal();
+    }
+
+    document.getElementById('delCancel').addEventListener('click', () => delDlg.close());
+
+    document.getElementById('delDo').addEventListener('click', async () => {
+      const id = deletingId;
+      const confirm = document.getElementById('delConfirm').value.trim();
+      if (!id || confirm !== id) {
+        showMsg('Confirmation id must match exactly.', 'err');
+        return;
+      }
+      try {
+        await api(
+          '/api/platform/tenants/' + encodeURIComponent(id) + '?confirmTenantId=' + encodeURIComponent(id),
+          { method: 'DELETE' }
+        );
+        delDlg.close();
+        showMsg('Tenant deleted.', 'ok');
+        loadList();
+      } catch (e) {
+        showMsg(e.message || String(e), 'err');
+      }
+    });
+
+    document.getElementById('reload').addEventListener('click', loadList);
+    document.getElementById('applyPage').addEventListener('click', loadList);
+
+    document.getElementById('doLogin').addEventListener('click', async () => {
+      showMsg('');
+      const username = document.getElementById('loginUser').value.trim();
+      const password = document.getElementById('loginPass').value;
+      try {
+        const res = await fetch('/api/platform/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        sessionStorage.setItem(JWT_KEY, data.token);
+        document.getElementById('loginPass').value = '';
+        showApp(true);
+        showMsg('Signed in.', 'ok');
+        loadList();
+      } catch (e) {
+        showMsg(e.message || String(e), 'err');
+      }
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      sessionStorage.removeItem(JWT_KEY);
+      showApp(false);
+      showMsg('Signed out.', 'ok');
+      rowsEl.innerHTML = '';
+      totalHint.textContent = '';
+    });
+
+    document.getElementById('changePwdBtn').addEventListener('click', () => {
+      document.getElementById('pwd_cur').value = '';
+      document.getElementById('pwd_new').value = '';
+      document.getElementById('pwd_new2').value = '';
+      pwdDlg.showModal();
+    });
+    document.getElementById('pwdCancel').addEventListener('click', () => pwdDlg.close());
+    document.getElementById('pwdSave').addEventListener('click', async () => {
+      const currentPassword = document.getElementById('pwd_cur').value;
+      const newPassword = document.getElementById('pwd_new').value;
+      const new2 = document.getElementById('pwd_new2').value;
+      if (newPassword !== new2) {
+        showMsg('New passwords do not match.', 'err');
+        return;
+      }
+      try {
+        await fetch('/api/platform/auth/password', {
+          method: 'PATCH',
+          headers: headersJson(true),
+          body: JSON.stringify({ currentPassword, newPassword }),
+        }).then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || res.statusText);
+        });
+        pwdDlg.close();
+        showMsg('Password updated. Use the new password next time you sign in.', 'ok');
+      } catch (e) {
+        showMsg(e.message || String(e), 'err');
+      }
+    });
+
+    if (secretEl) {
+      document.getElementById('saveSecret').addEventListener('click', () => {
+        const s = (secretEl.value || '').trim();
+        if (!s) {
+          sessionStorage.removeItem(STORAGE_KEY);
+          showMsg('Secret cleared from session.', 'ok');
+          return;
+        }
+        sessionStorage.setItem(STORAGE_KEY, s);
+        showMsg('Secret stored for this tab.', 'ok');
+      });
+      document.getElementById('clearSecret').addEventListener('click', () => {
+        secretEl.value = '';
+        sessionStorage.removeItem(STORAGE_KEY);
+        showMsg('Secret cleared.', 'ok');
+      });
+    }
+
+    (function init() {
+      if (secretEl && sessionStorage.getItem(STORAGE_KEY)) {
+        secretEl.placeholder = '(stored — enter to replace)';
+      }
+      if (getToken() || getSecret()) {
+        showApp(true);
+        loadList();
+      } else {
+        showApp(false);
+      }
+    })();
+  </script>
+</body>
+</html>

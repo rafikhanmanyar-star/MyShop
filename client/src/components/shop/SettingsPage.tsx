@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 // MyShop Settings Page - Reorganized Chart of Accounts
-import { Smartphone, Printer } from 'lucide-react';
+import { Smartphone, Printer, Truck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppContext } from '../../context/AppContext';
 import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
-import { shopApi, accountingApi, ShopBankAccount, ShopVendor } from '../../services/shopApi';
+import { shopApi, accountingApi, ShopBankAccount, ShopVendor, ShopRider } from '../../services/shopApi';
 import Card from '../ui/Card';
 import { AccountingProvider } from '../../context/AccountingContext';
 import ChartOfAccounts from './accounting/ChartOfAccounts';
@@ -181,6 +181,13 @@ const SettingsContent: React.FC = () => {
         username: '', name: '', email: '', password: '', role: 'pos_cashier'
     });
 
+    const [riders, setRiders] = useState<ShopRider[]>([]);
+    const [ridersLoading, setRidersLoading] = useState(true);
+    const [isRiderCreateModalOpen, setIsRiderCreateModalOpen] = useState(false);
+    const [riderCreateForm, setRiderCreateForm] = useState({ name: '', phone: '', password: '' });
+    const [riderPasswordTarget, setRiderPasswordTarget] = useState<ShopRider | null>(null);
+    const [riderPasswordValue, setRiderPasswordValue] = useState('');
+
     const [appVersion, setAppVersion] = useState<string | null>(null);
     const [updateStatus, setUpdateStatus] = useState<{ status: string; message?: string; version?: string; percent?: number } | null>(null);
     const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
@@ -240,6 +247,19 @@ const SettingsContent: React.FC = () => {
         }
     }, []);
 
+    const loadRiders = useCallback(async () => {
+        try {
+            const { shopRiderApi } = await import('../../services/shopApi');
+            setRidersLoading(true);
+            const list = await shopRiderApi.getRiders();
+            setRiders(Array.isArray(list) ? list : []);
+        } catch {
+            setRiders([]);
+        } finally {
+            setRidersLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         if (isCashier) setActiveTab('app');
     }, [isCashier]);
@@ -283,8 +303,11 @@ const SettingsContent: React.FC = () => {
             loadReceiptSettings();
         }
         if (activeTab === 'vendors') loadVendors();
-        if (activeTab === 'users') loadUsers();
-    }, [activeTab, loadVendors, loadUsers, loadPosSettings, loadReceiptSettings]);
+        if (activeTab === 'users') {
+            loadUsers();
+            loadRiders();
+        }
+    }, [activeTab, loadVendors, loadUsers, loadRiders, loadPosSettings, loadReceiptSettings]);
 
     const handleSavePosSettings = async () => {
         try {
@@ -440,6 +463,48 @@ const SettingsContent: React.FC = () => {
         }
     };
 
+    const openNewRider = () => {
+        setRiderCreateForm({ name: '', phone: '', password: '' });
+        setIsRiderCreateModalOpen(true);
+    };
+
+    const handleSaveRider = async () => {
+        const { name, phone, password } = riderCreateForm;
+        if (!name.trim() || !phone.trim() || !password) {
+            alert('Name, phone, and password are required.');
+            return;
+        }
+        try {
+            const { shopRiderApi } = await import('../../services/shopApi');
+            await shopRiderApi.createRider({
+                name: name.trim(),
+                phone: phone.trim(),
+                password,
+            });
+            setIsRiderCreateModalOpen(false);
+            setRiderCreateForm({ name: '', phone: '', password: '' });
+            loadRiders();
+        } catch (e: any) {
+            alert(e?.message || e?.error || 'Failed to create rider');
+        }
+    };
+
+    const handleSaveRiderPassword = async () => {
+        if (!riderPasswordTarget || !riderPasswordValue) {
+            alert('Enter a new password.');
+            return;
+        }
+        try {
+            const { shopRiderApi } = await import('../../services/shopApi');
+            await shopRiderApi.setRiderPassword(riderPasswordTarget.id, riderPasswordValue);
+            setRiderPasswordTarget(null);
+            setRiderPasswordValue('');
+            loadRiders();
+        } catch (e: any) {
+            alert(e?.message || e?.error || 'Failed to update password');
+        }
+    };
+
     const handleClearAllTransactions = async () => {
         setClearingTransactions(true);
         try {
@@ -476,7 +541,7 @@ const SettingsContent: React.FC = () => {
                 <div className="mb-6">
                     <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
                     <p className="text-muted-foreground text-sm font-medium">
-                        {isCashier ? 'Check for app updates and install new versions.' : 'Chart of accounts, vendor management, and team roles.'}
+                        {isCashier ? 'Check for app updates and install new versions.' : 'Chart of accounts, vendors, team & rider accounts, and more.'}
                     </p>
                 </div>
                 <div className="flex gap-8">
@@ -669,7 +734,9 @@ const SettingsContent: React.FC = () => {
                 {!isCashier && activeTab === 'users' && (
                     <div className="space-y-6">
                         <div className="flex justify-between items-center">
-                            <p className="text-muted-foreground text-sm">Manage team members and their access roles (Admin, Accountant, POS Cashier).</p>
+                            <p className="text-muted-foreground text-sm">
+                                Manage POS team members (Admin, Accountant, POS Cashier) and delivery riders for the rider app.
+                            </p>
                             <Button onClick={openNewUser} className="flex items-center gap-2">
                                 {ICONS.plus} New User
                             </Button>
@@ -728,6 +795,90 @@ const SettingsContent: React.FC = () => {
                                                                     </button>
                                                                 )}
                                                             </div>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </Card>
+
+                        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                            <Truck className="h-5 w-5 shrink-0 text-primary mt-0.5" aria-hidden />
+                            <p>
+                                <span className="font-semibold text-foreground">Delivery riders</span> use the separate rider web app. They log in with{' '}
+                                <strong className="text-foreground">shop slug</strong> (from Mobile branding), <strong className="text-foreground">phone</strong>, and the password you set here — not POS usernames.
+                            </p>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-2">
+                            <p className="text-muted-foreground text-sm">Riders for delivery assignment and the rider mobile app.</p>
+                            <Button onClick={openNewRider} className="flex items-center gap-2">
+                                <Truck className="h-4 w-4" /> New rider
+                            </Button>
+                        </div>
+                        <Card className="border-none shadow-sm overflow-hidden">
+                            {ridersLoading ? (
+                                <div className="p-12 text-center text-muted-foreground">Loading riders...</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground">
+                                            <tr>
+                                                <th className="px-6 py-4">Name</th>
+                                                <th className="px-6 py-4">Phone</th>
+                                                <th className="px-6 py-4">Status</th>
+                                                <th className="px-6 py-4">App</th>
+                                                <th className="px-6 py-4 text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {riders.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground text-sm">
+                                                        No delivery riders yet. Create one so they can sign in to the rider app.
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                riders.map((r) => (
+                                                    <tr key={r.id} className="hover:bg-muted/50 transition-colors">
+                                                        <td className="px-6 py-4 font-bold text-foreground">{r.name}</td>
+                                                        <td className="px-6 py-4 text-muted-foreground font-mono text-sm">{r.phone_number}</td>
+                                                        <td className="px-6 py-4">
+                                                            <span
+                                                                className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${
+                                                                    r.status === 'AVAILABLE'
+                                                                        ? 'bg-emerald-100 text-emerald-700'
+                                                                        : r.status === 'BUSY'
+                                                                          ? 'bg-amber-100 text-amber-800'
+                                                                          : 'bg-muted text-muted-foreground'
+                                                                }`}
+                                                            >
+                                                                {r.status}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span
+                                                                className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${
+                                                                    r.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'
+                                                                }`}
+                                                            >
+                                                                {r.is_active ? 'Active' : 'Disabled'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setRiderPasswordTarget(r);
+                                                                    setRiderPasswordValue('');
+                                                                }}
+                                                                className="text-xs font-bold text-primary hover:underline"
+                                                            >
+                                                                Set password
+                                                            </button>
                                                         </td>
                                                     </tr>
                                                 ))
@@ -1192,6 +1343,79 @@ const SettingsContent: React.FC = () => {
                         <Button onClick={handleSaveUser}>
                             {editingUser ? 'Update' : 'Create'}
                         </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* New delivery rider */}
+            <Modal
+                isOpen={isRiderCreateModalOpen}
+                onClose={() => setIsRiderCreateModalOpen(false)}
+                title="New delivery rider"
+                size="lg"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                        The rider signs in on the rider app using your shop slug, this phone number (Pakistan mobile), and the password below.
+                    </p>
+                    <Input
+                        label="Full name"
+                        placeholder="e.g. Ali Khan"
+                        value={riderCreateForm.name}
+                        onChange={(e) => setRiderCreateForm({ ...riderCreateForm, name: e.target.value })}
+                    />
+                    <Input
+                        label="Phone"
+                        placeholder="e.g. 0312 3456789 or +92312..."
+                        value={riderCreateForm.phone}
+                        onChange={(e) => setRiderCreateForm({ ...riderCreateForm, phone: e.target.value })}
+                    />
+                    <Input
+                        label="Password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={riderCreateForm.password}
+                        onChange={(e) => setRiderCreateForm({ ...riderCreateForm, password: e.target.value })}
+                    />
+                    <div className="flex justify-end gap-3 mt-4">
+                        <Button variant="secondary" onClick={() => setIsRiderCreateModalOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleSaveRider}>Create rider</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Reset rider password */}
+            <Modal
+                isOpen={!!riderPasswordTarget}
+                onClose={() => {
+                    setRiderPasswordTarget(null);
+                    setRiderPasswordValue('');
+                }}
+                title={riderPasswordTarget ? `Set password — ${riderPasswordTarget.name}` : 'Set password'}
+                size="md"
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground font-mono">{riderPasswordTarget?.phone_number}</p>
+                    <Input
+                        label="New password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={riderPasswordValue}
+                        onChange={(e) => setRiderPasswordValue(e.target.value)}
+                    />
+                    <div className="flex justify-end gap-3 mt-4">
+                        <Button
+                            variant="secondary"
+                            onClick={() => {
+                                setRiderPasswordTarget(null);
+                                setRiderPasswordValue('');
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button onClick={handleSaveRiderPassword}>Save password</Button>
                     </div>
                 </div>
             </Modal>

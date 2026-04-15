@@ -442,6 +442,70 @@ router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     }
 });
 
+// ─── Stages 10–11: SSE — customer stream; Stage 11 also feeds POS + rider streams (same NOTIFY) ───
+router.get('/orders/:id/stream', mobileAuthMiddleware(db), async (req: any, res) => {
+    const orderId = req.params.id;
+    try {
+        const own = await db.query(
+            'SELECT customer_id FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
+            [orderId, req.tenantId]
+        );
+        if (own.length === 0) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+        if (own[0].customer_id !== req.customerId) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        });
+        res.write(`data: ${JSON.stringify({ type: 'connected', orderId })}\n\n`);
+
+        const heartbeat = setInterval(() => {
+            res.write(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: new Date().toISOString() })}\n\n`);
+        }, 30000);
+
+        const pool = db.getPool();
+        let pgClient: any = null;
+
+        if (pool) {
+            try {
+                pgClient = await pool.connect();
+                await pgClient.query('LISTEN mobile_order_updated');
+                pgClient.on('notification', (msg: any) => {
+                    try {
+                        const payload = JSON.parse(msg.payload);
+                        if (payload.orderId === orderId && payload.tenantId === req.tenantId) {
+                            res.write(`data: ${JSON.stringify({ type: 'order_updated', ...payload })}\n\n`);
+                        }
+                    } catch (e) {
+                        console.error('[mobile SSE] notification parse error:', e);
+                    }
+                });
+            } catch (err) {
+                console.error('[mobile SSE] LISTEN error:', err);
+            }
+        }
+
+        req.on('close', () => {
+            clearInterval(heartbeat);
+            if (pgClient) {
+                pgClient.query('UNLISTEN mobile_order_updated').catch(() => {});
+                pgClient.release();
+            }
+        });
+    } catch (error: any) {
+        console.error('[mobile SSE]', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: error.message || 'Stream failed' });
+        }
+    }
+});
+
 // Order history
 router.get('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     try {

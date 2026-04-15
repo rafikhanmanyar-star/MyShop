@@ -1,8 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useRider } from './context/RiderContext';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import OrderDetail from './pages/OrderDetail';
+import LoginScreen from './screens/LoginScreen';
+import DashboardScreen from './screens/DashboardScreen';
+import OrderDetailScreen from './screens/OrderDetailScreen';
+import RiderLayout from './components/RiderLayout';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { token } = useRider();
@@ -13,23 +14,17 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<LoginScreen />} />
       <Route
-        path="/"
         element={
           <RequireAuth>
-            <Dashboard />
+            <RiderLayout />
           </RequireAuth>
         }
-      />
-      <Route
-        path="/order/:orderId"
-        element={
-          <RequireAuth>
-            <OrderDetail />
-          </RequireAuth>
-        }
-      />
+      >
+        <Route index element={<DashboardScreen />} />
+        <Route path="order/:orderId" element={<OrderDetailScreen />} />
+      </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

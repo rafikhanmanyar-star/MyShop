@@ -292,6 +292,26 @@ export const shopUserApi = {
   deleteUser: (id: string) => apiClient.delete(`/shop/users/${id}`),
 };
 
+/** Delivery riders — login to rider mobile app; managed by admin only (same Settings tab as users). */
+export interface ShopRider {
+  id: string;
+  tenant_id?: string;
+  name: string;
+  phone_number: string;
+  is_active: boolean;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const shopRiderApi = {
+  getRiders: () => apiClient.get<ShopRider[]>('/shop/riders'),
+  createRider: (data: { name: string; phone: string; password: string }) =>
+    apiClient.post<{ id: string }>('/shop/riders', data),
+  setRiderPassword: (id: string, password: string) =>
+    apiClient.put<{ success: boolean }>(`/shop/riders/${encodeURIComponent(id)}/password`, { password }),
+};
+
 // --- Accounting API ---
 export const accountingApi = {
   getAccounts: () => apiClient.get<any[]>('/shop/accounting/accounts'),

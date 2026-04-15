@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="Rider">
+  <rect width="192" height="192" rx="42" fill="#0f172a"/>
+  <g fill="none" stroke="#38bdf8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 128h36l20-52h76l24 32v52H32V128z"/>
+    <circle cx="56" cy="140" r="14" fill="#0f172a"/>
+    <circle cx="56" cy="140" r="14"/>
+    <circle cx="136" cy="140" r="14" fill="#0f172a"/>
+    <circle cx="136" cy="140" r="14"/>
+  </g>
+  <rect x="88" y="64" width="48" height="28" rx="4" fill="#94a3b8"/>
+</svg>

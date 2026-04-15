@@ -40,3 +40,15 @@ services:
       # Must match your API public URL + /api (same shape as mobile/.env.production.example).
       - key: VITE_API_URL
         value: https://myshop-api-9pd4.onrender.com/api
+
+  - type: web
+    name: MyShop-Mobile
+    runtime: static
+    branch: main
+    rootDir: mobile
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      # Customer PWA — same API base as rider; update host if your API service name differs.
+      - key: VITE_API_URL
+        value: https://myshop-api-9pd4.onrender.com/api

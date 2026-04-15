@@ -4,6 +4,16 @@ import { IDatabaseService } from '../services/databaseService.js';
 import { runWithTenantContext } from '../services/tenantContext.js';
 import { getMobileCustomerService } from '../services/mobileCustomerService.js';
 
+/** Bearer header, or GET `access_token` (for EventSource, which cannot set headers). */
+function getMobileJwtToken(req: any): string | undefined {
+    const fromHeader = req.headers.authorization?.replace(/^Bearer\s+/i, '')?.trim();
+    if (fromHeader) return fromHeader;
+    if (req.method === 'GET' && typeof req.query.access_token === 'string' && req.query.access_token.length > 0) {
+        return req.query.access_token;
+    }
+    return undefined;
+}
+
 /**
  * Resolves tenant (and branch when slug is branch URL) from :shopSlug URL param.
  * Tries branch slug first, then tenant slug. Sets req.tenantId, req.branchId, req.shop.
@@ -52,7 +62,7 @@ export function publicTenantMiddleware(db: IDatabaseService) {
 export function mobileAuthMiddleware(db: IDatabaseService) {
     return async (req: any, res: Response, next: NextFunction) => {
         try {
-            const token = req.headers.authorization?.replace('Bearer ', '');
+            const token = getMobileJwtToken(req);
 
             if (!token) {
                 return res.status(401).json({ error: 'Authentication required. Please log in.' });

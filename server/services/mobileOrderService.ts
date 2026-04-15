@@ -6,6 +6,7 @@ import { deductInventoryFefo, getSellableQuantityForWarehouse } from './inventor
 import { aggregateQuantitiesFromOfferLines, prepareOfferBundlesForOrder } from './mobileOfferCheckout.js';
 import { resolveBranchWarehouseForPlaceOrder } from './mobileOrderBranchRouting.js';
 import { tryAutoAssignRiderForMobileOrder } from './deliveryAssignment.js';
+import { haversineDistanceKm } from '../utils/haversine.js';
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -21,6 +22,19 @@ function generateOrderNumber(): string {
 function safeNum(v: any): number {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
+}
+
+/** Stage 8 (POS) / Stage 9 (customer PWA); Stages 10–11 SSE use NOTIFY — distance still from rider GPS when coords exist. */
+function enrichOrderWithRiderToDropoff(o: Record<string, unknown>): Record<string, unknown> {
+    const dlat = o.delivery_lat != null ? parseFloat(String(o.delivery_lat)) : NaN;
+    const dlng = o.delivery_lng != null ? parseFloat(String(o.delivery_lng)) : NaN;
+    const rlat = o.rider_latitude != null ? parseFloat(String(o.rider_latitude)) : NaN;
+    const rlng = o.rider_longitude != null ? parseFloat(String(o.rider_longitude)) : NaN;
+    let rider_to_dropoff_km: number | null = null;
+    if (Number.isFinite(dlat) && Number.isFinite(dlng) && Number.isFinite(rlat) && Number.isFinite(rlng)) {
+        rider_to_dropoff_km = Math.round(haversineDistanceKm(rlat, rlng, dlat, dlng) * 10000) / 10000;
+    }
+    return { ...o, rider_to_dropoff_km };
 }
 
 const VALID_STATUSES = ['Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Cancelled'] as const;
@@ -716,6 +730,7 @@ export class MobileOrderService {
 
     // ─── Order Queries ─────────────────────────────────────────────────
 
+    /** Customer order history; Stage 9 includes courier summary for list UI. */
     async getCustomerOrders(tenantId: string, customerId: string, cursor?: string, limit: number = 20) {
         const params: any[] = [tenantId, customerId];
         let paramIdx = 3;
@@ -734,8 +749,12 @@ export class MobileOrderService {
         params.push(limit + 1);
         const rows = await this.db.query(
             `SELECT o.id, o.order_number, o.status, o.grand_total, o.payment_method,
-              o.payment_status, o.delivery_address, o.created_at, o.updated_at
+              o.payment_status, o.delivery_address, o.created_at, o.updated_at,
+              d.id AS delivery_order_id, d.status AS delivery_status,
+              r.name AS rider_name
        FROM mobile_orders o
+       LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
+       LEFT JOIN riders r ON r.id = d.rider_id AND r.tenant_id = o.tenant_id
        WHERE o.tenant_id = $1 AND o.customer_id = $2 ${cursorClause}
        ORDER BY o.created_at DESC, o.id DESC
        LIMIT $${paramIdx}`,
@@ -758,7 +777,9 @@ export class MobileOrderService {
         const orders = await this.db.query(
             `SELECT o.*, mc.phone as customer_phone, mc.name as customer_name,
               d.id AS delivery_order_id, d.status AS delivery_status,
-              r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone
+              r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone,
+              r.current_latitude AS rider_latitude, r.current_longitude AS rider_longitude,
+              r.status AS rider_operational_status
        FROM mobile_orders o
        LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $2
        LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
@@ -796,7 +817,7 @@ export class MobileOrderService {
             tax_total = safeNum(order.tax_total) || normalizedItems.reduce((sum, i) => sum + i.tax_amount, 0);
             grand_total = Math.round((subtotal + tax_total + delivery_fee) * 100) / 100;
         }
-        return {
+        return enrichOrderWithRiderToDropoff({
             ...order,
             subtotal,
             tax_total,
@@ -805,7 +826,7 @@ export class MobileOrderService {
             grand_total,
             items: normalizedItems,
             status_history: history,
-        };
+        }) as any;
     }
 
     // ─── Status Updates (POS side) ─────────────────────────────────────
@@ -1071,7 +1092,9 @@ export class MobileOrderService {
         let query = `
       SELECT o.*, mc.phone as customer_phone, mc.name as customer_name,
         d.id AS delivery_order_id, d.status AS delivery_status,
-        r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone
+        r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone,
+        r.current_latitude AS rider_latitude, r.current_longitude AS rider_longitude,
+        r.status AS rider_operational_status
       FROM mobile_orders o
       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $1
       LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
@@ -1089,14 +1112,16 @@ export class MobileOrderService {
 
         query += ` ORDER BY o.created_at DESC LIMIT 200`;
         const rows = await this.db.query(query, params);
-        return (rows as any[]).map((o: any) => ({
-            ...o,
-            subtotal: safeNum(o.subtotal),
-            tax_total: safeNum(o.tax_total),
-            discount_total: safeNum(o.discount_total),
-            delivery_fee: safeNum(o.delivery_fee),
-            grand_total: safeNum(o.grand_total),
-        }));
+        return (rows as any[]).map((o: any) =>
+            enrichOrderWithRiderToDropoff({
+                ...o,
+                subtotal: safeNum(o.subtotal),
+                tax_total: safeNum(o.tax_total),
+                discount_total: safeNum(o.discount_total),
+                delivery_fee: safeNum(o.delivery_fee),
+                grand_total: safeNum(o.grand_total),
+            }) as any
+        );
     }
 
     async getUnsyncedOrders(tenantId: string) {

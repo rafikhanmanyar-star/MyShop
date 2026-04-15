@@ -1,0 +1,1 @@
+-- SQLite: Stage 10 SSE uses PostgreSQL LISTEN/NOTIFY only. No SQLite triggers.

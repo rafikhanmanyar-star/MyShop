@@ -4,6 +4,7 @@ import { getRiderService } from '../../services/riderService.js';
 import { getRiderAuthService } from '../../services/riderAuthService.js';
 import { getSalesReturnService } from '../../services/salesReturnService.js';
 import { getOfferService } from '../../services/offerService.js';
+import { getTenantManagementService } from '../../services/tenantManagementService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
 import * as fs from 'fs';
 import multer from 'multer';
@@ -773,6 +774,29 @@ router.delete('/users/:id', checkRole(['admin']), async (req: any, res) => {
     res.json({ success: true, message: 'User deactivated' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Current organization (tenant row); admin can view/edit own tenant ---
+router.get('/tenant', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const row = await getTenantManagementService().getTenantById(req.tenantId);
+    if (!row) return res.status(404).json({ error: 'Tenant not found' });
+    res.json(row);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/tenant', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const row = await getTenantManagementService().updateTenant(req.tenantId, req.body || {});
+    res.json(row);
+  } catch (error: any) {
+    const msg = error.message || 'Update failed';
+    if (msg.includes('not found')) return res.status(404).json({ error: msg });
+    if (msg.includes('already uses')) return res.status(409).json({ error: msg });
+    res.status(400).json({ error: msg });
   }
 });
 

@@ -3,13 +3,23 @@ import jwt from 'jsonwebtoken';
 import { IDatabaseService } from '../services/databaseService.js';
 import { runWithTenantContext } from '../services/tenantContext.js';
 
+/** Bearer header, or GET `access_token` (Stage 11 SSE / EventSource). */
+function getRiderJwtToken(req: any): string | undefined {
+    const fromHeader = req.headers.authorization?.replace(/^Bearer\s+/i, '')?.trim();
+    if (fromHeader) return fromHeader;
+    if (req.method === 'GET' && typeof req.query.access_token === 'string' && req.query.access_token.length > 0) {
+        return req.query.access_token;
+    }
+    return undefined;
+}
+
 /**
  * JWT auth for rider mobile app (`type: 'rider'`).
  */
 export function riderAuthMiddleware(db: IDatabaseService) {
     return async (req: any, res: Response, next: NextFunction) => {
         try {
-            const token = req.headers.authorization?.replace('Bearer ', '');
+            const token = getRiderJwtToken(req);
             if (!token) {
                 return res.status(401).json({ error: 'Authentication required.', code: 'NO_TOKEN' });
             }

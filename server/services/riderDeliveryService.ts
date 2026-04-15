@@ -1,42 +1,109 @@
 import { getDatabaseService } from './databaseService.js';
 import { getMobileOrderService } from './mobileOrderService.js';
+import { haversineDistanceKm } from '../utils/haversine.js';
 
 function safeNum(v: any): number {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
 }
 
+export type RiderOrderBucket = 'assigned' | 'active' | 'completed';
+
+function bucketWhere(bucket?: RiderOrderBucket): string {
+    if (bucket === 'assigned') {
+        return ` AND d.status = 'ASSIGNED' AND d.accepted_at IS NULL `;
+    }
+    if (bucket === 'active') {
+        return ` AND (
+            (d.status = 'ASSIGNED' AND d.accepted_at IS NOT NULL)
+            OR d.status IN ('PICKED', 'ON_THE_WAY')
+        ) `;
+    }
+    if (bucket === 'completed') {
+        return ` AND d.status = 'DELIVERED' `;
+    }
+    return '';
+}
+
 /**
  * Stage 6: Rider-facing delivery task APIs (assigned delivery_orders for this rider).
+ * Stage 7: Live GPS via RiderService.updateLocation (nearest-rider + distance in-app).
  */
 export class RiderDeliveryService {
     private db = getDatabaseService();
 
-    async listForRider(tenantId: string, riderId: string) {
+    async listForRider(
+        tenantId: string,
+        riderId: string,
+        opts?: { bucket?: RiderOrderBucket; limit?: number; offset?: number }
+    ) {
+        const limit = Math.min(Math.max(Number(opts?.limit) || 30, 1), 100);
+        const offset = Math.max(Number(opts?.offset) || 0, 0);
+        const take = limit + 1;
+        const bw = bucketWhere(opts?.bucket);
+
         const rows = await this.db.query(
             `SELECT d.id AS delivery_order_id, d.status AS delivery_status, d.assigned_at, d.accepted_at, d.picked_at, d.delivered_at,
               o.id AS order_id, o.order_number, o.status AS order_status, o.grand_total,
-              o.delivery_address, o.delivery_lat, o.delivery_lng, o.payment_method, o.created_at
+              o.delivery_address, o.delivery_lat, o.delivery_lng, o.payment_method, o.created_at,
+              COALESCE(NULLIF(TRIM(c.name), ''), c.phone, 'Customer') AS customer_name
        FROM delivery_orders d
        INNER JOIN mobile_orders o ON o.id = d.order_id AND o.tenant_id = d.tenant_id
+       LEFT JOIN mobile_customers c ON c.id = o.customer_id AND c.tenant_id = o.tenant_id
        WHERE d.tenant_id = $1 AND d.rider_id = $2
+       ${bw}
        ORDER BY d.created_at DESC
-       LIMIT 100`,
-            [tenantId, riderId]
+       LIMIT $3 OFFSET $4`,
+            [tenantId, riderId, take, offset]
         );
-        return (rows as any[]).map((r) => ({
-            ...r,
-            grand_total: safeNum(r.grand_total),
-        }));
+
+        const hasMore = rows.length > limit;
+        const slice = (hasMore ? rows.slice(0, limit) : rows) as any[];
+
+        const rlat = await this.db.query(
+            `SELECT current_latitude, current_longitude FROM riders WHERE id = $1 AND tenant_id = $2`,
+            [riderId, tenantId]
+        );
+        let riderLat: number | null = null;
+        let riderLng: number | null = null;
+        if (rlat.length > 0 && rlat[0].current_latitude != null && rlat[0].current_longitude != null) {
+            riderLat = parseFloat(rlat[0].current_latitude);
+            riderLng = parseFloat(rlat[0].current_longitude);
+        }
+
+        const orders = slice.map((r) => {
+            let distance_km: number | null = null;
+            const lat = r.delivery_lat != null ? parseFloat(String(r.delivery_lat)) : NaN;
+            const lng = r.delivery_lng != null ? parseFloat(String(r.delivery_lng)) : NaN;
+            if (
+                riderLat != null &&
+                riderLng != null &&
+                Number.isFinite(lat) &&
+                Number.isFinite(lng)
+            ) {
+                distance_km =
+                    Math.round(haversineDistanceKm(lat, lng, riderLat, riderLng) * 100) / 100;
+            }
+            return {
+                ...r,
+                grand_total: safeNum(r.grand_total),
+                distance_km,
+            };
+        });
+
+        return { orders, hasMore };
     }
 
     async getDetailForRider(tenantId: string, riderId: string, mobileOrderId: string) {
         const rows = await this.db.query(
             `SELECT d.id AS delivery_order_id, d.status AS delivery_status, d.assigned_at, d.accepted_at, d.picked_at, d.delivered_at,
               o.id AS order_id, o.order_number, o.status AS order_status, o.grand_total,
-              o.delivery_address, o.delivery_lat, o.delivery_lng, o.delivery_notes, o.payment_method, o.created_at
+              o.delivery_address, o.delivery_lat, o.delivery_lng, o.delivery_notes, o.payment_method, o.created_at,
+              COALESCE(NULLIF(TRIM(c.name), ''), c.phone, 'Customer') AS customer_name,
+              c.phone AS customer_phone
        FROM delivery_orders d
        INNER JOIN mobile_orders o ON o.id = d.order_id AND o.tenant_id = d.tenant_id
+       LEFT JOIN mobile_customers c ON c.id = o.customer_id AND c.tenant_id = o.tenant_id
        WHERE d.tenant_id = $1 AND d.rider_id = $2 AND o.id = $3`,
             [tenantId, riderId, mobileOrderId]
         );
@@ -63,7 +130,6 @@ export class RiderDeliveryService {
             rlat[0].current_latitude != null &&
             rlat[0].current_longitude != null
         ) {
-            const { haversineDistanceKm } = await import('../utils/haversine.js');
             distKm = Math.round(
                 haversineDistanceKm(
                     lat,
@@ -96,6 +162,47 @@ export class RiderDeliveryService {
             [tenantId, riderId, mobileOrderId]
         );
         if (res.length === 0) throw new Error('No active assignment for this order, or already past acceptance.');
+        return { ok: true };
+    }
+
+    async markOnTheWay(tenantId: string, riderId: string, mobileOrderId: string) {
+        const res = await this.db.query(
+            `UPDATE delivery_orders
+       SET status = 'ON_THE_WAY', updated_at = NOW()
+       WHERE tenant_id = $1 AND rider_id = $2 AND order_id = $3 AND status = 'PICKED'
+       RETURNING id`,
+            [tenantId, riderId, mobileOrderId]
+        );
+        if (res.length === 0) {
+            throw new Error('Pick up the order before marking on the way.');
+        }
+        return { ok: true };
+    }
+
+    async rejectAssignment(tenantId: string, riderId: string, mobileOrderId: string) {
+        const del = await this.db.query(
+            `DELETE FROM delivery_orders
+       WHERE tenant_id = $1 AND rider_id = $2 AND order_id = $3
+         AND status = 'ASSIGNED' AND accepted_at IS NULL
+       RETURNING id`,
+            [tenantId, riderId, mobileOrderId]
+        );
+        if (del.length === 0) {
+            throw new Error('This delivery can no longer be declined.');
+        }
+
+        const remaining = await this.db.query(
+            `SELECT COUNT(*)::int AS n FROM delivery_orders
+       WHERE tenant_id = $1 AND rider_id = $2 AND status <> 'DELIVERED'`,
+            [tenantId, riderId]
+        );
+        const n = remaining[0]?.n ?? 0;
+        if (n === 0) {
+            await this.db.execute(
+                `UPDATE riders SET status = 'AVAILABLE', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+                [riderId, tenantId]
+            );
+        }
         return { ok: true };
     }
 

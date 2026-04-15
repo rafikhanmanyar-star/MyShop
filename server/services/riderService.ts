@@ -39,6 +39,47 @@ export class RiderService {
         );
         return rows.length > 0 ? (rows[0] as RiderRow) : null;
     }
+
+    /** Stage 7: persist GPS for nearest-rider assignment + distance in rider app. */
+    async updateLocation(
+        tenantId: string,
+        riderId: string,
+        latitude: number,
+        longitude: number
+    ): Promise<void> {
+        if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+            throw new Error('Invalid latitude');
+        }
+        if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+            throw new Error('Invalid longitude');
+        }
+        const res = await this.db.query(
+            `UPDATE riders
+       SET current_latitude = $1, current_longitude = $2, updated_at = NOW()
+       WHERE id = $3 AND tenant_id = $4
+       RETURNING id`,
+            [latitude, longitude, riderId, tenantId]
+        );
+        if (res.length === 0) throw new Error('Rider not found');
+    }
+
+    /**
+     * Rider-controlled availability (server sets BUSY when assigning a delivery).
+     * AVAILABLE: open for new assignments. OFFLINE: not on shift.
+     */
+    async setAvailabilityStatus(tenantId: string, riderId: string, next: 'AVAILABLE' | 'OFFLINE'): Promise<void> {
+        const row = await this.getById(tenantId, riderId);
+        if (!row) throw new Error('Rider not found');
+        if (next === 'AVAILABLE' && row.status === 'BUSY') {
+            throw new Error(
+                'You have an active delivery. Complete or finish it before going available for new assignments.'
+            );
+        }
+        await this.db.execute(
+            `UPDATE riders SET status = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`,
+            [next, riderId, tenantId]
+        );
+    }
 }
 
 let riderServiceInstance: RiderService | null = null;
