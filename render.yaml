@@ -43,6 +43,9 @@ services:
       # Must match your API public URL + /api (same shape as mobile/.env.production.example).
       - key: VITE_API_URL
         value: https://myshop-api-9pd4.onrender.com/api
+      # Maps JavaScript + Directions (rider order screen). Set the real key in the Render dashboard.
+      - key: VITE_GOOGLE_MAPS_API_KEY
+        sync: false
 
   - type: web
     name: MyShop-Mobile
