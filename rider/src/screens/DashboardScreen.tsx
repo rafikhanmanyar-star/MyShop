@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { riderApi, type RiderOrderBucket, type RiderOrderRow } from '../api';
 import { OrderCard } from '../components/OrderCard';
@@ -14,7 +14,7 @@ const TABS: { id: RiderOrderBucket; label: string }[] = [
 
 export default function DashboardScreen() {
   const nav = useNavigate();
-  const { logout, riderName, shopSlug } = useRider();
+  const { riderName, shopSlug } = useRider();
   const {
     profile,
     profileLoading,
@@ -102,51 +102,84 @@ export default function DashboardScreen() {
   const busy = profile?.status === 'BUSY';
   const toggleDisabled = onlineBusy || profileLoading || busy;
 
+  const earningsLine = useMemo(() => {
+    if (tab !== 'completed' || orders.length === 0) return 'PKR —';
+    const total = orders.reduce((s, o) => s + Number(o.grand_total || 0), 0);
+    return `PKR ${total.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }, [tab, orders]);
+
   return (
-    <div className="page dashboard">
-      <header className="dash-header">
-        <div>
-          <h1 className="dash-header__title">My Deliveries</h1>
-          <p className="dash-header__meta">
-            {riderName} · {shopSlug}
-          </p>
-        </div>
-        <div className="dash-header__actions">
-          <label className="online-switch">
-            <span className="online-switch__label">{online ? 'Online' : 'Offline'}</span>
-            <input
-              type="checkbox"
-              className="online-switch__input"
-              checked={online}
+    <div className="page dashboard-page">
+      <div className="dashboard-page__hero">
+        <h1 className="dashboard-page__title">MY DELIVERIES</h1>
+        <p className="dashboard-page__sub">
+          {riderName ? `${riderName} · ` : null}
+          {shopSlug ? `Shop: ${shopSlug}` : '—'}
+        </p>
+        <div className="dashboard-page__toggle-row">
+          <span className="dashboard-page__toggle-label">Availability</span>
+          <div className="obo-seg-toggle">
+            <button
+              type="button"
+              className={`obo-seg-toggle__btn ${online ? 'is-active' : ''}`}
               disabled={toggleDisabled}
-              onChange={(e) => void setOnline(e.target.checked)}
-            />
-          </label>
-          <button type="button" className="btn btn-ghost" onClick={() => logout()}>
-            Out
-          </button>
+              onClick={() => void setOnline(true)}
+            >
+              ONLINE
+            </button>
+            <button
+              type="button"
+              className={`obo-seg-toggle__btn ${!online ? 'is-active' : ''}`}
+              disabled={toggleDisabled}
+              onClick={() => void setOnline(false)}
+            >
+              OFFLINE
+            </button>
+          </div>
         </div>
-      </header>
+      </div>
 
       {!netOnline ? <div className="banner banner--warn">No internet connection.</div> : null}
       {busy ? (
         <p className="dash-note">On a delivery — finish it before taking new assignments.</p>
       ) : null}
 
-      <div className="tabs">
+      <div className="tabs tabs--obo">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
-            className={`tab ${tab === t.id ? 'tab--active' : ''}`}
+            className={`tab tab--obo ${tab === t.id ? 'tab--active' : ''}`}
             onClick={() => setTab(t.id)}
           >
-            {t.label}
+            {t.label.toUpperCase()}
           </button>
         ))}
       </div>
 
-      {loading ? <p className="muted">Loading…</p> : null}
+      <div className="dashboard-page__stats">
+        <div className="obo-stat-card obo-stat-card--earn">
+          <span className="obo-stat-card__ico" aria-hidden />
+          <span className="obo-stat-card__label">EARNINGS</span>
+          <span className="obo-stat-card__value">{earningsLine}</span>
+        </div>
+        <div className="obo-stat-card obo-stat-card--time">
+          <span className="obo-stat-card__ico obo-stat-card__ico--clock" aria-hidden />
+          <span className="obo-stat-card__label">ON-TIME</span>
+          <span className="obo-stat-card__value">—%</span>
+        </div>
+      </div>
+
+      <div className="dash-map-preview" aria-hidden>
+        <div className="dash-map-preview__grid" />
+        <div className="dash-map-preview__bar">
+          <span className="dash-map-preview__arrow">↗</span>
+          <span className="dash-map-preview__txt">Your location · live routing when you open an order</span>
+          <span className="dash-map-preview__live">LIVE</span>
+        </div>
+      </div>
+
+      {loading ? <p className="muted dashboard-page__loading">Loading…</p> : null}
       {err && netOnline ? <p className="field-error">{err}</p> : null}
 
       {!loading && !orders.length ? <p className="muted">No orders here.</p> : null}
@@ -158,7 +191,7 @@ export default function DashboardScreen() {
       </div>
 
       {hasMore ? (
-        <button type="button" className="btn load-more" disabled={loadingMore} onClick={loadMore}>
+        <button type="button" className="btn load-more obo-load-more" disabled={loadingMore} onClick={loadMore}>
           {loadingMore ? 'Loading…' : 'Load more'}
         </button>
       ) : null}

@@ -150,7 +150,8 @@ export default function OfferDetail() {
               <div className="item-image" style={{ width: 56, height: 56, flexShrink: 0 }}>
                 <CachedImage
                   path={getFullImageUrl((i as { image_url?: string }).image_url)}
-                  alt=""
+                  alt={(i as { name?: string }).name || 'Product'}
+                  fallbackLabel={(i as { name?: string }).name || 'Product'}
                   style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'var(--radius)' }}
                 />
               </div>

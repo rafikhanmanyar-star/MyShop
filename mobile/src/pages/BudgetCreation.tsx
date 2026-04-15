@@ -327,7 +327,7 @@ export default function BudgetCreation() {
                                         width: 44, height: 44, borderRadius: 10, background: '#F1F5F9',
                                         flexShrink: 0, overflow: 'hidden',
                                     }}>
-                                        <CachedImage path={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        <CachedImage path={item.image_url} alt={item.name} fallbackLabel={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                     </div>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -479,7 +479,7 @@ export default function BudgetCreation() {
                             return (
                                 <div key={p.id} className="product-card">
                                     <div className="image-wrap">
-                                        <CachedImage path={getProductImagePath(p)} alt={p.name} loading="lazy" />
+                                        <CachedImage path={getProductImagePath(p)} alt={p.name} loading="lazy" fallbackLabel={p.name} />
                                     </div>
                                     <div className="info">
                                         <div className="name" style={{ marginBottom: 2 }}>{p.name}</div>
@@ -561,7 +561,7 @@ export default function BudgetCreation() {
                     }}>
                         <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
                             <div style={{ width: 44, height: 44, borderRadius: 10, background: '#F1F5F9', flexShrink: 0, overflow: 'hidden' }}>
-                                <CachedImage path={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <CachedImage path={item.image_url} alt={item.name} fallbackLabel={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             </div>
                             <div style={{ flex: 1 }}>
                                 <div style={{ fontWeight: 700, fontSize: 14 }}>{item.name}</div>

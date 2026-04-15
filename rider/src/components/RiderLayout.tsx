@@ -1,25 +1,29 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { NewOrderModal } from './NewOrderModal';
+import { RiderBottomNav } from './RiderBottomNav';
+import { RiderTopBar } from './RiderTopBar';
 import { RiderWorkProvider } from '../context/RiderWorkContext';
 import { useRiderGeolocation } from '../hooks/useRiderGeolocation';
 
 function GeolocationRunner() {
   const { geoError } = useRiderGeolocation();
   if (!geoError) return null;
+  return <div className="rider-geo-warn">{geoError}</div>;
+}
+
+function RiderShell() {
+  const loc = useLocation();
+  const compactTop = loc.pathname.startsWith('/order/');
+
   return (
-    <div
-      style={{
-        marginBottom: 12,
-        padding: '10px 12px',
-        borderRadius: 10,
-        background: 'rgba(248, 113, 113, 0.12)',
-        border: '1px solid rgba(248, 113, 113, 0.35)',
-        color: '#fecaca',
-        fontSize: 13,
-        lineHeight: 1.4,
-      }}
-    >
-      {geoError}
+    <div className="rider-app">
+      <RiderTopBar compactOnline={compactTop} />
+      <GeolocationRunner />
+      <main className="rider-app__main">
+        <Outlet />
+      </main>
+      <RiderBottomNav />
+      <NewOrderModal />
     </div>
   );
 }
@@ -27,9 +31,7 @@ function GeolocationRunner() {
 export default function RiderLayout() {
   return (
     <RiderWorkProvider>
-      <GeolocationRunner />
-      <NewOrderModal />
-      <Outlet />
+      <RiderShell />
     </RiderWorkProvider>
   );
 }

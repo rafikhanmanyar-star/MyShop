@@ -94,7 +94,13 @@ export default function ProductDetail() {
                 position: 'relative',
                 overflow: 'hidden',
             }}>
-                <CachedImage path={getProductImagePath(product)} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <CachedImage
+                    path={getProductImagePath(product)}
+                    alt={product.name}
+                    fallbackLabel={product.name}
+                    fallbackClassName="product-detail-image-fallback"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
 
                 {/* Back button */}
                 <button style={{

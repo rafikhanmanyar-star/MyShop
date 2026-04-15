@@ -248,13 +248,17 @@ function POSProductGridRow({ index, style, data }: ListChildComponentProps<POSPr
                             }`}
                     >
                         <div className={`w-full flex-shrink-0 ${bgClass} dark:bg-slate-700/80 rounded-[8px] flex items-center justify-center border border-white/50 dark:border-slate-600 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
-                            {product.imageUrl ? (
-                                <CachedImage path={product.imageUrl} alt={product.name} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
-                            ) : (
-                                <div className="text-slate-300 dark:text-slate-500">
-                                    {React.cloneElement(ICONS.package as any, { size: isDenseMode ? 24 : 40 })}
-                                </div>
-                            )}
+                            <CachedImage
+                                path={product.imageUrl}
+                                alt={product.name}
+                                fallbackLabel={product.name}
+                                fallbackClassName={
+                                    isDenseMode
+                                        ? '!p-0.5 [&_span]:text-[8px] [&_span]:leading-tight [&_span]:line-clamp-3'
+                                        : ''
+                                }
+                                className="object-cover w-full h-full min-h-0 min-w-0 group-hover:scale-105 transition-transform duration-500"
+                            />
                             {product.stockLevel <= (product.reorderPoint || 10) && (
                                 <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-[6px] text-xs font-bold uppercase tracking-wider shadow-sm ${product.stockLevel <= 0 ? 'bg-slate-800 text-white' : 'bg-[#fee2e2] text-[#991b1b] dark:bg-rose-950/80 dark:text-rose-200'}`}>
                                     {product.stockLevel <= 0 ? 'Out' : `Low: ${product.stockLevel}`}
@@ -1007,13 +1011,13 @@ const ProductSearch: React.FC = () => {
                                 className={`w-full flex flex-col items-center p-2 rounded-[10px] border transition-all ${p.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700' : 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 hover:border-[#0056b3]/35 hover:shadow-sm active:scale-95'}`}
                             >
                                 <div className="w-10 h-10 rounded-[8px] bg-[#eef2ff] dark:bg-slate-700/80 flex items-center justify-center mb-1 overflow-hidden">
-                                    {p.imageUrl ? (
-                                        <CachedImage path={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="text-[#0056b3]/40 dark:text-slate-500">
-                                            {React.cloneElement(ICONS.package as any, { size: 16 })}
-                                        </div>
-                                    )}
+                                    <CachedImage
+                                        path={p.imageUrl}
+                                        alt={p.name}
+                                        fallbackLabel={p.name}
+                                        fallbackClassName="!p-0.5 !text-[7px] leading-none"
+                                        className="h-full w-full min-h-0 min-w-0 object-cover"
+                                    />
                                 </div>
                                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate w-full text-center">{p.name}</span>
                             </button>

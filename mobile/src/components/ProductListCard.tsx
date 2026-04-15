@@ -104,7 +104,7 @@ export default function ProductListCard({
                 <div className="discount-badge">-{Math.round(Number(p.discount_percentage))}%</div>
             )}
             <div className="image-wrap image-wrap--list">
-                <CachedImage path={imgPath} alt={p.name} loading="lazy" />
+                <CachedImage path={imgPath} alt={p.name} loading="lazy" fallbackLabel={p.name} />
             </div>
             <div className="info">
                 <div className="name">{p.name}</div>

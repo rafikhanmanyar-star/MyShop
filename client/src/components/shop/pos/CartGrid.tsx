@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandl
 import { usePOS } from '../../../context/POSContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import type { CartGridHandle } from './usePosKeyboard';
+import CachedImage from '../../ui/CachedImage';
 
 const gridCols = 'minmax(0,1fr) minmax(70px,100px) minmax(100px,140px) minmax(80px,100px) 48px';
 
@@ -38,11 +39,13 @@ const CartRow = memo(
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
-          {item.imageUrl ? (
-            <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            React.cloneElement(ICONS.package as React.ReactElement, { size: 16, className: 'text-gray-300 dark:text-gray-600' })
-          )}
+          <CachedImage
+            path={item.imageUrl}
+            alt={item.name}
+            fallbackLabel={item.name}
+            fallbackClassName="!p-0.5 !text-[8px] leading-tight"
+            className="h-full w-full min-h-0 min-w-0 object-cover"
+          />
         </div>
         <div className="min-w-0 flex flex-col">
           <div className="truncate text-sm font-semibold text-gray-800 dark:text-gray-200">{item.name}</div>

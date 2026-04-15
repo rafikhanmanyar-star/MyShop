@@ -313,7 +313,7 @@ function MobileOrdersPageContent() {
             {/* Page header + status filters (single band) */}
             <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 shadow-sm z-10 shrink-0">
                 <div className="px-4 sm:px-6 lg:px-8 pt-4 pb-3">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
                         <div className="flex items-start gap-3 min-w-0 flex-1">
                             <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/40">
                                 <Smartphone className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
@@ -347,14 +347,65 @@ function MobileOrdersPageContent() {
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center justify-end gap-2 shrink-0 lg:pt-1">
+                        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-3 lg:max-w-[min(100%,52rem)] shrink-0">
+                            {ridersOverview?.stats && (
+                                <div
+                                    className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 rounded-xl border border-border/80 bg-muted/40 px-2.5 py-1.5 sm:px-3 sm:py-2 dark:bg-slate-800/60 dark:border-slate-600/80 min-w-0"
+                                    title="Delivery rider availability (same pool as the rider mobile app)"
+                                >
+                                    <span className="inline-flex items-center gap-1.5 text-[0.7rem] sm:text-xs font-bold text-foreground dark:text-slate-200 shrink-0">
+                                        <Users className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                                        Riders
+                                    </span>
+                                    <span className="text-[0.65rem] sm:text-xs text-muted-foreground text-right">
+                                        <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+                                            {ridersOverview.stats.available}
+                                        </span>{' '}
+                                        available
+                                    </span>
+                                    <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
+                                    <span className="text-[0.65rem] sm:text-xs text-muted-foreground">
+                                        <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-300">
+                                            {ridersOverview.stats.busy}
+                                        </span>{' '}
+                                        busy
+                                    </span>
+                                    <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
+                                    <span className="text-[0.65rem] sm:text-xs text-muted-foreground">
+                                        <span className="font-semibold tabular-nums text-slate-600 dark:text-slate-300">
+                                            {ridersOverview.stats.offline}
+                                        </span>{' '}
+                                        offline
+                                    </span>
+                                    <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
+                                    <span className="text-[0.65rem] sm:text-xs text-muted-foreground">
+                                        <span className="font-semibold tabular-nums text-foreground">{ridersOverview.stats.active_accounts}</span>{' '}
+                                        active accounts
+                                    </span>
+                                    {ridersOverview.stats.inactive_accounts > 0 && (
+                                        <>
+                                            <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
+                                            <span className="text-[0.65rem] sm:text-xs text-muted-foreground">
+                                                {ridersOverview.stats.inactive_accounts} disabled
+                                            </span>
+                                        </>
+                                    )}
+                                    <span className="text-border dark:text-slate-600 hidden md:inline">·</span>
+                                    <span className="text-[0.65rem] sm:text-xs text-muted-foreground">
+                                        <span className="font-semibold tabular-nums text-indigo-700 dark:text-indigo-300">
+                                            {ridersOverview.stats.open_deliveries}
+                                        </span>{' '}
+                                        open deliveries
+                                    </span>
+                                </div>
+                            )}
                             <button
                                 type="button"
                                 onClick={() => {
                                     loadOrders(statusFilter === 'All' ? undefined : statusFilter);
                                     loadRidersOverview();
                                 }}
-                                className="p-2.5 bg-muted/80 dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl hover:bg-muted dark:hover:bg-slate-700/80 transition-colors"
+                                className="p-2.5 bg-muted/80 dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl hover:bg-muted dark:hover:bg-slate-700/80 transition-colors shrink-0"
                                 title="Refresh"
                             >
                                 <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading || ridersOverviewLoading ? 'animate-spin' : ''}`} />
@@ -362,59 +413,6 @@ function MobileOrdersPageContent() {
                         </div>
                     </div>
                 </div>
-                {ridersOverview?.stats && (
-                    <div className="px-4 sm:px-6 lg:px-8 pb-3">
-                        <div
-                            className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-border/80 bg-muted/40 dark:bg-slate-800/60 dark:border-slate-600/80 px-3 py-2.5 sm:px-4"
-                            title="Delivery rider availability (same pool as the rider mobile app)"
-                        >
-                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-foreground dark:text-slate-200 shrink-0">
-                                <Users className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                                Riders
-                            </span>
-                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
-                                <span className="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
-                                    {ridersOverview.stats.available}
-                                </span>{' '}
-                                available
-                            </span>
-                            <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
-                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
-                                <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-300">
-                                    {ridersOverview.stats.busy}
-                                </span>{' '}
-                                busy
-                            </span>
-                            <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
-                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
-                                <span className="font-semibold tabular-nums text-slate-600 dark:text-slate-300">
-                                    {ridersOverview.stats.offline}
-                                </span>{' '}
-                                offline
-                            </span>
-                            <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
-                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
-                                <span className="font-semibold tabular-nums text-foreground">{ridersOverview.stats.active_accounts}</span> active
-                                accounts
-                            </span>
-                            {ridersOverview.stats.inactive_accounts > 0 && (
-                                <>
-                                    <span className="text-border dark:text-slate-600 hidden sm:inline">·</span>
-                                    <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
-                                        {ridersOverview.stats.inactive_accounts} disabled
-                                    </span>
-                                </>
-                            )}
-                            <span className="text-border dark:text-slate-600 hidden md:inline">·</span>
-                            <span className="text-[0.7rem] sm:text-xs text-muted-foreground">
-                                <span className="font-semibold tabular-nums text-indigo-700 dark:text-indigo-300">
-                                    {ridersOverview.stats.open_deliveries}
-                                </span>{' '}
-                                open deliveries
-                            </span>
-                        </div>
-                    </div>
-                )}
                 <div className="border-t border-border/70 dark:border-slate-700/80 px-4 sm:px-6 lg:px-8 py-2.5 -mt-px">
                     <div className="flex gap-2 overflow-x-auto overflow-y-hidden pb-0.5 custom-scrollbar [scrollbar-gutter:stable]">
                         {filterCounts.map(({ key: s, label, count }) => (

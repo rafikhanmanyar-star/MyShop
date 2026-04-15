@@ -79,57 +79,101 @@ export default function LoginScreen() {
   };
 
   return (
-    <div className="page login-page">
-      <h1 className="login-page__title">Rider</h1>
-      <p className="login-page__sub">Sign in with your shop code and phone.</p>
-      {showInstallHint ? (
-        <p className="login-page__hint">
-          Tip: Add this app to your home screen for a full-screen shortcut.
-        </p>
-      ) : null}
-      <form onSubmit={submit} className="card login-form">
-        <label className="field-label">Shop code</label>
-        <p className="field-hint">Same slug as your mobile ordering URL (path after /), or paste the full link.</p>
-        <input
-          className="input"
-          placeholder="e.g. mystore or https://…/mystore"
-          value={shopSlug}
-          onChange={(e) => setShopSlug(e.target.value)}
-          autoCapitalize="off"
-          autoCorrect="off"
-        />
-        <label className="field-label">Phone (+92)</label>
-        <input
-          className="input"
-          type="tel"
-          inputMode="tel"
-          placeholder="+92 3XX XXXXXXX"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          autoComplete="tel"
-        />
-        <label className="field-label">Password (4 characters)</label>
-        <input
-          className="input"
-          type="password"
-          inputMode="numeric"
-          maxLength={4}
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4))}
-        />
-        {err ? <p className="field-error">{err}</p> : null}
-        <button type="submit" className="btn btn-primary login-form__submit" disabled={loading}>
-          {loading ? 'Signing in…' : 'Log in'}
+    <div className="login-obo">
+      <div className="login-obo__brand-row">
+        <div className="login-obo__logo" aria-hidden />
+        <span className="login-obo__brand-name">OBO RIDER</span>
+      </div>
+
+      <h1 className="login-obo__title">
+        RIDER
+        <br />
+        LOGIN
+      </h1>
+      <p className="login-obo__version">Precision Logistics Terminal v4.2</p>
+
+      {showInstallHint ? <p className="login-obo__hint">Add this app to your home screen for a full-screen shortcut.</p> : null}
+
+      <form onSubmit={submit} className="login-obo__form">
+        <label className="login-obo__label">SHOP CODE</label>
+        <p className="login-obo__field-hint">Same as your mobile ordering URL (path after /), or paste the full link.</p>
+        <div className="obo-field">
+          <input
+            className="obo-field__input"
+            placeholder="e.g. mystore"
+            value={shopSlug}
+            onChange={(e) => setShopSlug(e.target.value)}
+            autoCapitalize="off"
+            autoCorrect="off"
+          />
+          <span className="obo-field__icon obo-field__icon--store" aria-hidden />
+        </div>
+
+        <label className="login-obo__label">PHONE NUMBER</label>
+        <div className="obo-field">
+          <span className="obo-field__prefix">+92</span>
+          <input
+            className="obo-field__input obo-field__input--phone"
+            type="tel"
+            inputMode="tel"
+            placeholder="300 0000000"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            autoComplete="tel"
+          />
+          <span className="obo-field__icon obo-field__icon--phone" aria-hidden />
+        </div>
+
+        <label className="login-obo__label">4-DIGIT ACCESS PIN</label>
+        <div className="obo-field">
+          <input
+            className="obo-field__input"
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4))}
+            placeholder="••••"
+          />
+          <span className="obo-field__icon obo-field__icon--key" aria-hidden />
+        </div>
+
+        {err ? <p className="login-obo__err">{err}</p> : null}
+
+        <button type="submit" className="login-obo__submit" disabled={loading}>
+          {loading ? 'SIGNING IN…' : 'LOGIN'}
+          {!loading ? <span className="login-obo__chev" aria-hidden /> : null}
         </button>
-        <button
-          type="button"
-          className="link-btn"
-          onClick={() => showToast('Contact your shop admin to reset your rider password.')}
-        >
-          Forgot password?
-        </button>
+
+        <div className="login-obo__links">
+          <button
+            type="button"
+            className="login-obo__link"
+            onClick={() => showToast('Contact your shop admin to reset your rider password.')}
+          >
+            FORGOT PIN?
+          </button>
+          <button type="button" className="login-obo__link" onClick={() => showToast('Support: contact your shop administrator.')}>
+            SUPPORT
+          </button>
+        </div>
       </form>
+
+      <div className="login-obo__terminal">
+        <div className="login-obo__terminal-head">TERMINAL STATUS</div>
+        <p className="login-obo__terminal-body">
+          <span className="login-obo__dot" /> ALL SYSTEMS OPERATIONAL
+        </p>
+      </div>
+
+      <footer className="login-obo__footer">
+        <p>SECURE ENTERPRISE CONNECTION · AES-256 ENCRYPTED</p>
+        <p>© {new Date().getFullYear()} OBO STORES LOGISTICS DIVISION · BUILD RIDER-PAK</p>
+        <p className="login-obo__legal">
+          <span>LEGAL</span> · <span>PRIVACY</span> · <span>SAFETY</span>
+        </p>
+      </footer>
     </div>
   );
 }

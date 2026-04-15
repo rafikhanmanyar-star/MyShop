@@ -689,6 +689,39 @@ img {
   opacity: 0.3;
 }
 
+.product-card .image-wrap .image-fallback-label {
+  background: transparent;
+}
+
+.product-card .image-wrap .image-fallback-label__text {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.product-detail-image-fallback {
+  padding: 16px;
+  background: transparent !important;
+}
+
+.product-detail-image-fallback .image-fallback-label__text {
+  font-size: clamp(1rem, 3.8vw, 1.35rem);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .product-card .info {
   padding: 10px 12px;
 }

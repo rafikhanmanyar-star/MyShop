@@ -107,7 +107,12 @@ export default function Cart() {
                 {state.cart.map(item => (
                     <div key={item.productId} className="cart-item">
                         <div className="item-image">
-                            <CachedImage path={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'var(--radius)' }} />
+                            <CachedImage
+                                path={item.image_url}
+                                alt={item.name}
+                                fallbackLabel={item.name}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'var(--radius)' }}
+                            />
                         </div>
                         <div className="item-details">
                             <div className="item-name">{item.name}</div>

@@ -6,6 +6,7 @@ import App from './App';
 import { RiderProvider } from './context/RiderContext';
 import { ToastProvider } from './context/ToastContext';
 import './index.css';
+import './theme-obo.css';
 
 registerSW({ immediate: true });
 

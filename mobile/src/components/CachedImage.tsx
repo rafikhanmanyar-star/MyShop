@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type CSSProperties } from 'react';
 import { useImageUrl } from '../hooks/useImageUrl';
 
 const PlaceholderIcon = ({ size = 40 }: { size?: number }) => (
@@ -11,14 +11,27 @@ interface CachedImageProps {
     path: string | undefined;
     alt: string;
     className?: string;
-    style?: React.CSSProperties;
+    style?: CSSProperties;
     loading?: 'lazy' | 'eager';
-    /** When true, show placeholder icon on load error instead of broken image. */
+    /** When true, show placeholder on load error (ignored if fallbackLabel is set). */
     fallbackToPlaceholder?: boolean;
+    /** Shown when there is no image path or loading fails — usually the product name. */
+    fallbackLabel?: string;
+    /** Extra classes for the fallback label block (e.g. hero size on product detail). */
+    fallbackClassName?: string;
 }
 
 /** Renders an img that uses local cached blob when available, so images load offline. */
-export default function CachedImage({ path, alt, className, style, loading, fallbackToPlaceholder = true }: CachedImageProps) {
+export default function CachedImage({
+    path,
+    alt,
+    className,
+    style,
+    loading,
+    fallbackToPlaceholder = true,
+    fallbackLabel,
+    fallbackClassName,
+}: CachedImageProps) {
     const src = useImageUrl(path);
     const [error, setError] = useState(false);
 
@@ -26,8 +39,30 @@ export default function CachedImage({ path, alt, className, style, loading, fall
         setError(false);
     }, [path]);
 
-    if (!path || !src) return fallbackToPlaceholder ? <PlaceholderIcon /> : null;
-    if (fallbackToPlaceholder && error) return <PlaceholderIcon />;
+    const useNameFallback = Boolean(fallbackLabel?.trim());
+    const showFallback = useNameFallback && (!path || !src || error);
+    const showIconFallback = !useNameFallback && fallbackToPlaceholder && (!path || !src || error);
+
+    if (showFallback) {
+        return (
+            <div
+                className={`image-fallback-label flex h-full w-full min-h-0 min-w-0 items-center justify-center p-2 text-center ${fallbackClassName ?? ''}`}
+                style={style}
+                role="img"
+                aria-label={alt}
+            >
+                <span className="image-fallback-label__text max-h-full w-full break-words">{fallbackLabel}</span>
+            </div>
+        );
+    }
+
+    if (showIconFallback) {
+        return <PlaceholderIcon />;
+    }
+
+    if (!path || !src) {
+        return null;
+    }
 
     return (
         <img
