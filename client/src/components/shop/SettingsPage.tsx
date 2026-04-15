@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 // MyShop Settings Page - Reorganized Chart of Accounts
-import { Smartphone, Printer, Truck } from 'lucide-react';
+import { Smartphone, Printer, Truck, MapPin } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppContext } from '../../context/AppContext';
 import { ICONS } from '../../constants';
@@ -14,6 +14,7 @@ import ChartOfAccounts from './accounting/ChartOfAccounts';
 import { MobileSettingsPanel } from './MobileOrdersPage';
 import DataExportImportSection from './settings/DataExportImportSection';
 import BackupRestoreSection from './settings/BackupRestoreSection';
+import { BranchConfigurationSection } from './settings/BranchConfigurationSection';
 import { useSettingsEditLock } from '../../hooks/useSettingsEditLock';
 import { getFullImageUrl } from '../../config/apiUrl';
 
@@ -120,7 +121,7 @@ const SettingsContent: React.FC = () => {
     const settingsLock = useSettingsEditLock(user?.userId, user?.name || user?.username || 'User');
     const { dispatch } = useAppContext();
     const isCashier = user?.role === 'pos_cashier';
-    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'mobileBranding' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
+    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'mobileBranding' | 'branchConfig' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
 
     const [posSettings, setPosSettings] = useState({
         auto_print_receipt: true,
@@ -523,6 +524,7 @@ const SettingsContent: React.FC = () => {
         { id: 'vendors' as const, label: 'Vendor Management', icon: ICONS.briefcase },
         { id: 'users' as const, label: 'User Management', icon: ICONS.users },
         { id: 'mobileBranding' as const, label: 'Mobile branding', icon: <Smartphone /> },
+        { id: 'branchConfig' as const, label: 'Branch configuration', icon: <MapPin /> },
         { id: 'pos' as const, label: 'POS Preferences', icon: <Printer /> },
         { id: 'data' as const, label: 'Data', icon: ICONS.trash },
         { id: 'app' as const, label: 'App', icon: ICONS.download },
@@ -565,6 +567,10 @@ const SettingsContent: React.FC = () => {
             </div>
 
             <div className={`flex-1 overflow-y-auto ${!isCashier && activeTab === 'mobileBranding' ? 'p-4 sm:p-6' : 'p-8'}`}>
+
+                {!isCashier && activeTab === 'branchConfig' && (
+                    <BranchConfigurationSection />
+                )}
 
                 {!isCashier && activeTab === 'coa' && (
                     <ChartOfAccounts />

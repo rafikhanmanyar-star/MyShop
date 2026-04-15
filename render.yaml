@@ -24,6 +24,9 @@ services:
         value: https://myshop-mobile.onrender.com
       - key: RIDER_APP_URL
         value: https://myshop-rider.onrender.com
+      # Driving ETA (Directions API) + optional server geocoding; create in Render dashboard if unset here.
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
     disk:
       name: myshop-uploads
       mountPath: /opt/render/project/src/server/uploads

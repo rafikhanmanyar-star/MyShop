@@ -19,6 +19,7 @@ type Detail = {
   delivery_notes?: string | null;
   grand_total: number;
   distance_km: number | null;
+  branch_to_customer_km?: number | null;
   customer_name?: string;
   customer_phone?: string | null;
   items: Array<{ product_name: string; product_sku: string; quantity: number; subtotal: number }>;
@@ -166,8 +167,12 @@ export default function OrderDetailScreen() {
           ) : null}
         </div>
 
-        {d.distance_km != null ? (
-          <p className="detail-dist">Straight-line ≈ {d.distance_km} km (from server)</p>
+        {d.branch_to_customer_km != null && Number.isFinite(Number(d.branch_to_customer_km)) ? (
+          <p className="detail-dist">
+            Branch → customer ≈ {Number(d.branch_to_customer_km).toFixed(2)} km
+          </p>
+        ) : d.distance_km != null ? (
+          <p className="detail-dist">Straight-line to customer ≈ {d.distance_km} km</p>
         ) : null}
 
         <p className="detail-addr">{d.delivery_address || '—'}</p>

@@ -12,6 +12,7 @@ import Checkout from './pages/Checkout';
 import OrderConfirm from './pages/OrderConfirm';
 import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
+import TrackOrder from './pages/TrackOrder';
 import LandingPage from './pages/LandingPage';
 import Offers from './pages/Offers';
 import OfferDetail from './pages/OfferDetail';
@@ -86,6 +87,7 @@ export default function App() {
           <Route path="checkout" element={<Checkout />} />
           <Route path="order-confirmed/:orderId" element={<OrderConfirm />} />
           <Route path="orders" element={<Orders />} />
+          <Route path="orders/:id/track" element={<TrackOrder />} />
           <Route path="orders/:id" element={<OrderDetail />} />
           <Route path="account" element={<AccountSettings />} />
 

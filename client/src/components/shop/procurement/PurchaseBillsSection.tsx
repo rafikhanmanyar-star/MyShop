@@ -58,6 +58,32 @@ function normalizeList<T>(raw: unknown): T[] {
   return [];
 }
 
+/** Only posted bills with an outstanding balance can be paid from supplier payments. */
+function purchaseBillCanPay(b: { is_posted?: unknown; balance_due?: unknown }): boolean {
+  const posted = b.is_posted !== false && b.is_posted !== 0;
+  if (!posted) return false;
+  return (Number(b.balance_due) || 0) > 0;
+}
+
+/** Drafts stay editable; posted bills are editable only until any payment (or zero balance). */
+function purchaseBillCanEdit(b: {
+  is_posted?: unknown;
+  paid_amount?: unknown;
+  status?: unknown;
+  balance_due?: unknown;
+  total_amount?: unknown;
+}): boolean {
+  if (b.is_posted === false || b.is_posted === 0) return true;
+  const paid = Number(b.paid_amount) || 0;
+  if (paid > 0) return false;
+  const st = String(b.status ?? '').trim();
+  if (st === 'Paid' || st === 'Partial') return false;
+  const bal = Number(b.balance_due);
+  const tot = Number(b.total_amount);
+  if (!Number.isNaN(tot) && tot > 0 && !Number.isNaN(bal) && bal <= 0) return false;
+  return true;
+}
+
 /** fetch-based apiClient surfaces `{ error }`; legacy axios used `response.data.error`. */
 function procurementHttpErr(err: unknown, fallback: string): string {
   const e = err as { error?: string; message?: string; response?: { data?: { error?: string } } };
@@ -102,6 +128,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     const [showAddVendorModal, setShowAddVendorModal] = useState(false);
     const [showAddSkuModal, setShowAddSkuModal] = useState(false);
     const [editBillId, setEditBillId] = useState<string | null>(null);
+    const [editingIsDraft, setEditingIsDraft] = useState(false);
     const [deleteConfirmBillId, setDeleteConfirmBillId] = useState<string | null>(null);
     const [updating, setUpdating] = useState(false);
     const [sharePdfToWhatsAppAfterSave, setSharePdfToWhatsAppAfterSave] = useState(false);
@@ -344,6 +371,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       setVendorSearch('');
       setProductSearch('');
       setEditBillId(null);
+      setEditingIsDraft(false);
       setFormErrors({});
     }, []);
 
@@ -453,8 +481,46 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
+    const buildPostedItemsPayload = () =>
+      form.items.map((i) => {
+        const qty = Math.max(1, Math.floor(i.quantity));
+        return {
+          productId: i.productId,
+          quantity: qty,
+          unitCost: i.unitCost,
+          taxAmount: i.taxAmount || 0,
+          subtotal: qty * i.unitCost,
+          expiryDate: (i.expiryDate || '').trim().slice(0, 10),
+          batchNo: i.batchNo?.trim() || undefined,
+        };
+      });
+
+    const validatePostedLines = (): boolean => {
+      const today = new Date().toISOString().slice(0, 10);
+      for (const row of form.items) {
+        const exp = (row.expiryDate || '').trim().slice(0, 10);
+        if (!exp) {
+          alert('Each line must have an expiry date.');
+          return false;
+        }
+        if (exp < today) {
+          alert('Expiry date must be today or a future date.');
+          return false;
+        }
+        const qty = Math.max(1, Math.floor(row.quantity));
+        if (qty <= 0) {
+          alert('Quantity must be greater than zero on each line.');
+          return false;
+        }
+        if (row.unitCost < 0) {
+          alert('Cost price cannot be negative.');
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const handleUpdatePostedBill = async () => {
       const nextErrors: { supplier?: string; items?: string } = {};
       if (!form.supplierId) nextErrors.supplier = 'Select a supplier';
       if (form.items.length === 0) nextErrors.items = 'Add at least one product';
@@ -463,20 +529,49 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         return;
       }
       setFormErrors({});
+      if (!validatePostedLines()) return;
+      if (!editBillId) return;
+      setLoading(true);
+      try {
+        const itemsPayload = buildPostedItemsPayload();
+        const sub = itemsPayload.reduce((s, i) => s + i.subtotal, 0);
+        const tax = form.items.reduce((s, i) => s + (i.taxAmount || 0), 0);
+        const total = sub + tax;
+        await procurementApi.updatePurchaseBill(editBillId, {
+          billNumber: form.billNumber,
+          billDate: form.billDate,
+          dueDate: form.dueDate || undefined,
+          notes: form.notes || undefined,
+          items: itemsPayload,
+          subtotal: sub,
+          taxTotal: tax,
+          totalAmount: total,
+        });
+        closeForm();
+        showProcurementToast('Purchase bill updated', 'success');
+        const list = await procurementApi.getPurchaseBills();
+        setBills(Array.isArray(list) ? list : []);
+        refreshItemsRef.current?.();
+      } catch (err: any) {
+        alert(procurementHttpErr(err, 'Failed to update purchase bill'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleSaveDraft = async () => {
+      const nextErrors: { supplier?: string; items?: string } = {};
+      if (!form.supplierId) nextErrors.supplier = 'Select a supplier';
+      if (Object.keys(nextErrors).length) {
+        setFormErrors(nextErrors);
+        return;
+      }
+      setFormErrors({});
       const today = new Date().toISOString().slice(0, 10);
       for (const row of form.items) {
         const exp = (row.expiryDate || '').trim().slice(0, 10);
-        if (!exp) {
-          alert('Each line must have an expiry date.');
-          return;
-        }
-        if (exp < today) {
+        if (exp && exp < today) {
           alert('Expiry date must be today or a future date.');
-          return;
-        }
-        const qty = Math.max(1, Math.floor(row.quantity));
-        if (qty <= 0) {
-          alert('Quantity must be greater than zero on each line.');
           return;
         }
         if (row.unitCost < 0) {
@@ -488,32 +583,20 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       try {
         const itemsPayload = form.items.map((i) => {
           const qty = Math.max(1, Math.floor(i.quantity));
+          const exp = (i.expiryDate || '').trim().slice(0, 10);
           return {
             productId: i.productId,
             quantity: qty,
             unitCost: i.unitCost,
             taxAmount: i.taxAmount || 0,
             subtotal: qty * i.unitCost,
-            expiryDate: i.expiryDate.trim().slice(0, 10),
+            ...(exp ? { expiryDate: exp } : {}),
             batchNo: i.batchNo?.trim() || undefined,
           };
         });
         const sub = itemsPayload.reduce((s, i) => s + i.subtotal, 0);
         const tax = form.items.reduce((s, i) => s + (i.taxAmount || 0), 0);
         const total = sub + tax;
-
-        const doSharePdf = sharePdfToWhatsAppAfterSave && !editBillId;
-        const vendorForSnap = selectedVendor ?? vendors.find((v) => v.id === form.supplierId);
-        const snapshotForPdf =
-          doSharePdf && vendorForSnap
-            ? {
-                form: { ...form, items: form.items.map((i) => ({ ...i })) },
-                vendor: vendorForSnap,
-                sub,
-                tax,
-                total,
-              }
-            : null;
 
         if (editBillId) {
           await procurementApi.updatePurchaseBill(editBillId, {
@@ -527,12 +610,58 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
             totalAmount: total,
           });
           closeForm();
-          showProcurementToast('Purchase bill updated', 'success');
+          showProcurementToast('Draft saved', 'success');
           const list = await procurementApi.getPurchaseBills();
           setBills(Array.isArray(list) ? list : []);
-          refreshItemsRef.current?.();
           return;
         }
+
+        const payload = {
+          supplierId: form.supplierId,
+          billNumber: form.billNumber,
+          billDate: form.billDate,
+          dueDate: form.dueDate || undefined,
+          items: itemsPayload,
+          subtotal: sub,
+          taxTotal: tax,
+          totalAmount: total,
+          paymentStatus: 'Credit' as const,
+          paidAmount: 0,
+          saveAsDraft: true,
+        };
+        const result = await createPurchaseBillOfflineFirst(payload);
+        if (result.synced) {
+          closeForm();
+          showProcurementToast('Draft saved', 'success');
+          const list = await procurementApi.getPurchaseBills();
+          setBills(Array.isArray(list) ? list : []);
+        } else if (result.localId) {
+          closeForm();
+          showProcurementToast('Draft saved offline — will sync when online', 'success');
+        }
+      } catch (err: any) {
+        alert(procurementHttpErr(err, 'Failed to save draft'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handlePostBill = async () => {
+      const nextErrors: { supplier?: string; items?: string } = {};
+      if (!form.supplierId) nextErrors.supplier = 'Select a supplier';
+      if (form.items.length === 0) nextErrors.items = 'Add at least one product';
+      if (Object.keys(nextErrors).length) {
+        setFormErrors(nextErrors);
+        return;
+      }
+      setFormErrors({});
+      if (!validatePostedLines()) return;
+      setLoading(true);
+      try {
+        const itemsPayload = buildPostedItemsPayload();
+        const sub = itemsPayload.reduce((s, i) => s + i.subtotal, 0);
+        const tax = form.items.reduce((s, i) => s + (i.taxAmount || 0), 0);
+        const total = sub + tax;
 
         const payload = {
           supplierId: form.supplierId,
@@ -548,6 +677,30 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           bankAccountId: form.bankAccountId || undefined,
           notes: form.notes || undefined,
         };
+
+        if (editBillId && editingIsDraft) {
+          await procurementApi.postPurchaseBill(editBillId, payload);
+          closeForm();
+          showProcurementToast('Purchase bill posted — stock updated', 'success');
+          const list = await procurementApi.getPurchaseBills();
+          setBills(Array.isArray(list) ? list : []);
+          refreshItemsRef.current?.();
+          return;
+        }
+
+        const doSharePdf = sharePdfToWhatsAppAfterSave && (!editBillId || editingIsDraft);
+        const vendorForSnap = selectedVendor ?? vendors.find((v) => v.id === form.supplierId);
+        const snapshotForPdf =
+          doSharePdf && vendorForSnap
+            ? {
+                form: { ...form, items: form.items.map((i) => ({ ...i })) },
+                vendor: vendorForSnap,
+                sub,
+                tax,
+                total,
+              }
+            : null;
+
         const result = await createPurchaseBillOfflineFirst(payload);
         if (result.synced) {
           closeForm();
@@ -555,6 +708,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           setSharePdfToWhatsAppAfterSave(false);
           const list = await procurementApi.getPurchaseBills();
           setBills(Array.isArray(list) ? list : []);
+          refreshItemsRef.current?.();
           if (snapshotForPdf) {
             try {
               await runSharePdfFromSnapshot(snapshotForPdf);
@@ -578,7 +732,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           }
         }
       } catch (err: any) {
-        alert(procurementHttpErr(err, editBillId ? 'Failed to update purchase bill' : 'Failed to create purchase bill'));
+        alert(procurementHttpErr(err, editBillId ? 'Failed to post purchase bill' : 'Failed to create purchase bill'));
       } finally {
         setLoading(false);
       }
@@ -596,13 +750,23 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           onClose={() => {
             if (!loading) closeForm();
           }}
-          title={editBillId ? 'Edit purchase bill' : 'Create purchase bill'}
+          title={
+            editBillId ? (editingIsDraft ? 'Edit draft purchase bill' : 'Edit purchase bill') : 'Create purchase bill'
+          }
           size="full"
           disableScroll
           className="!mx-0 w-full !max-w-none sm:!mx-auto sm:!max-w-[min(100vw-1rem,72rem)]"
         >
           <div className="flex h-full min-h-0 flex-1 flex-col p-3 sm:p-4 md:p-5">
-            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-2">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (editBillId && !editingIsDraft) {
+                  void handleUpdatePostedBill();
+                }
+              }}
+              className="flex min-h-0 flex-1 flex-col gap-2"
+            >
               <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
                 <div ref={vendorDropdownRef} className="min-w-0 sm:col-span-2 xl:col-span-1">
                   <SupplierSelect
@@ -733,7 +897,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                 </div>
               )}
 
-              {!editBillId && (
+              {(!editBillId || editingIsDraft) && (
                 <div className="shrink-0">
                   <PaymentSelector
                     value={form.paymentStatus}
@@ -765,7 +929,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               </details>
 
               <div className="flex shrink-0 flex-col gap-2 border-t border-border pt-2 sm:flex-row sm:items-center sm:justify-between">
-              {!editBillId && (
+              {(!editBillId || editingIsDraft) && (
                 <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground sm:max-w-[min(100%,28rem)]">
                   <input
                     type="checkbox"
@@ -773,7 +937,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                     onChange={(e) => setSharePdfToWhatsAppAfterSave(e.target.checked)}
                     className="mt-0.5 rounded border-border text-primary focus:ring-primary"
                   />
-                  <span>After save, share purchase order as PDF on WhatsApp</span>
+                  <span>After posting, share purchase order as PDF on WhatsApp</span>
                 </label>
               )}
               <div className={`flex flex-col-reverse gap-2 sm:flex-row sm:justify-end ${editBillId ? 'sm:ml-auto' : ''}`}>
@@ -784,13 +948,34 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="btn-primary rounded-lg px-6 py-2.5 text-sm font-semibold disabled:opacity-50"
-                >
-                  {loading ? 'Saving…' : editBillId ? 'Update purchase bill' : 'Save bill'}
-                </button>
+                {editBillId && !editingIsDraft ? (
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="btn-primary rounded-lg px-6 py-2.5 text-sm font-semibold disabled:opacity-50"
+                  >
+                    {loading ? 'Saving…' : 'Update purchase bill'}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void handleSaveDraft()}
+                      className="btn-secondary rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
+                    >
+                      {loading ? 'Saving…' : 'Save as draft'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void handlePostBill()}
+                      className="btn-primary rounded-lg px-6 py-2.5 text-sm font-semibold disabled:opacity-50"
+                    >
+                      {loading ? 'Posting…' : 'Post bill'}
+                    </button>
+                  </>
+                )}
               </div>
               </div>
             </form>
@@ -815,7 +1000,6 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               <tbody>
                 {bills.map((b) => {
                   const balanceDue = Number(b.balance_due) || 0;
-                  const hasBalance = balanceDue > 0;
                   return (
                     <tr
                       key={b.id}
@@ -836,10 +1020,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                       <td className="p-3">
                         <Badge
                           variant={
-                            b.status === 'Paid' ? 'success' : b.status === 'Partial' ? 'warning' : 'outline'
+                            b.is_posted === false
+                              ? 'default'
+                              : b.status === 'Paid'
+                                ? 'success'
+                                : b.status === 'Partial'
+                                  ? 'warning'
+                                  : 'outline'
                           }
                         >
-                          {b.status}
+                          {b.is_posted === false ? 'Draft' : b.status}
                         </Badge>
                       </td>
                       <td className="p-3 text-right">
@@ -855,19 +1045,25 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                           </button>
                           <button
                             type="button"
+                            disabled={!purchaseBillCanEdit(b)}
                             onClick={async () => {
+                              if (!purchaseBillCanEdit(b)) {
+                                alert('This bill cannot be edited because it has been paid (fully or partially).');
+                                return;
+                              }
                               try {
                                 const bill = await procurementApi.getPurchaseBillById(b.id);
-                                if (!bill || !bill.items?.length) {
-                                  alert('Could not load bill or bill has no items.');
+                                if (!bill) {
+                                  alert('Could not load bill.');
                                   return;
                                 }
+                                setEditingIsDraft(bill.is_posted === false || bill.is_posted === 0);
                                 setForm({
                                   supplierId: bill.supplier_id || bill.supplierId || '',
                                   billNumber: bill.bill_number || bill.billNumber || '',
                                   billDate: (bill.bill_date || bill.billDate || '').toString().slice(0, 10),
                                   dueDate: (bill.due_date || bill.dueDate || '').toString().slice(0, 10) || '',
-                                  items: bill.items.map((it: any) => ({
+                                  items: (bill.items || []).map((it: any) => ({
                                     lineId: newLineId(),
                                     productId: it.product_id || it.productId,
                                     quantity: Number(it.quantity) || 1,
@@ -890,8 +1086,12 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                                 alert(procurementHttpErr(err, 'Failed to load bill'));
                               }
                             }}
-                            className="transition-all duration-200 rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-primary"
-                            title="Edit bill"
+                            className={`transition-all duration-200 rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-primary disabled:pointer-events-none disabled:opacity-40`}
+                            title={
+                              purchaseBillCanEdit(b)
+                                ? 'Edit bill'
+                                : 'Paid bills cannot be edited'
+                            }
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -903,7 +1103,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
-                          {onPayRemaining && hasBalance && (
+                          {onPayRemaining && purchaseBillCanPay(b) && (
                             <button
                               type="button"
                               onClick={() =>
@@ -939,7 +1139,11 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           >
             <div className="w-full max-w-sm rounded-xl bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
               <p className="mb-4 font-medium text-foreground">
-                Delete this purchase bill? This will reverse accounting and inventory. Bills with supplier payments applied cannot be deleted.
+                Delete this purchase bill?
+                {deleteConfirmBillId &&
+                bills.find((x) => x.id === deleteConfirmBillId)?.is_posted === false
+                  ? ' This draft will be removed (no inventory or accounting to reverse).'
+                  : ' This will reverse accounting and inventory. Bills with supplier payments applied cannot be deleted.'}
               </p>
               <div className="flex gap-2">
                 <Button

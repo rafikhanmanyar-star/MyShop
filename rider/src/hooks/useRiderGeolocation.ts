@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { riderApi } from '../api';
 import { useRiderWork } from '../context/RiderWorkContext';
 
-const MIN_SEND_INTERVAL_MS = 22_000;
+const MIN_SEND_INTERVAL_MS = 5_000;
 
 /**
  * Stage 7: while the rider is AVAILABLE or BUSY, push GPS to the server for assignment + ETA distance.

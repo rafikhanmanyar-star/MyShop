@@ -160,6 +160,9 @@ export const customerApi = {
     getOrders: (cursor?: string) =>
         request(`${API_BASE}/orders${cursor ? `?cursor=${cursor}` : ''}`),
     getOrder: (id: string) => request(`${API_BASE}/orders/${id}`),
+    /** Driving ETA (Google Directions on server; cached). */
+    getDeliveryEta: (id: string) =>
+        request(`${API_BASE}/orders/${encodeURIComponent(id)}/delivery-eta`),
     cancelOrder: (id: string, reason?: string) =>
         request(`${API_BASE}/orders/${id}/cancel`, {
             method: 'POST',

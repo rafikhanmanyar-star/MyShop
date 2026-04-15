@@ -19,7 +19,11 @@ export class RiderAuthService {
 
     async login(shopSlug: string, phoneInput: string, passwordPlain: string) {
         const shop = await getMobileCustomerService().resolveShopBySlug(shopSlug);
-        if (!shop) throw new Error('Shop not found');
+        if (!shop) {
+            throw new Error(
+                'Shop not found. Ask your manager for the shop URL slug (Settings → mobile ordering), or paste your store ordering link.'
+            );
+        }
 
         const tenantId = shop.id;
         const want = phoneDigits(phoneInput);

@@ -44,6 +44,7 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
             pgClient = await pool.connect();
             await pgClient.query('LISTEN new_mobile_order');
             await pgClient.query('LISTEN mobile_order_updated');
+            await pgClient.query('LISTEN password_reset_request');
 
             pgClient.on('notification', (msg: any) => {
                 try {
@@ -54,6 +55,8 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
                         res.write(`data: ${JSON.stringify({ type: 'new_order', ...payload })}\n\n`);
                     } else if (msg.channel === 'mobile_order_updated') {
                         res.write(`data: ${JSON.stringify({ type: 'order_updated', ...payload })}\n\n`);
+                    } else if (msg.channel === 'password_reset_request') {
+                        res.write(`data: ${JSON.stringify({ type: 'password_reset_request', ...payload })}\n\n`);
                     }
                 } catch (err) {
                     console.error('SSE notification parse error:', err);
@@ -70,6 +73,7 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
         if (pgClient) {
             pgClient.query('UNLISTEN new_mobile_order').catch(() => { });
             pgClient.query('UNLISTEN mobile_order_updated').catch(() => { });
+            pgClient.query('UNLISTEN password_reset_request').catch(() => { });
             pgClient.release();
         }
     });

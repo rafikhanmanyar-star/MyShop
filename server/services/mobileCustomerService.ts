@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { normalizeShopSlugForLookup } from '../utils/shopSlug.js';
 import { getDatabaseService } from './databaseService.js';
 import { getCustomerIdentityService, assertMobilePasswordValid } from './customerIdentityService.js';
 
@@ -32,6 +33,9 @@ export class MobileCustomerService {
 
     // ─── Tenant / Shop Discovery ────────────────────────────────────────
     async resolveShopBySlug(slug: string): Promise<{ id: string; name: string; company_name: string; logo_url?: string; brand_color?: string; slug: string; branchId?: string } | null> {
+        const key = normalizeShopSlugForLookup(slug);
+        if (!key) return null;
+
         const { getShopService } = await import('./shopService.js');
         const branch = await getShopService().getBranchBySlug(slug);
         if (branch) {
@@ -42,14 +46,16 @@ export class MobileCustomerService {
             if (tenantRows.length === 0) return null;
             return {
                 ...tenantRows[0],
-                slug: branch.slug || slug,
+                slug: branch.slug || key,
                 branchId: branch.id,
             };
         }
         const rows = await this.db.query(
             `SELECT id, name, company_name, email, logo_url, brand_color, slug
-       FROM tenants WHERE slug = $1`,
-            [slug]
+       FROM tenants
+       WHERE slug IS NOT NULL
+         AND LOWER(TRIM(CAST(slug AS TEXT))) = $1`,
+            [key]
         );
         if (rows.length === 0) return null;
         const tenant = rows[0];

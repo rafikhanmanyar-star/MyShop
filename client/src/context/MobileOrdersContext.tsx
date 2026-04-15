@@ -5,11 +5,17 @@ import { useAuth } from './AuthContext';
 
 /** Incoming mobile order alerts for the global bell (from SSE). */
 export interface MobileOrderBellAlert {
+    /** Stable id for list keys / dismiss; mobile orders use order id, password resets use `pwreset_<requestId>`. */
     orderId: string;
     orderNumber: string;
     grandTotal?: number;
     status?: string;
     createdAt?: string;
+    alertType?: 'order' | 'password_reset';
+    requestId?: string;
+    loyaltyMemberId?: string | null;
+    customerId?: string;
+    phoneHint?: string;
 }
 
 interface MobileOrdersState {
@@ -153,6 +159,7 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
                                             if (orderId) {
                                                 setBellAlerts(prev => {
                                                     const next: MobileOrderBellAlert = {
+                                                        alertType: 'order',
                                                         orderId: String(orderId),
                                                         orderNumber: String(orderNumber),
                                                         grandTotal: payload.grandTotal != null ? Number(payload.grandTotal) : undefined,
@@ -167,6 +174,28 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
                                             playNotificationSound();
                                             // Auto-refresh orders list
                                             loadOrders();
+                                        } else if (payload.type === 'password_reset_request') {
+                                            const requestId = payload.requestId ?? payload.request_id;
+                                            if (requestId) {
+                                                const bellId = `pwreset_${String(requestId)}`;
+                                                const name = String(payload.customerName ?? payload.customer_name ?? 'Customer').trim() || 'Customer';
+                                                setBellAlerts(prev => {
+                                                    const next: MobileOrderBellAlert = {
+                                                        alertType: 'password_reset',
+                                                        orderId: bellId,
+                                                        orderNumber: name,
+                                                        requestId: String(requestId),
+                                                        loyaltyMemberId: payload.loyaltyMemberId ?? payload.loyalty_member_id ?? null,
+                                                        customerId: payload.customerId ?? payload.customer_id,
+                                                        phoneHint: payload.phoneHint ?? payload.phone_hint,
+                                                        status: 'Forgot password',
+                                                        createdAt: payload.createdAt ?? payload.created_at,
+                                                    };
+                                                    const rest = prev.filter(a => a.orderId !== next.orderId);
+                                                    return [next, ...rest].slice(0, 40);
+                                                });
+                                                playNotificationSound();
+                                            }
                                         } else if (payload.type === 'order_updated') {
                                             // Stage 11: shop/rider/customer order or delivery status changed — refresh list (no bell)
                                             loadOrders();

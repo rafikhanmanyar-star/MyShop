@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell, Smartphone, User } from 'lucide-react';
+import { Bell, KeyRound, Smartphone, User } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useMobileOrders } from '../context/MobileOrdersContext';
+import { useMobileOrders, type MobileOrderBellAlert } from '../context/MobileOrdersContext';
 import { useInventoryPageHeaderPayload } from '../context/InventoryPageHeaderContext';
 import { ICONS } from '../constants';
 import ThemeToggle from './ui/ThemeToggle';
@@ -15,6 +15,7 @@ const MOBILE_ORDER_ROLES = ['admin', 'pos_cashier'];
 export function AppHeaderToolbar({ className = '' }: { className?: string }) {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const isAdmin = user?.role === 'admin';
   const { bellAlerts, dismissBellAlert, clearBellAlerts } = useMobileOrders();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -34,10 +35,23 @@ export function AppHeaderToolbar({ className = '' }: { className?: string }) {
     return () => document.removeEventListener('mousedown', onDoc);
   }, [menuOpen]);
 
-  const openOrder = (orderId: string) => {
-    dismissBellAlert(orderId);
+  const openBellAlert = (a: MobileOrderBellAlert) => {
+    dismissBellAlert(a.orderId);
     setMenuOpen(false);
-    navigate(`/mobile-orders?order=${encodeURIComponent(orderId)}`);
+    if (a.alertType === 'password_reset') {
+      if (isAdmin) {
+        const id = a.loyaltyMemberId || a.customerId;
+        if (id) {
+          navigate(`/loyalty?tab=members&member=${encodeURIComponent(id)}`);
+        } else {
+          navigate('/loyalty?tab=members');
+        }
+      } else {
+        navigate('/mobile-orders');
+      }
+      return;
+    }
+    navigate(`/mobile-orders?order=${encodeURIComponent(a.orderId)}`);
   };
 
   return (
@@ -48,8 +62,8 @@ export function AppHeaderToolbar({ className = '' }: { className?: string }) {
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
             className="relative inline-flex h-10 w-10 items-center justify-center rounded-md bg-gray-100 text-gray-600 transition-colors duration-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-            title="Mobile order notifications"
-            aria-label="Mobile order notifications"
+            title="Shop notifications (mobile orders & password reset requests)"
+            aria-label="Shop notifications"
             aria-expanded={menuOpen ? 'true' : 'false'}
             aria-haspopup="dialog"
           >
@@ -67,7 +81,7 @@ export function AppHeaderToolbar({ className = '' }: { className?: string }) {
             >
               <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2 dark:border-gray-700">
                 <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  Mobile orders
+                  Notifications
                 </span>
                 {bellAlerts.length > 0 && (
                   <button
@@ -85,7 +99,7 @@ export function AppHeaderToolbar({ className = '' }: { className?: string }) {
               <div className="max-h-[min(60vh,20rem)] overflow-y-auto">
                 {bellAlerts.length === 0 ? (
                   <p className="px-3 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No new mobile order alerts
+                    No new notifications
                   </p>
                 ) : (
                   <ul className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -93,25 +107,45 @@ export function AppHeaderToolbar({ className = '' }: { className?: string }) {
                       <li key={a.orderId}>
                         <button
                           type="button"
-                          onClick={() => openOrder(a.orderId)}
+                          onClick={() => openBellAlert(a)}
                           className="flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/80"
                         >
-                          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300">
-                            <Smartphone className="h-4 w-4" strokeWidth={2} />
+                          <span
+                            className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                              a.alertType === 'password_reset'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                                : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-300'
+                            }`}
+                          >
+                            {a.alertType === 'password_reset' ? (
+                              <KeyRound className="h-4 w-4" strokeWidth={2} />
+                            ) : (
+                              <Smartphone className="h-4 w-4" strokeWidth={2} />
+                            )}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block font-semibold text-gray-900 dark:text-gray-100">
-                              {a.orderNumber}
+                              {a.alertType === 'password_reset' ? 'Forgot password request' : a.orderNumber}
                             </span>
                             <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
-                              {a.status ? `${a.status}` : 'New order'}
-                              {a.grandTotal != null && Number.isFinite(a.grandTotal)
-                                ? ` · PKR ${a.grandTotal.toLocaleString()}`
-                                : ''}
+                              {a.alertType === 'password_reset' ? (
+                                <>
+                                  {a.orderNumber}
+                                  {a.phoneHint ? ` · ends ${a.phoneHint}` : ''}
+                                  {' · Open loyalty profile to reset app password'}
+                                </>
+                              ) : (
+                                <>
+                                  {a.status ? `${a.status}` : 'New order'}
+                                  {a.grandTotal != null && Number.isFinite(a.grandTotal)
+                                    ? ` · PKR ${a.grandTotal.toLocaleString()}`
+                                    : ''}
+                                </>
+                              )}
                             </span>
                           </span>
                           <span className="shrink-0 text-xs font-medium text-primary-600 dark:text-primary-400">
-                            Open
+                            {a.alertType === 'password_reset' ? 'Profile' : 'Open'}
                           </span>
                         </button>
                       </li>

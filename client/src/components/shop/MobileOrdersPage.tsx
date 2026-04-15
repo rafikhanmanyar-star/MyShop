@@ -711,6 +711,36 @@ function OrderDetailPanel({
                                 <MapPin className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                                 <div className="min-w-0 space-y-1">
                                     <p className="break-words leading-relaxed">{order.delivery_address}</p>
+                                    {(order.assigned_branch_name || order.distance_km != null) &&
+                                        order.payment_method !== 'SelfCollection' && (
+                                        <p className="text-xs text-muted-foreground mt-2">
+                                            {order.assigned_branch_name && (
+                                                <span>
+                                                    Assigned branch: <span className="font-medium text-foreground">{order.assigned_branch_name}</span>
+                                                    {order.distance_km != null ? ' · ' : ''}
+                                                </span>
+                                            )}
+                                            {order.distance_km != null && (
+                                                <span>
+                                                    ~{Number(order.distance_km).toFixed(2)} km from branch to customer (straight line)
+                                                </span>
+                                            )}
+                                        </p>
+                                    )}
+                                    {order.delivery_lat != null &&
+                                        order.delivery_lng != null &&
+                                        Number.isFinite(Number(order.delivery_lat)) &&
+                                        Number.isFinite(Number(order.delivery_lng)) && (
+                                        <a
+                                            href={`https://www.google.com/maps?q=${Number(order.delivery_lat)},${Number(order.delivery_lng)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400 mt-2"
+                                        >
+                                            <MapPin className="w-3.5 h-3.5 shrink-0" />
+                                            Open customer pin in Google Maps
+                                        </a>
+                                    )}
                                     {order.delivery_notes && (
                                         <p className="text-xs text-muted-foreground leading-relaxed break-words">
                                             Note: {order.delivery_notes}

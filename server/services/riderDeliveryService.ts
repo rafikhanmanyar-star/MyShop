@@ -45,7 +45,8 @@ export class RiderDeliveryService {
         const rows = await this.db.query(
             `SELECT d.id AS delivery_order_id, d.status AS delivery_status, d.assigned_at, d.accepted_at, d.picked_at, d.delivered_at,
               o.id AS order_id, o.order_number, o.status AS order_status, o.grand_total,
-              o.delivery_address, o.delivery_lat, o.delivery_lng, o.payment_method, o.created_at,
+              o.delivery_address, o.delivery_lat, o.delivery_lng, o.distance_km AS branch_to_customer_km,
+              o.payment_method, o.created_at,
               COALESCE(NULLIF(TRIM(c.name), ''), c.phone, 'Customer') AS customer_name
        FROM delivery_orders d
        INNER JOIN mobile_orders o ON o.id = d.order_id AND o.tenant_id = d.tenant_id
@@ -98,7 +99,8 @@ export class RiderDeliveryService {
         const rows = await this.db.query(
             `SELECT d.id AS delivery_order_id, d.status AS delivery_status, d.assigned_at, d.accepted_at, d.picked_at, d.delivered_at,
               o.id AS order_id, o.order_number, o.status AS order_status, o.grand_total,
-              o.delivery_address, o.delivery_lat, o.delivery_lng, o.delivery_notes, o.payment_method, o.created_at,
+              o.delivery_address, o.delivery_lat, o.delivery_lng, o.distance_km AS branch_to_customer_km,
+              o.delivery_notes, o.payment_method, o.created_at,
               COALESCE(NULLIF(TRIM(c.name), ''), c.phone, 'Customer') AS customer_name,
               c.phone AS customer_phone
        FROM delivery_orders d

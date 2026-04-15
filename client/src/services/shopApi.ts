@@ -8,6 +8,11 @@ export interface ShopBranch {
   status: string;
   location: string;
   region: string;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  address?: string | null;
+  max_delivery_distance_km?: number | string | null;
+  is_active?: boolean;
 }
 
 export interface ShopProduct {
@@ -450,6 +455,8 @@ export const procurementApi = {
       totalAmount: number;
     }
   ) => apiClient.patch(`/shop/procurement/purchase-bills/${id}`, data),
+  postPurchaseBill: (id: string, data: any) =>
+    apiClient.post<{ message: string }>(`/shop/procurement/purchase-bills/${id}/post`, data),
   deletePurchaseBill: (id: string) => apiClient.delete(`/shop/procurement/purchase-bills/${id}`),
   getSupplierPayments: (supplierId?: string) =>
     apiClient.get<any[]>(`/shop/procurement/supplier-payments${supplierId ? `?supplierId=${supplierId}` : ''}`),

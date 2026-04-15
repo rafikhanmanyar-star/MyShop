@@ -15,6 +15,7 @@ export interface MobileOrder {
     delivery_address: string;
     /** Stage 3: Haversine routing metadata */
     assigned_branch_id?: string | null;
+    assigned_branch_name?: string | null;
     distance_km?: number | null;
     /** Stage 5: rider assignment */
     rider_id?: string | null;

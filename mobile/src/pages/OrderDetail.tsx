@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { customerApi, getApiBaseUrl } from '../api';
 
@@ -227,6 +227,18 @@ export default function OrderDetail() {
             )}
 
             {/* Stage 9: live courier — same data as shop POS (distance + map when coords exist) */}
+            {!isPickup && order.status === 'OutForDelivery' && (
+                <div style={{ marginBottom: 16 }}>
+                    <Link
+                        to={`/${shopSlug}/orders/${id}/track`}
+                        className="btn btn-primary"
+                        style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}
+                    >
+                        Track live on map
+                    </Link>
+                </div>
+            )}
+
             {!isPickup && order.delivery_order_id && order.status !== 'Cancelled' && order.status !== 'Delivered' && (
                 <div style={{
                     background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',

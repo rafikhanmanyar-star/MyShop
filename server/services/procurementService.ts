@@ -33,6 +33,11 @@ export interface CreatePurchaseBillInput {
   bankAccountId?: string;
   notes?: string;
   userId?: string;
+  /**
+   * When true, only the bill header and line rows are stored. No inventory, batches,
+   * inventory movements, or accounting until the bill is posted.
+   */
+  saveAsDraft?: boolean;
 }
 
 export interface SupplierPaymentInput {
@@ -67,6 +72,180 @@ export class ProcurementService {
     }
   }
 
+  /** Draft lines: expiry optional; when set, must be today or later. */
+  private validateDraftPurchaseItems(items: PurchaseBillItemInput[]): void {
+    const today = new Date().toISOString().slice(0, 10);
+    let line = 0;
+    for (const item of items) {
+      line += 1;
+      if (!item.productId) throw new Error(`Line ${line}: product is required`);
+      if (!item.quantity || item.quantity <= 0) throw new Error(`Line ${line}: quantity must be greater than 0`);
+      if (item.unitCost == null || item.unitCost < 0) throw new Error(`Line ${line}: cost price must be zero or positive`);
+      const exp = item.expiryDate?.trim();
+      if (exp && exp < today) throw new Error(`Line ${line}: expiry date must be today or a future date`);
+    }
+  }
+
+  private async ensureWarehouseId(client: any, tenantId: string): Promise<string> {
+    const whRows = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
+    if (whRows.length === 0) {
+      const ins = await client.query(
+        `INSERT INTO shop_warehouses (tenant_id, name, code, location, is_active)
+         VALUES ($1, 'Main Warehouse', 'MAIN', 'Default', TRUE) RETURNING id`,
+        [tenantId]
+      );
+      return ins[0].id as string;
+    }
+    return whRows[0].id as string;
+  }
+
+  /**
+   * Inserts posted purchase lines, updates inventory / batches / movements, posts AP and optional cash/bank.
+   * Caller must have inserted the purchase_bills row with is_posted true (or is about to flip after — not used here).
+   */
+  private async applyPostedPurchaseReceipt(
+    client: any,
+    tenantId: string,
+    billId: string,
+    data: CreatePurchaseBillInput,
+    warehouseId: string
+  ): Promise<void> {
+    let lineIndex = 0;
+    for (const item of data.items) {
+      lineIndex += 1;
+      const batchNo =
+        (item.batchNo && String(item.batchNo).trim()) || `B-${data.billNumber}-${lineIndex}`;
+      const expiryDate = String(item.expiryDate).trim().slice(0, 10);
+
+      await client.query(
+        `INSERT INTO purchase_bill_items (tenant_id, purchase_bill_id, product_id, quantity, unit_cost, tax_amount, subtotal, expiry_date, batch_no)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9)`,
+        [
+          tenantId,
+          billId,
+          item.productId,
+          item.quantity,
+          item.unitCost,
+          item.taxAmount || 0,
+          item.subtotal,
+          expiryDate,
+          batchNo,
+        ]
+      );
+
+      const totalCost = item.quantity * item.unitCost;
+      const invRows = await client.query(
+        `SELECT quantity_on_hand FROM shop_inventory
+         WHERE tenant_id = $1 AND product_id = $2 AND warehouse_id = $3 LIMIT 1`,
+        [tenantId, item.productId, warehouseId]
+      );
+
+      let newQty: number;
+      let newAvgCost: number;
+      if (invRows.length === 0) {
+        await client.query(
+          `INSERT INTO shop_inventory (tenant_id, product_id, warehouse_id, quantity_on_hand, updated_at)
+           VALUES ($1, $2, $3, $4, NOW())
+           ON CONFLICT (tenant_id, product_id, warehouse_id)
+           DO UPDATE SET quantity_on_hand = shop_inventory.quantity_on_hand + $4, updated_at = NOW()`,
+          [tenantId, item.productId, warehouseId, item.quantity]
+        );
+        newQty = item.quantity;
+        newAvgCost = item.unitCost;
+      } else {
+        const oldQty = parseFloat(invRows[0].quantity_on_hand) || 0;
+        const prodRows = await client.query(
+          'SELECT average_cost, cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2',
+          [item.productId, tenantId]
+        );
+        const oldCost =
+          prodRows[0]?.average_cost != null && Number(prodRows[0].average_cost) > 0
+            ? Number(prodRows[0].average_cost)
+            : Number(prodRows[0]?.cost_price) || 0;
+        newQty = oldQty + item.quantity;
+        newAvgCost = newQty > 0 ? (oldQty * oldCost + item.quantity * item.unitCost) / newQty : item.unitCost;
+
+        await client.query(
+          `UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand + $1, updated_at = NOW()
+           WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4`,
+          [item.quantity, tenantId, item.productId, warehouseId]
+        );
+      }
+
+      await client.query(
+        `UPDATE shop_products SET average_cost = $1, cost_price = $2, updated_at = NOW()
+         WHERE id = $3 AND tenant_id = $4`,
+        [newAvgCost, item.unitCost, item.productId, tenantId]
+      );
+
+      await insertPurchaseBatch(
+        client,
+        tenantId,
+        item.productId,
+        warehouseId,
+        billId,
+        item.quantity,
+        item.unitCost,
+        expiryDate,
+        batchNo
+      );
+
+      await client.query(
+        `INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, unit_cost, total_cost)
+         VALUES ($1, $2, $3, 'Purchase', $4, $5, $6, $7, $8)`,
+        [
+          tenantId,
+          item.productId,
+          warehouseId,
+          item.quantity,
+          billId,
+          data.userId || null,
+          item.unitCost,
+          totalCost,
+        ]
+      );
+    }
+
+    await this.postPurchaseToAccounting(client, tenantId, billId, data);
+  }
+
+  /**
+   * Posted bills may only have lines/totals edited while unpaid (no supplier allocations, no payments, positive balance).
+   */
+  private async assertPostedBillEditableForLineItems(
+    client: any,
+    tenantId: string,
+    billId: string,
+    bill: { paid_amount?: unknown; balance_due?: unknown; total_amount?: unknown; status?: unknown }
+  ): Promise<void> {
+    const paidAmount = parseFloat(String(bill.paid_amount ?? 0)) || 0;
+    if (paidAmount > 0) {
+      throw new Error('Cannot change this bill: payments have already been recorded against it.');
+    }
+    const linked = await client.query(
+      `SELECT 1 FROM purchase_bill_payments WHERE tenant_id = $1 AND purchase_bill_id = $2 LIMIT 1`,
+      [tenantId, billId]
+    );
+    if (linked.length > 0) {
+      throw new Error('Cannot change this bill: supplier payments are applied. Remove or edit those payments first.');
+    }
+    const st = String(bill.status ?? '').trim();
+    if (st === 'Paid' || st === 'Partial') {
+      throw new Error('Cannot change this bill: it has been paid (fully or partially).');
+    }
+    const balanceDue = parseFloat(String(bill.balance_due ?? 0));
+    const totalAmt = parseFloat(String(bill.total_amount ?? 0));
+    if (!Number.isNaN(totalAmt) && totalAmt > 0 && !Number.isNaN(balanceDue) && balanceDue <= 0) {
+      throw new Error('Cannot change this bill: it has no outstanding balance (fully paid).');
+    }
+  }
+
+  private isPostedBillRow(row: { is_posted?: boolean | null | number }): boolean {
+    const v = row.is_posted as unknown;
+    if (v === false || v === 0) return false;
+    return true;
+  }
+
   /**
    * Each save appends a new main journal (Dr Inv / Cr AP) plus optional reversal rows, all with the same
    * source_id. Reversals use reference "Reversal-...". We must target the latest main journal only.
@@ -98,26 +277,82 @@ export class ProcurementService {
   }
 
   /**
-   * Create purchase bill: save bill + items, update inventory (weighted average),
-   * insert movements, post double-entry (Inventory ↑, AP or Cash/Bank).
+   * Create purchase bill. Use `saveAsDraft` to persist header/lines only; inventory and books update when posted.
    */
   async createPurchaseBill(tenantId: string, data: CreatePurchaseBillInput): Promise<string> {
-    if (!data.items?.length) throw new Error('Purchase bill must have at least one line item');
-    this.validatePurchaseItemsForBatches(data.items);
+    const asDraft = Boolean(data.saveAsDraft);
+    if (asDraft) {
+      if (data.items?.length) this.validateDraftPurchaseItems(data.items);
+    } else {
+      if (!data.items?.length) throw new Error('Purchase bill must have at least one line item');
+      this.validatePurchaseItemsForBatches(data.items);
+    }
 
     const billId = await this.db.transaction(async (client) => {
+      if (asDraft) {
+        const balanceDue = data.totalAmount;
+        const billRes = await client.query(
+          `INSERT INTO purchase_bills (
+            tenant_id, supplier_id, bill_number, bill_date, due_date,
+            subtotal, tax_total, total_amount, paid_amount, balance_due, status, notes,
+            initial_payment_bank_account_id, is_posted
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, 'Draft', $10, NULL, FALSE) RETURNING id`,
+          [
+            tenantId,
+            data.supplierId,
+            data.billNumber,
+            data.billDate,
+            data.dueDate || null,
+            data.subtotal,
+            data.taxTotal,
+            data.totalAmount,
+            balanceDue,
+            data.notes || null,
+          ]
+        );
+        const newId = billRes[0].id as string;
+        let lineIndex = 0;
+        for (const item of data.items || []) {
+          lineIndex += 1;
+          const batchNo =
+            (item.batchNo && String(item.batchNo).trim()) || `B-${data.billNumber}-${lineIndex}`;
+          const expRaw = item.expiryDate?.trim();
+          const expiryDate = expRaw ? expRaw.slice(0, 10) : null;
+          await client.query(
+            `INSERT INTO purchase_bill_items (tenant_id, purchase_bill_id, product_id, quantity, unit_cost, tax_amount, subtotal, expiry_date, batch_no)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9)`,
+            [
+              tenantId,
+              newId,
+              item.productId,
+              item.quantity,
+              item.unitCost,
+              item.taxAmount || 0,
+              item.subtotal,
+              expiryDate,
+              batchNo,
+            ]
+          );
+        }
+        await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+        return newId;
+      }
+
       const balanceDue = data.totalAmount - (data.paidAmount || 0);
       const status =
-        balanceDue <= 0 ? 'Paid' : (data.paidAmount && data.paidAmount > 0 ? 'Partial' : 'Posted');
+        balanceDue <= 0 ? 'Paid' : data.paidAmount && data.paidAmount > 0 ? 'Partial' : 'Posted';
 
       const paidNow = data.paidAmount || 0;
-      const initialBankId = paidNow > 0 && (data.paymentStatus === 'Paid' || data.paymentStatus === 'Partial') ? data.bankAccountId || null : null;
+      const initialBankId =
+        paidNow > 0 && (data.paymentStatus === 'Paid' || data.paymentStatus === 'Partial')
+          ? data.bankAccountId || null
+          : null;
 
       const billRes = await client.query(
         `INSERT INTO purchase_bills (
           tenant_id, supplier_id, bill_number, bill_date, due_date,
-          subtotal, tax_total, total_amount, paid_amount, balance_due, status, notes, initial_payment_bank_account_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+          subtotal, tax_total, total_amount, paid_amount, balance_due, status, notes, initial_payment_bank_account_id, is_posted
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE) RETURNING id`,
         [
           tenantId,
           data.supplierId,
@@ -134,125 +369,93 @@ export class ProcurementService {
           initialBankId,
         ]
       );
-      const billId = billRes[0].id;
-
-      let warehouseId: string;
-      const whRows = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [
-        tenantId,
-      ]);
-      if (whRows.length === 0) {
-        const ins = await client.query(
-          `INSERT INTO shop_warehouses (tenant_id, name, code, location, is_active)
-           VALUES ($1, 'Main Warehouse', 'MAIN', 'Default', TRUE) RETURNING id`,
-          [tenantId]
-        );
-        warehouseId = ins[0].id;
-      } else {
-        warehouseId = whRows[0].id;
-      }
-
-      let lineIndex = 0;
-      for (const item of data.items) {
-        lineIndex += 1;
-        const batchNo =
-          (item.batchNo && String(item.batchNo).trim()) || `B-${data.billNumber}-${lineIndex}`;
-        const expiryDate = String(item.expiryDate).trim().slice(0, 10);
-
-        await client.query(
-          `INSERT INTO purchase_bill_items (tenant_id, purchase_bill_id, product_id, quantity, unit_cost, tax_amount, subtotal, expiry_date, batch_no)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9)`,
-          [
-            tenantId,
-            billId,
-            item.productId,
-            item.quantity,
-            item.unitCost,
-            item.taxAmount || 0,
-            item.subtotal,
-            expiryDate,
-            batchNo,
-          ]
-        );
-
-        const totalCost = item.quantity * item.unitCost;
-        const invRows = await client.query(
-          `SELECT quantity_on_hand FROM shop_inventory
-           WHERE tenant_id = $1 AND product_id = $2 AND warehouse_id = $3 LIMIT 1`,
-          [tenantId, item.productId, warehouseId]
-        );
-
-        let newQty: number;
-        let newAvgCost: number;
-        if (invRows.length === 0) {
-          await client.query(
-            `INSERT INTO shop_inventory (tenant_id, product_id, warehouse_id, quantity_on_hand, updated_at)
-             VALUES ($1, $2, $3, $4, NOW())
-             ON CONFLICT (tenant_id, product_id, warehouse_id)
-             DO UPDATE SET quantity_on_hand = shop_inventory.quantity_on_hand + $4, updated_at = NOW()`,
-            [tenantId, item.productId, warehouseId, item.quantity]
-          );
-          newQty = item.quantity;
-          newAvgCost = item.unitCost;
-        } else {
-          const oldQty = parseFloat(invRows[0].quantity_on_hand) || 0;
-          const prodRows = await client.query(
-            'SELECT average_cost, cost_price FROM shop_products WHERE id = $1 AND tenant_id = $2',
-            [item.productId, tenantId]
-          );
-          const oldCost = (prodRows[0]?.average_cost != null && Number(prodRows[0].average_cost) > 0)
-            ? Number(prodRows[0].average_cost)
-            : Number(prodRows[0]?.cost_price) || 0;
-          newQty = oldQty + item.quantity;
-          newAvgCost = newQty > 0 ? (oldQty * oldCost + item.quantity * item.unitCost) / newQty : item.unitCost;
-
-          await client.query(
-            `UPDATE shop_inventory SET quantity_on_hand = quantity_on_hand + $1, updated_at = NOW()
-             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4`,
-            [item.quantity, tenantId, item.productId, warehouseId]
-          );
-        }
-
-        await client.query(
-          `UPDATE shop_products SET average_cost = $1, cost_price = $2, updated_at = NOW()
-           WHERE id = $3 AND tenant_id = $4`,
-          [newAvgCost, item.unitCost, item.productId, tenantId]
-        );
-
-        await insertPurchaseBatch(
-          client,
-          tenantId,
-          item.productId,
-          warehouseId,
-          billId,
-          item.quantity,
-          item.unitCost,
-          expiryDate,
-          batchNo
-        );
-
-        await client.query(
-          `INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, unit_cost, total_cost)
-           VALUES ($1, $2, $3, 'Purchase', $4, $5, $6, $7, $8)`,
-          [
-            tenantId,
-            item.productId,
-            warehouseId,
-            item.quantity,
-            billId,
-            data.userId || null,
-            item.unitCost,
-            totalCost,
-          ]
-        );
-      }
-
-      await this.postPurchaseToAccounting(client, tenantId, billId, data);
+      const newId = billRes[0].id as string;
+      const warehouseId = await this.ensureWarehouseId(client, tenantId);
+      await this.applyPostedPurchaseReceipt(client, tenantId, newId, data, warehouseId);
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
-      return billId;
+      return newId;
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});
     return billId;
+  }
+
+  /**
+   * Post a draft bill: receive stock into inventory, record batches/movements, post accounting.
+   */
+  async postPurchaseBill(tenantId: string, billId: string, data: CreatePurchaseBillInput): Promise<void> {
+    if (!data.items?.length) throw new Error('Purchase bill must have at least one line item');
+    this.validatePurchaseItemsForBatches(data.items);
+
+    await this.db.transaction(async (client) => {
+      const billRows = await client.query(
+        `SELECT id, supplier_id, bill_number, paid_amount, is_posted FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, billId]
+      );
+      if (billRows.length === 0) throw new Error('Purchase bill not found');
+      const row = billRows[0];
+      if (this.isPostedBillRow(row)) {
+        throw new Error('This bill is already posted.');
+      }
+      if (String(row.supplier_id) !== String(data.supplierId)) {
+        throw new Error('Supplier does not match this bill.');
+      }
+      const paidAmount = parseFloat(row.paid_amount) || 0;
+      if (paidAmount > 0) {
+        throw new Error('Cannot post: this bill already has payments recorded.');
+      }
+      const linked = await client.query(
+        `SELECT 1 FROM purchase_bill_payments WHERE tenant_id = $1 AND purchase_bill_id = $2 LIMIT 1`,
+        [tenantId, billId]
+      );
+      if (linked.length > 0) {
+        throw new Error('Cannot post: supplier payments are linked to this bill.');
+      }
+
+      const balanceDue = data.totalAmount - (data.paidAmount || 0);
+      const status =
+        balanceDue <= 0 ? 'Paid' : data.paidAmount && data.paidAmount > 0 ? 'Partial' : 'Posted';
+      const paidNow = data.paidAmount || 0;
+      const initialBankId =
+        paidNow > 0 && (data.paymentStatus === 'Paid' || data.paymentStatus === 'Partial')
+          ? data.bankAccountId || null
+          : null;
+
+      await client.query(
+        `UPDATE purchase_bills SET
+          bill_number = $1, bill_date = $2, due_date = $3, notes = $4,
+          subtotal = $5, tax_total = $6, total_amount = $7,
+          paid_amount = $8, balance_due = $9, status = $10,
+          initial_payment_bank_account_id = $11, is_posted = TRUE, updated_at = NOW()
+         WHERE id = $12 AND tenant_id = $13`,
+        [
+          data.billNumber,
+          data.billDate,
+          data.dueDate ?? null,
+          data.notes ?? null,
+          data.subtotal,
+          data.taxTotal,
+          data.totalAmount,
+          paidNow,
+          balanceDue,
+          status,
+          initialBankId,
+          billId,
+          tenantId,
+        ]
+      );
+
+      await client.query('DELETE FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2', [
+        tenantId,
+        billId,
+      ]);
+
+      const warehouseId = await this.ensureWarehouseId(client, tenantId);
+      await this.applyPostedPurchaseReceipt(client, tenantId, billId, data, warehouseId);
+      await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+    });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
   }
 
   private async postPurchaseToAccounting(
@@ -359,8 +562,7 @@ export class ProcurementService {
 
   /**
    * Full update of purchase bill: line items, totals, metadata.
-   * Reverses old accounting (Inv/AP only) and inventory, then re-posts with new amounts.
-   * Keeps paid_amount unchanged (initial payment + supplier payment allocations).
+   * Draft bills: no inventory/accounting. Posted bills: reverses and re-posts unless payments exist.
    */
   async updatePurchaseBill(
     tenantId: string,
@@ -376,20 +578,76 @@ export class ProcurementService {
       totalAmount: number;
     }
   ): Promise<void> {
-    if (!data.items?.length) throw new Error('Purchase bill must have at least one line item');
-    this.validatePurchaseItemsForBatches(data.items);
-
     await this.db.transaction(async (client) => {
       const billRows = await client.query(
-        `SELECT id, bill_number, total_amount, paid_amount, initial_payment_bank_account_id
+        `SELECT id, bill_number, total_amount, paid_amount, balance_due, status, initial_payment_bank_account_id, is_posted
          FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
         [tenantId, billId]
       );
       if (billRows.length === 0) throw new Error('Purchase bill not found');
       const bill = billRows[0];
+      const posted = this.isPostedBillRow(bill);
+
+      if (!posted) {
+        if (data.items?.length) this.validateDraftPurchaseItems(data.items);
+        const balanceDue = data.totalAmount;
+        await client.query(
+          `UPDATE purchase_bills SET
+            bill_number = $1, bill_date = $2, due_date = $3, notes = $4,
+            subtotal = $5, tax_total = $6, total_amount = $7, balance_due = $8, status = 'Draft', updated_at = NOW()
+           WHERE id = $9 AND tenant_id = $10`,
+          [
+            data.billNumber,
+            data.billDate,
+            data.dueDate ?? null,
+            data.notes ?? null,
+            data.subtotal,
+            data.taxTotal,
+            data.totalAmount,
+            balanceDue,
+            billId,
+            tenantId,
+          ]
+        );
+        await client.query('DELETE FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2', [
+          tenantId,
+          billId,
+        ]);
+        let lineIndex = 0;
+        for (const item of data.items || []) {
+          lineIndex += 1;
+          const batchNo =
+            (item.batchNo && String(item.batchNo).trim()) || `B-${data.billNumber}-${lineIndex}`;
+          const expRaw = item.expiryDate?.trim();
+          const expiryDate = expRaw ? expRaw.slice(0, 10) : null;
+          await client.query(
+            `INSERT INTO purchase_bill_items (tenant_id, purchase_bill_id, product_id, quantity, unit_cost, tax_amount, subtotal, expiry_date, batch_no)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9)`,
+            [
+              tenantId,
+              billId,
+              item.productId,
+              item.quantity,
+              item.unitCost,
+              item.taxAmount || 0,
+              item.subtotal,
+              expiryDate,
+              batchNo,
+            ]
+          );
+        }
+        await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+        return;
+      }
+
+      if (!data.items?.length) throw new Error('Purchase bill must have at least one line item');
+      this.validatePurchaseItemsForBatches(data.items);
+
       const oldTotal = parseFloat(bill.total_amount) || 0;
       const paidAmount = parseFloat(bill.paid_amount) || 0;
       const newTotal = data.totalAmount;
+
+      await this.assertPostedBillEditableForLineItems(client, tenantId, billId, bill);
 
       const invAccId = await this.getOrCreateAccount(
         client,
@@ -615,12 +873,22 @@ export class ProcurementService {
       }
 
       const billRows = await client.query(
-        `SELECT id, bill_number, total_amount, paid_amount, initial_payment_bank_account_id
+        `SELECT id, bill_number, total_amount, paid_amount, initial_payment_bank_account_id, is_posted
          FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
         [tenantId, billId]
       );
       if (billRows.length === 0) throw new Error('Purchase bill not found');
       const bill = billRows[0];
+      if (!this.isPostedBillRow(bill)) {
+        await client.query('DELETE FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2', [
+          tenantId,
+          billId,
+        ]);
+        await client.query('DELETE FROM purchase_bills WHERE tenant_id = $1 AND id = $2', [tenantId, billId]);
+        await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+        return;
+      }
+
       const totalAmount = parseFloat(bill.total_amount) || 0;
       const paidNow = parseFloat(bill.paid_amount) || 0;
       const bankId = bill.initial_payment_bank_account_id;
@@ -716,6 +984,14 @@ export class ProcurementService {
 
       for (const alloc of data.allocations) {
         if (alloc.amount <= 0) continue;
+        const br = await client.query(
+          `SELECT is_posted FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, alloc.purchaseBillId]
+        );
+        if (br.length === 0) throw new Error('Purchase bill not found');
+        if (!this.isPostedBillRow(br[0])) {
+          throw new Error('Supplier payments cannot be applied to draft purchase bills. Post the bill first.');
+        }
         await client.query(
           `INSERT INTO purchase_bill_payments (tenant_id, purchase_bill_id, supplier_payment_id, amount)
            VALUES ($1, $2, $3, $4)`,
@@ -896,6 +1172,14 @@ export class ProcurementService {
       // Re-apply new allocations (same as record)
       for (const alloc of data.allocations) {
         if (alloc.amount <= 0) continue;
+        const br = await client.query(
+          `SELECT is_posted FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, alloc.purchaseBillId]
+        );
+        if (br.length === 0) throw new Error('Purchase bill not found');
+        if (!this.isPostedBillRow(br[0])) {
+          throw new Error('Supplier payments cannot be applied to draft purchase bills. Post the bill first.');
+        }
         await client.query(
           `INSERT INTO purchase_bill_payments (tenant_id, purchase_bill_id, supplier_payment_id, amount)
            VALUES ($1, $2, $3, $4)`,
@@ -1049,7 +1333,7 @@ export class ProcurementService {
               v.name as supplier_name
        FROM purchase_bills pb
        JOIN shop_vendors v ON pb.supplier_id = v.id AND v.tenant_id = $1
-       WHERE pb.tenant_id = $1 ${supplierId ? 'AND pb.supplier_id = $2' : ''}
+       WHERE pb.tenant_id = $1 AND pb.is_posted = TRUE ${supplierId ? 'AND pb.supplier_id = $2' : ''}
        ORDER BY pb.bill_date DESC`,
       supplierId ? [tenantId, supplierId] : [tenantId]
     );
@@ -1085,7 +1369,7 @@ export class ProcurementService {
               pb.due_date
        FROM purchase_bills pb
        JOIN shop_vendors v ON pb.supplier_id = v.id AND v.tenant_id = $1
-       WHERE pb.tenant_id = $1 AND pb.balance_due > 0 AND pb.status != 'Cancelled'
+       WHERE pb.tenant_id = $1 AND pb.balance_due > 0 AND pb.status != 'Cancelled' AND pb.is_posted = TRUE
        ORDER BY pb.due_date ASC NULLS LAST, pb.bill_date ASC`,
       [tenantId]
     );
@@ -1205,7 +1489,7 @@ export class ProcurementService {
     return this.db.query(
       `SELECT id, bill_number, bill_date, total_amount, paid_amount, balance_due, status
        FROM purchase_bills
-       WHERE tenant_id = $1 AND supplier_id = $2 AND balance_due > 0 AND status != 'Cancelled'
+       WHERE tenant_id = $1 AND supplier_id = $2 AND balance_due > 0 AND status != 'Cancelled' AND is_posted = TRUE
        ORDER BY bill_date ASC`,
       [tenantId, supplierId]
     );

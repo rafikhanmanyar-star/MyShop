@@ -506,6 +506,26 @@ router.get('/orders/:id/stream', mobileAuthMiddleware(db), async (req: any, res)
     }
 });
 
+// Driving ETA (Google Directions; rate-limited server-side). Must be before /orders/:id
+router.get('/orders/:id/delivery-eta', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const result = await getMobileOrderService().getDeliveryEtaForCustomerOrder(
+            req.tenantId,
+            req.params.id,
+            req.customerId
+        );
+        if ('error' in result && result.error === 'not_found') {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+        if ('error' in result && result.error === 'forbidden') {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        res.json(result);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Order history
 router.get('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     try {

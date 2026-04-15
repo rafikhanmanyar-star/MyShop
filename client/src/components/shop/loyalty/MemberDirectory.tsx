@@ -1,6 +1,6 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { KeyRound, RefreshCw } from 'lucide-react';
 import { useLoyalty } from '../../../context/LoyaltyContext';
 import { ICONS, CURRENCY } from '../../../constants';
@@ -12,6 +12,8 @@ import { mobileOrdersApi } from '../../../services/mobileOrdersApi';
 
 const MemberDirectory: React.FC = () => {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const deepLinkKey = useRef<string | null>(null);
     const { members, deleteMember, updateMember, tiers } = useLoyalty();
     const [posSales, setPosSales] = useState<any[] | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -42,6 +44,37 @@ const MemberDirectory: React.FC = () => {
             });
         return () => { cancelled = true; };
     }, []);
+
+    useEffect(() => {
+        const raw = searchParams.get('member');
+        if (!raw) {
+            deepLinkKey.current = null;
+            return;
+        }
+        if (members.length === 0) return;
+        if (deepLinkKey.current === raw) return;
+        const digits = raw.replace(/\D/g, '');
+        const found =
+            members.find((m) => m.id === raw) ||
+            members.find((m) => m.customerId === raw) ||
+            (digits.length >= 4
+                ? members.find((m) => (m.phone || '').replace(/\D/g, '').endsWith(digits))
+                : undefined);
+        if (found) {
+            deepLinkKey.current = raw;
+            setSelectedMember(found);
+            setIsDetailModalOpen(true);
+            setSearchParams(
+                (prev) => {
+                    const n = new URLSearchParams(prev);
+                    n.delete('member');
+                    n.delete('tab');
+                    return n;
+                },
+                { replace: true }
+            );
+        }
+    }, [members, searchParams, setSearchParams]);
 
     useEffect(() => {
         if (!selectedMember?.customerId) {

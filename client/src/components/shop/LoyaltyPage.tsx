@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { LoyaltyProvider, useLoyalty } from '../../context/LoyaltyContext';
 import LoyaltyDashboard from './loyalty/LoyaltyDashboard';
 import MemberDirectory from './loyalty/MemberDirectory';
@@ -14,7 +15,22 @@ import type { ApiError } from '../../services/apiClient';
 
 const LoyaltyContent: React.FC = () => {
     const { addMember } = useLoyalty();
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'members' | 'tiers' | 'campaigns'>('dashboard');
+    const [searchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'members' | 'tiers' | 'campaigns'>(() => {
+        if (typeof window === 'undefined') return 'dashboard';
+        const sp = new URLSearchParams(window.location.search);
+        if (sp.get('member')) return 'members';
+        const t = sp.get('tab');
+        if (t === 'members' || t === 'tiers' || t === 'campaigns') return t;
+        return 'dashboard';
+    });
+
+    useEffect(() => {
+        const member = searchParams.get('member');
+        const tab = searchParams.get('tab');
+        if (member) setActiveTab('members');
+        else if (tab === 'members' || tab === 'tiers' || tab === 'campaigns') setActiveTab(tab);
+    }, [searchParams]);
     const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
     const [newMemberData, setNewMemberData] = useState({
         customerName: '',

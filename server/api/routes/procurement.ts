@@ -8,7 +8,9 @@ function procurementWriteErrorStatus(e: any): number {
   if (e?.statusCode === 409) return 409;
   const m = String(e?.message || '');
   if (
-    /line \d|expiry|quantity|required|must be|cannot reverse|negative|no warehouse|not found/i.test(m)
+    /line \d|expiry|quantity|required|must be|cannot (change|reverse)|negative|no warehouse|not found|paid|outstanding balance/i.test(
+      m
+    )
   ) {
     return 400;
   }
@@ -48,6 +50,15 @@ router.patch('/purchase-bills/:id', checkRole(['admin', 'accountant']), async (r
   try {
     await getProcurementService().updatePurchaseBill(req.tenantId, req.params.id, req.body);
     res.json({ message: 'Purchase bill updated' });
+  } catch (e: any) {
+    res.status(procurementWriteErrorStatus(e)).json({ error: e.message });
+  }
+});
+
+router.post('/purchase-bills/:id/post', checkRole(['admin', 'accountant']), async (req: any, res) => {
+  try {
+    await getProcurementService().postPurchaseBill(req.tenantId, req.params.id, req.body);
+    res.json({ message: 'Purchase bill posted' });
   } catch (e: any) {
     res.status(procurementWriteErrorStatus(e)).json({ error: e.message });
   }

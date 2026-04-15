@@ -1,4 +1,5 @@
 import { getDatabaseService } from './databaseService.js';
+import { invalidateBranchGeoCache } from './mobileOrderBranchRouting.js';
 import { getAccountingService } from './accountingService.js';
 import { notifyDailyReportUpdated } from './dailyReportNotify.js';
 import { insertSystemLog } from './systemLogService.js';
@@ -106,12 +107,19 @@ export class ShopService {
           ? String(data.address).trim() || null
           : null;
 
+      const maxDel =
+        data.max_delivery_distance_km !== undefined && data.max_delivery_distance_km !== null && data.max_delivery_distance_km !== ''
+          ? Number(data.max_delivery_distance_km)
+          : null;
+      const branchActive =
+        data.is_active === undefined || data.is_active === null ? true : Boolean(data.is_active);
+
       const res = await client.query(`
         INSERT INTO shop_branches (
           tenant_id, name, code, type, region,
           manager_name, contact_no, timezone, open_time, close_time, location, slug,
-          latitude, longitude, address
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          latitude, longitude, address, max_delivery_distance_km, is_active
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id
       `, [
         tenantId, data.name, branchCode, data.type || 'Express', data.region || '',
@@ -121,9 +129,12 @@ export class ShopService {
         Number.isFinite(lat as number) ? lat : null,
         Number.isFinite(lng as number) ? lng : null,
         addr,
+        Number.isFinite(maxDel as number) && (maxDel as number) > 0 ? maxDel : null,
+        branchActive,
       ]);
 
       const branchId = res[0].id;
+      invalidateBranchGeoCache(tenantId);
 
       await client.query(`
         INSERT INTO shop_terminals (tenant_id, branch_id, name, code)
@@ -201,6 +212,38 @@ export class ShopService {
         addrU,
         branchId, tenantId
       ]);
+
+      if (data.max_delivery_distance_km !== undefined || data.is_active !== undefined) {
+        const parts: string[] = [];
+        const vals: any[] = [];
+        let pi = 1;
+        if (data.max_delivery_distance_km !== undefined) {
+          const raw = data.max_delivery_distance_km;
+          const n =
+            raw === '' || raw === null
+              ? null
+              : Number(raw);
+          const store =
+            n === null || !Number.isFinite(n)
+              ? null
+              : n > 0
+                ? n
+                : null;
+          parts.push(`max_delivery_distance_km = $${pi++}`);
+          vals.push(store);
+        }
+        if (data.is_active !== undefined) {
+          parts.push(`is_active = $${pi++}`);
+          vals.push(Boolean(data.is_active));
+        }
+        vals.push(branchId, tenantId);
+        await client.query(
+          `UPDATE shop_branches SET ${parts.join(', ')}, updated_at = NOW() WHERE id = $${pi} AND tenant_id = $${pi + 1}`,
+          vals
+        );
+      }
+
+      invalidateBranchGeoCache(tenantId);
       return branchId;
     });
   }
@@ -217,11 +260,16 @@ export class ShopService {
     longitude: number | null;
     address: string | null;
   } | null> {
+    const { normalizeShopSlugForLookup } = await import('../utils/shopSlug.js');
+    const key = normalizeShopSlugForLookup(slug);
+    if (!key) return null;
     const rows = await this.db.query(
       `SELECT id, tenant_id, name, code, location, slug,
               latitude, longitude, address
-       FROM shop_branches WHERE slug = $1`,
-      [slug]
+       FROM shop_branches
+       WHERE slug IS NOT NULL
+         AND LOWER(TRIM(CAST(slug AS TEXT))) = $1`,
+      [key]
     );
     if (rows.length === 0) return null;
     const r = rows[0] as any;

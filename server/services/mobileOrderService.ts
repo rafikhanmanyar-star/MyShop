@@ -7,6 +7,7 @@ import { aggregateQuantitiesFromOfferLines, prepareOfferBundlesForOrder } from '
 import { resolveBranchWarehouseForPlaceOrder } from './mobileOrderBranchRouting.js';
 import { tryAutoAssignRiderForMobileOrder } from './deliveryAssignment.js';
 import { haversineDistanceKm } from '../utils/haversine.js';
+import { getDrivingDurationSeconds } from './googleDirectionsEtaService.js';
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -779,11 +780,13 @@ export class MobileOrderService {
               d.id AS delivery_order_id, d.status AS delivery_status,
               r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone,
               r.current_latitude AS rider_latitude, r.current_longitude AS rider_longitude,
-              r.status AS rider_operational_status
+              r.status AS rider_operational_status,
+              ab.name AS assigned_branch_name
        FROM mobile_orders o
        LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $2
        LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
        LEFT JOIN riders r ON r.id = d.rider_id AND r.tenant_id = o.tenant_id
+       LEFT JOIN shop_branches ab ON ab.id = o.assigned_branch_id AND ab.tenant_id = o.tenant_id
        WHERE o.id = $1 AND o.tenant_id = $2`,
             [orderId, tenantId]
         );
@@ -827,6 +830,40 @@ export class MobileOrderService {
             items: normalizedItems,
             status_history: history,
         }) as any;
+    }
+
+    /** Driving ETA for customer track screen (Google Directions; server-side key). */
+    async getDeliveryEtaForCustomerOrder(tenantId: string, orderId: string, customerId: string) {
+        const rows = await this.db.query(
+            `SELECT o.customer_id, o.payment_method, o.status,
+              o.delivery_lat, o.delivery_lng,
+              r.current_latitude AS rider_lat, r.current_longitude AS rider_lng
+       FROM mobile_orders o
+       LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
+       LEFT JOIN riders r ON r.id = d.rider_id AND r.tenant_id = o.tenant_id
+       WHERE o.id = $1 AND o.tenant_id = $2`,
+            [orderId, tenantId]
+        );
+        if (rows.length === 0) return { error: 'not_found' as const };
+        if (rows[0].customer_id !== customerId) return { error: 'forbidden' as const };
+        if (rows[0].payment_method === 'SelfCollection') {
+            return { eta_minutes: null as number | null, reason: 'pickup' as const };
+        }
+        if (String(rows[0].status || '') !== 'OutForDelivery') {
+            return { eta_minutes: null as number | null, reason: 'not_out_for_delivery' as const };
+        }
+        const dlat = rows[0].delivery_lat != null ? parseFloat(String(rows[0].delivery_lat)) : NaN;
+        const dlng = rows[0].delivery_lng != null ? parseFloat(String(rows[0].delivery_lng)) : NaN;
+        const rlat = rows[0].rider_lat != null ? parseFloat(String(rows[0].rider_lat)) : NaN;
+        const rlng = rows[0].rider_lng != null ? parseFloat(String(rows[0].rider_lng)) : NaN;
+        if (![dlat, dlng, rlat, rlng].every((n) => Number.isFinite(n))) {
+            return { eta_minutes: null as number | null, reason: 'no_coordinates' as const };
+        }
+        const sec = await getDrivingDurationSeconds(rlat, rlng, dlat, dlng);
+        if (sec == null) {
+            return { eta_minutes: null as number | null, reason: 'directions_unavailable' as const };
+        }
+        return { eta_minutes: Math.max(1, Math.ceil(sec / 60)), eta_seconds: sec };
     }
 
     // ─── Status Updates (POS side) ─────────────────────────────────────
@@ -1094,11 +1131,13 @@ export class MobileOrderService {
         d.id AS delivery_order_id, d.status AS delivery_status,
         r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone,
         r.current_latitude AS rider_latitude, r.current_longitude AS rider_longitude,
-        r.status AS rider_operational_status
+        r.status AS rider_operational_status,
+        ab.name AS assigned_branch_name
       FROM mobile_orders o
       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $1
       LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
       LEFT JOIN riders r ON r.id = d.rider_id AND r.tenant_id = o.tenant_id
+      LEFT JOIN shop_branches ab ON ab.id = o.assigned_branch_id AND ab.tenant_id = o.tenant_id
       WHERE o.tenant_id = $1
     `;
         const params: any[] = [tenantId];

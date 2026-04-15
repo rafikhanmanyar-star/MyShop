@@ -177,6 +177,28 @@ export class CustomerIdentityService {
       [rid, tenantId, phoneE164]
     );
 
+    if (this.db.getType() === 'postgres') {
+      try {
+        const lmRows = await this.db.query(
+          `SELECT id FROM shop_loyalty_members WHERE tenant_id = $1 AND customer_id = $2 LIMIT 1`,
+          [tenantId, cust.id]
+        );
+        const loyaltyMemberId = (lmRows[0] as { id: string } | undefined)?.id ?? null;
+        const digits = phoneE164.replace(/\D/g, '');
+        const payload = JSON.stringify({
+          tenantId,
+          requestId: rid,
+          customerId: cust.id,
+          customerName: String(cust.name || '').trim() || 'Customer',
+          loyaltyMemberId,
+          phoneHint: digits.length >= 4 ? digits.slice(-4) : digits,
+        });
+        await this.db.execute(`SELECT pg_notify('password_reset_request', $1)`, [payload]);
+      } catch (e) {
+        console.warn('[password_reset] pg_notify failed:', (e as Error)?.message);
+      }
+    }
+
     try {
       const { notifyPasswordResetPending } = await import('./whatsappCustomerNotify.js');
       await notifyPasswordResetPending(tenantId, phoneE164);

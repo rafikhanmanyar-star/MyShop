@@ -4,6 +4,7 @@ import { riderApi } from '../api';
 import { useRider } from '../context/RiderContext';
 import { useToast } from '../context/ToastContext';
 import { isValidPkPhoneDisplay, normalizePakistanPhone } from '../utils/phone';
+import { normalizeShopSlugForLookup } from '../utils/shopSlug';
 
 const DEFAULT_SHOP = (import.meta.env.VITE_SHOP_SLUG as string | undefined) || '';
 
@@ -32,9 +33,9 @@ export default function LoginScreen() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
-    const slug = shopSlug.trim().toLowerCase();
+    const slug = normalizeShopSlugForLookup(shopSlug);
     if (!slug) {
-      setErr('Shop code is required.');
+      setErr('Shop code is required (use the same code as in your store’s ordering link).');
       return;
     }
     if (!isValidPkPhoneDisplay(phone)) {
@@ -88,9 +89,10 @@ export default function LoginScreen() {
       ) : null}
       <form onSubmit={submit} className="card login-form">
         <label className="field-label">Shop code</label>
+        <p className="field-hint">Same slug as your mobile ordering URL (path after /), or paste the full link.</p>
         <input
           className="input"
-          placeholder="e.g. mystore"
+          placeholder="e.g. mystore or https://…/mystore"
           value={shopSlug}
           onChange={(e) => setShopSlug(e.target.value)}
           autoCapitalize="off"
