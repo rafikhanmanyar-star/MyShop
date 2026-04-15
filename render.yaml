@@ -22,7 +22,21 @@ services:
         value: "*"
       - key: MOBILE_APP_URL
         value: https://myshop-mobile.onrender.com
+      - key: RIDER_APP_URL
+        value: https://myshop-rider.onrender.com
     disk:
       name: myshop-uploads
       mountPath: /opt/render/project/src/server/uploads
       sizeGB: 1
+
+  - type: web
+    name: MyShop-Rider
+    runtime: static
+    branch: main
+    rootDir: rider
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      # Must match your API public URL + /api (same shape as mobile/.env.production.example).
+      - key: VITE_API_URL
+        value: https://myshop-api-9pd4.onrender.com/api

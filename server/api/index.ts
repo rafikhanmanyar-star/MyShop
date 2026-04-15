@@ -29,7 +29,9 @@ const clientDistPath = process.env.CLIENT_DIST_PATH;
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = '0.0.0.0';
 
-// CORS
+// CORS — With CORS_ORIGIN=* (see render.yaml) every browser origin is allowed, including the rider
+// static site on Render. If you replace * with a comma-separated list, add your rider PWA origin
+// (e.g. https://myshop-rider.onrender.com) alongside the mobile and POS dev origins.
 const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
   : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5180'];

@@ -819,6 +819,7 @@ router.get('/receipt-settings', checkRole(['admin', 'pos_cashier']), async (req:
   try {
     const settings = await getShopService().getReceiptSettings(req.tenantId);
     let mobile_order_url: string | null = null;
+    const rider_app_url = (process.env.RIDER_APP_URL || 'http://localhost:5180').replace(/\/$/, '');
     try {
       const { getMobileCustomerService } = await import('../../services/mobileCustomerService.js');
       const slug = await getMobileCustomerService().getOrCreateSlug(req.tenantId);
@@ -827,7 +828,7 @@ router.get('/receipt-settings', checkRole(['admin', 'pos_cashier']), async (req:
     } catch (_) {
       // Mobile ordering not set up or slug error
     }
-    res.json({ ...settings, mobile_order_url });
+    res.json({ ...settings, mobile_order_url, rider_app_url });
   } catch (error: any) {
     res.status(500).json({ error: error.message, message: error.message });
   }
@@ -837,13 +838,14 @@ router.post('/receipt-settings', checkRole(['admin']), async (req: any, res) => 
   try {
     const settings = await getShopService().updateReceiptSettings(req.tenantId, req.body);
     let mobile_order_url: string | null = null;
+    const rider_app_url = (process.env.RIDER_APP_URL || 'http://localhost:5180').replace(/\/$/, '');
     try {
       const { getMobileCustomerService } = await import('../../services/mobileCustomerService.js');
       const slug = await getMobileCustomerService().getOrCreateSlug(req.tenantId);
       const baseUrl = process.env.MOBILE_APP_URL || 'http://localhost:5175';
       mobile_order_url = `${baseUrl}/${slug}`;
     } catch (_) {}
-    res.json({ ...settings, mobile_order_url });
+    res.json({ ...settings, mobile_order_url, rider_app_url });
   } catch (error: any) {
     res.status(500).json({ error: error.message, message: error.message });
   }
