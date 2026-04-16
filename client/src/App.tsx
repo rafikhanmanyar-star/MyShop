@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { installElectronFocusRecovery } from './utils/electronFocusRecovery';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -10,7 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, LogOut, Menu, X, Store, Smartphone, Brain, ChevronRight, Wallet, ClipboardList, Receipt, Undo2, Tag
+  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
 import { MobileOrdersProvider } from './context/MobileOrdersContext';
@@ -18,6 +18,7 @@ import { SyncOnOnline } from './components/SyncOnOnline';
 import OfflineBanner from './components/OfflineBanner';
 import AppHeader from './components/AppHeader';
 import { InventoryPageHeaderProvider } from './context/InventoryPageHeaderContext';
+import { useAutoLogout } from './hooks/useAutoLogout';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
 const InventoryPage = lazy(() => import('./components/shop/InventoryPage'));
@@ -39,41 +40,78 @@ const SalesReturnCreatePage = lazy(() => import('./components/shop/salesReturns/
 const SalesReturnDetailPage = lazy(() => import('./components/shop/salesReturns/SalesReturnDetailPage'));
 const ShopRealtimeBridge = lazy(() => import('./components/shop/ShopRealtimeBridge'));
 
-const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant'] },
-  { path: '/cashier-dashboard', label: 'Cashier Dashboard', icon: ClipboardList, roles: ['pos_cashier'] },
-  { path: '/pos', label: 'Point of Sale', icon: ShoppingCart, roles: ['admin', 'pos_cashier'] },
-  { path: '/sales-returns', label: 'Sales Return', icon: Undo2, roles: ['admin', 'pos_cashier', 'accountant'] },
-  { path: '/mobile-orders', label: 'Mobile Orders', icon: Smartphone, roles: ['admin', 'pos_cashier'] },
-  { path: '/offers', label: 'Offers', icon: Tag, roles: ['admin'] },
-  { path: '/inventory', label: 'Inventory', icon: Package, roles: ['admin'] },
-  { path: '/procurement', label: 'Procurement', icon: Truck, roles: ['admin', 'accountant'] },
-  { path: '/loyalty', label: 'Loyalty', icon: Users, roles: ['admin'] },
-  { path: '/khata', label: 'Khata Ledger', icon: Receipt, roles: ['admin', 'pos_cashier', 'accountant'] },
-  { path: '/multi-store', label: 'Multi-Store', icon: Building2, roles: ['admin'] },
-  { path: '/shifts', label: 'Shifts', icon: ClipboardList, roles: ['admin', 'accountant'] },
-  { path: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin', 'accountant'] },
-  { path: '/accounting', label: 'Accounting', icon: BookOpen, roles: ['admin', 'accountant'] },
-  { path: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin', 'accountant'] },
-  { path: '/forecast', label: 'Forecasting', icon: Brain, roles: ['admin', 'accountant'] },
-  { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'accountant', 'pos_cashier'] },
+type NavItem = { path: string; label: string; icon: React.ComponentType<{ className?: string }>; roles: string[] };
+type NavSection = { section: string; items: NavItem[] };
+
+const navSections: NavSection[] = [
+  {
+    section: 'MAIN',
+    items: [
+      { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant'] },
+      { path: '/cashier-dashboard', label: 'Cashier Dashboard', icon: ClipboardList, roles: ['pos_cashier'] },
+      { path: '/pos', label: 'POS', icon: ShoppingCart, roles: ['admin', 'pos_cashier'] },
+      { path: '/sales-returns', label: 'Sales Return', icon: Undo2, roles: ['admin', 'pos_cashier', 'accountant'] },
+      { path: '/mobile-orders', label: 'Mobile Orders', icon: Smartphone, roles: ['admin', 'pos_cashier'] },
+      { path: '/offers', label: 'Offers', icon: Tag, roles: ['admin'] },
+    ],
+  },
+  {
+    section: 'OPERATIONS',
+    items: [
+      { path: '/inventory', label: 'Inventory', icon: Package, roles: ['admin'] },
+      { path: '/procurement', label: 'Procurement', icon: Truck, roles: ['admin', 'accountant'] },
+    ],
+  },
+  {
+    section: 'CUSTOMERS',
+    items: [
+      { path: '/loyalty', label: 'Loyalty', icon: Users, roles: ['admin'] },
+      { path: '/khata', label: 'Khata Ledger', icon: Receipt, roles: ['admin', 'pos_cashier', 'accountant'] },
+    ],
+  },
+  {
+    section: 'BUSINESS',
+    items: [
+      { path: '/multi-store', label: 'Multi-Store', icon: Building2, roles: ['admin'] },
+      { path: '/shifts', label: 'Shifts', icon: Clock, roles: ['admin', 'accountant'] },
+      { path: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin', 'accountant'] },
+      { path: '/accounting', label: 'Accounting', icon: BookOpen, roles: ['admin', 'accountant'] },
+      { path: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin', 'accountant'] },
+      { path: '/forecast', label: 'Forecasting', icon: Brain, roles: ['admin', 'accountant'] },
+    ],
+  },
+  {
+    section: 'SYSTEM',
+    items: [
+      { path: '/settings', label: 'Settings', icon: Settings, roles: ['admin', 'accountant', 'pos_cashier'] },
+    ],
+  },
 ];
 
+const navItems = navSections.flatMap(s => s.items);
+
+function getUserInitials(name: string) {
+  return name
+    .split(' ')
+    .map(w => w[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
-
-  const filteredNavItems = navItems.filter(item =>
-    !user || !item.roles || item.roles.includes(user.role)
-  );
+  const filteredSections = navSections
+    .map(section => ({
+      ...section,
+      items: section.items.filter(item => !user || !item.roles || item.roles.includes(user.role)),
+    }))
+    .filter(section => section.items.length > 0);
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-gray-800 bg-gray-900 shadow-xl transition-all duration-300 ease-in-out ${collapsed ? 'w-20' : 'w-72'}`}>
+    <aside className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-gray-200 bg-white shadow-sm transition-all duration-300 ease-in-out dark:border-gray-700 dark:bg-gray-900 ${collapsed ? 'w-20' : 'w-72'}`}>
+      {/* Header: Logo + Toggle */}
       <div className="flex h-20 shrink-0 items-center justify-between px-5">
         {!collapsed && (
           <div className="group flex cursor-pointer items-center gap-2.5">
@@ -81,15 +119,15 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
               <Store className="h-[1.125rem] w-[1.125rem] text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-lg font-extrabold leading-none tracking-tight text-white text-shadow-sm">MyShop</span>
-              <span className="text-xs font-medium uppercase tracking-[0.2em] text-gray-400">Point of Sale</span>
+              <span className="text-lg font-extrabold leading-none tracking-tight text-gray-900 dark:text-white">MyShop</span>
+              <span className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">The Digital Atelier</span>
             </div>
           </div>
         )}
         {collapsed && (
           <button
             onClick={onToggle}
-            className="group flex w-full items-center justify-center rounded-lg py-3 text-gray-400 transition-colors duration-200 hover:bg-gray-800 hover:text-white"
+            className="group flex w-full items-center justify-center rounded-lg py-3 text-gray-400 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-white"
             title="Open sidebar"
           >
             <ChevronRight className="h-6 w-6 transition-transform group-hover:translate-x-0.5" />
@@ -99,81 +137,85 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
           <button
             type="button"
             onClick={onToggle}
-            className="rounded-lg p-1.5 text-gray-400 transition-colors duration-200 hover:bg-gray-800 hover:text-white"
+            className="rounded-lg p-1.5 text-gray-400 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-white"
             title="Collapse sidebar"
             aria-label="Collapse sidebar"
           >
-            <X className="h-[1.125rem] w-[1.125rem]" />
+            <AlignJustify className="h-[1.125rem] w-[1.125rem]" />
           </button>
         )}
       </div>
 
-      <nav className="custom-scrollbar min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pt-2">
-        {filteredNavItems.map(item => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.path === '/'}
-            className={({ isActive }) =>
-              `nav-sidebar-link group flex items-center gap-2 rounded-lg px-3 py-2 transition-colors duration-200
-              ${isActive
-                ? 'bg-primary-600 font-semibold text-white shadow-sm'
-                : 'font-medium text-gray-300 hover:bg-gray-800 hover:text-white'}`
-            }
-          >
-            <item.icon className={`h-[1.125rem] w-[1.125rem] flex-shrink-0 ${collapsed ? 'mx-auto' : ''}`} />
-            {!collapsed && <span>{item.label}</span>}
+      {/* Navigation with section groups */}
+      <nav className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pt-1">
+        {filteredSections.map((section, idx) => (
+          <div key={section.section} className={idx > 0 ? 'mt-5' : ''}>
             {!collapsed && (
-              <div className="ml-auto opacity-0 transition-opacity group-hover:opacity-100">
-                <div className="h-1.5 w-1.5 rounded-full bg-white/80" />
-              </div>
+              <p className="mb-1.5 px-3 text-[0.65rem] font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">
+                {section.section}
+              </p>
             )}
-          </NavLink>
+            {collapsed && idx > 0 && (
+              <div className="mx-auto my-2 h-px w-8 bg-gray-200 dark:bg-gray-700" />
+            )}
+            <div className="space-y-0.5">
+              {section.items.map(item => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.path === '/'}
+                  className={({ isActive }) =>
+                    `nav-sidebar-link group relative flex items-center gap-3 rounded-lg px-3 py-2 transition-colors duration-200
+                    ${isActive
+                      ? 'bg-primary-50 font-semibold text-primary-700 dark:bg-primary-950/40 dark:text-primary-300'
+                      : 'font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'}`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && (
+                        <div className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary-600" />
+                      )}
+                      <item.icon className={`h-[1.125rem] w-[1.125rem] flex-shrink-0 ${collapsed ? 'mx-auto' : ''} ${isActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 dark:text-gray-500'}`} />
+                      {!collapsed && <span>{item.label}</span>}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
-      <div className="mt-auto shrink-0 p-3">
-        <div className={`rounded-lg border border-gray-700/80 bg-gray-800/50 p-3 transition-all duration-200 ${collapsed ? 'px-2' : ''}`}>
-          {!collapsed && user && (
-            <div className="mb-2 flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border-2 border-primary-600/50 bg-gray-700">
-                <Users className="h-[1.125rem] w-[1.125rem] text-primary-300" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-white truncate">{user.name}</p>
-                <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">{user.role.replace('_', ' ')}</p>
-              </div>
+      {/* User card at bottom */}
+      <div className="mt-auto shrink-0 border-t border-gray-200 p-3 dark:border-gray-700">
+        {!collapsed && user ? (
+          <div className="flex items-center gap-3 rounded-xl bg-gray-100 px-3 py-2.5 dark:bg-gray-800">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
+              {getUserInitials(user.name)}
             </div>
-          )}
-          <button
-            onClick={handleLogout}
-            className={`group flex w-full items-center gap-2 text-gray-400 transition-colors hover:text-red-400 ${collapsed ? 'justify-center' : 'px-2 py-1'}`}
-          >
-            <LogOut className="h-[1.125rem] w-[1.125rem] transition-transform group-hover:-translate-x-1" />
-            {!collapsed && <span className="text-xs font-semibold tracking-wide">Sign out</span>}
-          </button>
-          {!collapsed && (
-            <p className="mt-2 border-t border-gray-700/50 pt-1.5 text-center text-xs text-gray-500">
-              v{__APP_VERSION__}
-            </p>
-          )}
-        </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate dark:text-white">{user.name}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.role.replace(/_/g, ' ')}</p>
+            </div>
+            <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+          </div>
+        ) : collapsed && user ? (
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
+              {getUserInitials(user.name)}
+            </div>
+          </div>
+        ) : null}
+        {!collapsed && (
+          <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">
+            v{__APP_VERSION__}
+          </p>
+        )}
+        {collapsed && (
+          <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">v{__APP_VERSION__}</p>
+        )}
       </div>
-
-      {collapsed && (
-        <>
-          <button
-            type="button"
-            onClick={onToggle}
-            className="mx-auto mb-2 rounded-lg bg-gray-800/80 p-2.5 text-gray-400 transition-all hover:bg-primary-600 hover:text-white"
-            title="Open navigation menu"
-            aria-label="Open navigation menu"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-          <p className="pb-2 text-center text-xs text-gray-500">v{__APP_VERSION__}</p>
-        </>
-      )}
     </aside>
   );
 }
@@ -184,8 +226,14 @@ function AppLayout() {
   const { pathname } = useLocation();
   const isPosRoute = pathname === '/pos';
   const isMobileOrdersRoute = pathname === '/mobile-orders';
-  const { user } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
   const role = user?.role || 'pos_cashier';
+
+  useAutoLogout(isAuthenticated, useCallback(() => {
+    logout();
+    navigate('/');
+  }, [logout, navigate]));
   useEffect(() => {
     const handlePosFullScreen = (e: CustomEvent<{ enabled: boolean }>) => {
       setPosFullScreen(!!e.detail?.enabled);

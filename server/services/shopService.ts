@@ -2227,19 +2227,21 @@ export class ShopService {
 
   async updatePosSettings(tenantId: string, data: any) {
     const res = await this.db.query(
-      `INSERT INTO pos_settings (tenant_id, auto_print_receipt, default_printer_name, receipt_copies, updated_at)
-       VALUES ($1, $2, $3, $4, NOW())
+      `INSERT INTO pos_settings (tenant_id, auto_print_receipt, default_printer_name, receipt_copies, auto_logout_minutes, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
        ON CONFLICT (tenant_id) DO UPDATE SET
          auto_print_receipt = EXCLUDED.auto_print_receipt,
          default_printer_name = EXCLUDED.default_printer_name,
          receipt_copies = EXCLUDED.receipt_copies,
+         auto_logout_minutes = EXCLUDED.auto_logout_minutes,
          updated_at = NOW()
        RETURNING *`,
       [
         tenantId,
         data.auto_print_receipt !== undefined ? data.auto_print_receipt : true,
         data.default_printer_name || null,
-        data.receipt_copies !== undefined ? data.receipt_copies : 1
+        data.receipt_copies !== undefined ? data.receipt_copies : 1,
+        data.auto_logout_minutes !== undefined ? parseInt(data.auto_logout_minutes, 10) || 0 : 0
       ]
     );
     return res[0];

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-// MyShop Settings Page - Reorganized Chart of Accounts
-import { Smartphone, Printer, Truck, MapPin } from 'lucide-react';
+import { Smartphone, Printer, Truck, MapPin, ShieldCheck, Search, ChevronLeft, ChevronRight, ChevronDown, Upload, Bike } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppContext } from '../../context/AppContext';
 import { ICONS } from '../../constants';
@@ -116,6 +115,728 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any; logoUrlOverride?: st
     );
 };
 
+const VENDOR_PAGE_SIZE = 10;
+const USER_PAGE_SIZE = 10;
+
+function getInitials(name: string): string {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+}
+
+function getVendorInitials(name: string): string {
+    return getInitials(name);
+}
+
+const AVATAR_COLORS = [
+    'bg-indigo-100 text-indigo-600',
+    'bg-emerald-100 text-emerald-600',
+    'bg-amber-100 text-amber-700',
+    'bg-rose-100 text-rose-600',
+    'bg-cyan-100 text-cyan-700',
+    'bg-violet-100 text-violet-600',
+    'bg-pink-100 text-pink-600',
+    'bg-teal-100 text-teal-700',
+];
+
+function getAvatarColor(id: string): string {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+const ROLE_BADGE: Record<string, string> = {
+    admin: 'bg-indigo-600 text-white',
+    accountant: 'bg-amber-500 text-white',
+    pos_cashier: 'bg-emerald-500 text-white',
+};
+
+function roleBadgeClasses(role: string) {
+    return ROLE_BADGE[role] || 'bg-muted text-foreground';
+}
+
+function roleLabel(role: string) {
+    if (role === 'admin') return 'ADMIN';
+    if (role === 'accountant') return 'ACCOUNTANT';
+    if (role === 'pos_cashier') return 'CASHER';
+    return role.replace(/_/g, ' ').toUpperCase();
+}
+
+interface VendorManagementTabProps {
+    vendors: ShopVendor[];
+    vendorsLoading: boolean;
+    openNewVendor: () => void;
+    openEditVendor: (v: ShopVendor) => void;
+    handleDeactivateVendor: (id: string) => void;
+    handleActivateVendor: (id: string) => void;
+}
+
+const VendorManagementTab: React.FC<VendorManagementTabProps> = ({
+    vendors,
+    vendorsLoading,
+    openNewVendor,
+    openEditVendor,
+    handleDeactivateVendor,
+    handleActivateVendor,
+}) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+    const [sortBy, setSortBy] = useState<'last_active' | 'name' | 'company'>('last_active');
+    const [currentPage, setCurrentPage] = useState(1);
+
+    const activeCount = useMemo(() => vendors.filter(v => v.is_active).length, [vendors]);
+    const inactiveCount = useMemo(() => vendors.filter(v => !v.is_active).length, [vendors]);
+
+    const filteredVendors = useMemo(() => {
+        let result = [...vendors];
+        if (statusFilter === 'active') result = result.filter(v => v.is_active);
+        else if (statusFilter === 'inactive') result = result.filter(v => !v.is_active);
+
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(v =>
+                v.name.toLowerCase().includes(q) ||
+                (v.company_name && v.company_name.toLowerCase().includes(q)) ||
+                (v.email && v.email.toLowerCase().includes(q)) ||
+                (v.contact_no && v.contact_no.toLowerCase().includes(q))
+            );
+        }
+
+        result.sort((a, b) => {
+            if (sortBy === 'name') return a.name.localeCompare(b.name);
+            if (sortBy === 'company') return (a.company_name || '').localeCompare(b.company_name || '');
+            const aDate = a.updated_at || a.created_at || '';
+            const bDate = b.updated_at || b.created_at || '';
+            return bDate.localeCompare(aDate);
+        });
+
+        return result;
+    }, [vendors, searchQuery, statusFilter, sortBy]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredVendors.length / VENDOR_PAGE_SIZE));
+    const safePage = Math.min(currentPage, totalPages);
+    const pagedVendors = filteredVendors.slice((safePage - 1) * VENDOR_PAGE_SIZE, safePage * VENDOR_PAGE_SIZE);
+
+    useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
+
+    const filterButtons: { key: typeof statusFilter; label: string }[] = [
+        { key: 'all', label: 'All' },
+        { key: 'active', label: 'Active' },
+        { key: 'inactive', label: 'Inactive' },
+    ];
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-2xl font-bold text-foreground tracking-tight">Vendor Management</h2>
+                        <span className="text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">
+                            {vendors.length} Vendors
+                        </span>
+                    </div>
+                    <p className="text-muted-foreground text-sm mt-1">Manage vendors used in procurement and stock operations</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4 mr-2">
+                        <div className="text-center px-4 py-2 rounded-lg bg-card border border-border">
+                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active</div>
+                            <div className="text-xl font-bold text-foreground">{activeCount}</div>
+                        </div>
+                        <div className="text-center px-4 py-2 rounded-lg bg-card border border-border">
+                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Inactive</div>
+                            <div className="text-xl font-bold text-foreground">{inactiveCount}</div>
+                        </div>
+                    </div>
+                    <Button onClick={openNewVendor} className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700">
+                        {ICONS.plus} Add Vendor
+                    </Button>
+                </div>
+            </div>
+
+            {/* Search & Filters */}
+            <Card className="border-none shadow-sm p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div className="relative flex-1 max-w-sm">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <input
+                            type="text"
+                            placeholder="Search by name, company, or email..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="input w-full pl-10 pr-3 py-2 text-sm"
+                        />
+                    </div>
+                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                        {filterButtons.map(fb => (
+                            <button
+                                key={fb.key}
+                                onClick={() => setStatusFilter(fb.key)}
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                                    statusFilter === fb.key
+                                        ? 'bg-card text-foreground shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                {fb.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex items-center gap-2 ml-auto">
+                        <select
+                            value={sortBy}
+                            onChange={e => setSortBy(e.target.value as typeof sortBy)}
+                            className="input text-xs py-1.5 pl-2 pr-7 rounded-md"
+                            aria-label="Sort vendors"
+                        >
+                            <option value="last_active">Sort by: Last Active</option>
+                            <option value="name">Sort by: Name</option>
+                            <option value="company">Sort by: Company</option>
+                        </select>
+                    </div>
+                </div>
+            </Card>
+
+            {/* Table */}
+            <Card className="border-none shadow-sm overflow-hidden">
+                {vendorsLoading ? (
+                    <div className="p-12 text-center text-muted-foreground">Loading...</div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-muted/60 text-[11px] font-semibold uppercase text-muted-foreground tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-3">Vendor Name</th>
+                                    <th className="px-6 py-3">Company</th>
+                                    <th className="px-6 py-3">Contact</th>
+                                    <th className="px-6 py-3">Email</th>
+                                    <th className="px-6 py-3">Status</th>
+                                    <th className="px-6 py-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {pagedVendors.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground text-sm">
+                                            {searchQuery || statusFilter !== 'all'
+                                                ? 'No vendors match your filters.'
+                                                : 'No vendors yet. Create one to use in Procurement.'}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    pagedVendors.map(v => {
+                                        const shortId = v.id.length > 8 ? v.id.slice(0, 8).toUpperCase() : v.id.toUpperCase();
+                                        return (
+                                            <tr key={v.id} className="hover:bg-muted/40 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${getAvatarColor(v.id)}`}>
+                                                            {getVendorInitials(v.name)}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-semibold text-foreground">{v.name}</div>
+                                                            <div className="text-[11px] text-muted-foreground">ID: VEN-{shortId}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-muted-foreground">{v.company_name || '—'}</td>
+                                                <td className="px-6 py-4 text-sm text-muted-foreground">{v.contact_no || '—'}</td>
+                                                <td className="px-6 py-4 text-sm text-muted-foreground">{v.email || '—'}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`text-[11px] font-bold uppercase px-2.5 py-1 rounded-full ${
+                                                        v.is_active
+                                                            ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
+                                                            : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200'
+                                                    }`}>
+                                                        {v.is_active ? 'Active' : 'Inactive'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-1">
+                                                        {v.is_active ? (
+                                                            <>
+                                                                <button onClick={() => openEditVendor(v)} className="p-1.5 rounded-md text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Edit">
+                                                                    {React.cloneElement(ICONS.edit as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
+                                                                </button>
+                                                                <button onClick={() => handleDeactivateVendor(v.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors" title="Deactivate">
+                                                                    {React.cloneElement(ICONS.trash as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <button onClick={() => handleActivateVendor(v.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 transition-colors" title="Activate">
+                                                                    {React.cloneElement(ICONS.checkCircle as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
+                                                                </button>
+                                                                <button onClick={() => openEditVendor(v)} className="p-1.5 rounded-md text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Edit">
+                                                                    {React.cloneElement(ICONS.edit as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {/* Pagination */}
+                {!vendorsLoading && filteredVendors.length > VENDOR_PAGE_SIZE && (
+                    <div className="flex items-center justify-between px-6 py-3 border-t border-border text-sm">
+                        <span className="text-muted-foreground text-xs">
+                            Showing {(safePage - 1) * VENDOR_PAGE_SIZE + 1} to {Math.min(safePage * VENDOR_PAGE_SIZE, filteredVendors.length)} of {filteredVendors.length} results
+                        </span>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={safePage <= 1}
+                                className="p-1.5 rounded-md text-muted-foreground hover:bg-muted disabled:opacity-30 transition-colors"
+                                title="Previous page"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                                let pageNum: number;
+                                if (totalPages <= 5) {
+                                    pageNum = i + 1;
+                                } else if (safePage <= 3) {
+                                    pageNum = i + 1;
+                                } else if (safePage >= totalPages - 2) {
+                                    pageNum = totalPages - 4 + i;
+                                } else {
+                                    pageNum = safePage - 2 + i;
+                                }
+                                return (
+                                    <button
+                                        key={pageNum}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={`min-w-[32px] h-8 rounded-md text-xs font-semibold transition-colors ${
+                                            safePage === pageNum
+                                                ? 'bg-primary-600 text-white'
+                                                : 'text-muted-foreground hover:bg-muted'
+                                        }`}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={safePage >= totalPages}
+                                className="p-1.5 rounded-md text-muted-foreground hover:bg-muted disabled:opacity-30 transition-colors"
+                                title="Next page"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Card>
+        </div>
+    );
+};
+
+interface UserManagementTabProps {
+    users: any[];
+    usersLoading: boolean;
+    riders: ShopRider[];
+    ridersLoading: boolean;
+    openNewUser: () => void;
+    openEditUser: (u: any) => void;
+    handleDeactivateUser: (id: string) => void;
+    openNewRider: () => void;
+    setRiderPasswordTarget: (r: ShopRider) => void;
+    setRiderPasswordValue: (v: string) => void;
+}
+
+const UserManagementTab: React.FC<UserManagementTabProps> = ({
+    users,
+    usersLoading,
+    riders,
+    ridersLoading,
+    openNewUser,
+    openEditUser,
+    handleDeactivateUser,
+    openNewRider,
+    setRiderPasswordTarget,
+    setRiderPasswordValue,
+}) => {
+    const [searchQuery, setSearchQuery] = useState('');
+    const [roleFilter, setRoleFilter] = useState<string>('all');
+    const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+    const adminCount = useMemo(() => users.filter(u => u.role === 'admin').length, [users]);
+    const cashierCount = useMemo(() => users.filter(u => u.role === 'pos_cashier').length, [users]);
+    const staffCount = useMemo(() => users.filter(u => u.role === 'accountant').length, [users]);
+
+    const filteredUsers = useMemo(() => {
+        let result = [...users];
+        if (roleFilter !== 'all') result = result.filter(u => u.role === roleFilter);
+        if (statusFilter === 'active') result = result.filter(u => u.is_active);
+        else if (statusFilter === 'inactive') result = result.filter(u => !u.is_active);
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(u =>
+                (u.name && u.name.toLowerCase().includes(q)) ||
+                (u.username && u.username.toLowerCase().includes(q)) ||
+                (u.email && u.email.toLowerCase().includes(q))
+            );
+        }
+        return result;
+    }, [users, searchQuery, roleFilter, statusFilter]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USER_PAGE_SIZE));
+    const safePage = Math.min(currentPage, totalPages);
+    const pagedUsers = filteredUsers.slice((safePage - 1) * USER_PAGE_SIZE, safePage * USER_PAGE_SIZE);
+
+    useEffect(() => { setCurrentPage(1); }, [searchQuery, roleFilter, statusFilter]);
+
+    const allPageSelected = pagedUsers.length > 0 && pagedUsers.every(u => selectedIds.has(u.id));
+    const toggleSelectAll = () => {
+        if (allPageSelected) {
+            setSelectedIds(prev => {
+                const next = new Set(prev);
+                pagedUsers.forEach(u => next.delete(u.id));
+                return next;
+            });
+        } else {
+            setSelectedIds(prev => {
+                const next = new Set(prev);
+                pagedUsers.forEach(u => next.add(u.id));
+                return next;
+            });
+        }
+    };
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                <div>
+                    <h2 className="text-2xl font-bold text-foreground tracking-tight">User Management</h2>
+                    <p className="text-muted-foreground text-sm mt-1">Manage POS team members (Admin, Accountant, POS Cashier)</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="text-center px-4 py-2 rounded-lg bg-card border border-border">
+                            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Total Users</div>
+                            <div className="text-xl font-bold text-foreground">{users.length}</div>
+                        </div>
+                        <div className="text-center px-4 py-2 rounded-lg bg-card border border-border">
+                            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Admins</div>
+                            <div className="text-xl font-bold text-foreground">{adminCount}</div>
+                        </div>
+                        <div className="text-center px-4 py-2 rounded-lg bg-card border border-border">
+                            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Cashiers</div>
+                            <div className="text-xl font-bold text-foreground">{cashierCount}</div>
+                        </div>
+                        <div className="text-center px-4 py-2 rounded-lg bg-card border border-border">
+                            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Staff</div>
+                            <div className="text-xl font-bold text-foreground">{staffCount}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Search & Filters */}
+            <Card className="border-none shadow-sm p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div className="relative flex-1 max-w-xs">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <input
+                            type="text"
+                            placeholder="Search team members..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="input w-full pl-10 pr-3 py-2 text-sm"
+                        />
+                    </div>
+                    <div className="relative">
+                        <select
+                            value={roleFilter}
+                            onChange={e => setRoleFilter(e.target.value)}
+                            className="input text-sm py-2 pl-3 pr-8 rounded-lg appearance-none"
+                            aria-label="Filter by role"
+                        >
+                            <option value="all">All Roles</option>
+                            <option value="admin">Admin</option>
+                            <option value="accountant">Accountant</option>
+                            <option value="pos_cashier">POS Cashier</option>
+                        </select>
+                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    </div>
+                    <div className="relative">
+                        <select
+                            value={statusFilter}
+                            onChange={e => setStatusFilter(e.target.value)}
+                            className="input text-sm py-2 pl-3 pr-8 rounded-lg appearance-none"
+                            aria-label="Filter by status"
+                        >
+                            <option value="all">All Status</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    </div>
+                    <div className="flex items-center gap-2 ml-auto">
+                        <button
+                            type="button"
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-border text-foreground hover:bg-muted transition-colors"
+                        >
+                            <Upload className="w-4 h-4" />
+                            Import Users
+                        </button>
+                        <Button onClick={openNewUser} className="flex items-center gap-2">
+                            {ICONS.plus} + New User
+                        </Button>
+                    </div>
+                </div>
+            </Card>
+
+            {/* Users Table */}
+            <Card className="border-none shadow-sm overflow-hidden">
+                {usersLoading ? (
+                    <div className="p-12 text-center text-muted-foreground">Loading users...</div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-muted/60 text-[11px] font-semibold uppercase text-muted-foreground tracking-wider">
+                                <tr>
+                                    <th className="px-4 py-3 w-10">
+                                        <input type="checkbox" checked={allPageSelected} onChange={toggleSelectAll} className="rounded border-border" title="Select all" />
+                                    </th>
+                                    <th className="px-4 py-3">Name / Username</th>
+                                    <th className="px-4 py-3">Role</th>
+                                    <th className="px-4 py-3">Email</th>
+                                    <th className="px-4 py-3">Status</th>
+                                    <th className="px-4 py-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {pagedUsers.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground text-sm">
+                                            {searchQuery || roleFilter !== 'all' || statusFilter !== 'all'
+                                                ? 'No users match your filters.'
+                                                : 'No users found.'}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    pagedUsers.map(u => (
+                                        <tr key={u.id} className="hover:bg-muted/40 transition-colors">
+                                            <td className="px-4 py-4 w-10">
+                                                <input type="checkbox" checked={selectedIds.has(u.id)} onChange={() => toggleSelect(u.id)} className="rounded border-border" title={`Select ${u.name}`} />
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${getAvatarColor(u.id)}`}>
+                                                        {getInitials(u.name || u.username)}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-semibold text-foreground">{u.name}</div>
+                                                        <div className="text-xs text-muted-foreground">@{u.username}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                <span className={`text-[11px] font-bold uppercase px-2.5 py-1 rounded-md ${roleBadgeClasses(u.role)}`}>
+                                                    {roleLabel(u.role)}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-4 text-sm text-muted-foreground">{u.email || '—'}</td>
+                                            <td className="px-4 py-4">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={`w-2 h-2 rounded-full ${u.is_active ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+                                                    <span className={`text-sm ${u.is_active ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                                        {u.is_active ? 'Active' : 'Inactive'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-4 text-right">
+                                                <div className="flex justify-end gap-1">
+                                                    <button onClick={() => openEditUser(u)} className="p-1.5 rounded-md text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Edit">
+                                                        {React.cloneElement(ICONS.edit as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
+                                                    </button>
+                                                    {u.is_active && u.role !== 'admin' && (
+                                                        <button onClick={() => handleDeactivateUser(u.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors" title="Deactivate">
+                                                            {React.cloneElement(ICONS.trash as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {/* Pagination */}
+                {!usersLoading && filteredUsers.length > USER_PAGE_SIZE && (
+                    <div className="flex items-center justify-between px-6 py-3 border-t border-border text-sm">
+                        <span className="text-muted-foreground text-xs">
+                            Showing {(safePage - 1) * USER_PAGE_SIZE + 1} to {Math.min(safePage * USER_PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length} users
+                        </span>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={safePage <= 1}
+                                className="px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-muted border border-border disabled:opacity-30 transition-colors"
+                            >
+                                Previous
+                            </button>
+                            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                                let pageNum: number;
+                                if (totalPages <= 5) pageNum = i + 1;
+                                else if (safePage <= 3) pageNum = i + 1;
+                                else if (safePage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                                else pageNum = safePage - 2 + i;
+                                return (
+                                    <button
+                                        key={pageNum}
+                                        onClick={() => setCurrentPage(pageNum)}
+                                        className={`min-w-[32px] h-8 rounded-md text-xs font-semibold transition-colors ${
+                                            safePage === pageNum
+                                                ? 'bg-primary-600 text-white'
+                                                : 'text-muted-foreground hover:bg-muted'
+                                        }`}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={safePage >= totalPages}
+                                className="px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-muted border border-border disabled:opacity-30 transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Card>
+
+            {/* Rider info callout */}
+            <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-muted-foreground">
+                <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-blue-600 text-xs font-bold">i</span>
+                </div>
+                <p>
+                    <span className="font-semibold text-foreground">Delivery riders</span> use a separate rider web app. To log in, they require your shop slug, their registered phone number, and their personal password.
+                </p>
+            </div>
+
+            {/* Delivery Riders Header */}
+            <div className="flex justify-between items-center pt-2">
+                <div className="flex items-center gap-2">
+                    <Bike className="w-5 h-5 text-foreground" />
+                    <h3 className="text-xl font-bold text-foreground">Delivery Riders</h3>
+                </div>
+                <Button onClick={openNewRider} className="flex items-center gap-2">
+                    {ICONS.plus} + New Rider
+                </Button>
+            </div>
+
+            {/* Riders Table */}
+            <Card className="border-none shadow-sm overflow-hidden">
+                {ridersLoading ? (
+                    <div className="p-12 text-center text-muted-foreground">Loading riders...</div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-muted/60 text-[11px] font-semibold uppercase text-muted-foreground tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-3">Name</th>
+                                    <th className="px-6 py-3">Phone</th>
+                                    <th className="px-6 py-3">Status</th>
+                                    <th className="px-6 py-3">App Status</th>
+                                    <th className="px-6 py-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {riders.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground text-sm">
+                                            No delivery riders yet. Create one so they can sign in to the rider app.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    riders.map((r) => (
+                                        <tr key={r.id} className="hover:bg-muted/40 transition-colors">
+                                            <td className="px-6 py-4 font-semibold text-foreground">{r.name}</td>
+                                            <td className="px-6 py-4 text-sm text-muted-foreground">{r.phone_number}</td>
+                                            <td className="px-6 py-4">
+                                                <span className={`text-[11px] font-bold uppercase px-2.5 py-1 rounded-md ${
+                                                    r.status === 'AVAILABLE'
+                                                        ? 'bg-emerald-500 text-white'
+                                                        : r.status === 'BUSY'
+                                                          ? 'bg-amber-500 text-white'
+                                                          : 'bg-muted text-muted-foreground'
+                                                }`}>
+                                                    {r.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={`w-2 h-2 rounded-full ${r.is_active ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} />
+                                                    <span className={`text-sm ${r.is_active ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                                        {r.is_active ? 'Active' : 'Disabled'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setRiderPasswordTarget(r);
+                                                            setRiderPasswordValue('');
+                                                        }}
+                                                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                                                    >
+                                                        Set Password
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs font-semibold text-muted-foreground hover:text-rose-500 transition-colors"
+                                                    >
+                                                        Disable
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                                                    >
+                                                        View Activity
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </Card>
+        </div>
+    );
+};
+
 const SettingsContent: React.FC = () => {
     const { user } = useAuth();
     const settingsLock = useSettingsEditLock(user?.userId, user?.name || user?.username || 'User');
@@ -126,7 +847,8 @@ const SettingsContent: React.FC = () => {
     const [posSettings, setPosSettings] = useState({
         auto_print_receipt: true,
         default_printer_name: '',
-        receipt_copies: 1
+        receipt_copies: 1,
+        auto_logout_minutes: 0
     });
     const [posSettingsLoading, setPosSettingsLoading] = useState(false);
     const [receiptSettings, setReceiptSettings] = useState<any>({
@@ -269,7 +991,7 @@ const SettingsContent: React.FC = () => {
         try {
             setPosSettingsLoading(true);
             const data = await shopApi.getPosSettings();
-            if (data) setPosSettings(data);
+            if (data) setPosSettings(prev => ({ ...prev, ...data, auto_logout_minutes: data.auto_logout_minutes ?? prev.auto_logout_minutes }));
         } catch (e: any) {
             console.error('Failed to load POS settings', e);
         } finally {
@@ -539,28 +1261,18 @@ const SettingsContent: React.FC = () => {
     return (
         <div className="relative flex w-full min-w-0 flex-col h-full bg-muted/80">
             <div className={settingsLockedOut ? 'pointer-events-none opacity-40 min-h-0 flex flex-col flex-1' : 'min-h-0 flex flex-col flex-1'}>
-            <div className="bg-card border-b border-border px-8 pt-6 shadow-sm z-10">
-                <div className="mb-6">
-                    <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-                    <p className="text-muted-foreground text-sm font-medium">
-                        {isCashier ? 'Check for app updates and install new versions.' : 'Chart of accounts, vendors, team & rider accounts, and more.'}
-                    </p>
-                </div>
-                <div className="flex gap-8">
+            <div className="bg-card border-b border-border px-8 pt-5 pb-4 shadow-sm z-10">
+                <div className="flex items-center gap-2 flex-wrap">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
-                                ? 'text-indigo-600'
-                                : 'text-muted-foreground hover:text-muted-foreground'
+                            className={`px-4 py-2 text-sm font-semibold rounded-full transition-all whitespace-nowrap ${activeTab === tab.id
+                                ? 'bg-foreground text-background shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                                 }`}
                         >
-                            {React.cloneElement(tab.icon as React.ReactElement<{ width?: number; height?: number }>, { width: 18, height: 18 })}
                             {tab.label}
-                            {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 rounded-t-full" />
-                            )}
                         </button>
                     ))}
                 </div>
@@ -661,240 +1373,29 @@ const SettingsContent: React.FC = () => {
                 )}
 
                 {!isCashier && activeTab === 'vendors' && (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center">
-                            <p className="text-muted-foreground text-sm">Vendors are used in Procurement when recording stock-in and purchases.</p>
-                            <Button onClick={openNewVendor} className="flex items-center gap-2">
-                                {ICONS.plus} New Vendor
-                            </Button>
-                        </div>
-                        <Card className="border-none shadow-sm overflow-hidden">
-                            {vendorsLoading ? (
-                                <div className="p-12 text-center text-muted-foreground">Loading...</div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left">
-                                        <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground">
-                                            <tr>
-                                                <th className="px-6 py-4">Name</th>
-                                                <th className="px-6 py-4">Company</th>
-                                                <th className="px-6 py-4">Contact</th>
-                                                <th className="px-6 py-4">Email</th>
-                                                <th className="px-6 py-4">Status</th>
-                                                <th className="px-6 py-4 text-right">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {vendors.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground text-sm">
-                                                        No vendors yet. Create one to use in Procurement.
-                                                    </td>
-                                                </tr>
-                                            ) : (
-                                                vendors.map(v => (
-                                                    <tr key={v.id} className="hover:bg-muted/50 transition-colors">
-                                                        <td className="px-6 py-4 font-bold text-foreground">{v.name}</td>
-                                                        <td className="px-6 py-4 text-muted-foreground">{v.company_name || '—'}</td>
-                                                        <td className="px-6 py-4 text-muted-foreground">{v.contact_no || '—'}</td>
-                                                        <td className="px-6 py-4 text-muted-foreground">{v.email || '—'}</td>
-                                                        <td className="px-6 py-4">
-                                                            <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${v.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
-                                                                {v.is_active ? 'Active' : 'Inactive'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <div className="flex justify-end gap-2">
-                                                                {v.is_active ? (
-                                                                    <>
-                                                                        <button onClick={() => openEditVendor(v)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors" title="Edit">
-                                                                            {ICONS.edit}
-                                                                        </button>
-                                                                        <button onClick={() => handleDeactivateVendor(v.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors" title="Deactivate">
-                                                                            {ICONS.trash}
-                                                                        </button>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <button onClick={() => handleActivateVendor(v.id)} className="p-2 text-slate-300 hover:text-emerald-600 transition-colors" title="Activate">
-                                                                            {ICONS.checkCircle}
-                                                                        </button>
-                                                                        <button onClick={() => openEditVendor(v)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors" title="Edit">
-                                                                            {ICONS.edit}
-                                                                        </button>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </Card>
-                    </div>
+                    <VendorManagementTab
+                        vendors={vendors}
+                        vendorsLoading={vendorsLoading}
+                        openNewVendor={openNewVendor}
+                        openEditVendor={openEditVendor}
+                        handleDeactivateVendor={handleDeactivateVendor}
+                        handleActivateVendor={handleActivateVendor}
+                    />
                 )}
 
                 {!isCashier && activeTab === 'users' && (
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-center">
-                            <p className="text-muted-foreground text-sm">
-                                Manage POS team members (Admin, Accountant, POS Cashier) and delivery riders for the rider app.
-                            </p>
-                            <Button onClick={openNewUser} className="flex items-center gap-2">
-                                {ICONS.plus} New User
-                            </Button>
-                        </div>
-                        <Card className="border-none shadow-sm overflow-hidden">
-                            {usersLoading ? (
-                                <div className="p-12 text-center text-muted-foreground">Loading users...</div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left">
-                                        <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground">
-                                            <tr>
-                                                <th className="px-6 py-4">Name / Username</th>
-                                                <th className="px-6 py-4">Role</th>
-                                                <th className="px-6 py-4">Email</th>
-                                                <th className="px-6 py-4">Status</th>
-                                                <th className="px-6 py-4 text-right">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {users.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground text-sm">
-                                                        No users found.
-                                                    </td>
-                                                </tr>
-                                            ) : (
-                                                users.map(u => (
-                                                    <tr key={u.id} className="hover:bg-muted/50 transition-colors">
-                                                        <td className="px-6 py-4">
-                                                            <div className="font-bold text-foreground">{u.name}</div>
-                                                            <div className="text-xs text-muted-foreground font-mono">@{u.username}</div>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded shadow-sm ${u.role === 'admin' ? 'bg-indigo-100 text-indigo-700' :
-                                                                u.role === 'accountant' ? 'bg-amber-100 text-amber-700' :
-                                                                    'bg-muted text-foreground'
-                                                                }`}>
-                                                                {u.role.replace('_', ' ')}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-muted-foreground">{u.email || '—'}</td>
-                                                        <td className="px-6 py-4">
-                                                            <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${u.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
-                                                                {u.is_active ? 'Active' : 'Inactive'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <div className="flex justify-end gap-2">
-                                                                <button onClick={() => openEditUser(u)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors">
-                                                                    {ICONS.edit}
-                                                                </button>
-                                                                {u.is_active && u.role !== 'admin' && (
-                                                                    <button onClick={() => handleDeactivateUser(u.id)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
-                                                                        {ICONS.trash}
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </Card>
-
-                        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-                            <Truck className="h-5 w-5 shrink-0 text-primary mt-0.5" aria-hidden />
-                            <p>
-                                <span className="font-semibold text-foreground">Delivery riders</span> use the separate rider web app. They log in with{' '}
-                                <strong className="text-foreground">shop slug</strong> (from Mobile branding), <strong className="text-foreground">phone</strong>, and the password you set here — not POS usernames.
-                            </p>
-                        </div>
-
-                        <div className="flex justify-between items-center pt-2">
-                            <p className="text-muted-foreground text-sm">Riders for delivery assignment and the rider mobile app.</p>
-                            <Button onClick={openNewRider} className="flex items-center gap-2">
-                                <Truck className="h-4 w-4" /> New rider
-                            </Button>
-                        </div>
-                        <Card className="border-none shadow-sm overflow-hidden">
-                            {ridersLoading ? (
-                                <div className="p-12 text-center text-muted-foreground">Loading riders...</div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left">
-                                        <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground">
-                                            <tr>
-                                                <th className="px-6 py-4">Name</th>
-                                                <th className="px-6 py-4">Phone</th>
-                                                <th className="px-6 py-4">Status</th>
-                                                <th className="px-6 py-4">App</th>
-                                                <th className="px-6 py-4 text-right">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {riders.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground text-sm">
-                                                        No delivery riders yet. Create one so they can sign in to the rider app.
-                                                    </td>
-                                                </tr>
-                                            ) : (
-                                                riders.map((r) => (
-                                                    <tr key={r.id} className="hover:bg-muted/50 transition-colors">
-                                                        <td className="px-6 py-4 font-bold text-foreground">{r.name}</td>
-                                                        <td className="px-6 py-4 text-muted-foreground font-mono text-sm">{r.phone_number}</td>
-                                                        <td className="px-6 py-4">
-                                                            <span
-                                                                className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${
-                                                                    r.status === 'AVAILABLE'
-                                                                        ? 'bg-emerald-100 text-emerald-700'
-                                                                        : r.status === 'BUSY'
-                                                                          ? 'bg-amber-100 text-amber-800'
-                                                                          : 'bg-muted text-muted-foreground'
-                                                                }`}
-                                                            >
-                                                                {r.status}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <span
-                                                                className={`text-xs font-bold uppercase px-2 py-0.5 rounded ${
-                                                                    r.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-muted text-muted-foreground'
-                                                                }`}
-                                                            >
-                                                                {r.is_active ? 'Active' : 'Disabled'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setRiderPasswordTarget(r);
-                                                                    setRiderPasswordValue('');
-                                                                }}
-                                                                className="text-xs font-bold text-primary hover:underline"
-                                                            >
-                                                                Set password
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </Card>
-                    </div>
+                    <UserManagementTab
+                        users={users}
+                        usersLoading={usersLoading}
+                        riders={riders}
+                        ridersLoading={ridersLoading}
+                        openNewUser={openNewUser}
+                        openEditUser={openEditUser}
+                        handleDeactivateUser={handleDeactivateUser}
+                        openNewRider={openNewRider}
+                        setRiderPasswordTarget={setRiderPasswordTarget}
+                        setRiderPasswordValue={setRiderPasswordValue}
+                    />
                 )}
 
                 {!isCashier && activeTab === 'mobileBranding' && (
@@ -946,6 +1447,48 @@ const SettingsContent: React.FC = () => {
                                                 />
                                             </div>
                                             <Button type="button" size="sm" onClick={handleSavePosSettings}>Save printer settings</Button>
+                                        </div>
+                                    )}
+                                </Card>
+                                <Card className="border-none shadow-sm p-5">
+                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
+                                        <ShieldCheck className="h-4 w-4" /> Security
+                                    </h3>
+                                    {posSettingsLoading ? (
+                                        <p className="text-muted-foreground text-sm">Loading...</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <label className="flex items-center gap-3 cursor-pointer">
+                                                <div className="relative shrink-0">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="sr-only"
+                                                        checked={posSettings.auto_logout_minutes > 0}
+                                                        onChange={e => setPosSettings({ ...posSettings, auto_logout_minutes: e.target.checked ? 15 : 0 })}
+                                                    />
+                                                    <div className={`block w-10 h-6 rounded-full transition-colors ${posSettings.auto_logout_minutes > 0 ? 'bg-indigo-600' : 'bg-slate-300'}`} />
+                                                    <div className={`dot absolute left-1 top-1 bg-card w-4 h-4 rounded-full transition-transform ${posSettings.auto_logout_minutes > 0 ? 'transform translate-x-4' : ''}`} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="font-bold text-sm text-foreground">Auto-logout on inactivity</p>
+                                                    <p className="text-xs text-muted-foreground">Automatically sign out after a period of no activity.</p>
+                                                </div>
+                                            </label>
+                                            {posSettings.auto_logout_minutes > 0 && (
+                                                <Input
+                                                    label="Timeout (minutes)"
+                                                    type="number"
+                                                    min={1}
+                                                    max={480}
+                                                    compact
+                                                    value={String(posSettings.auto_logout_minutes)}
+                                                    onChange={e => {
+                                                        const n = parseInt(e.target.value, 10);
+                                                        setPosSettings({ ...posSettings, auto_logout_minutes: Number.isFinite(n) ? Math.min(480, Math.max(1, n)) : 15 });
+                                                    }}
+                                                />
+                                            )}
+                                            <Button type="button" size="sm" onClick={handleSavePosSettings}>Save POS settings</Button>
                                         </div>
                                     )}
                                 </Card>
