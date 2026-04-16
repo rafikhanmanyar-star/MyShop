@@ -1329,7 +1329,7 @@ export class ProcurementService {
 
   async getSupplierLedger(tenantId: string, supplierId?: string) {
     const purchases = await this.db.query(
-      `SELECT pb.id, pb.supplier_id, pb.bill_number, pb.bill_date, pb.total_amount, pb.paid_amount, pb.balance_due, pb.status,
+      `SELECT pb.id, pb.supplier_id, pb.bill_number, pb.bill_date, pb.due_date, pb.total_amount, pb.paid_amount, pb.balance_due, pb.status,
               v.name as supplier_name
        FROM purchase_bills pb
        JOIN shop_vendors v ON pb.supplier_id = v.id AND v.tenant_id = $1
@@ -1404,24 +1404,40 @@ export class ProcurementService {
       }
     }
 
+    const pipelineRows = await this.db.query(
+      `SELECT
+        COUNT(*) FILTER (WHERE status = 'Draft')::int AS draft_count,
+        COUNT(*) FILTER (WHERE status = 'Partial' AND balance_due > 0)::int AS partial_open_count,
+        COUNT(*) FILTER (WHERE status IN ('Posted', 'Partial') AND balance_due > 0 AND is_posted = TRUE)::int AS open_posted_count
+       FROM purchase_bills
+       WHERE tenant_id = $1 AND status != 'Cancelled'`,
+      [tenantId]
+    );
+    const pr = pipelineRows[0] || {};
+
     return {
       summary: buckets,
       totalOutstanding: buckets.current + buckets.days30 + buckets.days60 + buckets.days90Plus,
       byBucket,
       rows,
+      pipeline: {
+        draftCount: parseInt(String(pr.draft_count ?? 0), 10) || 0,
+        partialOpenCount: parseInt(String(pr.partial_open_count ?? 0), 10) || 0,
+        openPostedCount: parseInt(String(pr.open_posted_count ?? 0), 10) || 0,
+      },
     };
   }
 
   async getInventoryValuationReport(tenantId: string) {
     const rows = await this.db.query(
-      `SELECT p.id, p.name, p.sku, p.unit,
+      `SELECT p.id, p.name, p.sku, p.unit, p.reorder_point, p.category_id,
               COALESCE(SUM(i.quantity_on_hand), 0) as quantity_on_hand,
               COALESCE(NULLIF(p.average_cost, 0), p.cost_price, 0) as unit_cost,
               (COALESCE(SUM(i.quantity_on_hand), 0) * COALESCE(NULLIF(p.average_cost, 0), p.cost_price, 0)) as total_value
        FROM shop_products p
        LEFT JOIN shop_inventory i ON i.product_id = p.id AND i.tenant_id = $1
        WHERE p.tenant_id = $1 AND p.is_active = TRUE
-       GROUP BY p.id, p.name, p.sku, p.unit, p.average_cost, p.cost_price
+       GROUP BY p.id, p.name, p.sku, p.unit, p.reorder_point, p.category_id, p.average_cost, p.cost_price
        ORDER BY total_value DESC NULLS LAST`,
       [tenantId]
     );

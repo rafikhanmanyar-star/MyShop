@@ -1,7 +1,7 @@
 {
   "name": "myshop-client",
   "private": true,
-  "version": "1.0.134",
+  "version": "1.0.135",
   "type": "module",
   "scripts": {
     "check:typography": "node scripts/check-typography.mjs",
@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-google-maps/api": "^2.20.8",
     "@types/lodash-es": "^4.17.12",
     "@types/react-window": "^1.8.8",
     "fuse.js": "^7.1.0",

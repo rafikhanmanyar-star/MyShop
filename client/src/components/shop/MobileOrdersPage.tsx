@@ -17,6 +17,7 @@ import {
     openWhatsAppDesktopWithMessage,
     buildWhatsAppWebSendUrl,
 } from '../../utils/whatsappManualSend';
+import { MobileOrdersLiveMap } from './MobileOrdersLiveMap';
 
 interface ShopBranchOption {
     id: string;
@@ -91,6 +92,7 @@ function isRiderAssignedDelivery(order: Pick<MobileOrder, 'payment_method' | 'ri
 }
 
 const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Unpaid', 'Cancelled'];
+const LIVE_MAP_TAB = 'LiveMap';
 
 // ─── Main Page ────────────────────────────────────────────
 function MobileOrdersPageContent() {
@@ -106,7 +108,8 @@ function MobileOrdersPageContent() {
     const [searchParams, setSearchParams] = useSearchParams();
     const orderIdFromUrl = searchParams.get('order');
 
-    const [statusFilter, setStatusFilter] = useState('All');
+    const [statusFilter, setStatusFilter] = useState<string>('All');
+    const liveMapAutoSelectDone = useRef(false);
     const [detailOrder, setDetailOrder] = useState<MobileOrder | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState('');
@@ -168,13 +171,28 @@ function MobileOrdersPageContent() {
     }, []);
 
     useEffect(() => {
-        loadOrders(statusFilter === 'All' ? undefined : statusFilter);
+        if (statusFilter === LIVE_MAP_TAB) {
+            loadOrders(undefined);
+        } else {
+            loadOrders(statusFilter === 'All' ? undefined : statusFilter);
+        }
         clearNewOrderCount();
     }, [statusFilter]);
 
     useEffect(() => {
+        if (statusFilter !== LIVE_MAP_TAB) return;
+        const id = window.setInterval(() => {
+            void loadRidersOverview();
+            void loadOrders(undefined);
+        }, 15_000);
+        return () => clearInterval(id);
+    }, [statusFilter, loadRidersOverview, loadOrders]);
+
+    useEffect(() => {
         if (newOrderCount > 0) {
-            loadOrders(statusFilter === 'All' ? undefined : statusFilter);
+            loadOrders(
+                statusFilter === LIVE_MAP_TAB || statusFilter === 'All' ? undefined : statusFilter
+            );
         }
     }, [newOrderCount]);
 
@@ -216,6 +234,22 @@ function MobileOrdersPageContent() {
         }, { replace: true });
     }, [setSearchParams]);
 
+    useEffect(() => {
+        if (statusFilter !== LIVE_MAP_TAB) {
+            liveMapAutoSelectDone.current = false;
+            return;
+        }
+        if (orderIdFromUrl) {
+            liveMapAutoSelectDone.current = true;
+            return;
+        }
+        if (loading || orders.length === 0) return;
+        if (!liveMapAutoSelectDone.current) {
+            liveMapAutoSelectDone.current = true;
+            handleViewDetail(orders[0]);
+        }
+    }, [statusFilter, orderIdFromUrl, loading, orders, handleViewDetail]);
+
     const handleAssignRider = async (orderId: string, riderId: string) => {
         if (!riderId) {
             alert('Select a rider');
@@ -225,7 +259,9 @@ function MobileOrdersPageContent() {
         try {
             await mobileOrdersApi.assignRider(orderId, riderId);
             await loadRidersOverview();
-            await loadOrders(statusFilter === 'All' ? undefined : statusFilter);
+            await loadOrders(
+                statusFilter === LIVE_MAP_TAB || statusFilter === 'All' ? undefined : statusFilter
+            );
             if (detailOrder?.id === orderId) {
                 setDetailOrder(await mobileOrdersApi.getOrder(orderId));
             }
@@ -308,6 +344,16 @@ function MobileOrdersPageContent() {
                   : orders.filter((o) => o.status === s).length,
     }));
 
+    const mapReadyCount = orders.filter(
+        (o) =>
+            o.payment_method !== 'SelfCollection' &&
+            o.delivery_lat != null &&
+            o.delivery_lng != null &&
+            Number.isFinite(Number(o.delivery_lat)) &&
+            Number.isFinite(Number(o.delivery_lng))
+    ).length;
+    const isLiveMapView = statusFilter === LIVE_MAP_TAB;
+
     return (
         <div className="flex w-full min-w-0 flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800">
             {/* Page header + status filters (single band) */}
@@ -343,7 +389,9 @@ function MobileOrdersPageContent() {
                                     )}
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5 hidden sm:block">
-                                    Select an order to view the full bill on the right
+                                    {statusFilter === LIVE_MAP_TAB
+                                        ? 'Live positions refresh every 15s. Pick an order to see route and ETA on the map.'
+                                        : 'Select an order to view the full bill on the right'}
                                 </p>
                             </div>
                         </div>
@@ -402,7 +450,11 @@ function MobileOrdersPageContent() {
                             <button
                                 type="button"
                                 onClick={() => {
-                                    loadOrders(statusFilter === 'All' ? undefined : statusFilter);
+                                    loadOrders(
+                                        statusFilter === LIVE_MAP_TAB || statusFilter === 'All'
+                                            ? undefined
+                                            : statusFilter
+                                    );
                                     loadRidersOverview();
                                 }}
                                 className="p-2.5 bg-muted/80 dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl hover:bg-muted dark:hover:bg-slate-700/80 transition-colors shrink-0"
@@ -437,6 +489,26 @@ function MobileOrdersPageContent() {
                                 </span>
                             </button>
                         ))}
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter(LIVE_MAP_TAB)}
+                            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all border shrink-0
+                                ${
+                                    statusFilter === LIVE_MAP_TAB
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/15 dark:shadow-indigo-900/30'
+                                        : 'bg-muted/50 dark:bg-slate-800/90 text-muted-foreground border-border dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-500/40'
+                                }`}
+                        >
+                            <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 opacity-90" />
+                            Live Map
+                            <span
+                                className={`text-[0.65rem] sm:text-xs tabular-nums px-1.5 py-0.5 rounded-full ${
+                                    statusFilter === LIVE_MAP_TAB ? 'bg-white/20' : 'bg-background/80 dark:bg-slate-900/80'
+                                }`}
+                            >
+                                {mapReadyCount}
+                            </span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -553,9 +625,19 @@ function MobileOrdersPageContent() {
                         </ul>
                     </div>
                 )}
-                <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6">
+                <div
+                    className={`flex min-h-0 flex-1 flex-col gap-4 ${
+                        isLiveMapView ? 'xl:flex-row xl:gap-5' : 'lg:flex-row lg:gap-6'
+                    }`}
+                >
                 {/* Orders List */}
-                <div className="flex min-h-0 min-w-0 flex-[1.15] flex-col lg:max-w-[min(100%,52%)]">
+                <div
+                    className={`flex min-h-0 min-w-0 flex-col ${
+                        isLiveMapView
+                            ? 'flex-[1] xl:max-w-[min(100%,400px)]'
+                            : 'flex-[1.15] lg:max-w-[min(100%,52%)]'
+                    }`}
+                >
                     <div className="min-h-0 flex-1 overflow-auto custom-scrollbar [scrollbar-gutter:stable] pr-1 space-y-3">
                     {loading && orders.length === 0 ? (
                         <div className="flex items-center justify-center h-64">
@@ -580,6 +662,55 @@ function MobileOrdersPageContent() {
                                     className={`bg-card dark:bg-slate-900/90 rounded-2xl border p-4 sm:p-5 cursor-pointer transition-all hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-500/40 ${detailOrder?.id === order.id ? 'ring-2 ring-indigo-500 border-indigo-300 dark:ring-indigo-400 dark:border-indigo-500/60' : 'border-border dark:border-slate-600'
                                         }`}
                                 >
+                                    {isLiveMapView ? (
+                                        <div className="flex gap-3 sm:gap-4">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/80 bg-muted/50 dark:bg-slate-800/80">
+                                                <Store className="h-5 w-5 text-muted-foreground" />
+                                            </div>
+                                            <div className="min-w-0 flex-1 space-y-1.5">
+                                                <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+                                                    <span className="font-bold text-foreground text-sm leading-snug break-words">
+                                                        {(order.customer_name || 'Customer').trim()}
+                                                        {order.distance_km != null && Number.isFinite(Number(order.distance_km)) && (
+                                                            <span className="font-semibold text-muted-foreground">
+                                                                {' '}
+                                                                — {Number(order.distance_km).toFixed(1)} km
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                    <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 tabular-nums shrink-0">
+                                                        {formatPrice(order.grand_total)}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[0.7rem] text-muted-foreground">{formatDate(order.created_at)}</p>
+                                                <p className="text-[0.7rem] text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                                    <span className="font-mono font-semibold break-all">{order.order_number}</span>
+                                                    <span className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-px text-[0.65rem] font-bold shrink-0 ${cfg.bg} ${cfg.color}`}>
+                                                        <StatusIcon className="w-3 h-3 shrink-0" />
+                                                        {cfg.label}
+                                                    </span>
+                                                    {(order.rider_name || order.delivery_order_id) && (
+                                                        <span className="inline-flex items-center gap-0.5 text-[0.65rem] font-semibold text-emerald-700 dark:text-emerald-400">
+                                                            <Truck className="w-3 h-3 shrink-0" />
+                                                            {order.rider_name || 'Courier'}
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                <div className="flex flex-col gap-1 text-[0.7rem] text-muted-foreground pt-0.5">
+                                                    <span className="flex items-start gap-1.5 min-w-0">
+                                                        <Phone className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                                        <span className="break-all leading-snug">{order.customer_phone}</span>
+                                                    </span>
+                                                    <span className={`flex items-start gap-1.5 font-medium min-w-0 ${order.payment_status === 'Paid' ? 'text-green-600 dark:text-green-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                                                        <FileText className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                                        <span className="break-words leading-snug">
+                                                            {formatMobilePaymentMethod(order.payment_method)} ({order.payment_status || 'Unpaid'})
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                                         <div className="min-w-0 flex-1 space-y-2">
                                             <div className="flex flex-wrap items-center gap-2">
@@ -624,9 +755,10 @@ function MobileOrdersPageContent() {
                                             {formatPrice(order.grand_total)}
                                         </span>
                                     </div>
+                                    )}
 
                                     {/* Quick action buttons — hidden when a rider is assigned (rider app drives status) */}
-                                    {nextStatus && !isRiderAssignedDelivery(order) && (
+                                    {!isLiveMapView && nextStatus && !isRiderAssignedDelivery(order) && (
                                         <div className="flex gap-2 mt-3 pt-3 border-t border-border/60">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleStatusUpdate(order.id, nextStatus); }}
@@ -653,13 +785,13 @@ function MobileOrdersPageContent() {
                                             )}
                                         </div>
                                     )}
-                                    {isRiderAssignedDelivery(order) && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+                                    {!isLiveMapView && isRiderAssignedDelivery(order) && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
                                         <p className="mt-3 pt-3 border-t border-border/60 text-xs text-muted-foreground leading-snug">
                                             Rider assigned — order status is updated from the rider app.
                                         </p>
                                     )}
                                     {/* Collect Payment button for Delivered + Unpaid */}
-                                    {order.status === 'Delivered' && order.payment_status !== 'Paid' && (
+                                    {!isLiveMapView && order.status === 'Delivered' && order.payment_status !== 'Paid' && (
                                         <div className="mt-3 pt-3 border-t border-border/60">
                                             <button
                                                 onClick={(e) => {
@@ -681,8 +813,22 @@ function MobileOrdersPageContent() {
                     </div>
                 </div>
 
+                {isLiveMapView && (
+                    <div className="relative flex min-h-[min(52vh,440px)] min-w-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-sm dark:border-slate-600 dark:bg-slate-950/40 xl:min-h-0">
+                        <MobileOrdersLiveMap
+                            branding={branding}
+                            selectedOrder={detailLoading ? null : detailOrder}
+                            riders={ridersOverview?.riders ?? []}
+                        />
+                    </div>
+                )}
+
                 {/* Bill / detail — fixed min width for readable receipt; scrolls when needed */}
-                <div className="flex min-h-0 w-full min-w-0 flex-[0.95] flex-col lg:min-w-[min(100%,22rem)] lg:max-w-xl xl:max-w-2xl">
+                <div
+                    className={`flex min-h-0 w-full min-w-0 flex-[0.95] flex-col lg:min-w-[min(100%,22rem)] ${
+                        isLiveMapView ? 'xl:max-w-md' : 'lg:max-w-xl xl:max-w-2xl'
+                    }`}
+                >
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card dark:border-slate-600 dark:bg-slate-900/95 shadow-sm">
                     {detailLoading ? (
                         <div className="flex flex-1 items-center justify-center p-10 min-h-[12rem]">

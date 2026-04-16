@@ -99,7 +99,7 @@ const ProcurementPage: React.FC = () => {
         {activeTab === 'payments' && (
           <SupplierPaymentsSection initialPrefill={paymentPrefill} onClearPrefill={clearPaymentPrefill} />
         )}
-        {activeTab === 'reports' && <ProcurementReports />}
+        {activeTab === 'reports' && <ProcurementReports onNewBill={handleNewBill} />}
       </div>
     </div>
   );

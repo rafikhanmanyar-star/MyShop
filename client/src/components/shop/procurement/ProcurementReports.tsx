@@ -1,12 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Bell, Calendar, Settings } from 'lucide-react';
 import { procurementApi, shopApi } from '../../../services/shopApi';
 import { getProcurementCache, setProcurementCache } from '../../../services/procurementSyncService';
 import { getTenantId } from '../../../services/posOfflineDb';
-import { CURRENCY } from '../../../constants';
+import APAgingReport from './APAgingReport';
+import InventoryValuationReport from './InventoryValuationReport';
+import SupplierLedgerReport from './SupplierLedgerReport';
 
 type ReportTab = 'ledger' | 'ap-aging' | 'inventory';
 
-export default function ProcurementReports() {
+export type ProcurementReportsProps = {
+  /** Opens the new purchase bill flow (Procurement → Purchase Bills). */
+  onNewBill?: () => void;
+};
+
+export default function ProcurementReports({ onNewBill }: ProcurementReportsProps) {
   const [tab, setTab] = useState<ReportTab>('ledger');
   const [vendors, setVendors] = useState<any[]>([]);
   const [supplierFilter, setSupplierFilter] = useState('');
@@ -14,6 +22,7 @@ export default function ProcurementReports() {
   const [apAging, setApAging] = useState<any>(null);
   const [inventoryVal, setInventoryVal] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
 
   useEffect(() => {
     shopApi.getVendors().then((v) => setVendors(Array.isArray(v) ? v : []));
@@ -78,196 +87,205 @@ export default function ProcurementReports() {
           .finally(() => setLoading(false));
       } else setLoading(false);
     }
-  }, [tab, supplierFilter]);
+  }, [tab, supplierFilter, inventoryRefreshKey]);
+
+  const refetchInventoryValuation = useCallback(() => {
+    setInventoryRefreshKey((k) => k + 1);
+  }, []);
+
+  const exportInventoryCsv = useCallback(() => {
+    const items = inventoryVal?.items;
+    if (!Array.isArray(items) || items.length === 0) return;
+    const escape = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
+    const lines: string[] = [
+      ['Product name', 'SKU', 'Quantity', 'Unit cost', 'Total value', 'Stock status'].join(','),
+    ];
+    for (const r of items as any[]) {
+      const rp = Math.max(1, Number(r.reorder_point ?? 10) || 10);
+      const q = Number(r.quantity_on_hand) || 0;
+      let status = 'HEALTHY';
+      if (q <= rp) status = 'LOW STOCK';
+      else if (q <= rp * 3) status = 'MEDIUM';
+      lines.push(
+        [
+          escape(String(r.name ?? '')),
+          escape(String(r.sku ?? '')),
+          String(q),
+          String(Number(r.unit_cost) || 0),
+          String(Number(r.total_value) || 0),
+          escape(status),
+        ].join(',')
+      );
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `inventory-valuation-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, [inventoryVal]);
+
+  const exportApAgingCsv = useCallback(() => {
+    if (!apAging?.rows?.length) return;
+    const now = new Date();
+    const escape = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
+    const lines: string[] = [
+      ['Supplier', 'Invoice', 'Due date', 'Days overdue', 'Amount', 'Aging bucket'].join(','),
+    ];
+    for (const r of apAging.rows as any[]) {
+      const rawDue = r.due_date || r.bill_date;
+      const due = rawDue ? new Date(rawDue) : null;
+      let days = 0;
+      if (due && !Number.isNaN(due.getTime())) {
+        days = Math.floor((now.getTime() - due.getTime()) / (24 * 60 * 60 * 1000));
+      }
+      const d = Math.max(0, days);
+      let bucket = 'CURRENT';
+      if (d <= 0) bucket = 'CURRENT';
+      else if (d <= 30) bucket = '1-30 DAYS';
+      else if (d <= 60) bucket = '31-60 DAYS';
+      else bucket = '61+ DAYS';
+      const inv = `#${r.bill_number || ''}`;
+      const dueStr = rawDue ? new Date(rawDue).toISOString().slice(0, 10) : '';
+      lines.push(
+        [
+          escape(String(r.supplier_name || '')),
+          escape(inv),
+          escape(dueStr),
+          String(d),
+          String(Number(r.balance_due) || 0),
+          escape(bucket),
+        ].join(',')
+      );
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ap-aging-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, [apAging]);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex gap-1 rounded-xl border border-border bg-muted p-1">
-          {(['ledger', 'ap-aging', 'inventory'] as ReportTab[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`button-text rounded-lg px-4 py-2 font-semibold capitalize transition-all duration-200 active:scale-[0.98] ${
-                tab === t
-                  ? 'bg-card text-primary shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {t === 'ledger' ? 'Supplier Ledger' : t === 'ap-aging' ? 'AP Aging' : 'Inventory Valuation'}
-            </button>
-          ))}
+      <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <nav className="flex min-w-0 flex-wrap gap-6 border-b border-slate-200 lg:border-0 lg:pb-0 dark:border-slate-700" aria-label="Report sections">
+            {(['ledger', 'ap-aging', 'inventory'] as ReportTab[]).map((t) => {
+              const label =
+                t === 'ledger' ? 'Supplier Ledger' : t === 'ap-aging' ? 'AP Aging' : 'Inventory Valuation';
+              const active = tab === t;
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  className={`relative pb-3 text-sm font-semibold transition-colors lg:pb-1 ${
+                    active
+                      ? 'text-[#1e3a5f] dark:text-indigo-400'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {label}
+                  {active ? (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#1e3a5d] dark:bg-indigo-500 lg:bottom-[-2px]" />
+                  ) : null}
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="flex flex-wrap items-center justify-end gap-2 lg:gap-3">
+            {tab === 'ledger' && (
+              <select
+                aria-label="Filter supplier for ledger"
+                title="Filter supplier for ledger"
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                className="input input-text min-w-[200px] rounded-xl border-slate-200 py-2 dark:border-slate-600"
+              >
+                <option value="">All suppliers</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {tab === 'ap-aging' && (
+              <>
+                <div className="mr-1 flex items-center gap-0.5 text-slate-500 dark:text-slate-400">
+                  <button
+                    type="button"
+                    className="rounded-xl p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    aria-label="Calendar"
+                  >
+                    <Calendar className="h-5 w-5" strokeWidth={1.75} />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-xl p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    aria-label="Notifications"
+                  >
+                    <Bell className="h-5 w-5" strokeWidth={1.75} />
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-xl p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    aria-label="Settings"
+                  >
+                    <Settings className="h-5 w-5" strokeWidth={1.75} />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={exportApAgingCsv}
+                  className="text-sm font-semibold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                >
+                  Export
+                </button>
+                {onNewBill ? (
+                  <button
+                    type="button"
+                    onClick={onNewBill}
+                    className="rounded-xl bg-[#1e3a5f] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#152a45] dark:bg-indigo-700 dark:hover:bg-indigo-600"
+                  >
+                    New Bill
+                  </button>
+                ) : null}
+              </>
+            )}
+          </div>
         </div>
-        {tab === 'ledger' && (
-          <select
-            value={supplierFilter}
-            onChange={(e) => setSupplierFilter(e.target.value)}
-            className="input input-text rounded-xl py-2"
-          >
-            <option value="">All suppliers</option>
-            {vendors.map((v) => (
-              <option key={v.id} value={v.id}>{v.name}</option>
-            ))}
-          </select>
-        )}
       </div>
 
-      {loading && <p className="body-text text-muted-foreground">Loading...</p>}
-
-      {tab === 'ledger' && ledger && !loading && (
-        <div className="card overflow-hidden p-0">
-          <h3 className="section-title border-b border-border p-4">Purchases &amp; payments</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
-            <div>
-              <h4 className="table-header mb-2">Purchases</h4>
-              <div className="max-h-96 space-y-2 overflow-y-auto">
-                {(ledger.purchases || []).map((p: any) => (
-                  <div key={p.id} className="body-text flex justify-between border-b border-border pb-2">
-                    <span>{p.bill_number} ({p.bill_date?.slice(0, 10)})</span>
-                    <span className="numeric-data text-right">
-                      {CURRENCY} {Number(p.total_amount).toLocaleString()} | Due: {CURRENCY}{' '}
-                      {Number(p.balance_due).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h4 className="table-header mb-2">Payments</h4>
-              <div className="max-h-96 space-y-2 overflow-y-auto">
-                {(ledger.payments || []).map((p: any) => (
-                  <div key={p.id} className="body-text flex justify-between border-b border-border pb-2">
-                    <span>{p.payment_date?.slice(0, 10)} {p.reference && `- ${p.reference}`}</span>
-                    <span className="numeric-data text-emerald-600">
-                      -{CURRENCY} {Number(p.amount).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          {Object.keys(ledger.outstandingBySupplier || {}).length > 0 && (
-            <div className="border-t border-border bg-amber-500/10 p-4 dark:bg-amber-500/5">
-              <h4 className="table-header mb-2 text-warning">Outstanding by supplier</h4>
-              <ul className="body-text space-y-1">
-                {Object.entries(ledger.outstandingBySupplier).map(([sid, amt]: [string, any]) => (
-                  <li key={sid}>
-                    {vendors.find((v) => v.id === sid)?.name || sid}:{' '}
-                    <span className="numeric-data">
-                      {CURRENCY} {Number(amt).toLocaleString()}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+      {loading && (
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-12 text-center text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          Loading report…
         </div>
       )}
 
-      {tab === 'ap-aging' && apAging && !loading && (
-        <div className="card overflow-hidden p-0">
-          <h3 className="section-title border-b border-border p-4">Accounts Payable Aging</h3>
-          <div className="p-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="rounded-xl bg-muted/80 p-4">
-                <p className="table-header text-muted-foreground">Current</p>
-                <p className="numeric-data text-xl font-semibold text-foreground dark:text-slate-100">
-                  {CURRENCY} {Number(apAging.summary?.current || 0).toLocaleString()}
-                </p>
-              </div>
-              <div className="rounded-xl bg-amber-50 p-4">
-                <p className="table-header text-amber-700">1–30 days</p>
-                <p className="numeric-data text-xl font-semibold text-amber-800">
-                  {CURRENCY} {Number(apAging.summary?.days30 || 0).toLocaleString()}
-                </p>
-              </div>
-              <div className="rounded-xl bg-orange-50 p-4">
-                <p className="table-header text-orange-700">31–60 days</p>
-                <p className="numeric-data text-xl font-semibold text-orange-800">
-                  {CURRENCY} {Number(apAging.summary?.days60 || 0).toLocaleString()}
-                </p>
-              </div>
-              <div className="rounded-xl bg-rose-50 p-4">
-                <p className="table-header text-rose-700">61+ days</p>
-                <p className="numeric-data text-xl font-semibold text-rose-800">
-                  {CURRENCY} {Number(apAging.summary?.days90Plus || 0).toLocaleString()}
-                </p>
-              </div>
-            </div>
-            <p className="section-title mb-4 text-foreground dark:text-slate-200">
-              Total outstanding:{' '}
-              <span className="numeric-data">
-                {CURRENCY} {Number(apAging.totalOutstanding || 0).toLocaleString()}
-              </span>
-            </p>
-            <div className="overflow-x-auto">
-              <table className="table-modern w-full">
-                <thead>
-                  <tr>
-                    <th className="table-header pb-2">Supplier</th>
-                    <th className="table-header pb-2">Bill</th>
-                    <th className="table-header pb-2">Date</th>
-                    <th className="table-header pb-2 text-right">Balance due</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(apAging.rows || []).map((r: any) => (
-                    <tr key={r.bill_id} className="border-b border-border">
-                      <td className="py-2 text-sm">{r.supplier_name}</td>
-                      <td className="py-2 text-sm">{r.bill_number}</td>
-                      <td className="py-2 text-sm text-muted-foreground">{r.bill_date?.slice(0, 10)}</td>
-                      <td className="numeric-data py-2 text-right">
-                        {CURRENCY} {Number(r.balance_due).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      {tab === 'ledger' && ledger && !loading && <SupplierLedgerReport data={ledger} />}
+
+      {tab === 'ap-aging' && !loading && apAging && <APAgingReport data={apAging} />}
+      {tab === 'ap-aging' && !loading && !apAging && (
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-12 text-center text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          No AP aging data available. Check your connection or try again.
         </div>
       )}
 
       {tab === 'inventory' && inventoryVal && !loading && (
-        <div className="card overflow-hidden p-0">
-          <h3 className="section-title border-b border-border p-4">Inventory valuation (weighted average cost)</h3>
-          <div className="p-6">
-            <p className="section-title mb-4 text-foreground dark:text-slate-200">
-              Total inventory value:{' '}
-              <span className="numeric-data">
-                {CURRENCY} {Number(inventoryVal.totalValue || 0).toLocaleString()}
-              </span>
-            </p>
-            <div className="overflow-x-auto">
-              <table className="table-modern w-full">
-                <thead>
-                  <tr>
-                    <th className="table-header pb-2">Product</th>
-                    <th className="table-header pb-2">SKU</th>
-                    <th className="table-header pb-2 text-right">Qty</th>
-                    <th className="table-header pb-2 text-right">Unit cost</th>
-                    <th className="table-header pb-2 text-right">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(inventoryVal.items || []).map((r: any) => (
-                    <tr key={r.id} className="border-b border-border">
-                      <td className="py-2 text-sm">{r.name}</td>
-                      <td className="py-2 font-mono text-xs text-muted-foreground">{r.sku}</td>
-                      <td className="numeric-data py-2 text-right text-sm">{Number(r.quantity_on_hand)}</td>
-                      <td className="numeric-data py-2 text-right text-sm">
-                        {CURRENCY} {Number(r.unit_cost).toLocaleString()}
-                      </td>
-                      <td className="numeric-data py-2 text-right text-sm">
-                        {CURRENCY} {Number(r.total_value).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        <InventoryValuationReport
+          data={inventoryVal}
+          onExportCsv={exportInventoryCsv}
+          onNewBill={onNewBill}
+          onManualReconcile={refetchInventoryValuation}
+        />
+      )}
+      {tab === 'inventory' && !loading && !inventoryVal && (
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-12 text-center text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          No inventory valuation data available. Check your connection or try again.
         </div>
       )}
     </div>

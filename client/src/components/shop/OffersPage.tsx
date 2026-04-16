@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { shopApi } from '../../services/shopApi';
-import { Tag, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Percent, Search, ChevronDown } from 'lucide-react';
 
 type OfferRow = {
   id: string;
@@ -15,6 +15,19 @@ type OfferRow = {
 type ProductOpt = { id: string; name: string; sku: string };
 
 type LineDraft = { product_id: string; quantity: number };
+
+function formatOfferType(t: string): string {
+  const k = String(t).toLowerCase();
+  if (k === 'discount') return 'Discount';
+  if (k === 'bundle') return 'Bundle';
+  if (k === 'fixed_price') return 'Fixed price';
+  return String(t).replace(/_/g, ' ');
+}
+
+function formatActiveWindow(start?: string, end?: string) {
+  if (!start || !end) return '—';
+  return `${new Date(start).toLocaleString()} - ${new Date(end).toLocaleString()}`;
+}
 
 function toLocalInput(d: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -48,6 +61,10 @@ export default function OffersPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'discount' | 'bundle' | 'fixed_price'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,6 +83,32 @@ export default function OffersPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const filteredOffers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return offers.filter(o => {
+      if (q && !o.title.toLowerCase().includes(q)) return false;
+      if (filterType !== 'all' && String(o.offer_type).toLowerCase() !== filterType) return false;
+      if (filterStatus === 'active' && !o.is_active) return false;
+      if (filterStatus === 'inactive' && o.is_active) return false;
+      return true;
+    });
+  }, [offers, searchQuery, filterType, filterStatus]);
+
+  const toggleActive = async (o: OfferRow) => {
+    if (togglingId) return;
+    setTogglingId(o.id);
+    setErr('');
+    const next = !o.is_active;
+    try {
+      await shopApi.updateOffer(o.id, { is_active: next });
+      setOffers(prev => prev.map(x => (x.id === o.id ? { ...x, is_active: next } : x)));
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to update status');
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const openNew = () => {
     setEditingId(null);
@@ -185,88 +228,194 @@ export default function OffersPage() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-muted/50 dark:bg-slate-900/50">
-      <div className="border-b border-border bg-card px-6 py-4 dark:bg-slate-900">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">
-              <Tag className="h-6 w-6 text-primary" />
-              Offers &amp; Promotions
-            </h1>
-            <p className="text-sm text-muted-foreground">Manage bundles and discounts for the mobile storefront.</p>
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-slate-100/90 dark:bg-slate-950/80">
+      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
+        <div className="mx-auto max-w-[1400px] overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-lg shadow-slate-200/40 dark:border-slate-700/80 dark:bg-slate-900 dark:shadow-none">
+          {/* Page header */}
+          <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-6 sm:py-6 dark:border-slate-700/80">
+            <div className="flex min-w-0 gap-3 sm:gap-4">
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm dark:bg-blue-500"
+                aria-hidden
+              >
+                <Percent className="h-5 w-5" strokeWidth={2.5} />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 sm:text-2xl">
+                  Offers &amp; Promotions
+                </h1>
+                <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                  Manage bundles and discounts for the mobile storefront.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={openNew}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2.5} />
+              New Offer
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={openNew}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow hover:opacity-95"
-          >
-            <Plus className="h-4 w-4" />
-            New offer
-          </button>
-        </div>
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-6">
-        {err && (
-          <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-            {err}
+          {err && (
+            <div className="mx-5 mb-0 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200 sm:mx-6">
+              {err}
+            </div>
+          )}
+
+          {/* Search & filters */}
+          <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 dark:border-slate-700/80">
+            <div className="relative min-w-0 flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                strokeWidth={2}
+              />
+              <input
+                type="search"
+                placeholder="Search offers..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/80 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-100 dark:placeholder:text-slate-500"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+              <div className="relative min-w-[10.5rem] flex-1 sm:flex-initial">
+                <select
+                  value={filterType}
+                  onChange={e => setFilterType(e.target.value as typeof filterType)}
+                  className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-9 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  aria-label="Filter by type"
+                >
+                  <option value="all">Filter by Type</option>
+                  <option value="discount">Discount</option>
+                  <option value="bundle">Bundle</option>
+                  <option value="fixed_price">Fixed price</option>
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  aria-hidden
+                />
+              </div>
+              <div className="relative min-w-[10.5rem] flex-1 sm:flex-initial">
+                <select
+                  value={filterStatus}
+                  onChange={e => setFilterStatus(e.target.value as typeof filterStatus)}
+                  className="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-3 pr-9 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  aria-label="Filter by status"
+                >
+                  <option value="all">Filter by Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  aria-hidden
+                />
+              </div>
+            </div>
           </div>
-        )}
 
-        {loading ? (
-          <div className="text-sm text-muted-foreground">Loading…</div>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-muted/60 text-xs font-semibold uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Title</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Window</th>
-                  <th className="px-4 py-3">Products</th>
-                  <th className="px-4 py-3">Active</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {offers.map(o => (
-                  <tr key={o.id} className="hover:bg-muted/40">
-                    <td className="px-4 py-3 font-medium">{o.title}</td>
-                    <td className="px-4 py-3 capitalize">{String(o.offer_type).replace('_', ' ')}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {o.start_date && new Date(o.start_date).toLocaleString()}
-                      <br />
-                      {o.end_date && new Date(o.end_date).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3">{o.item_count ?? '—'}</td>
-                    <td className="px-4 py-3">{o.is_active ? 'Yes' : 'No'}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        className="mr-2 inline-flex rounded p-1 text-primary hover:bg-primary/10"
-                        onClick={() => openEdit(o.id)}
-                        title="Edit"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        className="inline-flex rounded p-1 text-destructive hover:bg-destructive/10"
-                        onClick={() => deactivate(o.id)}
-                        title="Deactivate"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
+          {/* Table */}
+          {loading ? (
+            <div className="px-6 py-16 text-center text-sm text-slate-500 dark:text-slate-400">Loading…</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold uppercase tracking-wide text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">
+                    <th className="w-12 px-4 py-3 text-center">#</th>
+                    <th className="px-4 py-3">Title</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="min-w-[14rem] px-4 py-3">Active window</th>
+                    <th className="px-4 py-3">Linked products</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {offers.length === 0 && (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">No offers yet.</div>
-            )}
-          </div>
-        )}
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/80">
+                  {filteredOffers.map((o, idx) => (
+                    <tr
+                      key={o.id}
+                      className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                    >
+                      <td className="px-4 py-3.5 text-center text-slate-500 tabular-nums dark:text-slate-400">
+                        {idx + 1}
+                      </td>
+                      <td className="px-4 py-3.5 font-medium text-slate-900 dark:text-slate-100">{o.title}</td>
+                      <td className="px-4 py-3.5 text-slate-700 dark:text-slate-300">{formatOfferType(o.offer_type)}</td>
+                      <td className="px-4 py-3.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                        {formatActiveWindow(o.start_date, o.end_date)}
+                      </td>
+                      <td className="px-4 py-3.5 tabular-nums text-slate-800 dark:text-slate-200">
+                        {o.item_count ?? '—'}
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`text-sm font-medium ${o.is_active ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}
+                          >
+                            {o.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={o.is_active ? 'true' : 'false'}
+                            aria-label={`${o.is_active ? 'Deactivate' : 'Activate'} offer “${o.title}”`}
+                            disabled={togglingId === o.id}
+                            onClick={() => void toggleActive(o)}
+                            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus-visible:ring-offset-slate-900 ${
+                              o.is_active
+                                ? 'bg-emerald-500 dark:bg-emerald-600'
+                                : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                                o.is_active ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-2 border-blue-500 text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                            onClick={() => openEdit(o.id)}
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" strokeWidth={2} />
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border-2 border-red-500 text-red-600 transition-colors hover:bg-red-50 dark:border-red-400 dark:text-red-400 dark:hover:bg-red-950/40"
+                            onClick={() => deactivate(o.id)}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" strokeWidth={2} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {offers.length === 0 && (
+                <div className="px-4 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
+                  No offers yet.
+                </div>
+              )}
+              {offers.length > 0 && filteredOffers.length === 0 && (
+                <div className="px-4 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
+                  No offers match your filters.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {modalOpen && (
@@ -274,7 +423,12 @@ export default function OffersPage() {
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">{editingId ? 'Edit offer' : 'New offer'}</h2>
-              <button type="button" className="rounded p-1 hover:bg-muted" onClick={() => setModalOpen(false)}>
+              <button
+                type="button"
+                title="Close"
+                className="rounded p-1 hover:bg-muted"
+                onClick={() => setModalOpen(false)}
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
