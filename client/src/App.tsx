@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { installElectronFocusRecovery } from './utils/electronFocusRecovery';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -10,7 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock
+  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
 import { MobileOrdersProvider } from './context/MobileOrdersContext';
@@ -99,8 +99,22 @@ function getUserInitials(name: string) {
     .slice(0, 2);
 }
 
-function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onToggle: () => void; onLogout: () => void }) {
   const { user } = useAuth();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    if (userMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [userMenuOpen]);
 
   const filteredSections = navSections
     .map(section => ({
@@ -188,25 +202,59 @@ function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => 
       </nav>
 
       {/* User card at bottom */}
-      <div className="mt-auto shrink-0 border-t border-gray-200 p-3 dark:border-gray-700">
-        {!collapsed && user ? (
-          <div className="flex items-center gap-3 rounded-xl bg-gray-100 px-3 py-2.5 dark:bg-gray-800">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
-              {getUserInitials(user.name)}
+      <div className="mt-auto shrink-0 border-t border-gray-200 p-3 dark:border-gray-700" ref={menuRef}>
+        <div className="relative">
+          {/* Dropdown menu (opens upward) */}
+          {userMenuOpen && user && (
+            <div className={`absolute bottom-full mb-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800 ${collapsed ? 'left-1/2 -translate-x-1/2 w-48' : 'left-0 right-0'}`}>
+              <div className="p-1.5">
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    onLogout();
+                  }}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-red-600 transition-colors duration-150 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Log Out</span>
+                </button>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate dark:text-white">{user.name}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.role.replace(/_/g, ' ')}</p>
-            </div>
-            <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
-          </div>
-        ) : collapsed && user ? (
-          <div className="flex flex-col items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
-              {getUserInitials(user.name)}
-            </div>
-          </div>
-        ) : null}
+          )}
+
+          {/* User card (clickable) */}
+          {!collapsed && user ? (
+            <button
+              type="button"
+              onClick={() => setUserMenuOpen(prev => !prev)}
+              className="flex w-full items-center gap-3 rounded-xl bg-gray-100 px-3 py-2.5 transition-colors duration-150 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
+                {getUserInitials(user.name)}
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-semibold text-gray-900 truncate dark:text-white">{user.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.role.replace(/_/g, ' ')}</p>
+              </div>
+              {userMenuOpen
+                ? <ChevronUp className="h-4 w-4 shrink-0 text-gray-400" />
+                : <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+              }
+            </button>
+          ) : collapsed && user ? (
+            <button
+              type="button"
+              onClick={() => setUserMenuOpen(prev => !prev)}
+              className="flex w-full flex-col items-center gap-2 rounded-lg py-1 transition-colors duration-150 hover:bg-gray-100 dark:hover:bg-gray-800"
+              title={`${user.name} — Click to log out`}
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
+                {getUserInitials(user.name)}
+              </div>
+            </button>
+          ) : null}
+        </div>
+
         {!collapsed && (
           <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">
             v{__APP_VERSION__}
@@ -255,7 +303,7 @@ function AppLayout() {
             <ShopRealtimeBridge />
           </Suspense>
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
-        {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />}
+        {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onLogout={() => { logout(); navigate('/'); }} />}
         <main className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden transition-all duration-300 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
           <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isMobileOrdersRoute ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
           {!posFullScreen && !isPosRoute && <AppHeader />}
