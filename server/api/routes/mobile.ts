@@ -439,19 +439,35 @@ router.put('/auth/change-password', mobileAuthMiddleware(db), async (req: any, r
 // List branches for the current tenant (for switch branch in mobile app)
 router.get('/branches', mobileAuthMiddleware(db), async (req: any, res) => {
     try {
-        const { getShopService } = await import('../../services/shopService.js');
         const tenantRows = await db.query('SELECT slug FROM tenants WHERE id = $1', [req.tenantId]);
         const tenantSlug = tenantRows[0]?.slug ?? null;
-        const branches = await getShopService().getBranches(req.tenantId);
-        const list = branches.map((b: any, index: number) => ({
-            id: b.id,
-            name: b.name,
-            code: b.code || undefined,
-            slug: b.slug || (index === 0 && tenantSlug ? tenantSlug : null),
-            address: b.address || b.location || null,
-            latitude: b.latitude != null ? parseFloat(b.latitude) : null,
-            longitude: b.longitude != null ? parseFloat(b.longitude) : null,
-        }));
+
+        // Query active branches directly — avoid getBranches() which auto-creates
+        // a placeholder "Main Store" when none exist (meant for admin bootstrap only).
+        const branches = await db.query(
+            `SELECT * FROM shop_branches
+             WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE
+             ORDER BY name ASC`,
+            [req.tenantId]
+        );
+
+        const list = branches.map((b: any) => {
+            let slug = b.slug || null;
+            if (!slug && tenantSlug) {
+                slug = branches.length === 1
+                    ? tenantSlug
+                    : `${tenantSlug}-${(b.code || b.id).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+            }
+            return {
+                id: b.id,
+                name: b.name,
+                code: b.code || undefined,
+                slug,
+                address: b.address || b.location || null,
+                latitude: b.latitude != null ? parseFloat(b.latitude) : null,
+                longitude: b.longitude != null ? parseFloat(b.longitude) : null,
+            };
+        });
         res.json({ branches: list });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

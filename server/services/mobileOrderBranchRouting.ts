@@ -137,6 +137,13 @@ export async function resolveBranchWarehouseForPlaceOrder(
     // ─── Pickup: branch from QR or first by name; no delivery-radius rejection ───
     if (isPickup) {
         let bid: string | null = input.branchId || null;
+        if (bid) {
+            const activeCheck = await client.query(
+                `SELECT id FROM shop_branches WHERE id = $1 AND tenant_id = $2 AND COALESCE(is_active, TRUE) = TRUE`,
+                [bid, tenantId]
+            );
+            if (activeCheck.length === 0) bid = null;
+        }
         if (!bid) bid = await firstBranch();
         if (!bid) {
             return { effectiveBranchId: null, warehouseId: null, assignedBranchId: null, distanceKm: null };
@@ -162,32 +169,32 @@ export async function resolveBranchWarehouseForPlaceOrder(
        WHERE id = $1 AND tenant_id = $2 AND COALESCE(is_active, TRUE) = TRUE`,
             [bid, tenantId]
         );
-        if (brows.length === 0) {
-            throw new Error('Invalid or inactive branch.');
+        if (brows.length > 0) {
+            const bRow = brows[0];
+            const wh = await warehouseIdForBranch(client, tenantId, bid);
+            if (!wh || !(await canFulfillAtWarehouse(client, tenantId, demand, wh))) {
+                throw new Error(
+                    'Insufficient stock for this order at the selected branch. Try another branch or different items.'
+                );
+            }
+            const blat = parseFloat(bRow.latitude);
+            const blng = parseFloat(bRow.longitude);
+            if (!Number.isFinite(blat) || !Number.isFinite(blng)) {
+                throw new Error('This branch does not have coordinates configured for delivery.');
+            }
+            const dist = haversineDistanceKm(custLat!, custLng!, blat, blng);
+            const maxKm = maxKmForBranch(bRow, tenantDefaultKm);
+            if (dist > maxKm) {
+                throw new Error('Delivery not available in your area');
+            }
+            return {
+                effectiveBranchId: bid,
+                warehouseId: wh,
+                assignedBranchId: bid,
+                distanceKm: dist,
+            };
         }
-        const bRow = brows[0];
-        const wh = await warehouseIdForBranch(client, tenantId, bid);
-        if (!wh || !(await canFulfillAtWarehouse(client, tenantId, demand, wh))) {
-            throw new Error(
-                'Insufficient stock for this order at the selected branch. Try another branch or different items.'
-            );
-        }
-        const blat = parseFloat(bRow.latitude);
-        const blng = parseFloat(bRow.longitude);
-        if (!Number.isFinite(blat) || !Number.isFinite(blng)) {
-            throw new Error('This branch does not have coordinates configured for delivery.');
-        }
-        const dist = haversineDistanceKm(custLat!, custLng!, blat, blng);
-        const maxKm = maxKmForBranch(bRow, tenantDefaultKm);
-        if (dist > maxKm) {
-            throw new Error('Delivery not available in your area');
-        }
-        return {
-            effectiveBranchId: bid,
-            warehouseId: wh,
-            assignedBranchId: bid,
-            distanceKm: dist,
-        };
+        // Branch not found or inactive — fall through to auto-routing below
     }
 
     // ─── Delivery: auto-route — nearest branch that can fulfill and is within radius ───

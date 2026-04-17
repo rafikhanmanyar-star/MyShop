@@ -268,7 +268,8 @@ export class ShopService {
               latitude, longitude, address
        FROM shop_branches
        WHERE slug IS NOT NULL
-         AND LOWER(TRIM(CAST(slug AS TEXT))) = $1`,
+         AND LOWER(TRIM(CAST(slug AS TEXT))) = $1
+         AND COALESCE(is_active, TRUE) = TRUE`,
       [key]
     );
     if (rows.length === 0) return null;

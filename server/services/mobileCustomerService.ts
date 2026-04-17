@@ -50,6 +50,8 @@ export class MobileCustomerService {
                 branchId: branch.id,
             };
         }
+
+        // Exact tenant slug match
         const rows = await this.db.query(
             `SELECT id, name, company_name, email, logo_url, brand_color, slug
        FROM tenants
@@ -57,16 +59,63 @@ export class MobileCustomerService {
          AND LOWER(TRIM(CAST(slug AS TEXT))) = $1`,
             [key]
         );
-        if (rows.length === 0) return null;
-        const tenant = rows[0];
-        const firstBranch = await this.db.query(
-            'SELECT id FROM shop_branches WHERE tenant_id = $1 ORDER BY name ASC LIMIT 1',
-            [tenant.id]
-        );
-        return {
-            ...tenant,
-            branchId: firstBranch.length > 0 ? firstBranch[0].id : undefined,
-        };
+
+        if (rows.length > 0) {
+            const tenant = rows[0];
+            // Prefer branches with geo coordinates set (real branches, not auto-created placeholders)
+            let firstBranch = await this.db.query(
+                `SELECT id FROM shop_branches
+                 WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE
+                   AND latitude IS NOT NULL AND longitude IS NOT NULL
+                 ORDER BY name ASC LIMIT 1`,
+                [tenant.id]
+            );
+            if (firstBranch.length === 0) {
+                firstBranch = await this.db.query(
+                    'SELECT id FROM shop_branches WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE ORDER BY name ASC LIMIT 1',
+                    [tenant.id]
+                );
+            }
+            return {
+                ...tenant,
+                branchId: firstBranch.length > 0 ? firstBranch[0].id : undefined,
+            };
+        }
+
+        // Generated branch slug: {tenantSlug}-{branchCode} (from /branches endpoint)
+        // Try every dash position since tenant slugs can contain dashes
+        for (let i = key.length - 1; i > 0; i--) {
+            if (key[i] !== '-') continue;
+            const possibleTenantSlug = key.substring(0, i);
+            const branchSuffix = key.substring(i + 1);
+            if (!possibleTenantSlug || !branchSuffix) continue;
+
+            const tenantRows = await this.db.query(
+                `SELECT id, name, company_name, email, logo_url, brand_color, slug
+           FROM tenants
+           WHERE slug IS NOT NULL
+             AND LOWER(TRIM(CAST(slug AS TEXT))) = $1`,
+                [possibleTenantSlug]
+            );
+            if (tenantRows.length > 0) {
+                const tenant = tenantRows[0];
+                const branchRows = await this.db.query(
+                    `SELECT id FROM shop_branches
+               WHERE tenant_id = $1
+                 AND COALESCE(is_active, TRUE) = TRUE
+                 AND LOWER(REGEXP_REPLACE(code, '[^a-zA-Z0-9]+', '-', 'g')) = $2`,
+                    [tenant.id, branchSuffix]
+                );
+                if (branchRows.length > 0) {
+                    return {
+                        ...tenant,
+                        branchId: branchRows[0].id,
+                    };
+                }
+            }
+        }
+
+        return null;
     }
 
     async getOrCreateSlug(tenantId: string): Promise<string> {
@@ -146,19 +195,21 @@ export class MobileCustomerService {
                 order_acceptance_start: '09:00',
                 order_acceptance_end: '21:00',
                 estimated_delivery_minutes: 60,
+                rider_assignment_mode: 'auto',
             };
         }
         return rows[0];
     }
 
     async updateMobileSettings(tenantId: string, data: any) {
+        const riderMode = data.rider_assignment_mode === 'manual' ? 'manual' : 'auto';
         const rows = await this.db.query(
             `INSERT INTO mobile_ordering_settings (
         tenant_id, is_enabled, minimum_order_amount, delivery_fee,
         free_delivery_above, max_delivery_radius_km, auto_confirm_orders,
         order_acceptance_start, order_acceptance_end, estimated_delivery_minutes,
-        updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        rider_assignment_mode, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
       ON CONFLICT (tenant_id) DO UPDATE SET
         is_enabled = EXCLUDED.is_enabled,
         minimum_order_amount = EXCLUDED.minimum_order_amount,
@@ -169,6 +220,7 @@ export class MobileCustomerService {
         order_acceptance_start = EXCLUDED.order_acceptance_start,
         order_acceptance_end = EXCLUDED.order_acceptance_end,
         estimated_delivery_minutes = EXCLUDED.estimated_delivery_minutes,
+        rider_assignment_mode = EXCLUDED.rider_assignment_mode,
         updated_at = NOW()
       RETURNING *`,
             [
@@ -182,6 +234,7 @@ export class MobileCustomerService {
                 data.order_acceptance_start ?? '09:00',
                 data.order_acceptance_end ?? '21:00',
                 data.estimated_delivery_minutes ?? 60,
+                riderMode,
             ]
         );
         return rows[0];

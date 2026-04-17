@@ -67,6 +67,32 @@ export class RiderService {
      * Rider-controlled availability (server sets BUSY when assigning a delivery).
      * AVAILABLE: open for new assignments. OFFLINE: not on shift.
      */
+    async setActiveStatus(tenantId: string, riderId: string, isActive: boolean): Promise<void> {
+        const row = await this.getById(tenantId, riderId);
+        if (!row) throw new Error('Rider not found');
+        await this.db.execute(
+            `UPDATE riders SET is_active = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`,
+            [isActive, riderId, tenantId]
+        );
+    }
+
+    async getActivity(tenantId: string, riderId: string, limit = 50): Promise<any[]> {
+        const row = await this.getById(tenantId, riderId);
+        if (!row) throw new Error('Rider not found');
+        return this.db.query(
+            `SELECT d.id AS delivery_order_id, d.status AS delivery_status,
+                    d.assigned_at, d.accepted_at, d.picked_at, d.delivered_at,
+                    o.id AS order_id, o.order_number, o.grand_total,
+                    o.delivery_address, o.payment_method, o.created_at AS order_created_at
+             FROM delivery_orders d
+             INNER JOIN mobile_orders o ON o.id = d.order_id AND o.tenant_id = d.tenant_id
+             WHERE d.tenant_id = $1 AND d.rider_id = $2
+             ORDER BY d.created_at DESC
+             LIMIT $3`,
+            [tenantId, riderId, limit]
+        ) as Promise<any[]>;
+    }
+
     async setAvailabilityStatus(tenantId: string, riderId: string, next: 'AVAILABLE' | 'OFFLINE'): Promise<void> {
         const row = await this.getById(tenantId, riderId);
         if (!row) throw new Error('Rider not found');

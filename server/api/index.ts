@@ -111,14 +111,18 @@ app.use('/api/shop/khata', tenantMiddleware(dbService), khataRoutes);
 app.use('/api/shop/data', tenantMiddleware(dbService), dataRoutes);
 app.use('/api/shop', tenantMiddleware(dbService), shopRoutes);
 
-// Platform admin UI (static HTML; auth is X-Platform-Admin-Secret on API calls)
+// Platform admin UI (static HTML). Serve index without 308 redirect — avoids ERR_TOO_MANY_REDIRECTS
+// behind some proxies (e.g. Render) when slash normalization fights the redirect to /platform-admin/.
 const platformAdminDir = path.resolve(process.cwd(), 'public', 'platform-admin');
 if (fs.existsSync(platformAdminDir)) {
-  app.get('/platform-admin', (_req, res) => {
-    res.redirect(308, '/platform-admin/');
-  });
-  app.use('/platform-admin', express.static(platformAdminDir, { index: 'index.html' }));
-  console.log('🖥️  Platform admin UI: /platform-admin/');
+  const portalIndex = path.join(platformAdminDir, 'index.html');
+  const sendPlatformAdmin = (_req: express.Request, res: express.Response) => {
+    res.sendFile(portalIndex);
+  };
+  app.get('/platform-admin', sendPlatformAdmin);
+  app.get('/platform-admin/', sendPlatformAdmin);
+  app.use('/platform-admin', express.static(platformAdminDir, { index: false }));
+  console.log('🖥️  Platform admin UI: /platform-admin and /platform-admin/');
 }
 
 // Serve static client (Electron mode)

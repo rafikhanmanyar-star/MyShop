@@ -6,7 +6,7 @@ import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
-import { shopApi, accountingApi, ShopBankAccount, ShopVendor, ShopRider } from '../../services/shopApi';
+import { shopApi, accountingApi, ShopBankAccount, ShopVendor, ShopRider, RiderActivityRow } from '../../services/shopApi';
 import Card from '../ui/Card';
 import { AccountingProvider } from '../../context/AccountingContext';
 import ChartOfAccounts from './accounting/ChartOfAccounts';
@@ -451,6 +451,8 @@ interface UserManagementTabProps {
     openNewRider: () => void;
     setRiderPasswordTarget: (r: ShopRider) => void;
     setRiderPasswordValue: (v: string) => void;
+    handleToggleRiderActive: (rider: ShopRider) => void;
+    handleViewRiderActivity: (rider: ShopRider) => void;
 }
 
 const UserManagementTab: React.FC<UserManagementTabProps> = ({
@@ -464,6 +466,8 @@ const UserManagementTab: React.FC<UserManagementTabProps> = ({
     openNewRider,
     setRiderPasswordTarget,
     setRiderPasswordValue,
+    handleToggleRiderActive,
+    handleViewRiderActivity,
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -813,12 +817,14 @@ const UserManagementTab: React.FC<UserManagementTabProps> = ({
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        className="text-xs font-semibold text-muted-foreground hover:text-rose-500 transition-colors"
+                                                        onClick={() => handleToggleRiderActive(r)}
+                                                        className={`text-xs font-semibold transition-colors ${r.is_active ? 'text-muted-foreground hover:text-rose-500' : 'text-emerald-600 hover:text-emerald-800'}`}
                                                     >
-                                                        Disable
+                                                        {r.is_active ? 'Disable' : 'Enable'}
                                                     </button>
                                                     <button
                                                         type="button"
+                                                        onClick={() => handleViewRiderActivity(r)}
                                                         className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
                                                     >
                                                         View Activity
@@ -1228,6 +1234,38 @@ const SettingsContent: React.FC = () => {
         }
     };
 
+    const [riderActivityTarget, setRiderActivityTarget] = useState<ShopRider | null>(null);
+    const [riderActivity, setRiderActivity] = useState<RiderActivityRow[]>([]);
+    const [riderActivityLoading, setRiderActivityLoading] = useState(false);
+
+    const handleToggleRiderActive = async (rider: ShopRider) => {
+        const next = !rider.is_active;
+        const action = next ? 'enable' : 'disable';
+        if (!confirm(`Are you sure you want to ${action} rider "${rider.name}"?`)) return;
+        try {
+            const { shopRiderApi } = await import('../../services/shopApi');
+            await shopRiderApi.setRiderActive(rider.id, next);
+            loadRiders();
+        } catch (e: any) {
+            alert(e?.message || e?.error || `Failed to ${action} rider`);
+        }
+    };
+
+    const handleViewRiderActivity = async (rider: ShopRider) => {
+        setRiderActivityTarget(rider);
+        setRiderActivityLoading(true);
+        setRiderActivity([]);
+        try {
+            const { shopRiderApi } = await import('../../services/shopApi');
+            const rows = await shopRiderApi.getRiderActivity(rider.id);
+            setRiderActivity(Array.isArray(rows) ? rows : []);
+        } catch (e: any) {
+            alert(e?.message || e?.error || 'Failed to load rider activity');
+        } finally {
+            setRiderActivityLoading(false);
+        }
+    };
+
     const handleClearAllTransactions = async () => {
         setClearingTransactions(true);
         try {
@@ -1395,6 +1433,8 @@ const SettingsContent: React.FC = () => {
                         openNewRider={openNewRider}
                         setRiderPasswordTarget={setRiderPasswordTarget}
                         setRiderPasswordValue={setRiderPasswordValue}
+                        handleToggleRiderActive={handleToggleRiderActive}
+                        handleViewRiderActivity={handleViewRiderActivity}
                     />
                 )}
 
@@ -1965,6 +2005,60 @@ const SettingsContent: React.FC = () => {
                             Cancel
                         </Button>
                         <Button onClick={handleSaveRiderPassword}>Save password</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Rider activity */}
+            <Modal
+                isOpen={!!riderActivityTarget}
+                onClose={() => { setRiderActivityTarget(null); setRiderActivity([]); }}
+                title={riderActivityTarget ? `Delivery activity — ${riderActivityTarget.name}` : 'Delivery activity'}
+                size="lg"
+            >
+                <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground font-mono">{riderActivityTarget?.phone_number}</p>
+                    {riderActivityLoading ? (
+                        <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>
+                    ) : riderActivity.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-6 text-center">No delivery activity found for this rider.</p>
+                    ) : (
+                        <div className="max-h-96 overflow-y-auto">
+                            <table className="w-full text-sm">
+                                <thead className="sticky top-0 bg-background">
+                                    <tr className="text-left text-xs text-muted-foreground border-b">
+                                        <th className="px-3 py-2">Order #</th>
+                                        <th className="px-3 py-2">Status</th>
+                                        <th className="px-3 py-2 text-right">Total</th>
+                                        <th className="px-3 py-2">Assigned</th>
+                                        <th className="px-3 py-2">Delivered</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {riderActivity.map((a) => (
+                                        <tr key={a.delivery_order_id} className="border-b last:border-0 hover:bg-muted/40">
+                                            <td className="px-3 py-2 font-medium">{a.order_number}</td>
+                                            <td className="px-3 py-2">
+                                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                    a.delivery_status === 'DELIVERED' ? 'bg-emerald-100 text-emerald-700' :
+                                                    a.delivery_status === 'ON_THE_WAY' ? 'bg-blue-100 text-blue-700' :
+                                                    a.delivery_status === 'PICKED' ? 'bg-amber-100 text-amber-700' :
+                                                    'bg-gray-100 text-gray-600'
+                                                }`}>
+                                                    {a.delivery_status}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-right font-mono">{Number(a.grand_total).toLocaleString()}</td>
+                                            <td className="px-3 py-2 text-muted-foreground">{a.assigned_at ? new Date(a.assigned_at).toLocaleString() : '—'}</td>
+                                            <td className="px-3 py-2 text-muted-foreground">{a.delivered_at ? new Date(a.delivered_at).toLocaleString() : '—'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    <div className="flex justify-end pt-2">
+                        <Button variant="secondary" onClick={() => { setRiderActivityTarget(null); setRiderActivity([]); }}>Close</Button>
                     </div>
                 </div>
             </Modal>

@@ -664,11 +664,14 @@ export class MobileOrderService {
                 deliveryOrderId: string;
             } | null = null;
             if (paymentMethod !== 'SelfCollection') {
-                deliveryAssign = await tryAutoAssignRiderForMobileOrder(client, tenantId, orderId, {
-                    deliveryLat: input.deliveryLat,
-                    deliveryLng: input.deliveryLng,
-                    assignedBranchId: assignedBranchId ?? effectiveBranchId,
-                });
+                const riderMode = settingsRes.length > 0 ? (settingsRes[0].rider_assignment_mode || 'auto') : 'auto';
+                if (riderMode !== 'manual') {
+                    deliveryAssign = await tryAutoAssignRiderForMobileOrder(client, tenantId, orderId, {
+                        deliveryLat: input.deliveryLat,
+                        deliveryLng: input.deliveryLng,
+                        assignedBranchId: assignedBranchId ?? effectiveBranchId,
+                    });
+                }
             }
 
             return {

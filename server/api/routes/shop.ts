@@ -132,6 +132,27 @@ router.put('/riders/:id/password', checkRole(['admin']), async (req: any, res) =
   }
 });
 
+router.patch('/riders/:id/active', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const isActive = req.body?.is_active;
+    if (typeof isActive !== 'boolean') return res.status(400).json({ error: 'is_active (boolean) is required' });
+    await getRiderService().setActiveStatus(req.tenantId, req.params.id, isActive);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.get('/riders/:id/activity', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
+    const rows = await getRiderService().getActivity(req.tenantId, req.params.id, limit);
+    res.json(rows);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // --- Warehouses ---
 router.get('/warehouses', async (req: any, res) => {
   try {

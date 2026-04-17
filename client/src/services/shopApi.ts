@@ -309,12 +309,31 @@ export interface ShopRider {
   updated_at?: string;
 }
 
+export interface RiderActivityRow {
+  delivery_order_id: string;
+  delivery_status: string;
+  assigned_at: string | null;
+  accepted_at: string | null;
+  picked_at: string | null;
+  delivered_at: string | null;
+  order_id: string;
+  order_number: string;
+  grand_total: number;
+  delivery_address: string | null;
+  payment_method: string | null;
+  order_created_at: string;
+}
+
 export const shopRiderApi = {
   getRiders: () => apiClient.get<ShopRider[]>('/shop/riders'),
   createRider: (data: { name: string; phone: string; password: string }) =>
     apiClient.post<{ id: string }>('/shop/riders', data),
   setRiderPassword: (id: string, password: string) =>
     apiClient.put<{ success: boolean }>(`/shop/riders/${encodeURIComponent(id)}/password`, { password }),
+  setRiderActive: (id: string, isActive: boolean) =>
+    apiClient.patch<{ success: boolean }>(`/shop/riders/${encodeURIComponent(id)}/active`, { is_active: isActive }),
+  getRiderActivity: (id: string, limit = 50) =>
+    apiClient.get<RiderActivityRow[]>(`/shop/riders/${encodeURIComponent(id)}/activity?limit=${limit}`),
 };
 
 // --- Accounting API ---

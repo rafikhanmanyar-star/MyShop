@@ -97,13 +97,14 @@ const LIVE_MAP_TAB = 'LiveMap';
 // ─── Main Page ────────────────────────────────────────────
 function MobileOrdersPageContent() {
     const {
-        orders, loading, error, sseConnected, newOrderCount, branding,
-        loadOrders, clearNewOrderCount, updateOrderStatus, collectPayment, loadBranding
+        orders, loading, error, sseConnected, newOrderCount, branding, settings,
+        loadOrders, clearNewOrderCount, updateOrderStatus, collectPayment, loadBranding, loadSettings
     } = useMobileOrders();
 
     useEffect(() => {
         loadBranding();
-    }, [loadBranding]);
+        loadSettings();
+    }, [loadBranding, loadSettings]);
 
     const [searchParams, setSearchParams] = useSearchParams();
     const orderIdFromUrl = searchParams.get('order');
@@ -730,6 +731,12 @@ function MobileOrdersPageContent() {
                                                         )}
                                                     </span>
                                                 )}
+                                                {!isRiderAssignedDelivery(order) && order.payment_method !== 'SelfCollection' && order.status !== 'Delivered' && order.status !== 'Cancelled' && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.65rem] sm:text-xs font-semibold border shrink-0 bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-300">
+                                                        <Users className="w-3 h-3 shrink-0" />
+                                                        No rider
+                                                    </span>
+                                                )}
                                             </div>
                                             <p className="text-xs text-muted-foreground">{formatDate(order.created_at)}</p>
                                             <div className="flex flex-col gap-2 text-xs sm:text-sm text-muted-foreground">
@@ -852,6 +859,7 @@ function MobileOrdersPageContent() {
                             }
                             onAssignRider={handleAssignRider}
                             assignLoadingOrderId={assignLoadingOrderId}
+                            riderAssignmentMode={settings?.rider_assignment_mode || 'auto'}
                         />
                     ) : (
                         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground min-h-[12rem] lg:min-h-0">
@@ -967,7 +975,7 @@ function MobileOrdersPageContent() {
 // ─── Order Detail Panel ───────────────────────────────────
 function OrderDetailPanel({
     order, onStatusUpdate, onCollectPayment, actionLoading, formatPrice, formatDate,
-    assignableRiders, onAssignRider, assignLoadingOrderId,
+    assignableRiders, onAssignRider, assignLoadingOrderId, riderAssignmentMode,
 }: {
     order: MobileOrder;
     onStatusUpdate: (id: string, status: string) => void;
@@ -978,6 +986,7 @@ function OrderDetailPanel({
     assignableRiders: { id: string; name: string }[];
     onAssignRider: (orderId: string, riderId: string) => void | Promise<void>;
     assignLoadingOrderId: string | null;
+    riderAssignmentMode: 'auto' | 'manual';
 }) {
     const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Pending;
     const DetailStatusIcon = cfg.icon;
@@ -1110,10 +1119,12 @@ function OrderDetailPanel({
                         <div className="rounded-xl border border-dashed border-indigo-300/80 bg-indigo-50/40 px-3 py-3 dark:border-indigo-700/50 dark:bg-indigo-950/25">
                             <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                                 <Truck className="w-3.5 h-3.5 shrink-0" />
-                                Manual rider assignment
+                                Assign rider
                             </h4>
                             <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-                                If no rider was auto-assigned at checkout, choose an available rider here. Only riders marked Available in the rider app can be selected.
+                                {riderAssignmentMode === 'manual'
+                                    ? 'Select an available rider to deliver this order. Only riders on shift in the rider app are listed.'
+                                    : 'No rider was auto-assigned at checkout. Choose an available rider here.'}
                             </p>
                             <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                                 <select
@@ -1897,6 +1908,37 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     />
                                     <span className="text-sm text-foreground leading-snug">Auto-confirm new orders (skip manual approval)</span>
                                 </label>
+                            </div>
+
+                            <div className="col-span-1 sm:col-span-2 lg:col-span-3">
+                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Rider assignment</label>
+                                <div className="flex gap-3">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="rider_assignment_mode"
+                                            checked={(localSettings.rider_assignment_mode || 'auto') === 'auto'}
+                                            onChange={() => setLocalSettings({ ...localSettings, rider_assignment_mode: 'auto' })}
+                                            className="w-4 h-4 text-indigo-600 border-gray-300 dark:border-slate-600 dark:bg-slate-800 focus:ring-indigo-500"
+                                        />
+                                        <span className="text-sm text-foreground">Auto-assign nearest rider</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="rider_assignment_mode"
+                                            checked={localSettings.rider_assignment_mode === 'manual'}
+                                            onChange={() => setLocalSettings({ ...localSettings, rider_assignment_mode: 'manual' })}
+                                            className="w-4 h-4 text-indigo-600 border-gray-300 dark:border-slate-600 dark:bg-slate-800 focus:ring-indigo-500"
+                                        />
+                                        <span className="text-sm text-foreground">Manual — assign from POS</span>
+                                    </label>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                                    {localSettings.rider_assignment_mode === 'manual'
+                                        ? 'Orders will arrive without a rider. Assign a rider manually from the order detail panel.'
+                                        : 'The nearest available rider is automatically assigned when the customer places an order.'}
+                                </p>
                             </div>
 
                             <div className="col-span-1 sm:col-span-2 lg:col-span-3">
