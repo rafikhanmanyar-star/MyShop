@@ -103,7 +103,7 @@ export async function runMigrations() {
 
       const executionTime = Date.now() - startTime;
       await db.execute(
-        'INSERT INTO schema_migrations (name, execution_time_ms) VALUES ($1, $2)',
+        'INSERT INTO schema_migrations (name, execution_time_ms) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING',
         [file, executionTime]
       );
       console.log(`✅ Applied: ${file} (${executionTime}ms)`);
@@ -116,7 +116,13 @@ export async function runMigrations() {
   console.log('✅ All migrations complete');
 }
 
-runMigrations().catch(err => {
-  console.error('Fatal migration error:', err);
-  process.exit(1);
-});
+// Only run directly when this script is the entry point (e.g. `tsx scripts/run-migrations.ts`).
+// When imported by index.ts, the top-level call must NOT fire — otherwise two concurrent
+// runMigrations() calls race and the second INSERT hits the schema_migrations unique constraint.
+const isDirectRun = process.argv[1]?.replace(/\\/g, '/').includes('run-migrations');
+if (isDirectRun) {
+  runMigrations().catch(err => {
+    console.error('Fatal migration error:', err);
+    process.exit(1);
+  });
+}
