@@ -1,6 +1,7 @@
 import { getDatabaseService } from './databaseService.js';
 import { getAccountingService } from './accountingService.js';
 import { COA } from '../constants/accountCodes.js';
+import { normalizePakistanMobileTo92Digits } from '../utils/pakistanMobile.js';
 
 export interface KhataLedgerEntry {
   id: string;
@@ -363,11 +364,14 @@ export class KhataService {
 
   async createCustomer(tenantId: string, data: { name: string; contact_no?: string; company_name?: string }): Promise<{ id: string; name: string; contact_no: string | null; company_name?: string | null }> {
     const id = `contact_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const storedPhone = data.contact_no
+      ? normalizePakistanMobileTo92Digits(data.contact_no) ?? data.contact_no
+      : null;
     const rows = await this.db.query(
       `INSERT INTO contacts (id, tenant_id, name, type, contact_no, company_name)
        VALUES ($1, $2, $3, 'Client', $4, $5)
        RETURNING id, name, contact_no, company_name`,
-      [id, tenantId, data.name, data.contact_no ?? null, data.company_name ?? null]
+      [id, tenantId, data.name, storedPhone, data.company_name ?? null]
     );
     const r = rows[0];
     try {

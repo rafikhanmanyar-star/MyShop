@@ -1,3 +1,4 @@
+/** Keep in sync with client/src/utils/pakistanMobile.ts and mobile/src/utils/pakistanMobile.ts */
 /** Pakistan mobile stored as digits only: country code 92 + 10 digits (12 characters total). */
 export const PK_MOBILE_92_DIGITS_REGEX = /^92\d{10}$/;
 
@@ -29,7 +30,7 @@ export function parsePakistanMobile(raw: string):
     return {
       ok: false,
       message:
-        'Use 12 digits: 92 and 10 digits (e.g. 923*********). Local numbers starting with 0 are adjusted automatically.',
+        'Enter your 11-digit mobile number starting with 03 (e.g. 0300 1234567). Numbers starting with 92 or 3 are also accepted.',
     };
   }
   return { ok: true, digits: n };

@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { authApi } from '../api';
 import { useApp } from '../context/AppContext';
 import { useOnline } from '../hooks/useOnline';
-import { parsePakistanMobile } from '../utils/pakistanMobile';
+import { parsePakistanMobile, PHONE_HELPER_TEXT } from '../utils/pakistanMobile';
 
 export default function ForgotPassword() {
     const { shopSlug } = useParams();
@@ -54,7 +54,7 @@ export default function ForgotPassword() {
                                 className="input"
                                 type="tel"
                                 inputMode="numeric"
-                                placeholder="923*********"
+                                placeholder="0300 1234567"
                                 value={phone}
                                 onChange={(e) => setPhone(e.target.value)}
                                 onBlur={() => {
@@ -62,6 +62,9 @@ export default function ForgotPassword() {
                                     if (p.ok) setPhone(p.digits);
                                 }}
                             />
+                            <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                {PHONE_HELPER_TEXT}
+                            </p>
                         </div>
                         <button
                             type="button"

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { BIProvider, useBI } from '../../context/BIContext';
 import ExecutiveOverview from './bi/ExecutiveOverview';
 import SalesAnalytics from './bi/SalesAnalytics';
@@ -7,13 +7,14 @@ import InventoryIntelligence from './bi/InventoryIntelligence';
 import ProfitabilityAnalysis from './bi/ProfitabilityAnalysis';
 import { ICONS } from '../../constants';
 
+const ProcurementDemand = lazy(() => import('./bi/ProcurementDemand'));
+
 const BIContent: React.FC = () => {
     const { dateRange, setDateRange } = useBI();
-    const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'inventory' | 'profit'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'inventory' | 'profit' | 'procurement'>('overview');
 
     const handleExport = () => {
         alert(`Exporting BI Report for ${dateRange}...`);
-        // In real app, trigger PDF/CSV generation here
     };
 
     const tabs = [
@@ -21,6 +22,7 @@ const BIContent: React.FC = () => {
         { id: 'sales', label: 'Sales Analytics', icon: ICONS.trendingUp },
         { id: 'inventory', label: 'Inventory Intelligence', icon: ICONS.package },
         { id: 'profit', label: 'Profitability Analysis', icon: ICONS.dollarSign },
+        { id: 'procurement', label: 'Procurement Demand', icon: ICONS.shoppingCart },
     ];
 
     return (
@@ -88,6 +90,11 @@ const BIContent: React.FC = () => {
                 {activeTab === 'sales' && <SalesAnalytics />}
                 {activeTab === 'inventory' && <InventoryIntelligence />}
                 {activeTab === 'profit' && <ProfitabilityAnalysis />}
+                {activeTab === 'procurement' && (
+                    <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" /></div>}>
+                        <ProcurementDemand />
+                    </Suspense>
+                )}
             </div>
         </div>
     );

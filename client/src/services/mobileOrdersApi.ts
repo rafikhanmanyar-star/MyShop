@@ -118,6 +118,32 @@ export interface ShopBranding {
     branch_location?: string | null;
 }
 
+export interface MobileOnlineUser {
+    customer_id: string;
+    customer_name: string | null;
+    customer_phone: string;
+    last_seen_at: string;
+    current_page: string | null;
+    cart_item_count: number;
+    cart_total: number;
+    registered_at: string;
+    last_login_at: string | null;
+}
+
+export interface MobileUsersStats {
+    online_now: number;
+    active_today: number;
+    total_registered: number;
+    browsing: number;
+    shopping: number;
+    total_cart_value: number;
+}
+
+export interface MobileOnlineUsersResponse {
+    users: MobileOnlineUser[];
+    stats: MobileUsersStats;
+}
+
 export const mobileOrdersApi = {
     // Orders
     getOrders: (status?: string) =>
@@ -134,8 +160,8 @@ export const mobileOrdersApi = {
         }),
     updateStatus: (id: string, status: string, note?: string) =>
         apiClient.put(`/shop/mobile-orders/${id}/status`, { status, note }),
-    collectPayment: (id: string, bankAccountId: string) =>
-        apiClient.put(`/shop/mobile-orders/${id}/collect-payment`, { bankAccountId }),
+    collectPayment: (id: string, bankAccountId?: string, paymentType?: 'khata') =>
+        apiClient.put(`/shop/mobile-orders/${id}/collect-payment`, { bankAccountId, paymentType }),
     markSynced: (id: string) =>
         apiClient.put(`/shop/mobile-orders/${id}/synced`),
 
@@ -170,6 +196,10 @@ export const mobileOrdersApi = {
     // QR Code (optional branchId for per-branch QR at branch door)
     getQRCode: (branchId?: string | null) =>
         apiClient.get<{ slug: string; url: string; qrData: string; branchId?: string | null }>(`/shop/mobile-orders/qr-code${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''}`),
+
+    // Online mobile users
+    getOnlineUsers: (thresholdMinutes?: number) =>
+        apiClient.get<MobileOnlineUsersResponse>(`/shop/mobile-orders/online-users${thresholdMinutes ? `?threshold=${thresholdMinutes}` : ''}`),
 
     // Product mobile visibility
     updateProductMobile: (id: string, data: {

@@ -474,6 +474,30 @@ router.get('/branches', mobileAuthMiddleware(db), async (req: any, res) => {
     }
 });
 
+// ─── Heartbeat: mobile PWA reports activity (page, cart size) ─────────
+router.post('/heartbeat', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { currentPage, cartItemCount, cartTotal } = req.body;
+        const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket?.remoteAddress || null;
+        const ua = req.headers['user-agent'] || null;
+        await db.execute(
+            `INSERT INTO mobile_customer_heartbeats (id, tenant_id, customer_id, last_seen_at, current_page, cart_item_count, cart_total, ip_address, user_agent)
+             VALUES (uuid_generate_v4()::text, $1, $2, NOW(), $3, $4, $5, $6, $7)
+             ON CONFLICT (tenant_id, customer_id) DO UPDATE
+             SET last_seen_at = NOW(),
+                 current_page = COALESCE($3, mobile_customer_heartbeats.current_page),
+                 cart_item_count = COALESCE($4, mobile_customer_heartbeats.cart_item_count),
+                 cart_total = COALESCE($5, mobile_customer_heartbeats.cart_total),
+                 ip_address = COALESCE($6, mobile_customer_heartbeats.ip_address),
+                 user_agent = COALESCE($7, mobile_customer_heartbeats.user_agent)`,
+            [req.tenantId, req.customerId, currentPage || null, cartItemCount ?? 0, cartTotal ?? 0, ip, ua]
+        );
+        res.json({ ok: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Profile
 router.get('/profile', mobileAuthMiddleware(db), async (req: any, res) => {
     try {

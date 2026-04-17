@@ -1,6 +1,7 @@
 import express from 'express';
 import { checkRole } from '../../middleware/roleMiddleware.js';
 import { getKhataService } from '../../services/khataService.js';
+import { normalizePakistanMobileTo92Digits } from '../../utils/pakistanMobile.js';
 
 const router = express.Router();
 
@@ -115,9 +116,16 @@ router.post('/customers', checkRole(['admin', 'pos_cashier', 'accountant']), asy
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'name is required' });
     }
+    let normalizedPhone: string | undefined;
+    if (contactNo != null) {
+      const trimmed = String(contactNo).trim();
+      if (trimmed) {
+        normalizedPhone = normalizePakistanMobileTo92Digits(trimmed) ?? trimmed;
+      }
+    }
     const created = await getKhataService().createCustomer(req.tenantId, {
       name: name.trim(),
-      contact_no: contactNo != null ? String(contactNo).trim() || undefined : undefined,
+      contact_no: normalizedPhone,
       company_name: companyName != null ? String(companyName).trim() || undefined : undefined,
     });
     res.status(201).json(created);

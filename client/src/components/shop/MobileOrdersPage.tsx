@@ -1,14 +1,15 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMobileOrders } from '../../context/MobileOrdersContext';
-import { mobileOrdersApi, MobileOrder, PosRidersOverview } from '../../services/mobileOrdersApi';
+import { mobileOrdersApi, MobileOrder, PosRidersOverview, MobileOnlineUser, MobileUsersStats } from '../../services/mobileOrdersApi';
 import { QRCodeSVG } from 'qrcode.react';
 import {
     Smartphone, RefreshCw, Package, Truck, Check, X, Clock,
     ChevronRight, WifiOff, Wifi, QrCode, Settings as SettingsIcon,
     Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
     Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
-    Banknote, Building2, Wallet, ExternalLink,     Navigation, Users,
+    Banknote, Building2, Wallet, ExternalLink, Navigation, Users,
+    ShoppingCart, Activity, UserCheck, Globe, CircleDot, BookOpen,
 } from 'lucide-react';
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
@@ -93,11 +94,45 @@ function isRiderAssignedDelivery(order: Pick<MobileOrder, 'payment_method' | 'ri
 
 const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Unpaid', 'Cancelled'];
 const LIVE_MAP_TAB = 'LiveMap';
+const MOBILE_USERS_TAB = 'MobileUsers';
+
+const PAGE_LABELS: Record<string, { label: string; color: string }> = {
+    home: { label: 'Home', color: 'text-slate-600 dark:text-slate-300' },
+    browsing_products: { label: 'Browsing Products', color: 'text-blue-600 dark:text-blue-400' },
+    viewing_product: { label: 'Viewing Product', color: 'text-blue-700 dark:text-blue-300' },
+    viewing_cart: { label: 'Viewing Cart', color: 'text-amber-600 dark:text-amber-400' },
+    checkout: { label: 'Checkout', color: 'text-emerald-600 dark:text-emerald-400' },
+    browsing_offers: { label: 'Browsing Offers', color: 'text-purple-600 dark:text-purple-400' },
+    viewing_offer: { label: 'Viewing Offer', color: 'text-purple-700 dark:text-purple-300' },
+    viewing_orders: { label: 'My Orders', color: 'text-indigo-600 dark:text-indigo-400' },
+    viewing_order: { label: 'Order Detail', color: 'text-indigo-700 dark:text-indigo-300' },
+    tracking_order: { label: 'Tracking Order', color: 'text-cyan-600 dark:text-cyan-400' },
+    account_settings: { label: 'Account', color: 'text-slate-500 dark:text-slate-400' },
+    budget: { label: 'Budget', color: 'text-teal-600 dark:text-teal-400' },
+    notifications: { label: 'Notifications', color: 'text-rose-600 dark:text-rose-400' },
+};
+
+function formatPageLabel(page: string | null): { label: string; color: string } {
+    if (!page) return { label: 'Unknown', color: 'text-muted-foreground' };
+    const found = PAGE_LABELS[page];
+    if (found) return found;
+    return { label: page.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), color: 'text-muted-foreground' };
+}
+
+function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const secs = Math.floor(diff / 1000);
+    if (secs < 60) return 'Just now';
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    return `${hrs}h ${mins % 60}m ago`;
+}
 
 // ─── Main Page ────────────────────────────────────────────
 function MobileOrdersPageContent() {
     const {
-        orders, loading, error, sseConnected, newOrderCount, branding, settings,
+        orders, loading, error, sseConnected, newOrderCount, branding, settings, userActivityTick,
         loadOrders, clearNewOrderCount, updateOrderStatus, collectPayment, loadBranding, loadSettings
     } = useMobileOrders();
 
@@ -115,8 +150,9 @@ function MobileOrdersPageContent() {
     const [detailLoading, setDetailLoading] = useState(false);
     const [actionLoading, setActionLoading] = useState('');
     const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-    const [paymentModal, setPaymentModal] = useState<{ orderId: string; orderNumber: string; grandTotal: number } | null>(null);
+    const [paymentModal, setPaymentModal] = useState<{ orderId: string; orderNumber: string; grandTotal: number; customerId?: string; customerName?: string } | null>(null);
     const [selectedBankAccount, setSelectedBankAccount] = useState('');
+    const [paymentType, setPaymentType] = useState<'bank' | 'khata'>('bank');
     const [paymentLoading, setPaymentLoading] = useState(false);
     const [passwordResetRequests, setPasswordResetRequests] = useState<
         { id: string; phone_number: string; status: string; created_at: string }[]
@@ -130,6 +166,9 @@ function MobileOrdersPageContent() {
     const [ridersOverview, setRidersOverview] = useState<PosRidersOverview | null>(null);
     const [ridersOverviewLoading, setRidersOverviewLoading] = useState(false);
     const [assignLoadingOrderId, setAssignLoadingOrderId] = useState<string | null>(null);
+    const [onlineUsers, setOnlineUsers] = useState<MobileOnlineUser[]>([]);
+    const [onlineUsersStats, setOnlineUsersStats] = useState<MobileUsersStats | null>(null);
+    const [onlineUsersLoading, setOnlineUsersLoading] = useState(false);
 
     const loadRidersOverview = useCallback(async () => {
         setRidersOverviewLoading(true);
@@ -143,13 +182,28 @@ function MobileOrdersPageContent() {
         }
     }, []);
 
+    const loadOnlineUsers = useCallback(async () => {
+        setOnlineUsersLoading(true);
+        try {
+            const data = await mobileOrdersApi.getOnlineUsers(5);
+            setOnlineUsers(data.users);
+            setOnlineUsersStats(data.stats);
+        } catch {
+            setOnlineUsers([]);
+            setOnlineUsersStats(null);
+        } finally {
+            setOnlineUsersLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         shopApi.getBankAccounts().then(setBankAccounts).catch(() => {});
     }, []);
 
     useEffect(() => {
         loadRidersOverview();
-    }, [loadRidersOverview]);
+        loadOnlineUsers();
+    }, [loadRidersOverview, loadOnlineUsers]);
 
     useEffect(() => {
         let cancelled = false;
@@ -172,13 +226,27 @@ function MobileOrdersPageContent() {
     }, []);
 
     useEffect(() => {
-        if (statusFilter === LIVE_MAP_TAB) {
+        if (statusFilter === MOBILE_USERS_TAB) {
+            loadOnlineUsers();
+        } else if (statusFilter === LIVE_MAP_TAB) {
             loadOrders(undefined);
         } else {
             loadOrders(statusFilter === 'All' ? undefined : statusFilter);
         }
         clearNewOrderCount();
     }, [statusFilter]);
+
+    useEffect(() => {
+        if (statusFilter !== MOBILE_USERS_TAB) return;
+        const id = window.setInterval(() => void loadOnlineUsers(), 15_000);
+        return () => clearInterval(id);
+    }, [statusFilter, loadOnlineUsers]);
+
+    useEffect(() => {
+        if (statusFilter === MOBILE_USERS_TAB && userActivityTick > 0) {
+            loadOnlineUsers();
+        }
+    }, [userActivityTick]);
 
     useEffect(() => {
         if (statusFilter !== LIVE_MAP_TAB) return;
@@ -354,6 +422,7 @@ function MobileOrdersPageContent() {
             Number.isFinite(Number(o.delivery_lng))
     ).length;
     const isLiveMapView = statusFilter === LIVE_MAP_TAB;
+    const isMobileUsersView = statusFilter === MOBILE_USERS_TAB;
 
     return (
         <div className="flex w-full min-w-0 flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800">
@@ -390,7 +459,9 @@ function MobileOrdersPageContent() {
                                     )}
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-0.5 hidden sm:block">
-                                    {statusFilter === LIVE_MAP_TAB
+                                    {statusFilter === MOBILE_USERS_TAB
+                                        ? 'Real-time view of mobile app customers — see who is online, browsing, or adding to cart'
+                                        : statusFilter === LIVE_MAP_TAB
                                         ? 'Live positions refresh every 15s. Pick an order to see route and ETA on the map.'
                                         : 'Select an order to view the full bill on the right'}
                                 </p>
@@ -451,17 +522,21 @@ function MobileOrdersPageContent() {
                             <button
                                 type="button"
                                 onClick={() => {
-                                    loadOrders(
-                                        statusFilter === LIVE_MAP_TAB || statusFilter === 'All'
-                                            ? undefined
-                                            : statusFilter
-                                    );
-                                    loadRidersOverview();
+                                    if (statusFilter === MOBILE_USERS_TAB) {
+                                        loadOnlineUsers();
+                                    } else {
+                                        loadOrders(
+                                            statusFilter === LIVE_MAP_TAB || statusFilter === 'All'
+                                                ? undefined
+                                                : statusFilter
+                                        );
+                                        loadRidersOverview();
+                                    }
                                 }}
                                 className="p-2.5 bg-muted/80 dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl hover:bg-muted dark:hover:bg-slate-700/80 transition-colors shrink-0"
                                 title="Refresh"
                             >
-                                <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading || ridersOverviewLoading ? 'animate-spin' : ''}`} />
+                                <RefreshCw className={`w-4 h-4 text-muted-foreground ${loading || ridersOverviewLoading || onlineUsersLoading ? 'animate-spin' : ''}`} />
                             </button>
                         </div>
                     </div>
@@ -509,6 +584,28 @@ function MobileOrdersPageContent() {
                             >
                                 {mapReadyCount}
                             </span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setStatusFilter(MOBILE_USERS_TAB)}
+                            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all border shrink-0
+                                ${
+                                    statusFilter === MOBILE_USERS_TAB
+                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/15 dark:shadow-emerald-900/30'
+                                        : 'bg-muted/50 dark:bg-slate-800/90 text-muted-foreground border-border dark:border-slate-600 hover:border-emerald-300 dark:hover:border-emerald-500/40'
+                                }`}
+                        >
+                            <Activity className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 opacity-90" />
+                            Mobile Users
+                            {onlineUsersStats && onlineUsersStats.online_now > 0 && (
+                                <span
+                                    className={`text-[0.65rem] sm:text-xs tabular-nums px-1.5 py-0.5 rounded-full ${
+                                        statusFilter === MOBILE_USERS_TAB ? 'bg-white/20' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
+                                    }`}
+                                >
+                                    {onlineUsersStats.online_now}
+                                </span>
+                            )}
                         </button>
                     </div>
                 </div>
@@ -626,6 +723,14 @@ function MobileOrdersPageContent() {
                         </ul>
                     </div>
                 )}
+                {isMobileUsersView ? (
+                    <MobileUsersPanel
+                        users={onlineUsers}
+                        stats={onlineUsersStats}
+                        loading={onlineUsersLoading}
+                        onRefresh={loadOnlineUsers}
+                    />
+                ) : (
                 <div
                     className={`flex min-h-0 flex-1 flex-col gap-4 ${
                         isLiveMapView ? 'xl:flex-row xl:gap-5' : 'lg:flex-row lg:gap-6'
@@ -803,8 +908,9 @@ function MobileOrdersPageContent() {
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    setPaymentModal({ orderId: order.id, orderNumber: order.order_number, grandTotal: parseFloat(String(order.grand_total)) });
+                                                    setPaymentModal({ orderId: order.id, orderNumber: order.order_number, grandTotal: parseFloat(String(order.grand_total)), customerId: order.customer_id, customerName: order.customer_name });
                                                     setSelectedBankAccount('');
+                                                    setPaymentType('bank');
                                                 }}
                                                 className="w-full flex items-center justify-center gap-1.5 py-2 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition-colors"
                                             >
@@ -846,8 +952,9 @@ function MobileOrdersPageContent() {
                             order={detailOrder}
                             onStatusUpdate={handleStatusUpdate}
                             onCollectPayment={(o) => {
-                                setPaymentModal({ orderId: o.id, orderNumber: o.order_number, grandTotal: parseFloat(String(o.grand_total)) });
+                                setPaymentModal({ orderId: o.id, orderNumber: o.order_number, grandTotal: parseFloat(String(o.grand_total)), customerId: o.customer_id, customerName: o.customer_name });
                                 setSelectedBankAccount('');
+                                setPaymentType('bank');
                             }}
                             actionLoading={actionLoading}
                             formatPrice={formatPrice}
@@ -871,6 +978,7 @@ function MobileOrdersPageContent() {
                     </div>
                 </div>
             </div>
+                )}
 
             {/* Payment Collection Modal */}
             {paymentModal && (
@@ -894,45 +1002,88 @@ function MobileOrdersPageContent() {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Deposit To Account</label>
-                                {bankAccounts.length === 0 ? (
-                                    <p className="text-sm text-red-500 dark:text-red-400">No bank accounts found. Create one in Settings first.</p>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {bankAccounts.map((acc: any) => (
-                                            <label
-                                                key={acc.id}
-                                                className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                                                    selectedBankAccount === acc.id
-                                                        ? 'border-orange-400 bg-orange-50 dark:border-orange-600 dark:bg-orange-950/40'
-                                                        : 'border-border dark:border-slate-600 hover:border-orange-200 dark:hover:border-orange-600/50'
-                                                }`}
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    name="bankAccount"
-                                                    value={acc.id}
-                                                    checked={selectedBankAccount === acc.id}
-                                                    onChange={() => setSelectedBankAccount(acc.id)}
-                                                    className="sr-only"
-                                                />
-                                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                                                    selectedBankAccount === acc.id ? 'bg-orange-100 text-orange-600 dark:bg-orange-950/80 dark:text-orange-400' : 'bg-muted text-muted-foreground dark:bg-slate-800'
-                                                }`}>
-                                                    {acc.account_type === 'Cash' ? <Wallet className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-bold text-foreground truncate">{acc.name}</p>
-                                                    <p className="text-xs text-muted-foreground uppercase">{acc.account_type} {acc.chart_code ? `• ${acc.chart_code}` : acc.code ? `• ${acc.code}` : ''}</p>
-                                                </div>
-                                                <span className="text-xs font-mono font-bold text-muted-foreground">
-                                                    PKR {(parseFloat(acc.balance) || 0).toLocaleString()}
-                                                </span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                )}
+                                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Payment Type</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setPaymentType('bank'); }}
+                                        className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+                                            paymentType === 'bank'
+                                                ? 'border-orange-400 bg-orange-50 text-orange-700 dark:border-orange-600 dark:bg-orange-950/40 dark:text-orange-300'
+                                                : 'border-border dark:border-slate-600 text-muted-foreground hover:border-orange-200 dark:hover:border-orange-600/50'
+                                        }`}
+                                    >
+                                        <Wallet className="w-4 h-4" />
+                                        Cash / Bank
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setPaymentType('khata'); setSelectedBankAccount(''); }}
+                                        className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
+                                            paymentType === 'khata'
+                                                ? 'border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-950/40 dark:text-amber-300'
+                                                : 'border-border dark:border-slate-600 text-muted-foreground hover:border-amber-200 dark:hover:border-amber-600/50'
+                                        }`}
+                                    >
+                                        <BookOpen className="w-4 h-4" />
+                                        Khata / Credit
+                                    </button>
+                                </div>
                             </div>
+
+                            {paymentType === 'khata' ? (
+                                <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                        <span className="text-sm font-bold text-amber-800 dark:text-amber-300">Khata / Credit</span>
+                                    </div>
+                                    <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                                        Amount of <strong>{formatPrice(paymentModal.grandTotal)}</strong> will be added as a debit entry
+                                        to <strong>{paymentModal.customerName || 'this customer'}</strong>&apos;s khata account.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div>
+                                    <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Deposit To Account</label>
+                                    {bankAccounts.length === 0 ? (
+                                        <p className="text-sm text-red-500 dark:text-red-400">No bank accounts found. Create one in Settings first.</p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {bankAccounts.map((acc: any) => (
+                                                <label
+                                                    key={acc.id}
+                                                    className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                                                        selectedBankAccount === acc.id
+                                                            ? 'border-orange-400 bg-orange-50 dark:border-orange-600 dark:bg-orange-950/40'
+                                                            : 'border-border dark:border-slate-600 hover:border-orange-200 dark:hover:border-orange-600/50'
+                                                    }`}
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="bankAccount"
+                                                        value={acc.id}
+                                                        checked={selectedBankAccount === acc.id}
+                                                        onChange={() => setSelectedBankAccount(acc.id)}
+                                                        className="sr-only"
+                                                    />
+                                                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                                                        selectedBankAccount === acc.id ? 'bg-orange-100 text-orange-600 dark:bg-orange-950/80 dark:text-orange-400' : 'bg-muted text-muted-foreground dark:bg-slate-800'
+                                                    }`}>
+                                                        {acc.account_type === 'Cash' ? <Wallet className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-bold text-foreground truncate">{acc.name}</p>
+                                                        <p className="text-xs text-muted-foreground uppercase">{acc.account_type} {acc.chart_code ? `• ${acc.chart_code}` : acc.code ? `• ${acc.code}` : ''}</p>
+                                                    </div>
+                                                    <span className="text-xs font-mono font-bold text-muted-foreground">
+                                                        PKR {(parseFloat(acc.balance) || 0).toLocaleString()}
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         <div className="p-4 border-t border-border dark:border-slate-600 flex gap-3">
                             <button
@@ -943,10 +1094,14 @@ function MobileOrdersPageContent() {
                             </button>
                             <button
                                 onClick={async () => {
-                                    if (!selectedBankAccount) { alert('Please select a deposit account'); return; }
+                                    if (paymentType === 'bank' && !selectedBankAccount) { alert('Please select a deposit account'); return; }
                                     setPaymentLoading(true);
                                     try {
-                                        await collectPayment(paymentModal.orderId, selectedBankAccount);
+                                        await collectPayment(
+                                            paymentModal.orderId,
+                                            paymentType === 'khata' ? undefined : selectedBankAccount,
+                                            paymentType === 'khata' ? 'khata' : undefined,
+                                        );
                                         setPaymentModal(null);
                                         if (detailOrder?.id === paymentModal.orderId) {
                                             const updated = await mobileOrdersApi.getOrder(paymentModal.orderId);
@@ -957,16 +1112,198 @@ function MobileOrdersPageContent() {
                                     }
                                     setPaymentLoading(false);
                                 }}
-                                disabled={!selectedBankAccount || paymentLoading}
-                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-bold hover:bg-orange-600 transition-colors disabled:opacity-50"
+                                disabled={(paymentType === 'bank' && !selectedBankAccount) || paymentLoading}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-50 ${
+                                    paymentType === 'khata'
+                                        ? 'bg-amber-500 hover:bg-amber-600'
+                                        : 'bg-orange-500 hover:bg-orange-600'
+                                }`}
                             >
                                 {paymentLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                                Confirm Payment
+                                {paymentType === 'khata' ? 'Confirm Khata' : 'Confirm Payment'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
+            </div>
+        </div>
+    );
+}
+
+// ─── Mobile Users Panel ──────────────────────────────────
+function MobileUsersPanel({
+    users,
+    stats,
+    loading,
+    onRefresh,
+}: {
+    users: MobileOnlineUser[];
+    stats: MobileUsersStats | null;
+    loading: boolean;
+    onRefresh: () => void;
+}) {
+    const formatPrice = (p: any) => {
+        const n = Number(p);
+        return `PKR ${Number.isFinite(n) ? n.toLocaleString() : '0'}`;
+    };
+
+    return (
+        <div className="flex min-h-0 flex-1 flex-col gap-5">
+            {/* Stats Cards */}
+            {stats && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 shrink-0">
+                    <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-700 p-4 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center">
+                                <CircleDot className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">Online Now</span>
+                        </div>
+                        <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{stats.online_now}</p>
+                    </div>
+                    <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-700 p-4 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950/60 flex items-center justify-center">
+                                <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">Browsing</span>
+                        </div>
+                        <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">{stats.browsing}</p>
+                    </div>
+                    <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-700 p-4 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/60 flex items-center justify-center">
+                                <ShoppingCart className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">Shopping</span>
+                        </div>
+                        <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 tabular-nums">{stats.shopping}</p>
+                    </div>
+                    <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-700 p-4 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 flex items-center justify-center">
+                                <Banknote className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">Cart Value</span>
+                        </div>
+                        <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">{formatPrice(stats.total_cart_value)}</p>
+                    </div>
+                    <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-700 p-4 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-950/60 flex items-center justify-center">
+                                <Activity className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">Active Today</span>
+                        </div>
+                        <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 tabular-nums">{stats.active_today}</p>
+                    </div>
+                    <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-700 p-4 space-y-1">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                <UserCheck className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+                            </div>
+                            <span className="text-xs font-medium text-muted-foreground">Registered</span>
+                        </div>
+                        <p className="text-2xl font-bold text-foreground tabular-nums">{stats.total_registered}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Users List */}
+            <div className="min-h-0 flex-1 overflow-auto custom-scrollbar [scrollbar-gutter:stable]">
+                {loading && users.length === 0 ? (
+                    <div className="flex items-center justify-center h-64">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600 dark:border-emerald-400" />
+                    </div>
+                ) : users.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                        <Users className="w-16 h-16 mb-4 opacity-20" />
+                        <p className="text-lg font-semibold">No mobile users online</p>
+                        <p className="text-sm mt-1">When customers use the mobile app, they will appear here in real-time</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {users.map((user) => {
+                            const page = formatPageLabel(user.current_page);
+                            const cartItems = parseInt(String(user.cart_item_count)) || 0;
+                            const cartTotal = parseFloat(String(user.cart_total)) || 0;
+                            const hasCart = cartItems > 0;
+
+                            return (
+                                <div
+                                    key={user.customer_id}
+                                    className={`bg-card dark:bg-slate-900/90 rounded-2xl border p-4 transition-all ${
+                                        hasCart
+                                            ? 'border-amber-200 dark:border-amber-800/60 shadow-sm shadow-amber-100/50 dark:shadow-amber-950/30'
+                                            : 'border-border dark:border-slate-700'
+                                    }`}
+                                >
+                                    <div className="flex items-start gap-3">
+                                        {/* Avatar / status indicator */}
+                                        <div className="relative shrink-0">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                                hasCart
+                                                    ? 'bg-amber-100 dark:bg-amber-950/60'
+                                                    : 'bg-emerald-100 dark:bg-emerald-950/60'
+                                            }`}>
+                                                <User className={`w-5 h-5 ${
+                                                    hasCart ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+                                                }`} />
+                                            </div>
+                                            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-card dark:border-slate-900" />
+                                        </div>
+
+                                        {/* User info */}
+                                        <div className="min-w-0 flex-1 space-y-1.5">
+                                            <div className="flex items-baseline justify-between gap-2">
+                                                <p className="text-sm font-bold text-foreground truncate">
+                                                    {user.customer_name || 'Anonymous'}
+                                                </p>
+                                                <span className="text-[0.65rem] text-muted-foreground whitespace-nowrap shrink-0">
+                                                    {timeAgo(user.last_seen_at)}
+                                                </span>
+                                            </div>
+
+                                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                                <Phone className="w-3 h-3 shrink-0" />
+                                                <span className="font-mono">{user.customer_phone}</span>
+                                            </p>
+
+                                            {/* Current activity */}
+                                            <div className="flex items-center gap-1.5">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.65rem] font-semibold border ${
+                                                    user.current_page === 'checkout'
+                                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-300'
+                                                        : user.current_page === 'viewing_cart'
+                                                        ? 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-300'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-800/50 dark:border-slate-600 dark:text-slate-300'
+                                                }`}>
+                                                    <CircleDot className="w-2.5 h-2.5 shrink-0" />
+                                                    {page.label}
+                                                </span>
+                                            </div>
+
+                                            {/* Cart info */}
+                                            {hasCart && (
+                                                <div className="flex items-center gap-2 mt-1 p-2 rounded-lg bg-amber-50/80 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/40">
+                                                    <ShoppingCart className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                                    <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                                                        {cartItems} {cartItems === 1 ? 'item' : 'items'}
+                                                    </span>
+                                                    <span className="text-amber-400 dark:text-amber-600">·</span>
+                                                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300 tabular-nums">
+                                                        {formatPrice(cartTotal)}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );

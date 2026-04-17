@@ -26,6 +26,12 @@ import PWAReloadPrompt from './components/PWAReloadPrompt';
 import OfflineBanner from './components/OfflineBanner';
 import { processOrderQueue, subscribeToOnline } from './services/orderSyncService';
 import { processPendingProductQueue } from './services/productSyncService';
+import { useHeartbeat } from './hooks/useHeartbeat';
+
+function HeartbeatReporter() {
+  useHeartbeat();
+  return null;
+}
 
 function LoyaltyBootstrap() {
   const { state, refreshLoyalty } = useApp();
@@ -73,6 +79,7 @@ export default function App() {
     <AppProvider>
       <OfflineBanner />
       <LoyaltyBootstrap />
+      <HeartbeatReporter />
       <SyncOnOnline />
       <Routes>
         {/* Shop slug entry point — loads shop branding */}

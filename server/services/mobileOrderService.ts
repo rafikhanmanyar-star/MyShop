@@ -1198,6 +1198,80 @@ export class MobileOrderService {
         });
     }
 
+    // ─── Collect Payment via Khata (Delivered → Paid on credit) ─────────
+
+    async collectPaymentKhata(tenantId: string, orderId: string, changedBy: string) {
+        const orders = await this.db.query(
+            'SELECT id, status, payment_status, customer_id, grand_total, order_number FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
+            [orderId, tenantId]
+        );
+        if (orders.length === 0) throw new Error('Order not found');
+        const order = orders[0];
+
+        if (order.status !== 'Delivered') {
+            throw new Error('Only delivered orders can have payment collected');
+        }
+        if (order.payment_status === 'Paid') {
+            throw new Error('Payment has already been collected for this order');
+        }
+        if (!order.customer_id) {
+            throw new Error('Order has no customer — khata requires a customer');
+        }
+
+        const custRows = await this.db.query(
+            'SELECT id, pos_contact_id, name, phone_number FROM customers WHERE id = $1 AND tenant_id = $2',
+            [order.customer_id, tenantId]
+        );
+        if (custRows.length === 0) throw new Error('Customer record not found');
+        const customer = custRows[0];
+
+        let contactId = customer.pos_contact_id;
+
+        if (!contactId) {
+            const contactRes = await this.db.query(
+                `INSERT INTO contacts (tenant_id, name, contact_no, type, address)
+                 VALUES ($1, $2, $3, 'Customer', NULL)
+                 RETURNING id`,
+                [tenantId, customer.name, customer.phone_number]
+            );
+            contactId = contactRes[0].id;
+            await this.db.query(
+                'UPDATE customers SET pos_contact_id = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3',
+                [contactId, customer.id, tenantId]
+            );
+        }
+
+        const grandTotal = parseFloat(order.grand_total);
+
+        return this.db.transaction(async (client: any) => {
+            // 1. Mark order as Paid
+            await client.query(
+                `UPDATE mobile_orders SET payment_status = 'Paid', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+                [orderId, tenantId]
+            );
+
+            // 2. Insert khata debit entry (order_id is NULL since khata_ledger FK references shop_sales)
+            await client.query(
+                `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note)
+                 VALUES ($1, $2, NULL, 'debit', $3, $4)`,
+                [tenantId, contactId, grandTotal, `Mobile Order ${order.order_number}`]
+            );
+
+            // 3. GL: Debit Trade Receivables, Credit Accounts Receivable (no cash movement)
+            // Trade Receivables stays debited — the AR that was booked at order creation is now khata
+            // No bank balance update needed
+
+            // 4. Record in status history
+            await client.query(
+                `INSERT INTO mobile_order_status_history (id, tenant_id, order_id, from_status, to_status, changed_by, changed_by_type, note)
+                 VALUES ($1, $2, $3, 'Unpaid', 'Paid', $4, 'shop_user', $5)`,
+                [generateId('mosh'), tenantId, orderId, changedBy, 'Payment via Khata / Credit']
+            );
+
+            return { success: true, orderId, paymentStatus: 'Paid', paymentType: 'khata' };
+        });
+    }
+
     // ─── POS-side queries ──────────────────────────────────────────────
 
     async getMobileOrdersForPOS(tenantId: string, status?: string) {

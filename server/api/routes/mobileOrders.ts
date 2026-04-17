@@ -45,6 +45,7 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
             await pgClient.query('LISTEN new_mobile_order');
             await pgClient.query('LISTEN mobile_order_updated');
             await pgClient.query('LISTEN password_reset_request');
+            await pgClient.query('LISTEN mobile_user_activity');
 
             pgClient.on('notification', (msg: any) => {
                 try {
@@ -57,6 +58,8 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
                         res.write(`data: ${JSON.stringify({ type: 'order_updated', ...payload })}\n\n`);
                     } else if (msg.channel === 'password_reset_request') {
                         res.write(`data: ${JSON.stringify({ type: 'password_reset_request', ...payload })}\n\n`);
+                    } else if (msg.channel === 'mobile_user_activity') {
+                        res.write(`data: ${JSON.stringify({ type: 'mobile_user_activity', ...payload })}\n\n`);
                     }
                 } catch (err) {
                     console.error('SSE notification parse error:', err);
@@ -74,6 +77,7 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
             pgClient.query('UNLISTEN new_mobile_order').catch(() => { });
             pgClient.query('UNLISTEN mobile_order_updated').catch(() => { });
             pgClient.query('UNLISTEN password_reset_request').catch(() => { });
+            pgClient.query('UNLISTEN mobile_user_activity').catch(() => { });
             pgClient.release();
         }
     });
@@ -232,6 +236,60 @@ router.get('/qr-code', checkRole(['admin']), async (req: any, res) => {
     }
 });
 
+// ─── Online Mobile Users (POS view) ─────────────────────────────────
+router.get('/online-users', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const db = getDatabaseService();
+        const thresholdMinutes = parseInt(req.query.threshold as string) || 5;
+
+        const users = await db.query(
+            `SELECT
+                h.customer_id,
+                h.last_seen_at,
+                h.current_page,
+                h.cart_item_count,
+                h.cart_total,
+                c.name AS customer_name,
+                c.phone AS customer_phone,
+                c.created_at AS registered_at,
+                c.last_login_at
+             FROM mobile_customer_heartbeats h
+             INNER JOIN mobile_customers c ON c.id = h.customer_id AND c.tenant_id = h.tenant_id
+             WHERE h.tenant_id = $1
+               AND h.last_seen_at > NOW() - INTERVAL '1 minute' * $2
+             ORDER BY h.last_seen_at DESC`,
+            [req.tenantId, thresholdMinutes]
+        );
+
+        const totalRegistered = await db.query(
+            'SELECT COUNT(*) AS count FROM mobile_customers WHERE tenant_id = $1',
+            [req.tenantId]
+        );
+
+        const todayActive = await db.query(
+            `SELECT COUNT(*) AS count FROM mobile_customer_heartbeats
+             WHERE tenant_id = $1 AND last_seen_at > NOW() - INTERVAL '24 hours'`,
+            [req.tenantId]
+        );
+
+        const withCarts = users.filter((u: any) => (parseInt(u.cart_item_count) || 0) > 0);
+
+        res.json({
+            users,
+            stats: {
+                online_now: users.length,
+                active_today: parseInt(todayActive[0]?.count) || 0,
+                total_registered: parseInt(totalRegistered[0]?.count) || 0,
+                browsing: users.filter((u: any) => (parseInt(u.cart_item_count) || 0) === 0).length,
+                shopping: withCarts.length,
+                total_cart_value: withCarts.reduce((s: number, u: any) => s + (parseFloat(u.cart_total) || 0), 0),
+            },
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ─── Unsynced orders ────────────────────────────────────────────────
 router.get('/unsynced', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
     try {
@@ -341,7 +399,13 @@ router.post('/:id/assign-rider', checkRole(['admin', 'pos_cashier']), async (req
 // ─── Collect Payment (Delivered → Paid) ─────────────────────────────
 router.put('/:id/collect-payment', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
     try {
-        const { bankAccountId } = req.body;
+        const { bankAccountId, paymentType } = req.body;
+        if (paymentType === 'khata') {
+            const result = await getMobileOrderService().collectPaymentKhata(
+                req.tenantId, req.params.id, req.userId
+            );
+            return res.json(result);
+        }
         if (!bankAccountId) return res.status(400).json({ error: 'bankAccountId is required' });
 
         const result = await getMobileOrderService().collectPayment(

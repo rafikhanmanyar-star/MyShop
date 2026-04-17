@@ -112,9 +112,14 @@ const MemberDirectory: React.FC = () => {
 
     const filteredMembers = useMemo(() => {
         return members.filter(m => {
-            const nameMatch = (m.customerName || '').toLowerCase().includes(searchQuery.toLowerCase());
-            const cardMatch = (m.cardNumber || '').toLowerCase().includes(searchQuery.toLowerCase());
-            const phoneMatch = (m.phone || '').includes(searchQuery);
+            const q = searchQuery.toLowerCase();
+            const nameMatch = (m.customerName || '').toLowerCase().includes(q);
+            const cardMatch = (m.cardNumber || '').toLowerCase().includes(q);
+            const searchDigits = searchQuery.replace(/\D/g, '');
+            const memberDigits = (m.phone || '').replace(/\D/g, '');
+            const phoneMatch = searchDigits.length >= 3
+                ? memberDigits.includes(searchDigits) || memberDigits.endsWith(searchDigits)
+                : (m.phone || '').includes(searchQuery);
 
             const matchesSearch = nameMatch || cardMatch || phoneMatch;
 

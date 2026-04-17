@@ -493,6 +493,23 @@ export const procurementApi = {
   },
 };
 
+// --- Procurement Demand (Smart Procurement) API ---
+export const procurementDemandApi = {
+  analyze: (params?: { salesWindowDays?: number; minimumDaysThreshold?: number; targetStockDays?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.salesWindowDays != null) q.set('salesWindowDays', String(params.salesWindowDays));
+    if (params?.minimumDaysThreshold != null) q.set('minimumDaysThreshold', String(params.minimumDaysThreshold));
+    if (params?.targetStockDays != null) q.set('targetStockDays', String(params.targetStockDays));
+    const qs = q.toString();
+    return apiClient.get<any>(`/shop/procurement/demand/analyze${qs ? `?${qs}` : ''}`);
+  },
+  saveDraft: (data: { name: string; items: any[]; settings: any }) =>
+    apiClient.post<{ id: string }>('/shop/procurement/demand/drafts', data),
+  getDrafts: () => apiClient.get<any[]>('/shop/procurement/demand/drafts'),
+  getDraftById: (id: string) => apiClient.get<any>(`/shop/procurement/demand/drafts/${id}`),
+  deleteDraft: (id: string) => apiClient.delete(`/shop/procurement/demand/drafts/${id}`),
+};
+
 // --- Data export/import (Settings → Data) ---
 export interface ImportRowError {
   row: number;

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext';
 import { authApi, getFullImageUrl } from '../api';
 import { useOnline } from '../hooks/useOnline';
-import { parsePakistanMobile } from '../utils/pakistanMobile';
+import { parsePakistanMobile, PHONE_HELPER_TEXT } from '../utils/pakistanMobile';
 
 type Mode = 'login' | 'register';
 
@@ -137,7 +137,7 @@ export default function Login() {
                         type="tel"
                         inputMode="numeric"
                         autoComplete="tel"
-                        placeholder="923*********"
+                        placeholder="0300 1234567"
                         value={phone}
                         onChange={e => setPhone(e.target.value)}
                         onBlur={() => {
@@ -146,11 +146,9 @@ export default function Login() {
                         }}
                         autoFocus
                     />
-                    {mode === 'register' && (
-                        <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                            Format: 92 followed by 10 digits (e.g. 923*********). Local 03… numbers are saved without the leading 0.
-                        </p>
-                    )}
+                    <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                        {PHONE_HELPER_TEXT}
+                    </p>
                 </div>
 
                 {mode === 'register' && (

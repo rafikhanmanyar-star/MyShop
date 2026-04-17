@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { mobileOrdersApi, MobileOrder, MobileOrderingSettings, ShopBranding } from '../services/mobileOrdersApi';
+import { mobileOrdersApi, MobileOrder, MobileOrderingSettings, ShopBranding, MobileOnlineUsersResponse } from '../services/mobileOrdersApi';
 import { getApiBaseUrl } from '../config/apiUrl';
 import { useAuth } from './AuthContext';
 
@@ -27,6 +27,8 @@ interface MobileOrdersState {
     loading: boolean;
     error: string | null;
     sseConnected: boolean;
+    /** Incremented whenever SSE pushes a mobile_user_activity event — triggers UI refresh. */
+    userActivityTick: number;
 }
 
 interface MobileOrdersContextType extends MobileOrdersState {
@@ -34,7 +36,7 @@ interface MobileOrdersContextType extends MobileOrdersState {
     loadSettings: () => Promise<void>;
     loadBranding: () => Promise<void>;
     updateOrderStatus: (orderId: string, status: string, note?: string) => Promise<void>;
-    collectPayment: (orderId: string, bankAccountId: string) => Promise<void>;
+    collectPayment: (orderId: string, bankAccountId?: string, paymentType?: 'khata') => Promise<void>;
     updateSettings: (data: Partial<MobileOrderingSettings>) => Promise<void>;
     updateBranding: (data: Partial<ShopBranding>) => Promise<void>;
     clearNewOrderCount: () => void;
@@ -57,6 +59,7 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sseConnected, setSseConnected] = useState(false);
+    const [userActivityTick, setUserActivityTick] = useState(0);
 
     // Create notification sound using Web Audio API
     const playNotificationSound = useCallback(() => {
@@ -197,8 +200,9 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
                                                 playNotificationSound();
                                             }
                                         } else if (payload.type === 'order_updated') {
-                                            // Stage 11: shop/rider/customer order or delivery status changed — refresh list (no bell)
                                             loadOrders();
+                                        } else if (payload.type === 'mobile_user_activity') {
+                                            setUserActivityTick(prev => prev + 1);
                                         } else if (payload.type === 'connected') {
                                             setSseConnected(true);
                                         }
@@ -252,8 +256,8 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
         await loadOrders();
     }, [loadOrders]);
 
-    const collectPayment = useCallback(async (orderId: string, bankAccountId: string) => {
-        await mobileOrdersApi.collectPayment(orderId, bankAccountId);
+    const collectPayment = useCallback(async (orderId: string, bankAccountId?: string, paymentType?: 'khata') => {
+        await mobileOrdersApi.collectPayment(orderId, bankAccountId, paymentType);
         await loadOrders();
     }, [loadOrders]);
 
@@ -272,7 +276,7 @@ export function MobileOrdersProvider({ children }: { children: React.ReactNode }
 
     return (
         <MobileOrdersContext.Provider value={{
-            orders, settings, branding, newOrderCount, bellAlerts, loading, error, sseConnected,
+            orders, settings, branding, newOrderCount, bellAlerts, loading, error, sseConnected, userActivityTick,
             loadOrders, loadSettings, loadBranding,
             updateOrderStatus, collectPayment, updateSettings, updateBranding,
             clearNewOrderCount, dismissBellAlert, clearBellAlerts, refreshOrders,

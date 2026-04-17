@@ -9,6 +9,7 @@ import { POSCustomer } from '../../../types/pos';
 import { Contact, ContactType } from '../../../types';
 import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 import { showAppToast } from '../../../utils/appToast';
+import { parsePakistanMobile, phoneDigitsMatch, PHONE_HELPER_TEXT } from '../../../utils/pakistanMobile';
 
 interface CustomerSelectionModalProps {
     isOpen: boolean;
@@ -59,8 +60,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
     }, [isOpen, searchQuery]);
 
     const handleSelect = (contact: Contact) => {
-        // Find if this contact is a loyalty member
-        const loyaltyMember = members.find(m => m.customerId === contact.id || m.phone === contact.contactNo);
+        const loyaltyMember = members.find(m => m.customerId === contact.id || phoneDigitsMatch(m.phone, contact.contactNo));
 
         const posCustomer: POSCustomer = {
             id: contact.id,
@@ -86,13 +86,25 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
             setRegisterError('Name is required.');
             return;
         }
+
+        let normalizedContactNo: string | undefined;
+        const rawPhone = registerForm.contactNo.trim();
+        if (rawPhone) {
+            const parsed = parsePakistanMobile(rawPhone);
+            if (!parsed.ok) {
+                setRegisterError(parsed.message);
+                return;
+            }
+            normalizedContactNo = parsed.digits;
+        }
+
         setRegisterSubmitting(true);
         try {
             const newContact: Contact = {
                 id: `contact-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
                 name: trimmedName,
                 type: ContactType.CLIENT,
-                contactNo: registerForm.contactNo.trim() || undefined,
+                contactNo: normalizedContactNo,
                 companyName: registerForm.companyName.trim() || undefined
             };
             const created = await contactsApi.createContact(newContact);
@@ -167,12 +179,21 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                 <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Phone</label>
                                 <input
                                     type="tel"
+                                    inputMode="numeric"
                                     value={registerForm.contactNo}
                                     onChange={(e) => setRegisterForm(f => ({ ...f, contactNo: e.target.value }))}
-                                    placeholder="Contact number"
+                                    onBlur={() => {
+                                        const raw = registerForm.contactNo.trim();
+                                        if (raw) {
+                                            const parsed = parsePakistanMobile(raw);
+                                            if (parsed.ok) setRegisterForm(f => ({ ...f, contactNo: parsed.digits }));
+                                        }
+                                    }}
+                                    placeholder="0300 1234567"
                                     className="w-full px-5 py-4 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-2xl focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-semibold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                                     disabled={registerSubmitting}
                                 />
+                                <p className="mt-2 text-xs text-slate-400 dark:text-slate-500 leading-relaxed">{PHONE_HELPER_TEXT}</p>
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Company (optional)</label>
@@ -241,7 +262,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {filteredContacts.map(contact => {
-                                        const loyaltyMember = members.find(m => m.customerId === contact.id || m.phone === contact.contactNo);
+                                        const loyaltyMember = members.find(m => m.customerId === contact.id || phoneDigitsMatch(m.phone, contact.contactNo));
                                         return (
                                             <button
                                                 key={contact.id}

@@ -10,7 +10,7 @@ import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
-import { parsePakistanMobile } from '../../utils/pakistanMobile';
+import { parsePakistanMobile, PHONE_HELPER_TEXT } from '../../utils/pakistanMobile';
 import type { ApiError } from '../../services/apiClient';
 
 const LoyaltyContent: React.FC = () => {
@@ -170,8 +170,8 @@ const LoyaltyContent: React.FC = () => {
                             type="tel"
                             inputMode="numeric"
                             autoComplete="tel"
-                            placeholder="923*********"
-                            helperText="Format: 92 followed by 10 digits (e.g. 923*********). Local 03… numbers are saved without the leading 0."
+                            placeholder="0300 1234567"
+                            helperText={PHONE_HELPER_TEXT}
                             error={phoneError}
                             value={newMemberData.phone}
                             onChange={(e) => {

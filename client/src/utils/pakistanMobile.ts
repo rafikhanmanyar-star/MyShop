@@ -1,5 +1,9 @@
+/** Keep in sync with server/utils/pakistanMobile.ts */
 /** Pakistan mobile stored as digits only: country code 92 + 10 digits (12 characters total). */
 export const PK_MOBILE_92_DIGITS_REGEX = /^92\d{10}$/;
+
+export const PHONE_HELPER_TEXT =
+  'Enter your 11-digit mobile number starting with 03 (e.g. 0300 1234567). You can also enter 923001234567 or 3001234567.';
 
 function digitsOnly(raw: string): string {
   return (raw || '').replace(/\D/g, '');
@@ -29,8 +33,33 @@ export function parsePakistanMobile(raw: string):
     return {
       ok: false,
       message:
-        'Use 12 digits: 92 and 10 digits (e.g. 923*********). Local numbers starting with 0 are adjusted automatically.',
+        'Enter your 11-digit mobile number starting with 03 (e.g. 0300 1234567). Numbers starting with 92 or 3 are also accepted.',
     };
   }
   return { ok: true, digits: n };
+}
+
+/** E.164 storage form for Pakistan mobile: +923XXXXXXXXX (from 12-digit 92… string). */
+export function pakistanMobileDigitsToE164(digits: string): string {
+  const d = (digits || '').replace(/\D/g, '');
+  if (!PK_MOBILE_92_DIGITS_REGEX.test(d)) {
+    throw new Error('Invalid Pakistan mobile digits');
+  }
+  return `+${d}`;
+}
+
+/** Parse flexible input to a single E.164 value for DB, or null. */
+export function normalizePakistanPhoneForStorage(raw: string): string | null {
+  const p = parsePakistanMobile(raw);
+  if (!p.ok) return null;
+  return pakistanMobileDigitsToE164(p.digits);
+}
+
+/** Compare two phone numbers by their digit-only representation. */
+export function phoneDigitsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const da = a.replace(/\D/g, '');
+  const db = b.replace(/\D/g, '');
+  if (da.length < 10 || db.length < 10) return false;
+  return da === db || da.endsWith(db.slice(-10)) || db.endsWith(da.slice(-10));
 }
