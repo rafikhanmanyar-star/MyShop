@@ -1690,6 +1690,10 @@ export class ShopService {
       sets.push(`visit_count = $${vals.length + 1}`);
       vals.push(Number(data.visitCount ?? data.visit_count));
     }
+    if (data.mobileCustomerVerified !== undefined || data.mobile_customer_verified !== undefined) {
+      sets.push(`mobile_customer_verified = $${vals.length + 1}`);
+      vals.push(Boolean(data.mobileCustomerVerified ?? data.mobile_customer_verified));
+    }
 
     if (sets.length === 0) {
       return this.db.query(

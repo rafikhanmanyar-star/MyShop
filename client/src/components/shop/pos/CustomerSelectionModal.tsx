@@ -10,6 +10,7 @@ import { Contact, ContactType } from '../../../types';
 import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 import { showAppToast } from '../../../utils/appToast';
 import { parsePakistanMobile, phoneDigitsMatch, PHONE_HELPER_TEXT } from '../../../utils/pakistanMobile';
+import { BadgeCheck } from 'lucide-react';
 
 interface CustomerSelectionModalProps {
     isOpen: boolean;
@@ -68,6 +69,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
             phone: contact.contactNo || 'N/A',
             email: undefined, // Add if available
             loyaltyMemberId: loyaltyMember?.id ?? null,
+            mobileCustomerVerified: loyaltyMember?.mobileCustomerVerified,
             points: loyaltyMember?.pointsBalance || 0,
             creditLimit: 0, // Default or fetch from somewhere
             balance: 0, // Default or fetch from somewhere
@@ -274,7 +276,12 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                                     {contact.name.charAt(0)}
                                                 </div>
                                                 <div className="flex-1 min-w-0 relative z-10">
-                                                    <div className="font-semibold text-slate-900 dark:text-slate-100 truncate tracking-tight text-base mb-1">{contact.name}</div>
+                                                    <div className="font-semibold text-slate-900 dark:text-slate-100 truncate tracking-tight text-base mb-1 flex items-center gap-1.5 min-w-0">
+                                                        {loyaltyMember?.mobileCustomerVerified && (
+                                                            <BadgeCheck className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Verified mobile customer" />
+                                                        )}
+                                                        <span className="truncate">{contact.name}</span>
+                                                    </div>
                                                     <div className="text-xs text-slate-500 dark:text-slate-400 font-bold tracking-tight">{contact.contactNo || 'Anonymous Phone'}</div>
                                                     {loyaltyMember && (
                                                         <div className="mt-3 flex items-center gap-2">

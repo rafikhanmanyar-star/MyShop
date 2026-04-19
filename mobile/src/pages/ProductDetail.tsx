@@ -427,6 +427,57 @@ export default function ProductDetail() {
                     </section>
                 )}
 
+                <section style={{ marginBottom: 24 }} aria-label="Add to cart">
+                    <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Add to cart</h2>
+                    {canPurchase ? (
+                        <div
+                            style={{
+                                display: 'flex',
+                                gap: 12,
+                                alignItems: 'center',
+                                padding: '16px',
+                                background: 'var(--bg)',
+                                borderRadius: 'var(--radius-lg)',
+                                border: '1px solid var(--border)',
+                            }}
+                        >
+                            <div className="qty-controls">
+                                <button type="button" onClick={() => setQty(Math.max(1, qty - 1))}>
+                                    −
+                                </button>
+                                <span>{qty}</span>
+                                <button type="button" onClick={() => setQty(Math.min(maxQty, qty + 1))}>
+                                    +
+                                </button>
+                            </div>
+                            <button type="button" className="btn btn-primary btn-full" onClick={handleAdd}>
+                                + Add to Cart — {formatPrice(Number(product.price) * qty)}
+                            </button>
+                        </div>
+                    ) : (
+                        <p
+                            style={{
+                                margin: 0,
+                                padding: '14px 16px',
+                                background: 'var(--bg)',
+                                borderRadius: 'var(--radius-lg)',
+                                border: '1px solid var(--border)',
+                                fontSize: 14,
+                                color: 'var(--text-muted)',
+                                fontWeight: 500,
+                            }}
+                        >
+                            This item is not available to add to your cart right now.
+                        </p>
+                    )}
+                </section>
+
+                {inCart && (
+                    <p style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, marginTop: -12, marginBottom: 20, textAlign: 'center' }}>
+                        ✓ {inCart.quantity} already in cart
+                    </p>
+                )}
+
                 {recsLoading && (
                     <div style={{ marginBottom: 16 }} className="skeleton" aria-hidden>
                         <div style={{ height: 18, width: '50%', marginBottom: 12 }} />
@@ -452,12 +503,6 @@ export default function ProductDetail() {
                             ))}
                         </div>
                     </section>
-                )}
-
-                {inCart && (
-                    <p style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, marginTop: 12, textAlign: 'center' }}>
-                        ✓ {inCart.quantity} already in cart
-                    </p>
                 )}
             </div>
 

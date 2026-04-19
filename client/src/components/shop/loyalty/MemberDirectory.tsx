@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { KeyRound, RefreshCw } from 'lucide-react';
+import { KeyRound, RefreshCw, BadgeCheck } from 'lucide-react';
 import { useLoyalty } from '../../../context/LoyaltyContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
@@ -229,7 +229,12 @@ const MemberDirectory: React.FC = () => {
                                                 {m.customerName.charAt(0)}
                                             </div>
                                             <div>
-                                                <div className="font-bold text-foreground text-sm group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">{m.customerName}</div>
+                                                <div className="font-bold text-foreground text-sm group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors flex items-center gap-1.5 min-w-0">
+                                                    {m.mobileCustomerVerified && (
+                                                        <BadgeCheck className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Verified mobile customer" />
+                                                    )}
+                                                    <span className="truncate">{m.customerName}</span>
+                                                </div>
                                                 <div className="text-xs text-muted-foreground font-mono italic tracking-tighter">ID: {m.cardNumber}</div>
                                             </div>
                                         </div>
@@ -325,7 +330,12 @@ const MemberDirectory: React.FC = () => {
                                         }`}>
                                         {(selectedMember.customerName || 'U').charAt(0)}
                                     </div>
-                                    <h4 className="text-2xl font-semibold text-foreground tracking-tight">{selectedMember.customerName || 'Unnamed Member'}</h4>
+                                    <h4 className="text-2xl font-semibold text-foreground tracking-tight flex items-center justify-center gap-2 flex-wrap">
+                                        {selectedMember.mobileCustomerVerified && (
+                                            <BadgeCheck className="w-7 h-7 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Verified mobile customer" />
+                                        )}
+                                        <span>{selectedMember.customerName || 'Unnamed Member'}</span>
+                                    </h4>
                                     <p className="text-xs font-semibold uppercase tracking-[0.3em] text-rose-600 dark:text-rose-400 mt-1">{selectedMember.tier} Elite Member</p>
 
                                     <div className="w-full mt-8 pt-8 border-t border-border dark:border-slate-600 space-y-4">
@@ -342,6 +352,51 @@ const MemberDirectory: React.FC = () => {
                                             <span className="text-foreground font-semibold">{new Date(selectedMember.joinDate).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>
                                         </div>
                                     </div>
+
+                                    {selectedMember.mobileCustomerId ? (
+                                        <div className="w-full mt-6 p-4 rounded-2xl border border-border dark:border-slate-600 bg-card/80 text-left space-y-3">
+                                            <p className="text-[0.65rem] font-bold uppercase tracking-widest text-muted-foreground">Mobile app verification</p>
+                                            <p className="text-xs text-muted-foreground leading-snug">
+                                                After you confirm this customer’s identity (in store or by phone), mark them as verified. This shows on POS and mobile orders.
+                                            </p>
+                                            <div className="flex rounded-xl border border-border dark:border-slate-600 overflow-hidden">
+                                                <button
+                                                    type="button"
+                                                    className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors ${selectedMember.mobileCustomerVerified
+                                                        ? 'bg-emerald-600 text-white'
+                                                        : 'bg-muted/60 dark:bg-slate-800 text-muted-foreground hover:bg-muted'
+                                                        }`}
+                                                    onClick={async () => {
+                                                        await updateMember(selectedMember.id, { mobileCustomerVerified: true });
+                                                        setSelectedMember((prev) =>
+                                                            prev && prev.id === selectedMember.id ? { ...prev, mobileCustomerVerified: true } : prev
+                                                        );
+                                                    }}
+                                                >
+                                                    Verified
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors border-l border-border dark:border-slate-600 ${!selectedMember.mobileCustomerVerified
+                                                        ? 'bg-slate-200 dark:bg-slate-700 text-foreground'
+                                                        : 'bg-muted/40 dark:bg-slate-800/80 text-muted-foreground hover:bg-muted/60'
+                                                        }`}
+                                                    onClick={async () => {
+                                                        await updateMember(selectedMember.id, { mobileCustomerVerified: false });
+                                                        setSelectedMember((prev) =>
+                                                            prev && prev.id === selectedMember.id ? { ...prev, mobileCustomerVerified: false } : prev
+                                                        );
+                                                    }}
+                                                >
+                                                    Unverified
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground text-center mt-4 px-2">
+                                            Mobile app verification is available once this member is linked to a mobile account (same phone as above).
+                                        </p>
+                                    )}
                                 </div>
 
                                 <button

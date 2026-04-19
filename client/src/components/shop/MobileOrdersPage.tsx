@@ -9,7 +9,7 @@ import {
     Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
     Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
     Banknote, Building2, Wallet, ExternalLink, Navigation, Users,
-    ShoppingCart, Activity, UserCheck, Globe, CircleDot, BookOpen,
+    ShoppingCart, Activity, UserCheck, Globe, CircleDot, BookOpen, BadgeCheck,
 } from 'lucide-react';
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
@@ -37,6 +37,18 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
     Unpaid: { label: 'Unpaid', color: 'text-orange-700 dark:text-orange-300', bg: 'bg-orange-50 border-orange-200 dark:bg-orange-950/50 dark:border-orange-800', icon: Banknote },
     Cancelled: { label: 'Cancelled', color: 'text-red-700 dark:text-red-300', bg: 'bg-red-50 border-red-200 dark:bg-red-950/50 dark:border-red-800', icon: X },
 };
+
+function MobileOrderCustomerVerifiedBadge() {
+    return (
+        <span
+            className="inline-flex items-center gap-0.5 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-px text-[0.65rem] font-bold uppercase tracking-wide text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 shrink-0"
+            title="Mobile customer verified in loyalty"
+        >
+            <BadgeCheck className="w-3 h-3 shrink-0" aria-hidden />
+            Verified
+        </span>
+    );
+}
 
 const NEXT_STATUS: Record<string, string> = {
     Pending: 'Confirmed',
@@ -811,14 +823,17 @@ function MobileOrdersPageContent() {
                                             </div>
                                             <div className="min-w-0 flex-1 space-y-1.5">
                                                 <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
-                                                    <span className="font-bold text-foreground text-sm leading-snug break-words">
-                                                        {(order.customer_name || 'Customer').trim()}
-                                                        {order.distance_km != null && Number.isFinite(Number(order.distance_km)) && (
-                                                            <span className="font-semibold text-muted-foreground">
-                                                                {' '}
-                                                                — {Number(order.distance_km).toFixed(1)} km
-                                                            </span>
-                                                        )}
+                                                    <span className="font-bold text-foreground text-sm leading-snug break-words inline-flex flex-wrap items-center gap-1.5">
+                                                        {order.customer_mobile_verified && <MobileOrderCustomerVerifiedBadge />}
+                                                        <span>
+                                                            {(order.customer_name || 'Customer').trim()}
+                                                            {order.distance_km != null && Number.isFinite(Number(order.distance_km)) && (
+                                                                <span className="font-semibold text-muted-foreground">
+                                                                    {' '}
+                                                                    — {Number(order.distance_km).toFixed(1)} km
+                                                                </span>
+                                                            )}
+                                                        </span>
                                                     </span>
                                                     <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400 tabular-nums shrink-0">
                                                         {formatPrice(order.grand_total)}
@@ -884,7 +899,10 @@ function MobileOrdersPageContent() {
                                                 {order.customer_name && (
                                                     <span className="flex items-start gap-2 min-w-0">
                                                         <User className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                                                        <span className="break-words leading-snug">{order.customer_name}</span>
+                                                        <span className="break-words leading-snug inline-flex flex-wrap items-center gap-1.5">
+                                                            {order.customer_mobile_verified && <MobileOrderCustomerVerifiedBadge />}
+                                                            <span>{order.customer_name}</span>
+                                                        </span>
                                                     </span>
                                                 )}
                                                 <span className="flex items-start gap-2 min-w-0">
@@ -1419,7 +1437,10 @@ function OrderDetailPanel({
                             {order.customer_name && (
                                 <div className="flex gap-2 min-w-0">
                                     <User className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                                    <span className="break-words leading-snug">{order.customer_name}</span>
+                                    <span className="break-words leading-snug inline-flex flex-wrap items-center gap-1.5">
+                                        {order.customer_mobile_verified && <MobileOrderCustomerVerifiedBadge />}
+                                        <span>{order.customer_name}</span>
+                                    </span>
                                 </div>
                             )}
                             <div className="flex gap-2 min-w-0">

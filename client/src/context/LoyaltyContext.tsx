@@ -19,7 +19,7 @@ interface LoyaltyContextType {
     campaigns: LoyaltyCampaign[];
 
     addMember: (member: Omit<LoyaltyMember, 'id' | 'joinDate' | 'pointsBalance' | 'lifetimePoints'>) => Promise<void>;
-    updateMember: (id: string, data: Partial<LoyaltyMember>) => void;
+    updateMember: (id: string, data: Partial<LoyaltyMember>) => Promise<void>;
     deleteMember: (id: string) => void;
     processLoyalty: (customerId: string, saleAmount: number, saleId: string, isRedemption?: boolean, redeemPoints?: number) => void;
     updateMemberTier: (memberId: string) => void;
@@ -65,6 +65,7 @@ export const LoyaltyProvider: React.FC<{ children: React.ReactNode }> = ({ child
                         id: m.id,
                         customerId: m.customer_id,
                         mobileCustomerId: m.mobile_customer_id ?? null,
+                        mobileCustomerVerified: Boolean(m.mobile_customer_verified),
                         customerName: m.customer_name || 'Unnamed Member',
                         cardNumber: m.card_number,
                         phone: m.contact_no,
@@ -106,7 +107,8 @@ export const LoyaltyProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 status: 'Active',
                 tier: 'Silver',
                 visitCount: 0,
-                totalSpend: 0
+                totalSpend: 0,
+                mobileCustomerVerified: memberData.mobileCustomerVerified ?? false
             };
             setMembers(prev => [...prev, newMember]);
         } catch (error) {

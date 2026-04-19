@@ -7,6 +7,7 @@ import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils
 import { showAppToast } from '../../../utils/appToast';
 import CustomerSelectionModal from './CustomerSelectionModal';
 import type { CheckoutPanelHandle } from './usePosKeyboard';
+import { BadgeCheck } from 'lucide-react';
 
 const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, ref) {
     const {
@@ -179,7 +180,12 @@ const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, 
                             {customer.name.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">
-                            <div className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{customer.name}</div>
+                            <div className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate flex items-center gap-1.5 min-w-0">
+                                {customer.mobileCustomerVerified && (
+                                    <BadgeCheck className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Verified mobile customer" />
+                                )}
+                                <span className="truncate">{customer.name}</span>
+                            </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">{customer.phone}</div>
                         </div>
                         <div className="text-right flex flex-col items-end gap-1 shrink-0">

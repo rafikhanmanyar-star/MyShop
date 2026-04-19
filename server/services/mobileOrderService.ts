@@ -854,7 +854,20 @@ export class MobileOrderService {
               r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone,
               r.current_latitude AS rider_latitude, r.current_longitude AS rider_longitude,
               r.status AS rider_operational_status,
-              ab.name AS assigned_branch_name
+              ab.name AS assigned_branch_name,
+              COALESCE(
+                (SELECT mobile_customer_verified FROM shop_loyalty_members
+                 WHERE id = o.loyalty_member_id AND tenant_id = o.tenant_id LIMIT 1),
+                (SELECT lm.mobile_customer_verified
+                 FROM mobile_customers mc2
+                 INNER JOIN contacts c ON c.tenant_id = mc2.tenant_id
+                   AND regexp_replace(COALESCE(mc2.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+                   AND length(regexp_replace(COALESCE(mc2.phone, ''), '[^0-9]', '', 'g')) > 0
+                 INNER JOIN shop_loyalty_members lm ON lm.customer_id = c.id AND lm.tenant_id = c.tenant_id
+                 WHERE mc2.id = o.customer_id AND mc2.tenant_id = o.tenant_id
+                 LIMIT 1),
+                FALSE
+              ) AS customer_mobile_verified
        FROM mobile_orders o
        LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $2
        LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
@@ -1351,7 +1364,20 @@ export class MobileOrderService {
         r.id AS rider_id, r.name AS rider_name, r.phone_number AS rider_phone,
         r.current_latitude AS rider_latitude, r.current_longitude AS rider_longitude,
         r.status AS rider_operational_status,
-        ab.name AS assigned_branch_name
+        ab.name AS assigned_branch_name,
+        COALESCE(
+          (SELECT mobile_customer_verified FROM shop_loyalty_members
+           WHERE id = o.loyalty_member_id AND tenant_id = o.tenant_id LIMIT 1),
+          (SELECT lm.mobile_customer_verified
+           FROM mobile_customers mc2
+           INNER JOIN contacts c ON c.tenant_id = mc2.tenant_id
+             AND regexp_replace(COALESCE(mc2.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+             AND length(regexp_replace(COALESCE(mc2.phone, ''), '[^0-9]', '', 'g')) > 0
+           INNER JOIN shop_loyalty_members lm ON lm.customer_id = c.id AND lm.tenant_id = c.tenant_id
+           WHERE mc2.id = o.customer_id AND mc2.tenant_id = o.tenant_id
+           LIMIT 1),
+          FALSE
+        ) AS customer_mobile_verified
       FROM mobile_orders o
       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $1
       LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id

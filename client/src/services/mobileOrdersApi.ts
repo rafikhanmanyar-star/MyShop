@@ -34,6 +34,8 @@ export interface MobileOrder {
     delivery_notes?: string;
     customer_phone: string;
     customer_name: string;
+    /** True when POS staff marked the loyalty member (mobile app customer) as verified. */
+    customer_mobile_verified?: boolean;
     pos_synced: boolean;
     created_at: string;
     updated_at: string;

@@ -509,6 +509,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     if (contact) {
                         const { shopApi } = await import('../services/shopApi');
                         let loyaltyMemberId: string | null = null;
+                        let mobileCustomerVerified: boolean | undefined;
                         let points = 0;
                         let tier: POSCustomer['tier'] = 'Standard';
                         try {
@@ -522,6 +523,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                                 );
                                 if (m) {
                                     loyaltyMemberId = m.id;
+                                    mobileCustomerVerified = Boolean(m.mobile_customer_verified);
                                     points = parseInt(String(m.points_balance), 10) || 0;
                                     tier = (m.tier as POSCustomer['tier']) || 'Standard';
                                 }
@@ -534,6 +536,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                             name: contact.name,
                             phone: contact.contactNo || 'N/A',
                             loyaltyMemberId,
+                            mobileCustomerVerified,
                             points,
                             creditLimit: 0,
                             balance: 0,

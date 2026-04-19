@@ -100,6 +100,8 @@ export interface POSCustomer {
     email?: string;
     /** `shop_loyalty_members.id` when this contact is enrolled; required for awarding points on sale. */
     loyaltyMemberId?: string | null;
+    /** True when staff marked the linked mobile app customer as verified in Loyalty. */
+    mobileCustomerVerified?: boolean;
     points: number;
     creditLimit: number;
     balance: number;

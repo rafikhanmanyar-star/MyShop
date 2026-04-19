@@ -16,6 +16,8 @@ export interface LoyaltyMember {
     customerId: string;
     /** Present when this member is linked to a mobile app account (same phone as contact). */
     mobileCustomerId?: string | null;
+    /** Set by POS staff after manually confirming the mobile app customer (identity / phone). */
+    mobileCustomerVerified?: boolean;
     customerName: string;
     cardNumber: string;
     email?: string;

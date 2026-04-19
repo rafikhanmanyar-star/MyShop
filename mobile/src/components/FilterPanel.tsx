@@ -1,4 +1,30 @@
-import { useState, useEffect, useRef, useCallback, type TouchEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type TouchEvent } from 'react';
+
+function normalizeCategoryFilters(
+    f: Record<string, unknown>,
+    allCategories: { id: string; parent_id?: string | null }[],
+): Record<string, unknown> {
+    const mains = new Set(allCategories.filter((c) => !c.parent_id).map((c) => c.id));
+    const catIds = (f.categoryIds as string[]) || [];
+    const subIds = (f.subcategoryIds as string[]) || [];
+
+    let main = catIds.find((id) => mains.has(id)) || '';
+    if (!main && subIds[0]) {
+        const sub = allCategories.find((c) => c.id === subIds[0]);
+        if (sub?.parent_id && mains.has(sub.parent_id)) main = sub.parent_id;
+    }
+
+    const subs = subIds.filter((sid) => {
+        const s = allCategories.find((c) => c.id === sid);
+        return Boolean(main && s?.parent_id === main);
+    });
+
+    return {
+        ...f,
+        categoryIds: main ? [main] : [],
+        subcategoryIds: subs[0] ? [subs[0]] : [],
+    };
+}
 
 const SORT_OPTIONS: { value: string; label: string }[] = [
     { value: 'price_low_high', label: 'Price: Low → High' },
@@ -31,18 +57,16 @@ export default function FilterPanel({
     onClear,
 }: FilterPanelProps) {
     const [localFilters, setLocalFilters] = useState(filters);
-    const [categorySearch, setCategorySearch] = useState('');
     const [brandSearch, setBrandSearch] = useState('');
     const touchStartX = useRef<number | null>(null);
     const panelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (isOpen) {
-            setLocalFilters(filters);
-            setCategorySearch('');
+            setLocalFilters(normalizeCategoryFilters(filters, categories));
             setBrandSearch('');
         }
-    }, [isOpen, filters]);
+    }, [isOpen, filters, categories]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -124,17 +148,26 @@ export default function FilterPanel({
         onClose();
     };
 
+    const mainCategories = useMemo(
+        () =>
+            [...categories.filter((c) => !c.parent_id)].sort((a, b) =>
+                (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }),
+            ),
+        [categories],
+    );
+
+    const selectedMainCategoryId = (localFilters.categoryIds as string[] | undefined)?.[0] || '';
+
+    const subcategoriesForMain = useMemo(() => {
+        if (!selectedMainCategoryId) return [];
+        return [...categories.filter((c) => c.parent_id === selectedMainCategoryId)].sort((a, b) =>
+            (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }),
+        );
+    }, [categories, selectedMainCategoryId]);
+
+    const selectedSubcategoryId = (localFilters.subcategoryIds as string[] | undefined)?.[0] || '';
+
     if (!isOpen) return null;
-
-    const filteredCategories = categories.filter(
-        (c) => c.name.toLowerCase().includes(categorySearch.toLowerCase()) && !c.parent_id
-    );
-
-    const filteredSubcategories = categories.filter(
-        (c) =>
-            c.name.toLowerCase().includes(categorySearch.toLowerCase()) &&
-            (localFilters.categoryIds as string[] | undefined)?.includes(c.parent_id)
-    );
 
     const filteredBrands = brands.filter((b) => b.name.toLowerCase().includes(brandSearch.toLowerCase()));
 
@@ -208,48 +241,60 @@ export default function FilterPanel({
 
                     <div className="filter-section">
                         <h3>Categories</h3>
-                        <input
-                            type="search"
-                            className="search-mini"
-                            placeholder="Search categories…"
-                            value={categorySearch}
-                            onChange={(e) => setCategorySearch(e.target.value)}
-                        />
-                        <div className="filter-grid filter-grid--scroll">
-                            {filteredCategories.map((c) => (
-                                <label
-                                    key={c.id}
-                                    className={`filter-checkbox ${(localFilters.categoryIds as string[])?.includes(c.id) ? 'active' : ''}`}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={(localFilters.categoryIds as string[])?.includes(c.id) ?? false}
-                                        onChange={() => toggleMultiSelect('categoryIds', c.id)}
-                                    />
+                        <label className="visually-hidden" htmlFor="filter-main-category">
+                            Main category
+                        </label>
+                        <select
+                            id="filter-main-category"
+                            className="filter-select"
+                            value={selectedMainCategoryId}
+                            onChange={(e) => {
+                                const id = e.target.value;
+                                setLocalFilters((prev: Record<string, unknown>) => ({
+                                    ...prev,
+                                    categoryIds: id ? [id] : [],
+                                    subcategoryIds: [],
+                                }));
+                            }}
+                        >
+                            <option value="">All categories</option>
+                            {mainCategories.map((c) => (
+                                <option key={c.id} value={c.id}>
                                     {c.name}
-                                </label>
+                                </option>
                             ))}
-                        </div>
+                        </select>
                     </div>
 
-                    {filteredSubcategories.length > 0 && (
+                    {selectedMainCategoryId && subcategoriesForMain.length > 0 && (
                         <div className="filter-section">
                             <h3>Subcategories</h3>
-                            <div className="filter-grid">
-                                {filteredSubcategories.map((c) => (
-                                    <label
-                                        key={c.id}
-                                        className={`filter-checkbox ${(localFilters.subcategoryIds as string[])?.includes(c.id) ? 'active' : ''}`}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={(localFilters.subcategoryIds as string[])?.includes(c.id) ?? false}
-                                            onChange={() => toggleMultiSelect('subcategoryIds', c.id)}
-                                        />
+                            <label className="visually-hidden" htmlFor="filter-subcategory">
+                                Subcategory
+                            </label>
+                            <select
+                                id="filter-subcategory"
+                                className="filter-select"
+                                value={
+                                    subcategoriesForMain.some((s) => s.id === selectedSubcategoryId)
+                                        ? selectedSubcategoryId
+                                        : ''
+                                }
+                                onChange={(e) => {
+                                    const id = e.target.value;
+                                    setLocalFilters((prev: Record<string, unknown>) => ({
+                                        ...prev,
+                                        subcategoryIds: id ? [id] : [],
+                                    }));
+                                }}
+                            >
+                                <option value="">All subcategories</option>
+                                {subcategoriesForMain.map((c) => (
+                                    <option key={c.id} value={c.id}>
                                         {c.name}
-                                    </label>
+                                    </option>
                                 ))}
-                            </div>
+                            </select>
                         </div>
                     )}
 
