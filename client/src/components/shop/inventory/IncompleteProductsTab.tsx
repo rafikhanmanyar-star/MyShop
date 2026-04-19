@@ -20,11 +20,9 @@ import {
 import { useInventory } from '../../../context/InventoryContext';
 import { InventoryItem } from '../../../types/inventory';
 import { CURRENCY, ICONS } from '../../../constants';
-import Input from '../../ui/Input';
 import Button from '../../ui/Button';
-import { shopApi } from '../../../services/shopApi';
+import AddOrEditSkuModal from '../pos/AddOrEditSkuModal';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
-import { getFullImageUrl } from '../../../config/apiUrl';
 
 const PAGE_SIZE = 25;
 
@@ -220,7 +218,7 @@ function marginPillClass(marginPct: number, retail: number, cost: number): strin
 }
 
 const IncompleteProductsTab: React.FC = () => {
-    const { items, updateItem } = useInventory();
+    const { items } = useInventory();
     const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
     const [search, setSearch] = useState('');
     const [summaryIssueFilter, setSummaryIssueFilter] = useState<SummaryIssueFilter>('all');
@@ -228,22 +226,8 @@ const IncompleteProductsTab: React.FC = () => {
     const [salesStatusFilter, setSalesStatusFilter] = useState<SalesStatusFilter>('active');
     const [sortKey, setSortKey] = useState<SortKey>('sku');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [draft, setDraft] = useState<{
-        sku: string;
-        name: string;
-        barcode: string;
-        category: string;
-        unit: string;
-        costPrice: number;
-        retailPrice: number;
-        reorderPoint: number;
-        imageUrl?: string;
-        salesDeactivated: boolean;
-    } | null>(null);
-    const [imageFile, setImageFile] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(null);
-    const [saving, setSaving] = useState(false);
+    const [skuEditOpen, setSkuEditOpen] = useState(false);
+    const [skuToEdit, setSkuToEdit] = useState<InventoryItem | null>(null);
     const [page, setPage] = useState(1);
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const [lastDataAt, setLastDataAt] = useState(() => Date.now());
@@ -410,63 +394,15 @@ const IncompleteProductsTab: React.FC = () => {
         }
     };
 
-    const startEdit = (item: InventoryItem) => {
-        setEditingId(item.id);
-        setDraft({
-            sku: item.sku,
-            name: item.name,
-            barcode: item.barcode || '',
-            category: item.category || 'General',
-            unit: item.unit,
-            costPrice: item.costPrice,
-            retailPrice: item.retailPrice,
-            reorderPoint: item.reorderPoint,
-            imageUrl: item.imageUrl,
-            salesDeactivated: item.salesDeactivated === true,
-        });
-        setImageFile(null);
-        setImagePreview(item.imageUrl || null);
+    const openSkuEditModal = (item: InventoryItem) => {
+        const fresh = items.find((i) => i.id === item.id) ?? item;
+        setSkuToEdit(fresh);
+        setSkuEditOpen(true);
     };
 
-    const cancelEdit = () => {
-        if (imagePreview && imagePreview.startsWith('blob:')) URL.revokeObjectURL(imagePreview);
-        setEditingId(null);
-        setDraft(null);
-        setImageFile(null);
-        setImagePreview(null);
-    };
-
-    const handleSave = async () => {
-        if (!editingId || !draft) return;
-        if (!draft.name?.trim()) {
-            alert('Product name is required.');
-            return;
-        }
-        setSaving(true);
-        try {
-            let imageUrl = draft.imageUrl;
-            if (imageFile) {
-                const uploadRes = await shopApi.uploadImage(imageFile);
-                imageUrl = getFullImageUrl(uploadRes.imageUrl) || '';
-            }
-            await updateItem(editingId, {
-                sku: draft.sku,
-                name: draft.name.trim(),
-                barcode: draft.barcode.trim() || undefined,
-                category: draft.category,
-                unit: draft.unit.trim() || 'pcs',
-                costPrice: draft.costPrice,
-                retailPrice: draft.retailPrice,
-                reorderPoint: draft.reorderPoint,
-                imageUrl,
-                salesDeactivated: draft.salesDeactivated,
-            });
-            cancelEdit();
-        } catch {
-            /* updateItem already alerted */
-        } finally {
-            setSaving(false);
-        }
+    const closeSkuEditModal = () => {
+        setSkuEditOpen(false);
+        setSkuToEdit(null);
     };
 
     const exportCsv = () => {
@@ -521,8 +457,8 @@ const IncompleteProductsTab: React.FC = () => {
     );
 
     const statCardBase =
-        'rounded-2xl border border-slate-200/90 bg-white p-4 text-left shadow-sm transition hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600';
-    const statCardActive = 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-[#f4f6fa] dark:ring-offset-slate-900';
+        'shrink-0 rounded-xl border border-slate-200/90 bg-white px-2.5 py-2 text-left shadow-sm transition hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600 min-w-[5.5rem] sm:min-w-0 sm:flex-1';
+    const statCardActive = 'ring-2 ring-indigo-500 ring-offset-1 ring-offset-[#f4f6fa] dark:ring-offset-slate-900';
 
     const issueSelectValue =
         summaryIssueFilter === 'deactivated' ? 'deactivated' : summaryIssueFilter === 'all' ? 'all' : summaryIssueFilter;
@@ -554,123 +490,109 @@ const IncompleteProductsTab: React.FC = () => {
                     </div>
                 </header>
 
-                {/* Summary cards */}
-                <section className="grid flex-shrink-0 grid-cols-1 gap-3 lg:grid-cols-[minmax(240px,280px)_1fr]">
-                    <div className="flex flex-col gap-3">
-                        <button
-                            type="button"
-                            aria-pressed={summaryIssueFilter === 'all'}
-                            onClick={() => setSummaryIssueFilter('all')}
-                            className={`flex min-h-[140px] flex-col justify-between rounded-2xl bg-gradient-to-br from-[#5b4fd4] to-[#7c6ae8] p-5 text-left text-white shadow-md transition hover:brightness-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900 ${
-                                summaryIssueFilter === 'all' ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-[#f4f6fa] dark:ring-offset-slate-900' : ''
-                            }`}
-                        >
-                            <CircleAlert className="h-8 w-8 opacity-90" strokeWidth={2} />
-                            <div>
-                                <p className="text-4xl font-bold tabular-nums tracking-tight">{issueStats.totalSkus}</p>
-                                <p className="mt-1 text-[11px] font-bold uppercase tracking-widest text-white/85">SKUs to fix</p>
-                            </div>
-                        </button>
-                        <button
-                            type="button"
-                            aria-pressed={summaryIssueFilter === 'deactivated'}
-                            onClick={() => setSummaryIssueFilter('deactivated')}
-                            className={`${statCardBase} flex items-center gap-3 py-3 ${
-                                summaryIssueFilter === 'deactivated' ? statCardActive : ''
-                            }`}
-                        >
-                            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
-                                <Ban className="h-5 w-5" strokeWidth={2} />
-                            </span>
-                            <div>
-                                <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-                                    {formatStatCount(issueStats.deactivatedCount)}
-                                </p>
-                                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                                    Deactivated
-                                </p>
-                            </div>
-                        </button>
-                    </div>
+                {/* Summary cards — single compact row (scroll on narrow viewports) */}
+                <section className="flex flex-shrink-0 gap-2 overflow-x-auto pb-0.5 [scrollbar-gutter:stable]">
+                    <button
+                        type="button"
+                        aria-pressed={summaryIssueFilter === 'all'}
+                        onClick={() => setSummaryIssueFilter('all')}
+                        className={`flex min-w-[6.5rem] shrink-0 flex-col justify-between rounded-xl bg-gradient-to-br from-[#5b4fd4] to-[#7c6ae8] px-2.5 py-2 text-left text-white shadow-sm transition hover:brightness-[1.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-900 sm:min-w-0 sm:flex-[1.15] ${
+                            summaryIssueFilter === 'all'
+                                ? 'ring-2 ring-white/60 ring-offset-1 ring-offset-[#f4f6fa] dark:ring-offset-slate-900'
+                                : ''
+                        }`}
+                    >
+                        <CircleAlert className="h-4 w-4 opacity-90" strokeWidth={2} />
+                        <div>
+                            <p className="text-xl font-bold tabular-nums leading-tight sm:text-2xl">{issueStats.totalSkus}</p>
+                            <p className="mt-0.5 text-[8px] font-bold uppercase leading-tight tracking-wide text-white/90 sm:text-[9px]">
+                                SKUs TO FIX
+                            </p>
+                        </div>
+                    </button>
 
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                        {(
-                            [
-                                {
-                                    id: 'image' as const,
-                                    label: 'No image',
-                                    short: 'No image',
-                                    value: issueStats.missingImage,
-                                    icon: ImageOff,
-                                    iconClass: 'text-violet-600 bg-violet-50 dark:bg-violet-950/40 dark:text-violet-400',
-                                },
-                                {
-                                    id: 'barcode' as const,
-                                    label: 'No barcode',
-                                    short: 'No barcode',
-                                    value: issueStats.missingBarcode,
-                                    icon: ScanBarcode,
-                                    iconClass: 'text-orange-600 bg-orange-50 dark:bg-orange-950/40 dark:text-orange-400',
-                                },
-                                {
-                                    id: 'name' as const,
-                                    label: 'No name',
-                                    short: 'No name',
-                                    value: issueStats.missingName,
-                                    icon: Type,
-                                    iconClass: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 dark:text-sky-400',
-                                },
-                                {
-                                    id: 'sku' as const,
-                                    label: 'No SKU',
-                                    short: 'No SKU',
-                                    value: issueStats.missingSku,
-                                    icon: Tag,
-                                    iconClass: 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300',
-                                },
-                                {
-                                    id: 'unit' as const,
-                                    label: 'No unit',
-                                    short: 'No unit',
-                                    value: issueStats.missingUnit,
-                                    icon: Ruler,
-                                    iconClass: 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-300',
-                                },
-                                {
-                                    id: 'weak_pricing' as const,
-                                    label: 'Weak pricing',
-                                    short: 'Weak pricing',
-                                    value: issueStats.pricingSkus,
-                                    icon: BadgePercent,
-                                    iconClass: 'text-orange-600 bg-orange-50 dark:bg-orange-950/40 dark:text-orange-400',
-                                },
-                            ] as const
-                        ).map((c) => {
-                            const Icon = c.icon;
-                            return (
-                                <button
-                                    key={c.id}
-                                    type="button"
-                                    aria-pressed={summaryIssueFilter === c.id}
-                                    aria-label={c.label}
-                                    onClick={() => setSummaryIssueFilter(c.id)}
-                                    className={`${statCardBase} flex flex-col gap-2 ${summaryIssueFilter === c.id ? statCardActive : ''}`}
-                                >
-                                    <span
-                                        className={`flex h-9 w-9 items-center justify-center rounded-lg ${c.iconClass}`}
-                                    >
-                                        <Icon className="h-4 w-4" strokeWidth={2} />
-                                    </span>
-                                    <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-                                        {formatStatCount(c.value)}
-                                    </p>
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                                        {c.short}
-                                    </p>
-                                </button>
-                            );
-                        })}
-                    </div>
+                    {(
+                        [
+                            {
+                                id: 'image' as const,
+                                label: 'No image',
+                                short: 'NO IMAGE',
+                                value: issueStats.missingImage,
+                                icon: ImageOff,
+                                iconClass: 'text-violet-600 bg-violet-50 dark:bg-violet-950/40 dark:text-violet-400',
+                            },
+                            {
+                                id: 'barcode' as const,
+                                label: 'No barcode',
+                                short: 'NO BARCODE',
+                                value: issueStats.missingBarcode,
+                                icon: ScanBarcode,
+                                iconClass: 'text-orange-600 bg-orange-50 dark:bg-orange-950/40 dark:text-orange-400',
+                            },
+                            {
+                                id: 'name' as const,
+                                label: 'No name',
+                                short: 'NO NAME',
+                                value: issueStats.missingName,
+                                icon: Type,
+                                iconClass: 'text-sky-600 bg-sky-50 dark:bg-sky-950/40 dark:text-sky-400',
+                            },
+                            {
+                                id: 'deactivated' as const,
+                                label: 'Deactivated',
+                                short: 'DEACTIVATED',
+                                value: issueStats.deactivatedCount,
+                                icon: Ban,
+                                iconClass: 'text-rose-600 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-400',
+                            },
+                            {
+                                id: 'sku' as const,
+                                label: 'No SKU',
+                                short: 'NO SKU',
+                                value: issueStats.missingSku,
+                                icon: Tag,
+                                iconClass: 'text-sky-700 bg-sky-50 dark:bg-sky-950/40 dark:text-sky-300',
+                            },
+                            {
+                                id: 'unit' as const,
+                                label: 'No unit',
+                                short: 'NO UNIT',
+                                value: issueStats.missingUnit,
+                                icon: Ruler,
+                                iconClass: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 dark:text-indigo-400',
+                            },
+                            {
+                                id: 'weak_pricing' as const,
+                                label: 'Weak pricing',
+                                short: 'WEAK PRICING',
+                                value: issueStats.pricingSkus,
+                                icon: BadgePercent,
+                                iconClass: 'text-orange-600 bg-orange-50 dark:bg-orange-950/40 dark:text-orange-400',
+                            },
+                        ] as const
+                    ).map((c) => {
+                        const Icon = c.icon;
+                        return (
+                            <button
+                                key={c.id}
+                                type="button"
+                                aria-pressed={summaryIssueFilter === c.id}
+                                aria-label={c.label}
+                                onClick={() => setSummaryIssueFilter(c.id)}
+                                className={`${statCardBase} flex flex-col items-stretch gap-1 ${summaryIssueFilter === c.id ? statCardActive : ''}`}
+                            >
+                                <span className={`flex h-7 w-7 items-center justify-center rounded-md ${c.iconClass}`}>
+                                    <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+                                </span>
+                                <p className="text-lg font-bold tabular-nums leading-none text-slate-900 dark:text-white sm:text-xl">
+                                    {formatStatCount(c.value)}
+                                </p>
+                                <p className="text-[8px] font-bold uppercase leading-tight tracking-wide text-slate-500 dark:text-slate-400 sm:text-[9px]">
+                                    {c.short}
+                                </p>
+                            </button>
+                        );
+                    })}
                 </section>
 
                 {/* Info banner */}
@@ -824,7 +746,6 @@ const IncompleteProductsTab: React.FC = () => {
                                     </tr>
                                 ) : (
                                     pageSlice.map((item) => {
-                                        const editing = editingId === item.id && draft;
                                         const rawIssues = rowIssueLabels(item);
                                         const displayKeys = displayIssueKeys(rawIssues);
                                         const pills = displayKeys.map(issuePillMeta);
@@ -836,207 +757,75 @@ const IncompleteProductsTab: React.FC = () => {
                                         return (
                                             <tr key={item.id} className="align-top hover:bg-slate-50/80 dark:hover:bg-slate-900/50">
                                                 <td className="px-4 py-3">
-                                                    {editing ? (
-                                                        <div className="flex gap-3">
-                                                            <div className="flex flex-col gap-2">
-                                                                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-600 dark:bg-slate-800">
-                                                                    {imagePreview ? (
-                                                                        <img
-                                                                            src={imagePreview}
-                                                                            alt=""
-                                                                            className="h-full w-full object-cover"
-                                                                        />
-                                                                    ) : (
-                                                                        <ImageIcon className="h-6 w-6 text-slate-300 dark:text-slate-600" />
-                                                                    )}
-                                                                </div>
-                                                                <input
-                                                                    type="file"
-                                                                    accept="image/*"
-                                                                    aria-label="Upload product image"
-                                                                    title="Upload product image"
-                                                                    className="max-w-[120px] text-[10px]"
-                                                                    onChange={(e) => {
-                                                                        const file = e.target.files?.[0];
-                                                                        if (file) {
-                                                                            setImageFile(file);
-                                                                            if (imagePreview?.startsWith('blob:'))
-                                                                                URL.revokeObjectURL(imagePreview);
-                                                                            setImagePreview(URL.createObjectURL(file));
-                                                                        }
-                                                                    }}
-                                                                />
-                                                            </div>
-                                                            <div className="min-w-0 flex-1 space-y-2">
-                                                                <Input
-                                                                    compact
-                                                                    value={draft.name}
-                                                                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                                                                    placeholder="Name"
-                                                                />
-                                                                <Input
-                                                                    compact
-                                                                    value={draft.sku}
-                                                                    onChange={(e) => setDraft({ ...draft, sku: e.target.value })}
-                                                                    placeholder="SKU"
-                                                                    className="font-mono text-xs"
-                                                                />
-                                                            </div>
+                                                    <div className="flex gap-3">
+                                                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-600 dark:bg-slate-800">
+                                                            {item.imageUrl ? (
+                                                                <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+                                                            ) : (
+                                                                <ImageIcon className="h-5 w-5 text-slate-300 dark:text-slate-600" />
+                                                            )}
                                                         </div>
-                                                    ) : (
-                                                        <div className="flex gap-3">
-                                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-600 dark:bg-slate-800">
-                                                                {item.imageUrl ? (
-                                                                    <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
-                                                                ) : (
-                                                                    <ImageIcon className="h-5 w-5 text-slate-300 dark:text-slate-600" />
-                                                                )}
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <p className="font-semibold text-slate-900 dark:text-white">
-                                                                    {item.name || '—'}
-                                                                </p>
-                                                                <p className="mt-0.5 font-mono text-xs text-slate-500 dark:text-slate-400">
-                                                                    {item.sku || '—'}
-                                                                </p>
-                                                            </div>
+                                                        <div className="min-w-0">
+                                                            <p className="font-semibold text-slate-900 dark:text-white">
+                                                                {item.name || '—'}
+                                                            </p>
+                                                            <p className="mt-0.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+                                                                {item.sku || '—'}
+                                                            </p>
                                                         </div>
-                                                    )}
+                                                    </div>
                                                 </td>
                                                 <td className="px-4 py-3 font-mono text-sm">
-                                                    {editing ? (
-                                                        <Input
-                                                            compact
-                                                            value={draft.barcode}
-                                                            onChange={(e) => setDraft({ ...draft, barcode: e.target.value })}
-                                                        />
-                                                    ) : item.barcode?.trim() ? (
+                                                    {item.barcode?.trim() ? (
                                                         item.barcode
                                                     ) : (
                                                         <span className="font-bold text-red-600 dark:text-red-400">MISSING</span>
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
-                                                    {editing ? (
-                                                        <select
-                                                            aria-label="Category"
-                                                            title="Category"
-                                                            className="block w-full min-w-[140px] rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-600 dark:bg-slate-900"
-                                                            value={draft.category || 'General'}
-                                                            onChange={(e) => setDraft({ ...draft, category: e.target.value })}
-                                                        >
-                                                            <option value="General">General</option>
-                                                            {categories.map((cat) => (
-                                                                <option key={cat.id} value={cat.id}>
-                                                                    {cat.name}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    ) : (
-                                                        categoryLabel(categories, item.category)
-                                                    )}
+                                                    {categoryLabel(categories, item.category)}
                                                 </td>
                                                 <td className="px-4 py-3 text-sm">
-                                                    {editing ? (
-                                                        <Input
-                                                            compact
-                                                            value={draft.unit}
-                                                            onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
-                                                        />
-                                                    ) : item.unit?.trim() ? (
+                                                    {item.unit?.trim() ? (
                                                         item.unit
                                                     ) : (
                                                         <span className="font-bold text-red-600 dark:text-red-400">MISSING</span>
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    {editing ? (
-                                                        <div className="flex flex-col gap-2">
-                                                            <Input
-                                                                compact
-                                                                type="number"
-                                                                value={draft.retailPrice}
-                                                                onChange={(e) =>
-                                                                    setDraft({ ...draft, retailPrice: Number(e.target.value) })
-                                                                }
-                                                                placeholder="Retail"
-                                                            />
-                                                            <Input
-                                                                compact
-                                                                type="number"
-                                                                value={draft.costPrice}
-                                                                onChange={(e) =>
-                                                                    setDraft({ ...draft, costPrice: Number(e.target.value) })
-                                                                }
-                                                                placeholder="Cost"
-                                                            />
-                                                            <Input
-                                                                compact
-                                                                type="number"
-                                                                value={draft.reorderPoint}
-                                                                onChange={(e) =>
-                                                                    setDraft({ ...draft, reorderPoint: Number(e.target.value) })
-                                                                }
-                                                                placeholder="Reorder point"
-                                                            />
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <div>
+                                                            <p className="font-semibold text-slate-900 dark:text-white">
+                                                                {CURRENCY} {formatPrice(item.retailPrice)}
+                                                            </p>
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                                C: {CURRENCY} {formatPrice(item.costPrice)}
+                                                            </p>
                                                         </div>
-                                                    ) : (
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <div>
-                                                                <p className="font-semibold text-slate-900 dark:text-white">
-                                                                    {CURRENCY} {formatPrice(item.retailPrice)}
-                                                                </p>
-                                                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                                                    C: {CURRENCY} {formatPrice(item.costPrice)}
-                                                                </p>
-                                                            </div>
-                                                            <span
-                                                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${marginPillClass(
-                                                                    marginPct,
-                                                                    item.retailPrice,
-                                                                    item.costPrice
-                                                                )}`}
-                                                            >
-                                                                {item.retailPrice > 0
-                                                                    ? `${marginPct >= 0 ? '+' : ''}${marginPct.toFixed(1)}%`
-                                                                    : '—'}
-                                                            </span>
-                                                        </div>
-                                                    )}
+                                                        <span
+                                                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${marginPillClass(
+                                                                marginPct,
+                                                                item.retailPrice,
+                                                                item.costPrice
+                                                            )}`}
+                                                        >
+                                                            {item.retailPrice > 0
+                                                                ? `${marginPct >= 0 ? '+' : ''}${marginPct.toFixed(1)}%`
+                                                                : '—'}
+                                                        </span>
+                                                    </div>
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    {editing ? (
-                                                        <div className="space-y-1">
-                                                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                                                                On hand
-                                                            </p>
-                                                            <span className="font-mono text-sm text-slate-600 dark:text-slate-300">
-                                                                {item.onHand}
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
-                                                            <span className="font-mono text-sm text-slate-800 dark:text-slate-200">
-                                                                {item.onHand}
-                                                            </span>
-                                                        </div>
-                                                    )}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+                                                        <span className="font-mono text-sm text-slate-800 dark:text-slate-200">
+                                                            {item.onHand}
+                                                        </span>
+                                                    </div>
                                                 </td>
                                                 {advancedOpen && (
-                                                    <td className="px-4 py-3 text-sm">
-                                                        {editing ? (
-                                                            <Input
-                                                                compact
-                                                                type="number"
-                                                                value={draft.reorderPoint}
-                                                                onChange={(e) =>
-                                                                    setDraft({ ...draft, reorderPoint: Number(e.target.value) })
-                                                                }
-                                                            />
-                                                        ) : (
-                                                            item.reorderPoint
-                                                        )}
+                                                    <td className="px-4 py-3 text-sm tabular-nums text-slate-700 dark:text-slate-300">
+                                                        {item.reorderPoint}
                                                     </td>
                                                 )}
                                                 <td className="px-4 py-3">
@@ -1057,68 +846,30 @@ const IncompleteProductsTab: React.FC = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3 text-right whitespace-nowrap">
-                                                    {editing ? (
-                                                        <div className="flex max-w-[220px] flex-col items-end gap-2">
-                                                            <label className="flex cursor-pointer items-start gap-2 text-left text-xs text-slate-800 dark:text-slate-200">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-slate-300"
-                                                                    checked={!draft.salesDeactivated}
-                                                                    onChange={(e) =>
-                                                                        setDraft({
-                                                                            ...draft,
-                                                                            salesDeactivated: !e.target.checked,
-                                                                        })
-                                                                    }
-                                                                />
-                                                                <span>
-                                                                    <span className="font-medium">Available for sale</span>
-                                                                    <span className="mt-0.5 block text-[10px] text-slate-500">
-                                                                        POS &amp; mobile shop
-                                                                    </span>
-                                                                </span>
-                                                            </label>
-                                                            <div className="flex justify-end gap-2">
-                                                                <Button
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            className="rounded-lg bg-indigo-600 px-3 hover:bg-indigo-700"
+                                                            onClick={() => openSkuEditModal(item)}
+                                                        >
+                                                            Fix
+                                                        </Button>
+                                                        <details className="relative">
+                                                            <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 [&::-webkit-details-marker]:hidden">
+                                                                <MoreVertical className="h-4 w-4" strokeWidth={2} />
+                                                            </summary>
+                                                            <div className="absolute right-0 z-20 mt-1 min-w-[120px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-900">
+                                                                <button
                                                                     type="button"
-                                                                    variant="secondary"
-                                                                    size="sm"
-                                                                    onClick={cancelEdit}
-                                                                    disabled={saving}
+                                                                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
+                                                                    onClick={() => openSkuEditModal(item)}
                                                                 >
-                                                                    Cancel
-                                                                </Button>
-                                                                <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
-                                                                    {saving ? 'Saving…' : 'Save'}
-                                                                </Button>
+                                                                    Fix
+                                                                </button>
                                                             </div>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center justify-end gap-1">
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                className="rounded-lg bg-indigo-600 px-3 hover:bg-indigo-700"
-                                                                onClick={() => startEdit(item)}
-                                                            >
-                                                                Fix
-                                                            </Button>
-                                                            <details className="relative">
-                                                                <summary className="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 [&::-webkit-details-marker]:hidden">
-                                                                    <MoreVertical className="h-4 w-4" strokeWidth={2} />
-                                                                </summary>
-                                                                <div className="absolute right-0 z-20 mt-1 min-w-[120px] rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-900">
-                                                                    <button
-                                                                        type="button"
-                                                                        className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
-                                                                        onClick={() => startEdit(item)}
-                                                                    >
-                                                                        Fix
-                                                                    </button>
-                                                                </div>
-                                                            </details>
-                                                        </div>
-                                                    )}
+                                                        </details>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
@@ -1184,6 +935,13 @@ const IncompleteProductsTab: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            <AddOrEditSkuModal
+                key={skuToEdit?.id ?? 'sku-edit'}
+                isOpen={skuEditOpen}
+                onClose={closeSkuEditModal}
+                initialEditingItem={skuToEdit}
+            />
         </div>
     );
 };
