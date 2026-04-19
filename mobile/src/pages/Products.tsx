@@ -175,6 +175,11 @@ export default function Products() {
         }
     }, [shopSlug, online]);
 
+    const mainCategories = useMemo(
+        () => categories.filter((c: any) => !c.parent_id),
+        [categories]
+    );
+
     useEffect(() => {
         if (!shopSlug) return;
         setCursor(null);
@@ -640,7 +645,7 @@ export default function Products() {
                         </span>
                         <span>New Arrivals</span>
                     </button>
-                    {categories.map((c: any) => (
+                    {mainCategories.map((c: any) => (
                         <button
                             key={c.id}
                             type="button"

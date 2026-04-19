@@ -295,6 +295,45 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         barcodeConflictItems.length
     ]);
 
+    /** Gross margin on retail: (retail − cost) / retail — used for low-margin warning. */
+    const grossMarginPercent = useMemo(() => {
+        const retail = Number(formData.retailPrice);
+        const cost = Number(formData.costPrice);
+        if (!Number.isFinite(retail) || retail <= 0) return null;
+        return ((retail - cost) / retail) * 100;
+    }, [formData.retailPrice, formData.costPrice]);
+
+    const showLowMarginWarning =
+        grossMarginPercent !== null && grossMarginPercent < 5 && Number(formData.retailPrice) > 0;
+
+    const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+
+    const UNIT_OPTIONS: { value: string; label: string }[] = [
+        { value: 'pcs', label: 'Piece (pcs)' },
+        { value: 'BTL', label: 'Bottle (BTL)' },
+        { value: 'kg', label: 'Kilogram (kg)' },
+        { value: 'g', label: 'Gram (g)' },
+        { value: 'L', label: 'Litre (L)' },
+        { value: 'mL', label: 'Millilitre (mL)' },
+        { value: 'box', label: 'Box' },
+        { value: 'pack', label: 'Pack' },
+        { value: 'dozen', label: 'Dozen' }
+    ];
+
+    const handleSkuImageFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > MAX_IMAGE_BYTES) {
+            alert('Image must be 2MB or smaller. Recommended: 1024×1024px, PNG or JPG.');
+            e.target.value = '';
+            return;
+        }
+        setSelectedImage(file);
+        setImagePreview(URL.createObjectURL(file));
+    }, []);
+
+    const unitInPreset = UNIT_OPTIONS.some((o) => o.value === formData.unit);
+
     const handleClose = useCallback(() => {
         categoryFormInitForItemId.current = null;
         setMode('choice');
@@ -434,7 +473,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     const handleDeleteSku = useCallback(async () => {
         if (!editingItem || editingItem.id.startsWith('pending-')) return;
         const confirmed = window.confirm(
-            `Are you sure you want to delete "${editingItem.name}" (SKU: ${editingItem.sku})? This cannot be undone.`
+            `Archive "${editingItem.name}" (SKU: ${editingItem.sku})? This removes it from the catalog. This cannot be undone.`
         );
         if (!confirmed) return;
         setDeleting(true);
@@ -572,73 +611,56 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
 
                 {showSkuForm && (
                     <>
-                        <div className="-mx-3 sm:-mx-4 md:-mx-6 lg:-mx-8 -mt-2 border-b border-slate-200 bg-white px-4 pb-2 pt-0.5 sm:px-5 md:px-6 lg:px-8">
+                        <div className="-mx-3 sm:-mx-4 md:-mx-6 lg:-mx-8 -mt-2 border-b border-slate-200 bg-white px-4 pb-4 pt-2 sm:px-5 md:px-6 lg:px-8">
                             <button
                                 type="button"
                                 onClick={handleFormBack}
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                                className="mb-2 inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-violet-700"
                             >
                                 {React.cloneElement(ICONS.chevronLeft as React.ReactElement<any>, { size: 16, className: 'shrink-0' })}
                                 {closeOnBackFromAdd ? 'Back to Inventory' : 'Back'}
                             </button>
-                            <div className="mt-1.5 flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0 pr-2">
-                                    <h1 id="modal-title" className="text-lg font-bold leading-snug tracking-tight text-slate-900 sm:text-xl">
-                                        {editingItem
-                                            ? `Edit SKU: ${formData.name || editingItem.name}`
-                                            : 'Add New SKU'}
-                                    </h1>
-                                    <p className="text-xs leading-snug text-slate-600 sm:text-[13px]">
-                                        {editingItem
-                                            ? `Update product specifications and stock parameters for ${formData.sku || editingItem.sku}.`
-                                            : 'Define product details, pricing, and how this SKU appears in inventory and on the shop.'}
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                        {editingItem ? 'Edit SKU' : 'New SKU'}
                                     </p>
+                                    <h1 id="modal-title" className="mt-1 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                                        {formData.name.trim() || (editingItem?.name ?? 'Untitled product')}
+                                    </h1>
                                 </div>
-                                <div className="flex shrink-0 items-center gap-2 self-start sm:ml-auto">
-                                    <span
-                                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                                            formData.salesDeactivated
-                                                ? 'bg-slate-200 text-slate-700'
-                                                : 'bg-sky-100 text-blue-800'
-                                        }`}
-                                    >
-                                        {formData.salesDeactivated ? 'Sales off' : 'Active stock'}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={handleClose}
-                                        className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                                        aria-label="Close"
-                                    >
-                                        <span className="text-lg leading-none">&times;</span>
-                                    </button>
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleClose}
+                                    className="shrink-0 rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                    aria-label="Close"
+                                >
+                                    {React.cloneElement(ICONS.x as React.ReactElement<any>, { size: 22, strokeWidth: 2 })}
+                                </button>
                             </div>
                         </div>
 
-                        <div className="-mx-3 sm:-mx-4 md:-mx-6 lg:-mx-8 space-y-3 bg-slate-100/90 px-4 py-3 sm:px-5 md:px-6 lg:px-8 dark:bg-slate-900/50">
+                        <div className="-mx-3 sm:-mx-4 md:-mx-6 lg:-mx-8 space-y-4 bg-white px-4 py-4 sm:px-5 md:px-6 lg:px-8">
                             {editingItem && (
-                                <p className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[11px] leading-snug text-slate-600 shadow-sm">
-                                    Barcodes must be unique so POS scans resolve to one product. Use{' '}
-                                    <strong className="font-semibold text-slate-800">Inventory → Stock Master</strong> to find SKUs marked{' '}
-                                    <strong>Sales off</strong> and reactivate them below.
+                                <p className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 text-[11px] leading-snug text-slate-600">
+                                    Barcodes must be unique for POS scans. Use{' '}
+                                    <strong className="font-semibold text-slate-800">Inventory → Stock Master</strong> to find SKUs with sales off.
                                 </p>
                             )}
                             {formData.salesDeactivated && (
                                 <div
-                                    className="flex flex-col gap-2 rounded-lg border-2 border-amber-400 bg-gradient-to-r from-amber-50 to-orange-50/80 p-3 sm:flex-row sm:items-center sm:justify-between"
+                                    className="flex flex-col gap-2 rounded-xl border-2 border-amber-300 bg-amber-50/90 p-3 sm:flex-row sm:items-center sm:justify-between"
                                     role="status"
                                 >
                                     <div className="min-w-0">
                                         <p className="text-xs font-semibold text-amber-950">Sales are off for this product</p>
                                         <p className="mt-0.5 text-[11px] leading-snug text-amber-900/90">
-                                            It is hidden from POS and the mobile shop. Stock and past orders are unchanged. Reactivate to sell again, or
-                                            leave off to keep it out of sales channels.
+                                            Hidden from POS and the mobile shop. Reactivate below or from the sales status bar.
                                         </p>
                                     </div>
                                     <button
                                         type="button"
-                                        className="shrink-0 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                                        className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
                                         onClick={() => setFormData({ ...formData, salesDeactivated: false })}
                                     >
                                         Reactivate for sales
@@ -646,398 +668,439 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-12 lg:gap-3">
-                                {/* Product details */}
-                                <div className="rounded-lg border border-slate-200/90 bg-white p-3 shadow-sm lg:col-span-5">
-                                    <div className="mb-2 flex items-center gap-1.5">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                            {React.cloneElement(ICONS.fileText as React.ReactElement<any>, { size: 16 })}
-                                        </span>
-                                        <h3 className="text-sm font-semibold text-slate-800">Product Details</h3>
+                            <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
+                                {/* Product preview (left) */}
+                                <div className="w-full shrink-0 lg:max-w-[280px]">
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Product preview</p>
+                                    <div className="mt-3 aspect-square w-full overflow-hidden rounded-2xl bg-sky-100/90 ring-1 ring-sky-200/80">
+                                        {imagePreview ? (
+                                            imagePreview.startsWith('blob:') ? (
+                                                <img src={imagePreview} alt="" className="h-full w-full object-contain p-2" />
+                                            ) : (
+                                                <CachedImage path={imagePreview} alt="" className="h-full w-full object-contain p-2" />
+                                            )
+                                        ) : (
+                                            <div className="flex h-full min-h-[200px] w-full flex-col items-center justify-center gap-2 text-sky-400/90">
+                                                {React.cloneElement(ICONS.image as React.ReactElement<any>, { size: 40, strokeWidth: 1.5 })}
+                                                <span className="text-xs font-medium text-slate-400">No image</span>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="space-y-2.5">
-                                        <div className="space-y-1.5">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-code-input">
-                                                    SKU Code
-                                                </label>
-                                                {!editingItem && (
-                                                    <span className="text-xs font-medium text-blue-600">Auto-generated</span>
+                                    <input
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/jpg,image/webp,image/*"
+                                        onChange={handleSkuImageFile}
+                                        className="hidden"
+                                        id="add-edit-sku-image"
+                                    />
+                                    <label
+                                        htmlFor="add-edit-sku-image"
+                                        className="mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+                                    >
+                                        {React.cloneElement(ICONS.upload as React.ReactElement<any>, { size: 18, className: 'text-slate-500' })}
+                                        Change image
+                                    </label>
+                                    <div className="mt-3 rounded-xl border border-sky-100 bg-sky-50/80 px-3 py-2.5 text-[11px] leading-snug text-sky-900/80">
+                                        Recommended: 1024×1024px, PNG or JPG. Maximum file size 2MB.
+                                    </div>
+                                </div>
+
+                                {/* Fields (right) */}
+                                <div className="min-w-0 flex-1 space-y-8">
+                                    <section>
+                                        <div className="mb-4 flex items-center gap-2">
+                                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-600" />
+                                            <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-violet-700">
+                                                Product identity
+                                            </h2>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-code-input">
+                                                        SKU
+                                                    </label>
+                                                    {!editingItem && (
+                                                        <span className="text-[10px] font-medium text-violet-600">Auto if empty</span>
+                                                    )}
+                                                </div>
+                                                <Input
+                                                    id="pos-sku-code-input"
+                                                    readOnly={!!editingItem}
+                                                    placeholder={editingItem ? '' : 'e.g. BEV-7UP-1500ML'}
+                                                    value={formData.sku}
+                                                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                                                    className={
+                                                        editingItem
+                                                            ? 'cursor-not-allowed rounded-lg border-slate-200 bg-slate-100 text-slate-700'
+                                                            : 'rounded-lg border-slate-200 bg-white'
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Input
+                                                    label="Barcode"
+                                                    placeholder="Scan or enter"
+                                                    value={formData.barcode}
+                                                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                                                    helperText={barcodeConflictItems.length === 0 ? 'Unique across products' : undefined}
+                                                    className="rounded-lg border-slate-200 bg-white"
+                                                />
+                                                {barcodeConflictItems.length > 0 && (
+                                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                                                        <div className="mb-1 flex items-center gap-1 font-semibold">
+                                                            {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 12 })}
+                                                            Barcode already in use
+                                                        </div>
+                                                        <ul className="max-h-20 space-y-0.5 overflow-y-auto">
+                                                            {barcodeConflictItems.map((item) => (
+                                                                <li key={item.id} className="flex items-center gap-2">
+                                                                    <span className="truncate">{item.name}</span>
+                                                                    <span className="shrink-0 text-amber-700">· {item.sku}</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
                                                 )}
                                             </div>
-                                            <Input
-                                                id="pos-sku-code-input"
-                                                placeholder="e.g. SKU-001"
-                                                value={formData.sku}
-                                                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                                                className="border-slate-200/90 bg-slate-50/90"
-                                            />
                                         </div>
-                                        <div className="space-y-1 sm:col-span-2 xl:col-span-1">
+                                        <div className="mt-4 space-y-1">
                                             <Input
-                                                label="Barcode (EAN/UPC)"
-                                                placeholder="Scan or enter barcode"
-                                                value={formData.barcode}
-                                                onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                                                helperText={barcodeConflictItems.length === 0 ? 'Must be unique across all products.' : undefined}
-                                                className="border-slate-200/90 bg-slate-50/90"
+                                                label="Product name"
+                                                placeholder="e.g. 7up 1.5 litre"
+                                                value={formData.name}
+                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                                helperText={nameConflictItems.length === 0 ? 'Unique across products' : undefined}
+                                                className="rounded-lg border-slate-200 bg-white"
                                             />
-                                            {barcodeConflictItems.length > 0 && (
-                                                <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs">
-                                                    <div className="mb-0.5 flex items-center gap-1 font-semibold text-amber-800">
+                                            {nameConflictItems.length > 0 && (
+                                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                                                    <div className="mb-1 flex items-center gap-1 font-semibold">
                                                         {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 12 })}
-                                                        <span>Barcode already in use</span>
+                                                        Name already in use
                                                     </div>
-                                                    <ul className="max-h-16 space-y-0.5 overflow-y-auto">
-                                                        {barcodeConflictItems.map((item) => (
-                                                            <li key={item.id} className="flex items-center gap-2 text-amber-800">
-                                                                <div className="h-6 w-6 flex-shrink-0 overflow-hidden rounded bg-slate-100">
-                                                                    {item.imageUrl ? (
-                                                                        <CachedImage path={item.imageUrl} alt="" className="h-full w-full object-cover" />
-                                                                    ) : (
-                                                                        React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 12, className: 'm-1' })
-                                                                    )}
-                                                                </div>
-                                                                <span className="truncate font-medium">{item.name}</span>
-                                                                <span className="flex-shrink-0 text-xs text-amber-600">SKU: {item.sku}</span>
+                                                    <ul className="max-h-20 space-y-0.5 overflow-y-auto">
+                                                        {nameConflictItems.map((item) => (
+                                                            <li key={item.id} className="truncate">
+                                                                {item.name} · {item.sku}
                                                             </li>
                                                         ))}
                                                     </ul>
                                                 </div>
                                             )}
                                         </div>
-                                        <Input
-                                            label="Product Name"
-                                            placeholder="e.g. Cotton T-Shirt"
-                                            value={formData.name}
-                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                            helperText={nameConflictItems.length === 0 ? 'Must be unique across all products.' : undefined}
-                                            className="border-slate-200/90 bg-slate-50/90"
-                                        />
-                                        <div className="space-y-1">
-                                            <label className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Description</label>
+                                        <details className="group mt-4 rounded-xl border border-slate-100 bg-slate-50/60 px-3 py-2">
+                                            <summary className="cursor-pointer text-xs font-medium text-slate-600 marker:text-slate-400">
+                                                Description (mobile shop)
+                                            </summary>
                                             <textarea
-                                                placeholder="Describe materials, sizing, and what makes this product stand out."
+                                                placeholder="Optional — shown when customers open this product."
                                                 value={formData.description}
                                                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                                 rows={3}
-                                                className="focus:ring-primary-500/30 min-h-[4.5rem] w-full rounded-md border border-slate-200/90 bg-slate-50/90 px-2 py-1.5 text-sm text-slate-800 shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2"
+                                                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
                                             />
-                                            <p className="text-[11px] leading-snug text-slate-500">Shown in the mobile app when customers open this product.</p>
-                                        </div>
-                                        {nameConflictItems.length > 0 && (
-                                            <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs">
-                                                <div className="mb-0.5 flex items-center gap-1 font-semibold text-amber-800">
-                                                    {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 12 })}
-                                                    <span>Product name already in use</span>
-                                                </div>
-                                                <ul className="max-h-16 space-y-0.5 overflow-y-auto">
-                                                    {nameConflictItems.map((item) => (
-                                                        <li key={item.id} className="flex items-center gap-2 text-amber-800">
-                                                            <div className="h-6 w-6 flex-shrink-0 overflow-hidden rounded bg-slate-100">
-                                                                {item.imageUrl ? (
-                                                                    <CachedImage path={item.imageUrl} alt="" className="h-full w-full object-cover" />
-                                                                ) : (
-                                                                    React.cloneElement(ICONS.package as React.ReactElement<any>, { size: 12, className: 'm-1' })
-                                                                )}
-                                                            </div>
-                                                            <span className="truncate font-medium">{item.name}</span>
-                                                            <span className="flex-shrink-0 text-xs text-amber-600">SKU: {item.sku}</span>
-                                                            {item.barcode && (
-                                                                <span className="flex-shrink-0 text-xs text-amber-600">· {item.barcode}</span>
-                                                            )}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                                        </details>
+                                    </section>
 
-                                {/* Media */}
-                                <div className="min-w-0 rounded-lg border border-slate-200/90 bg-white p-3 shadow-sm lg:col-span-4">
-                                    <div className="mb-2 flex items-center gap-1.5">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                            {React.cloneElement(ICONS.image as React.ReactElement<any>, { size: 16 })}
-                                        </span>
-                                        <h3 className="text-sm font-semibold text-slate-800">Media</h3>
-                                    </div>
-                                    <div className="h-36 w-full overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                                        {imagePreview ? (
-                                            imagePreview.startsWith('blob:') ? (
-                                                <img src={imagePreview} alt="Preview" className="h-full w-full object-contain" />
-                                            ) : (
-                                                <CachedImage path={imagePreview} alt="Preview" className="h-full w-full object-contain" />
-                                            )
-                                        ) : (
-                                            <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-400">
-                                                {React.cloneElement(ICONS.image as React.ReactElement<any>, { size: 28 })}
-                                                <span className="text-[11px] font-medium">No image yet</span>
+                                    <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
+                                        <section>
+                                            <div className="mb-4 flex items-center gap-2">
+                                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-600" />
+                                                <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-violet-700">
+                                                    Categorization
+                                                </h2>
                                             </div>
-                                        )}
-                                    </div>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) {
-                                                setSelectedImage(file);
-                                                setImagePreview(URL.createObjectURL(file));
-                                            }
-                                        }}
-                                        className="hidden"
-                                        id="add-edit-sku-image"
-                                    />
-                                    <label
-                                        htmlFor="add-edit-sku-image"
-                                        className="mt-2 flex w-full cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-slate-300 bg-white py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                                    >
-                                        Upload New Image
-                                    </label>
-                                </div>
-
-                                {/* Pricing */}
-                                <div className="rounded-lg border border-slate-200/90 bg-white p-3 shadow-sm lg:col-span-3">
-                                    <div className="mb-2 flex items-center gap-1.5">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                            {React.cloneElement(ICONS.dollarSign as React.ReactElement<any>, { size: 16 })}
-                                        </span>
-                                        <h3 className="text-sm font-semibold text-slate-800">Pricing</h3>
-                                    </div>
-                                    <div className="space-y-2.5">
-                                            <Input
-                                                label={`Cost Price (${CURRENCY})`}
-                                                type="number"
-                                                value={formData.costPrice}
-                                                onChange={(e) => {
-                                                    const cost = Number(e.target.value);
-                                                    const next = { ...formData, costPrice: cost };
-                                                    if (formData.retailPriceMode === 'percentage') {
-                                                        next.retailPrice = Math.round(cost * (1 + formData.retailMarkupPercent / 100) * 100) / 100;
-                                                    }
-                                                    setFormData(next);
-                                                }}
-                                                className="border-slate-200/90 bg-slate-50/90"
-                                            />
-                                            <div className="space-y-2">
-                                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Retail Price</span>
-                                                    <div
-                                                        className="inline-flex w-full rounded-lg border border-slate-200 bg-slate-100 p-0.5 sm:w-auto"
-                                                        role="group"
-                                                        aria-label="Retail price mode"
+                                            <div className="space-y-4">
+                                                <div className="space-y-1.5">
+                                                    <label
+                                                        htmlFor="pos-add-edit-sku-main-category"
+                                                        className="text-[11px] font-semibold uppercase tracking-wide text-slate-500"
                                                     >
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setFormData({ ...formData, retailPriceMode: 'fixed' })}
-                                                            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors sm:flex-none ${
-                                                                formData.retailPriceMode === 'fixed'
-                                                                    ? 'bg-blue-600 text-white shadow-sm'
-                                                                    : 'text-slate-600 hover:bg-white/80'
-                                                            }`}
-                                                        >
-                                                            Fixed
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                const cost = formData.costPrice;
-                                                                const pct = cost > 0 ? Math.round(((formData.retailPrice - cost) / cost) * 100) : 0;
-                                                                setFormData({
-                                                                    ...formData,
-                                                                    retailPriceMode: 'percentage',
-                                                                    retailMarkupPercent: Math.max(0, pct),
-                                                                    retailPrice: cost * (1 + Math.max(0, pct) / 100)
-                                                                });
-                                                            }}
-                                                            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors sm:flex-none ${
-                                                                formData.retailPriceMode === 'percentage'
-                                                                    ? 'bg-blue-600 text-white shadow-sm'
-                                                                    : 'text-slate-600 hover:bg-white/80'
-                                                            }`}
-                                                        >
-                                                            Markup
-                                                        </button>
+                                                        Category
+                                                    </label>
+                                                    <select
+                                                        id="pos-add-edit-sku-main-category"
+                                                        className="block w-full rounded-lg border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                                                        value={formData.category}
+                                                        onChange={(e) => {
+                                                            const next = e.target.value;
+                                                            setFormData({
+                                                                ...formData,
+                                                                category: next,
+                                                                subcategoryId: ''
+                                                            });
+                                                        }}
+                                                    >
+                                                        <option value="General">General (uncategorized)</option>
+                                                        {rootCategories.map((c) => (
+                                                            <option key={c.id} value={c.id}>
+                                                                {c.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label
+                                                        htmlFor="pos-add-edit-sku-subcategory"
+                                                        className="text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                                                    >
+                                                        Subcategory
+                                                    </label>
+                                                    <select
+                                                        id="pos-add-edit-sku-subcategory"
+                                                        aria-describedby="pos-add-edit-sku-subcategory-help"
+                                                        disabled={subcategorySelectDisabled}
+                                                        className="block w-full rounded-lg border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                                                        value={formData.subcategoryId}
+                                                        onChange={(e) => setFormData({ ...formData, subcategoryId: e.target.value })}
+                                                    >
+                                                        <option value="">
+                                                            {formData.category === 'General'
+                                                                ? 'Select a main category first…'
+                                                                : subcategoriesForParent.length === 0
+                                                                  ? '— No subcategories'
+                                                                  : 'Main category only'}
+                                                        </option>
+                                                        {subcategoriesForParent.map((c) => (
+                                                            <option key={c.id} value={c.id}>
+                                                                {c.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <p
+                                                        id="pos-add-edit-sku-subcategory-help"
+                                                        className="line-clamp-2 text-[11px] leading-snug text-slate-500"
+                                                        title={subcategoryHelperText}
+                                                    >
+                                                        {subcategoryHelperText}
+                                                    </p>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label htmlFor="pos-sku-unit" className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                                        Unit of measure
+                                                    </label>
+                                                    <select
+                                                        id="pos-sku-unit"
+                                                        className="block w-full rounded-lg border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                                                        value={unitInPreset ? formData.unit : '__custom__'}
+                                                        onChange={(e) => {
+                                                            const v = e.target.value;
+                                                            if (v === '__custom__') {
+                                                                setFormData({ ...formData, unit: '' });
+                                                            } else {
+                                                                setFormData({ ...formData, unit: v });
+                                                            }
+                                                        }}
+                                                    >
+                                                        {UNIT_OPTIONS.map((o) => (
+                                                            <option key={o.value} value={o.value}>
+                                                                {o.label}
+                                                            </option>
+                                                        ))}
+                                                        <option value="__custom__">Custom…</option>
+                                                    </select>
+                                                    {!unitInPreset && (
+                                                        <input
+                                                            id="pos-sku-unit-custom"
+                                                            value={formData.unit}
+                                                            onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                                                            placeholder="e.g. case (12)"
+                                                            className="mt-1.5 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                                                        />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </section>
+
+                                        <section>
+                                            <div className="mb-4 flex items-center gap-2">
+                                                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-600" />
+                                                <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-violet-700">Financials</h2>
+                                            </div>
+                                            <div className="space-y-4">
+                                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                                    <Input
+                                                        label={`Cost (${CURRENCY})`}
+                                                        type="number"
+                                                        value={formData.costPrice}
+                                                        onChange={(e) => {
+                                                            const cost = Number(e.target.value);
+                                                            const next = { ...formData, costPrice: cost };
+                                                            if (formData.retailPriceMode === 'percentage') {
+                                                                next.retailPrice =
+                                                                    Math.round(cost * (1 + formData.retailMarkupPercent / 100) * 100) / 100;
+                                                            }
+                                                            setFormData(next);
+                                                        }}
+                                                        className="rounded-lg border-slate-200 bg-white"
+                                                    />
+                                                    <div className="space-y-2">
+                                                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                                                Retail ({CURRENCY})
+                                                            </span>
+                                                            <div
+                                                                className="inline-flex w-full rounded-lg border border-slate-200 bg-slate-100 p-0.5 sm:w-auto"
+                                                                role="group"
+                                                                aria-label="Retail price mode"
+                                                            >
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setFormData({ ...formData, retailPriceMode: 'fixed' })}
+                                                                    className={`flex-1 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors sm:flex-none ${
+                                                                        formData.retailPriceMode === 'fixed'
+                                                                            ? 'bg-violet-600 text-white shadow-sm'
+                                                                            : 'text-slate-600 hover:bg-white/80'
+                                                                    }`}
+                                                                >
+                                                                    Fixed
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const cost = formData.costPrice;
+                                                                        const pct =
+                                                                            cost > 0 ? Math.round(((formData.retailPrice - cost) / cost) * 100) : 0;
+                                                                        setFormData({
+                                                                            ...formData,
+                                                                            retailPriceMode: 'percentage',
+                                                                            retailMarkupPercent: Math.max(0, pct),
+                                                                            retailPrice: cost * (1 + Math.max(0, pct) / 100)
+                                                                        });
+                                                                    }}
+                                                                    className={`flex-1 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors sm:flex-none ${
+                                                                        formData.retailPriceMode === 'percentage'
+                                                                            ? 'bg-violet-600 text-white shadow-sm'
+                                                                            : 'text-slate-600 hover:bg-white/80'
+                                                                    }`}
+                                                                >
+                                                                    Markup
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        {formData.retailPriceMode === 'fixed' ? (
+                                                            <Input
+                                                                type="number"
+                                                                placeholder="0"
+                                                                value={formData.retailPrice}
+                                                                onChange={(e) => setFormData({ ...formData, retailPrice: Number(e.target.value) })}
+                                                                className="rounded-lg border-slate-200 bg-white"
+                                                            />
+                                                        ) : (
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                <div>
+                                                                    <div className="flex items-center gap-1">
+                                                                        <Input
+                                                                            type="number"
+                                                                            placeholder="0"
+                                                                            value={formData.retailMarkupPercent}
+                                                                            onChange={(e) => {
+                                                                                const pct = Number(e.target.value);
+                                                                                const cost = formData.costPrice;
+                                                                                const retail =
+                                                                                    Math.round(cost * (1 + pct / 100) * 100) / 100;
+                                                                                setFormData({
+                                                                                    ...formData,
+                                                                                    retailMarkupPercent: pct,
+                                                                                    retailPrice: retail
+                                                                                });
+                                                                            }}
+                                                                            className="rounded-lg border-slate-200 bg-white"
+                                                                        />
+                                                                        <span className="text-sm text-slate-500">%</span>
+                                                                    </div>
+                                                                    <p className="mt-0.5 text-[10px] text-slate-500">Markup on cost</p>
+                                                                </div>
+                                                                <div className="flex flex-col justify-end pb-0.5">
+                                                                    <p className="text-[10px] font-bold uppercase text-slate-500">Retail</p>
+                                                                    <p className="text-lg font-semibold text-slate-800">
+                                                                        {Number(formData.retailPrice).toFixed(2)}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                {formData.retailPriceMode === 'fixed' ? (
-                                                    <Input
-                                                        type="number"
-                                                        placeholder="e.g. 285.00"
-                                                        value={formData.retailPrice}
-                                                        onChange={(e) => setFormData({ ...formData, retailPrice: Number(e.target.value) })}
-                                                        className="border-slate-200/90 bg-slate-50/90"
-                                                    />
-                                                ) : (
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="min-w-0 flex-1">
-                                                                    <Input
-                                                                        type="number"
-                                                                        placeholder="e.g. 7"
-                                                                        value={formData.retailMarkupPercent}
-                                                                        onChange={(e) => {
-                                                                            const pct = Number(e.target.value);
-                                                                            const cost = formData.costPrice;
-                                                                            const retail = Math.round(cost * (1 + pct / 100) * 100) / 100;
-                                                                            setFormData({ ...formData, retailMarkupPercent: pct, retailPrice: retail });
-                                                                        }}
-                                                                        className="border-slate-200/90 bg-slate-50/90"
-                                                                    />
-                                                                </div>
-                                                                <span className="flex-shrink-0 font-medium text-slate-600">%</span>
-                                                            </div>
-                                                            <p className="mt-0.5 text-xs text-slate-500">% added to cost price</p>
-                                                        </div>
-                                                        <div className="flex flex-col justify-end pb-1">
-                                                            <p className="text-xs font-bold uppercase opacity-80">Sale price</p>
-                                                            <p className="text-lg font-semibold text-slate-800">{Number(formData.retailPrice).toFixed(2)}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
+                                                <Input
+                                                    label="Reorder point"
+                                                    type="number"
+                                                    value={formData.reorderPoint}
+                                                    onChange={(e) => setFormData({ ...formData, reorderPoint: Number(e.target.value) })}
+                                                    className="rounded-lg border-slate-200 bg-white"
+                                                />
                                             </div>
-                                        </div>
+                                        </section>
                                     </div>
-                            </div>
 
-                            {/* Category & stock strategy */}
-                            <div className="rounded-lg border border-slate-200/90 bg-white p-3 shadow-sm">
-                                <div className="mb-2 flex items-center gap-1.5">
-                                    <span className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                                        {React.cloneElement(ICONS.grid as React.ReactElement<any>, { size: 16 })}
-                                    </span>
-                                    <h3 className="text-sm font-semibold text-slate-800">Category &amp; Stock Strategy</h3>
-                                </div>
-                                <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 xl:grid-cols-4">
-                                    <div className="space-y-1.5">
-                                        <label htmlFor="pos-add-edit-sku-main-category" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            Main Category
-                                        </label>
-                                        <select
-                                            id="pos-add-edit-sku-main-category"
-                                            className="block w-full rounded-md border border-slate-200/90 bg-slate-50/90 py-1.5 px-2.5 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                                            value={formData.category}
-                                            onChange={(e) => {
-                                                const next = e.target.value;
-                                                setFormData({
-                                                    ...formData,
-                                                    category: next,
-                                                    subcategoryId: ''
-                                                });
-                                            }}
-                                        >
-                                            <option value="General">General (uncategorized)</option>
-                                            {rootCategories.map((c) => (
-                                                <option key={c.id} value={c.id}>
-                                                    {c.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label htmlFor="pos-add-edit-sku-subcategory" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            Subcategory
-                                        </label>
-                                        <select
-                                            id="pos-add-edit-sku-subcategory"
-                                            aria-describedby="pos-add-edit-sku-subcategory-help"
-                                            disabled={subcategorySelectDisabled}
-                                            className="block w-full rounded-md border border-slate-200/90 bg-slate-50/90 py-1.5 px-2.5 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                                            value={formData.subcategoryId}
-                                            onChange={(e) => setFormData({ ...formData, subcategoryId: e.target.value })}
-                                        >
-                                            <option value="">
-                                                {formData.category === 'General'
-                                                    ? 'Select a main category first…'
-                                                    : subcategoriesForParent.length === 0
-                                                      ? '— No subcategories for this main category'
-                                                      : 'Main category only (no subcategory)'}
-                                            </option>
-                                            {subcategoriesForParent.map((c) => (
-                                                <option key={c.id} value={c.id}>
-                                                    {c.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <p id="pos-add-edit-sku-subcategory-help" className="line-clamp-2 text-[11px] leading-snug text-slate-500" title={subcategoryHelperText}>
-                                            {subcategoryHelperText}
-                                        </p>
-                                    </div>
-                                    <Input
-                                        label="Unit of Measure"
-                                        placeholder="e.g. Piece (pc)"
-                                        value={formData.unit}
-                                        onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                                        className="border-slate-200/90 bg-slate-50/90"
-                                    />
-                                    <Input
-                                        label="Reorder Point"
-                                        type="number"
-                                        value={formData.reorderPoint}
-                                        onChange={(e) => setFormData({ ...formData, reorderPoint: Number(e.target.value) })}
-                                        className="border-slate-200/90 bg-slate-50/90"
-                                    />
-                                </div>
-
-                                <div className="mt-2 flex flex-col gap-2 rounded-lg border border-sky-200 bg-sky-50/80 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="flex min-w-0 items-center gap-2">
-                                        <span className="shrink-0 text-blue-600">
-                                            {React.cloneElement(ICONS.shoppingCart as React.ReactElement<any>, { size: 18 })}
-                                        </span>
-                                        <div>
-                                            <p className="text-sm font-semibold leading-tight text-slate-900">Available for sale</p>
-                                            <p className="text-[11px] leading-snug text-slate-600">
-                                                Visible on POS and customer portals.
-                                            </p>
+                                    <div className="flex flex-col gap-3 rounded-xl bg-slate-100/90 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                type="button"
+                                                role="switch"
+                                                aria-checked={!formData.salesDeactivated}
+                                                aria-label="Available for sale"
+                                                onClick={() => setFormData({ ...formData, salesDeactivated: !formData.salesDeactivated })}
+                                                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 ${
+                                                    !formData.salesDeactivated ? 'bg-violet-600' : 'bg-slate-300'
+                                                }`}
+                                            >
+                                                <span
+                                                    className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                                                        !formData.salesDeactivated ? 'translate-x-5' : 'translate-x-0'
+                                                    }`}
+                                                />
+                                            </button>
+                                            <span className="text-sm font-medium text-slate-800">Available for sale</span>
                                         </div>
+                                        {showLowMarginWarning && (
+                                            <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-red-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-red-700 sm:self-center">
+                                                {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 14, className: 'shrink-0' })}
+                                                Margin {'<'} 5%
+                                            </span>
+                                        )}
                                     </div>
-                                    <button
-                                        type="button"
-                                        role="switch"
-                                        aria-checked={!formData.salesDeactivated}
-                                        aria-label="Available for sale"
-                                        onClick={() => setFormData({ ...formData, salesDeactivated: !formData.salesDeactivated })}
-                                        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                                            !formData.salesDeactivated ? 'bg-blue-600' : 'bg-slate-300'
-                                        }`}
-                                    >
-                                        <span
-                                            className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
-                                                !formData.salesDeactivated ? 'translate-x-5' : 'translate-x-0'
-                                            }`}
-                                        />
-                                    </button>
                                 </div>
                             </div>
 
-                            <div className="flex flex-col gap-2 border-t border-slate-200/80 pt-2 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="order-2 sm:order-1">
+                            <div className="-mx-4 mt-2 flex flex-col gap-3 border-t border-slate-200 bg-slate-50/95 px-4 py-4 sm:-mx-5 sm:px-5 md:-mx-6 md:px-6 lg:-mx-8 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+                                <div className="order-2 lg:order-1">
                                     {editingItem && !editingItem.id.startsWith('pending-') && (
-                                        <Button
+                                        <button
                                             type="button"
-                                            variant="ghost"
                                             onClick={handleDeleteSku}
                                             disabled={saving || deleting}
-                                            className="border border-transparent text-red-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                                            className="inline-flex items-center gap-2 text-sm font-medium text-red-600 transition-colors hover:text-red-700 disabled:opacity-50"
                                         >
                                             {React.cloneElement(ICONS.trash as React.ReactElement<any>, { size: 18 })}
-                                            {deleting ? 'Deleting...' : 'Delete SKU'}
-                                        </Button>
+                                            {deleting ? 'Archiving…' : 'Archive SKU'}
+                                        </button>
                                     )}
                                 </div>
-                                <div className="order-1 flex flex-wrap justify-end gap-2 sm:order-2 sm:ml-auto">
-                                    <Button type="button" variant="ghost" onClick={handleDiscardForm} disabled={saving || deleting}>
-                                        Discard Changes
-                                    </Button>
+                                <div className="order-1 flex flex-wrap items-center justify-end gap-3 lg:order-2 lg:ml-auto">
+                                    <button
+                                        type="button"
+                                        onClick={handleDiscardForm}
+                                        disabled={saving || deleting}
+                                        className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-800 disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
                                     {editingItem ? (
-                                        <Button onClick={handleUpdateExisting} disabled={!formData.name || saving || hasBlockingConflict}>
-                                            {saving ? 'Saving...' : 'Save SKU Details'}
+                                        <Button
+                                            onClick={handleUpdateExisting}
+                                            disabled={!formData.name || saving || hasBlockingConflict}
+                                            className="min-w-[140px] rounded-xl bg-violet-600 px-6 shadow-md hover:bg-violet-700"
+                                        >
+                                            {saving ? 'Saving…' : 'Save changes'}
                                         </Button>
                                     ) : (
-                                        <Button onClick={handleCreateNew} disabled={!formData.name || saving || hasBlockingConflict}>
-                                            {saving ? 'Creating...' : 'Create SKU'}
+                                        <Button
+                                            onClick={handleCreateNew}
+                                            disabled={!formData.name || saving || hasBlockingConflict}
+                                            className="min-w-[140px] rounded-xl bg-violet-600 px-6 shadow-md hover:bg-violet-700"
+                                        >
+                                            {saving ? 'Creating…' : 'Create SKU'}
                                         </Button>
                                     )}
                                 </div>

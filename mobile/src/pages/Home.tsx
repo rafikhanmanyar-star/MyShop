@@ -17,6 +17,11 @@ export default function Home() {
     const [loading, setLoading] = useState(true);
     const [searchDraft, setSearchDraft] = useState('');
 
+    const mainCategories = useMemo(
+        () => categories.filter((c: any) => !c.parent_id),
+        [categories]
+    );
+
     useEffect(() => {
         if (!shopSlug) return;
         setLoading(true);
@@ -251,7 +256,7 @@ export default function Home() {
                         </span>
                         <span>New Arrivals</span>
                     </Link>
-                    {categories.map((c: any) => (
+                    {mainCategories.map((c: any) => (
                         <Link
                             key={c.id}
                             to={`/${shopSlug}/products?category=${c.id}`}
