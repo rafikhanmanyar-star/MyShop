@@ -25,6 +25,46 @@ function safeNum(v: any): number {
     return Number.isFinite(n) ? n : 0;
 }
 
+function parseAttributesJson(val: any): Record<string, unknown> | null {
+    if (val == null) return null;
+    if (typeof val === 'object' && !Array.isArray(val)) return val as Record<string, unknown>;
+    if (typeof val === 'string') {
+        try {
+            const j = JSON.parse(val);
+            if (j && typeof j === 'object' && !Array.isArray(j)) return j as Record<string, unknown>;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+}
+
+/** Sellable qty expression for mobile catalog (tenant param is always $1). */
+function mobileProductSellableStockSql(): string {
+    return `COALESCE((
+          SELECT SUM(
+            CASE
+              WHEN EXISTS (
+                SELECT 1 FROM inventory_batches b0
+                WHERE b0.tenant_id = $1 AND b0.product_id = i.product_id AND b0.warehouse_id = i.warehouse_id
+              )
+              THEN GREATEST(0,
+                COALESCE((
+                  SELECT SUM(b.quantity_remaining)
+                  FROM inventory_batches b
+                  WHERE b.tenant_id = i.tenant_id AND b.product_id = i.product_id AND b.warehouse_id = i.warehouse_id
+                    AND b.quantity_remaining > 0
+                    AND (b.expiry_date IS NULL OR b.expiry_date >= CURRENT_DATE)
+                ), 0) - COALESCE(i.quantity_reserved, 0)
+              )
+              ELSE GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0)
+            END
+          )
+          FROM shop_inventory i
+          WHERE i.tenant_id = $1 AND i.product_id = p.id
+        ), 0)`;
+}
+
 /** Stage 8 (POS) / Stage 9 (customer PWA); Stages 10–11 SSE use NOTIFY — distance still from rider GPS when coords exist. */
 function enrichOrderWithRiderToDropoff(o: Record<string, unknown>): Record<string, unknown> {
     const dlat = o.delivery_lat != null ? parseFloat(String(o.delivery_lat)) : NaN;
@@ -150,28 +190,7 @@ export class MobileOrderService {
             paramIdx++;
         }
 
-        const stockSubquery = `COALESCE((
-          SELECT SUM(
-            CASE
-              WHEN EXISTS (
-                SELECT 1 FROM inventory_batches b0
-                WHERE b0.tenant_id = $1 AND b0.product_id = i.product_id AND b0.warehouse_id = i.warehouse_id
-              )
-              THEN GREATEST(0,
-                COALESCE((
-                  SELECT SUM(b.quantity_remaining)
-                  FROM inventory_batches b
-                  WHERE b.tenant_id = i.tenant_id AND b.product_id = i.product_id AND b.warehouse_id = i.warehouse_id
-                    AND b.quantity_remaining > 0
-                    AND (b.expiry_date IS NULL OR b.expiry_date >= CURRENT_DATE)
-                ), 0) - COALESCE(i.quantity_reserved, 0)
-              )
-              ELSE GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0)
-            END
-          )
-          FROM shop_inventory i
-          WHERE i.tenant_id = $1 AND i.product_id = p.id
-        ), 0)`;
+        const stockSubquery = mobileProductSellableStockSql();
 
         const showUnavailable = opts.showUnavailable === true;
         /** Explicit "out of stock" filter must not be combined with the default hide-OOS rule (would yield no rows). */
@@ -322,30 +341,10 @@ export class MobileOrderService {
     }
 
     async getProductDetailForMobile(tenantId: string, productId: string) {
+        const stockExpr = mobileProductSellableStockSql();
         const rows = await this.db.query(
             `SELECT p.*, c.name as category_name, b.name as brand_name,
-              COALESCE((
-                SELECT SUM(
-                  CASE
-                    WHEN EXISTS (
-                      SELECT 1 FROM inventory_batches b0
-                      WHERE b0.tenant_id = $1 AND b0.product_id = i.product_id AND b0.warehouse_id = i.warehouse_id
-                    )
-                    THEN GREATEST(0,
-                      COALESCE((
-                        SELECT SUM(b.quantity_remaining)
-                        FROM inventory_batches b
-                        WHERE b.tenant_id = i.tenant_id AND b.product_id = i.product_id AND b.warehouse_id = i.warehouse_id
-                          AND b.quantity_remaining > 0
-                          AND (b.expiry_date IS NULL OR b.expiry_date >= CURRENT_DATE)
-                      ), 0) - COALESCE(i.quantity_reserved, 0)
-                    )
-                    ELSE GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0)
-                  END
-                )
-                FROM shop_inventory i
-                WHERE i.tenant_id = $1 AND i.product_id = p.id
-              ), 0) as available_stock
+              ${stockExpr} as available_stock
        FROM shop_products p
        LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
        LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
@@ -354,12 +353,83 @@ export class MobileOrderService {
         );
         if (rows.length === 0) return null;
         const r = rows[0];
+        const stockNum = safeNum(r.available_stock);
+        const attrs = parseAttributesJson((r as any).attributes);
         return {
             ...r,
             price: r.mobile_price != null ? parseFloat(r.mobile_price) : parseFloat(r.retail_price),
-            available_stock: parseFloat(r.available_stock),
+            available_stock: stockNum,
+            stock: stockNum,
+            description: r.mobile_description ?? (r as any).description ?? null,
+            image_url: r.image_url ?? null,
+            category_id: r.category_id ?? null,
+            size: (r as any).size ?? null,
+            weight: (r as any).weight ?? null,
+            unit: r.unit ?? null,
+            attributes: attrs,
             rating_avg: parseFloat(r.rating_avg) || 0,
         };
+    }
+
+    /**
+     * Same-category recommendations: in-stock only, exclude current SKU, prefer high sellers.
+     * When the product has no category, falls back to tenant-wide in-stock best sellers.
+     */
+    async getProductRecommendationsForMobile(tenantId: string, productId: string, limit = 3) {
+        const stockSubquery = mobileProductSellableStockSql();
+        const meta = await this.db.query(
+            `SELECT category_id FROM shop_products
+       WHERE tenant_id = $1 AND id = $2 AND is_active = TRUE AND mobile_visible = TRUE AND COALESCE(sales_deactivated, FALSE) = FALSE`,
+            [tenantId, productId]
+        );
+        if (meta.length === 0) return [];
+
+        const categoryId = meta[0]?.category_id ?? null;
+        const params: any[] = [tenantId, productId];
+        let pIdx = 3;
+        let catFilter = '';
+        if (categoryId) {
+            catFilter = ` AND p.category_id = $${pIdx}`;
+            params.push(categoryId);
+            pIdx++;
+        }
+        const safeLimit = Math.min(Math.max(limit, 1), 10);
+        params.push(safeLimit);
+        const limitParam = pIdx;
+
+        const query = `
+      SELECT p.id, p.name, p.sku, p.category_id, p.unit, p.retail_price, p.tax_rate, p.image_url,
+             p.mobile_price, p.mobile_description, p.is_on_sale, p.is_pre_order, p.discount_percentage,
+             p.rating_avg, p.rating_count,
+             c.name as category_name,
+             ${stockSubquery} as available_stock
+      FROM shop_products p
+      LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
+      WHERE p.tenant_id = $1
+        AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+        AND p.id != $2
+        ${catFilter}
+        AND (${stockSubquery} > 0)
+      ORDER BY COALESCE(p.total_sales, 0) DESC, COALESCE(p.popularity_score, 0) DESC, p.id DESC
+      LIMIT $${limitParam}
+    `;
+
+        const rows = await this.db.query(query, params);
+        const LOW_STOCK_THRESHOLD = 5;
+        return rows.map((row: any) => {
+            const stock = parseFloat(row.available_stock) || 0;
+            const isPre = Boolean(row.is_pre_order);
+            return {
+                ...row,
+                price: row.mobile_price != null ? (parseFloat(row.mobile_price) || 0) : (parseFloat(row.retail_price) || 0),
+                available_stock: stock,
+                stock,
+                image: row.image_url,
+                is_low_stock: stock > 0 && stock <= LOW_STOCK_THRESHOLD,
+                is_out_of_stock: stock <= 0 && !isPre,
+                rating_avg: parseFloat(row.rating_avg) || 0,
+            };
+        });
     }
 
     async getCategoriesForMobile(tenantId: string) {

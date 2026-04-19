@@ -2,7 +2,6 @@ import { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CachedImage from './CachedImage';
 import { getProductImagePath } from '../api';
-import { useLongPress } from '../hooks/useLongPress';
 
 export type ProductListProduct = {
     id: string;
@@ -62,12 +61,9 @@ export default function ProductListCard({
         }, 400);
     };
 
-    const longPress = useLongPress(openDetail, 500);
-
     const handleCardClick = () => {
         if (suppressClick.current) return;
-        if (unavailableStyle || !canPurchase) return;
-        onAddOne(p);
+        openDetail();
     };
 
     const imgPath = getProductImagePath(p);

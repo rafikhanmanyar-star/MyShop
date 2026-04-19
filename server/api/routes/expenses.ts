@@ -32,7 +32,8 @@ router.post('/upload-attachment', checkRole(canCreate), upload.single('attachmen
 
 router.get('/categories', checkRole(canView), async (req: any, res) => {
   try {
-    const categories = await getExpenseService().getCategories(req.tenantId);
+    const includeInactive = req.query.includeInactive === 'true' || req.query.includeInactive === '1';
+    const categories = await getExpenseService().getCategories(req.tenantId, includeInactive);
     res.json(categories);
   } catch (e: any) {
     res.status(e.statusCode || 500).json({ error: e.message });
@@ -48,10 +49,32 @@ router.post('/categories', checkRole(['admin']), async (req: any, res) => {
   }
 });
 
+router.put('/categories/:id', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const updated = await getExpenseService().updateCategory(req.tenantId, req.params.id, req.body);
+    res.json(updated);
+  } catch (e: any) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
+});
+
+export function normalizeExpenseBody(body: any) {
+  const pm = body?.paymentMethod;
+  let paymentMethod = pm;
+  if (typeof pm === 'string') {
+    const u = pm.toUpperCase();
+    if (u === 'CASH' || u === 'BANK' || u === 'OTHER') paymentMethod = u;
+    else if (pm === 'Cash') paymentMethod = 'CASH';
+    else if (pm === 'Bank') paymentMethod = 'BANK';
+    else if (pm === 'Credit') paymentMethod = 'OTHER';
+  }
+  return { ...body, paymentMethod };
+}
+
 router.post('/', checkRole(canCreate), async (req: any, res) => {
   try {
     const created = await getExpenseService().createExpense(req.tenantId, {
-      ...req.body,
+      ...normalizeExpenseBody(req.body),
       createdBy: req.user?.userId,
     });
     res.status(201).json(created);
@@ -66,6 +89,7 @@ router.get('/', checkRole(canView), async (req: any, res) => {
       fromDate: req.query.fromDate as string,
       toDate: req.query.toDate as string,
       categoryId: req.query.categoryId as string,
+      accountId: req.query.accountId as string,
       vendorId: req.query.vendorId as string,
       paymentMethod: req.query.paymentMethod as string,
       search: req.query.search as string,
@@ -124,11 +148,38 @@ router.get('/reports/monthly-summary', checkRole(canView), async (req: any, res)
   }
 });
 
+router.get('/reports/summary', checkRole(canView), async (req: any, res) => {
+  try {
+    const from = (req.query.fromDate as string) || new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 10);
+    const to = (req.query.toDate as string) || new Date().toISOString().slice(0, 10);
+    const categoryId = req.query.categoryId as string | undefined;
+    const accountId = req.query.accountId as string | undefined;
+    const data = await getExpenseService().getExpenseSummary(req.tenantId, from, to, { categoryId, accountId });
+    res.json(data);
+  } catch (e: any) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
+});
+
+router.get('/reports/monthly-trend', checkRole(canView), async (req: any, res) => {
+  try {
+    const from = (req.query.fromDate as string) || new Date(new Date().setMonth(new Date().getMonth() - 11)).toISOString().slice(0, 10);
+    const to = (req.query.toDate as string) || new Date().toISOString().slice(0, 10);
+    const categoryId = req.query.categoryId as string | undefined;
+    const accountId = req.query.accountId as string | undefined;
+    const data = await getExpenseService().getMonthlyExpenseTrend(req.tenantId, from, to, { categoryId, accountId });
+    res.json(data);
+  } catch (e: any) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
+});
+
 router.get('/reports/category-wise', checkRole(canView), async (req: any, res) => {
   try {
     const from = (req.query.fromDate as string) || new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 10);
     const to = (req.query.toDate as string) || new Date().toISOString().slice(0, 10);
-    const data = await getExpenseService().getCategoryWiseReport(req.tenantId, from, to);
+    const accountId = req.query.accountId as string | undefined;
+    const data = await getExpenseService().getCategoryWiseReport(req.tenantId, from, to, accountId);
     res.json(data);
   } catch (e: any) {
     res.status(e.statusCode || 500).json({ error: e.message });

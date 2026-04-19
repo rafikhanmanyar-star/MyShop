@@ -12,11 +12,15 @@ const DEFAULT_CATEGORIES = DEFAULT_CATEGORY_NAMES.map((name, i) => ({
   sortOrder: i + 1,
 }));
 
+export type ExpensePaymentMethod = 'CASH' | 'BANK' | 'OTHER';
+
 export interface CreateExpenseInput {
   expenseDate: string;
   categoryId: string;
+  /** Chart of Accounts expense account to debit */
+  accountId: string;
   amount: number;
-  paymentMethod: 'Cash' | 'Bank' | 'Credit';
+  paymentMethod: ExpensePaymentMethod;
   payeeName?: string;
   vendorId?: string;
   description?: string;
@@ -25,7 +29,8 @@ export interface CreateExpenseInput {
   recurring?: boolean;
   referenceNumber?: string;
   taxAmount?: number;
-  paymentAccountId?: string; // required for Cash/Bank
+  /** Required when paymentMethod is CASH or BANK (shop bank/cash → chart account for credit line) */
+  paymentAccountId?: string;
   createdBy?: string;
 }
 
@@ -69,15 +74,16 @@ export class ExpenseService {
     return rows[0].chart_account_id;
   }
 
-  /** Create expense and post double-entry journal. Cash/Bank: Dr Expense Cr Cash/Bank. Credit: Dr Expense Cr AP */
+  /** Create expense and post double-entry journal. CASH/BANK: Dr expense account Cr cash/bank chart. OTHER: Dr expense Cr AP */
   async createExpense(tenantId: string, input: CreateExpenseInput): Promise<any> {
-    if (!input.expenseDate || !input.categoryId || input.amount == null || input.amount <= 0) {
-      const err: any = new Error('Expense date, category, and positive amount are required.');
+    if (!input.expenseDate || !input.categoryId || !input.accountId || input.amount == null || input.amount <= 0) {
+      const err: any = new Error('Expense date, category, account, and a positive amount are required.');
       err.statusCode = 400;
       throw err;
     }
-    if (input.paymentMethod !== 'Credit' && !input.paymentAccountId) {
-      const err: any = new Error('Payment account is required for Cash/Bank expenses.');
+    const pm = input.paymentMethod;
+    if ((pm === 'CASH' || pm === 'BANK') && !input.paymentAccountId) {
+      const err: any = new Error('Payment account is required for CASH and BANK expenses.');
       err.statusCode = 400;
       throw err;
     }
@@ -86,24 +92,34 @@ export class ExpenseService {
       await this.ensureDefaultCategories(tenantId);
 
       const categoryRow = await client.query(
-        `SELECT ec.id, ec.account_id, ec.name as category_name FROM expense_categories ec
-         WHERE ec.id = $1 AND ec.tenant_id = $2`,
+        `SELECT ec.id, ec.name as category_name FROM expense_categories ec
+         WHERE ec.id = $1 AND ec.tenant_id = $2 AND ec.is_active = TRUE`,
         [input.categoryId, tenantId]
       );
       if (categoryRow.length === 0) {
-        const err: any = new Error('Expense category not found.');
+        const err: any = new Error('Expense category not found or inactive.');
         err.statusCode = 404;
         throw err;
       }
-      const expenseAccountId = categoryRow[0].account_id;
       const categoryName = categoryRow[0].category_name;
 
-      const status = input.paymentMethod === 'Credit' ? 'unpaid' : 'paid';
+      const accRow = await client.query(
+        `SELECT id FROM accounts WHERE id = $1 AND tenant_id = $2 AND type = 'Expense'`,
+        [input.accountId, tenantId]
+      );
+      if (accRow.length === 0) {
+        const err: any = new Error('Invalid expense account for this tenant.');
+        err.statusCode = 400;
+        throw err;
+      }
+      const expenseAccountId = input.accountId;
+
+      const status = pm === 'OTHER' ? 'unpaid' : 'paid';
       const ref = input.referenceNumber || `EXP-${Date.now()}`;
       const description = input.description || `${categoryName} - ${input.payeeName || 'Expense'}`;
 
       let creditAccountId: string;
-      if (input.paymentMethod === 'Credit') {
+      if (pm === 'OTHER') {
         creditAccountId = await this.getOrCreateAccountsPayable(tenantId, client);
       } else {
         const chartId = await this.getPaymentChartAccountId(tenantId, input.paymentAccountId!, client);
@@ -138,8 +154,8 @@ export class ExpenseService {
         `INSERT INTO expenses (
           tenant_id, branch_id, category_id, vendor_id, payee_name, amount,
           payment_account_id, expense_date, description, attachment_url, status,
-          payment_method, reference_number, tax_amount, journal_entry_id, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          payment_method, reference_number, tax_amount, journal_entry_id, created_by, account_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING id`,
         [
           tenantId,
@@ -153,14 +169,20 @@ export class ExpenseService {
           input.description || null,
           input.attachmentUrl || null,
           status,
-          input.paymentMethod,
+          pm,
           input.referenceNumber || null,
           input.taxAmount ?? 0,
           journalId,
           input.createdBy || null,
+          expenseAccountId,
         ]
       );
       const expenseId = expenseRes[0].id;
+
+      await client.query(
+        `UPDATE journal_entries SET source_id = $1 WHERE id = $2 AND tenant_id = $3`,
+        [expenseId, journalId, tenantId]
+      );
 
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
 
@@ -176,6 +198,7 @@ export class ExpenseService {
     fromDate?: string;
     toDate?: string;
     categoryId?: string;
+    accountId?: string;
     vendorId?: string;
     paymentMethod?: string;
     search?: string;
@@ -202,6 +225,11 @@ export class ExpenseService {
       params.push(filters.categoryId);
       idx++;
     }
+    if (filters.accountId) {
+      conditions.push(`e.account_id = $${idx}`);
+      params.push(filters.accountId);
+      idx++;
+    }
     if (filters.vendorId) {
       conditions.push(`e.vendor_id = $${idx}`);
       params.push(filters.vendorId);
@@ -225,19 +253,22 @@ export class ExpenseService {
       `SELECT COUNT(*) as total FROM expenses e WHERE ${whereClause}`,
       params
     );
-    const total = parseInt(countRes[0]?.total ?? '0', 10);
+    const total = parseInt(String(countRes[0]?.total ?? '0'), 10);
 
     const rows = await this.db.query(
-      `SELECT e.id, e.tenant_id, e.branch_id, e.category_id, e.vendor_id, e.payee_name, e.amount,
+      `SELECT e.id, e.tenant_id, e.branch_id, e.category_id, e.account_id, e.vendor_id, e.payee_name, e.amount,
               e.payment_account_id, e.expense_date, e.description, e.attachment_url, e.status,
               e.payment_method, e.recurring_id, e.reference_number, e.tax_amount, e.journal_entry_id,
               e.created_by, e.created_at,
               ec.name as category_name,
               b.name as branch_name,
               v.name as vendor_name,
-              sba.name as payment_account_name
+              sba.name as payment_account_name,
+              ea.name as expense_account_name,
+              ea.code as expense_account_code
        FROM expenses e
        LEFT JOIN expense_categories ec ON e.category_id = ec.id AND ec.tenant_id = e.tenant_id
+       LEFT JOIN accounts ea ON e.account_id = ea.id AND ea.tenant_id = e.tenant_id
        LEFT JOIN shop_branches b ON e.branch_id = b.id AND b.tenant_id = e.tenant_id
        LEFT JOIN shop_vendors v ON e.vendor_id = v.id AND v.tenant_id = e.tenant_id
        LEFT JOIN shop_bank_accounts sba ON e.payment_account_id = sba.id AND sba.tenant_id = e.tenant_id
@@ -253,6 +284,9 @@ export class ExpenseService {
         tenantId: r.tenant_id,
         branchId: r.branch_id,
         categoryId: r.category_id,
+        accountId: r.account_id,
+        expenseAccountName: r.expense_account_name,
+        expenseAccountCode: r.expense_account_code,
         categoryName: r.category_name,
         vendorId: r.vendor_id,
         vendorName: r.vendor_name,
@@ -281,9 +315,10 @@ export class ExpenseService {
   async getExpenseById(tenantId: string, expenseId: string): Promise<any | null> {
     const all = await this.db.query(
       `SELECT e.*, ec.name as category_name, b.name as branch_name, v.name as vendor_name,
-              sba.name as payment_account_name
+              sba.name as payment_account_name, ea.name as expense_account_name, ea.code as expense_account_code
        FROM expenses e
        LEFT JOIN expense_categories ec ON e.category_id = ec.id
+       LEFT JOIN accounts ea ON e.account_id = ea.id AND ea.tenant_id = e.tenant_id
        LEFT JOIN shop_branches b ON e.branch_id = b.id
        LEFT JOIN shop_vendors v ON e.vendor_id = v.id
        LEFT JOIN shop_bank_accounts sba ON e.payment_account_id = sba.id
@@ -297,6 +332,9 @@ export class ExpenseService {
       tenantId: r.tenant_id,
       branchId: r.branch_id,
       categoryId: r.category_id,
+      accountId: r.account_id,
+      expenseAccountName: r.expense_account_name,
+      expenseAccountCode: r.expense_account_code,
       categoryName: r.category_name,
       vendorId: r.vendor_id,
       vendorName: r.vendor_name,
@@ -368,13 +406,18 @@ export class ExpenseService {
   }
 
   /** Get expense categories for tenant */
-  async getCategories(tenantId: string): Promise<any[]> {
+  async getCategories(tenantId: string, includeInactive = false): Promise<any[]> {
     await this.ensureDefaultCategories(tenantId);
+    const activeClause = includeInactive
+      ? ''
+      : this.db.getType() === 'sqlite'
+        ? ' AND ec.is_active = 1'
+        : ' AND ec.is_active IS TRUE';
     const rows = await this.db.query(
-      `SELECT ec.id, ec.tenant_id, ec.name, ec.account_id, ec.is_system, ec.sort_order, a.code as account_code
+      `SELECT ec.id, ec.tenant_id, ec.name, ec.account_id, ec.is_system, ec.sort_order, ec.is_active, a.code as account_code
        FROM expense_categories ec
        JOIN accounts a ON ec.account_id = a.id AND a.tenant_id = ec.tenant_id
-       WHERE ec.tenant_id = $1
+       WHERE ec.tenant_id = $1${activeClause}
        ORDER BY ec.sort_order ASC, ec.name ASC`,
       [tenantId]
     );
@@ -385,6 +428,7 @@ export class ExpenseService {
       accountCode: r.account_code,
       isSystem: !!r.is_system,
       sortOrder: r.sort_order,
+      isActive: r.is_active === undefined || r.is_active === null ? true : !!r.is_active || r.is_active === 1,
     }));
   }
 
@@ -414,12 +458,105 @@ export class ExpenseService {
       throw err;
     }
     const res = await this.db.query(
-      `INSERT INTO expense_categories (tenant_id, name, account_id, is_system, sort_order)
-       VALUES ($1, $2, $3, FALSE, 999)
-       RETURNING id, name, account_id, is_system, sort_order`,
+      `INSERT INTO expense_categories (tenant_id, name, account_id, is_system, sort_order, is_active)
+       VALUES ($1, $2, $3, FALSE, 999, TRUE)
+       RETURNING id, name, account_id, is_system, sort_order, is_active`,
       [tenantId, data.name.trim(), data.accountId]
     );
-    return res[0];
+    const row = res[0];
+    return {
+      id: row.id,
+      name: row.name,
+      accountId: row.account_id,
+      isSystem: !!row.is_system,
+      sortOrder: row.sort_order,
+      isActive: row.is_active === undefined || row.is_active === null ? true : !!row.is_active || row.is_active === 1,
+    };
+  }
+
+  /** Update category name and/or linked default expense account */
+  async updateCategory(
+    tenantId: string,
+    categoryId: string,
+    data: { name?: string; accountId?: string; isActive?: boolean }
+  ): Promise<any> {
+    const existing = await this.db.query(
+      `SELECT id, name FROM expense_categories WHERE id = $1 AND tenant_id = $2`,
+      [categoryId, tenantId]
+    );
+    if (existing.length === 0) {
+      const err: any = new Error('Category not found.');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (data.name != null && data.name.trim()) {
+      const dup = await this.db.query(
+        `SELECT id FROM expense_categories WHERE tenant_id = $1 AND LOWER(name) = LOWER($2) AND id <> $3`,
+        [tenantId, data.name.trim(), categoryId]
+      );
+      if (dup.length > 0) {
+        const err: any = new Error('A category with this name already exists.');
+        err.statusCode = 409;
+        throw err;
+      }
+    }
+    if (data.accountId != null) {
+      const acc = await this.db.query(
+        `SELECT id FROM accounts WHERE id = $1 AND tenant_id = $2 AND type = 'Expense'`,
+        [data.accountId, tenantId]
+      );
+      if (acc.length === 0) {
+        const err: any = new Error('Invalid expense account.');
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+
+    let n = 1;
+    const params: any[] = [];
+    const parts: string[] = [];
+    if (data.name != null && data.name.trim()) {
+      parts.push(`name = $${n++}`);
+      params.push(data.name.trim());
+    }
+    if (data.accountId != null) {
+      parts.push(`account_id = $${n++}`);
+      params.push(data.accountId);
+    }
+    if (data.isActive !== undefined) {
+      parts.push(`is_active = $${n++}`);
+      params.push(data.isActive);
+    }
+    const tsExpr = this.db.getType() === 'sqlite' ? "datetime('now')" : 'NOW()';
+    parts.push(`updated_at = ${tsExpr}`);
+    if (parts.length === 1) {
+      const err: any = new Error('No changes provided.');
+      err.statusCode = 400;
+      throw err;
+    }
+    params.push(categoryId, tenantId);
+    await this.db.execute(
+      `UPDATE expense_categories SET ${parts.join(', ')} WHERE id = $${n} AND tenant_id = $${n + 1}`,
+      params
+    );
+
+    const rows = await this.db.query(
+      `SELECT ec.id, ec.name, ec.account_id, ec.is_system, ec.sort_order, ec.is_active, a.code as account_code
+       FROM expense_categories ec
+       JOIN accounts a ON ec.account_id = a.id AND a.tenant_id = ec.tenant_id
+       WHERE ec.id = $1 AND ec.tenant_id = $2`,
+      [categoryId, tenantId]
+    );
+    const r = rows[0];
+    return {
+      id: r.id,
+      name: r.name,
+      accountId: r.account_id,
+      accountCode: r.account_code,
+      isSystem: !!r.is_system,
+      sortOrder: r.sort_order,
+      isActive: r.is_active === undefined || r.is_active === null ? true : !!r.is_active || r.is_active === 1,
+    };
   }
 
   /** Recurring: list */
@@ -489,20 +626,25 @@ export class ExpenseService {
   /** Process due recurring expenses (create expense records and advance next_run_date) */
   async processDueRecurring(tenantId: string, upToDate: string, createdBy?: string): Promise<{ created: number }> {
     const rows = await this.db.query(
-      `SELECT * FROM recurring_expenses WHERE tenant_id = $1 AND next_run_date <= $2 AND auto_generate = 1
-       ORDER BY next_run_date ASC`,
+      `SELECT r.*, ec.account_id AS category_account_id
+       FROM recurring_expenses r
+       JOIN expense_categories ec ON r.category_id = ec.id AND ec.tenant_id = r.tenant_id
+       WHERE r.tenant_id = $1 AND r.next_run_date <= $2 AND r.auto_generate = 1
+       ORDER BY r.next_run_date ASC`,
       [tenantId, upToDate]
     );
     let created = 0;
     for (const r of rows) {
       try {
+        const pm = (r.payment_method || 'BANK') as ExpensePaymentMethod;
         await this.createExpense(tenantId, {
           expenseDate: r.next_run_date,
           categoryId: r.category_id,
+          accountId: r.category_account_id,
           amount: parseFloat(r.amount) || 0,
-          paymentMethod: (r.payment_method || 'Bank') as 'Cash' | 'Bank' | 'Credit',
+          paymentMethod: pm === 'CASH' || pm === 'BANK' || pm === 'OTHER' ? pm : 'BANK',
           payeeName: r.payee_name,
-          paymentAccountId: r.payment_account_id,
+          paymentAccountId: pm === 'OTHER' ? undefined : r.payment_account_id,
           description: r.description || `Recurring: ${r.frequency}`,
           createdBy,
         });
@@ -567,20 +709,92 @@ export class ExpenseService {
   }
 
   /** Category-wise expense report (for charts) */
-  async getCategoryWiseReport(tenantId: string, fromDate: string, toDate: string): Promise<any[]> {
+  async getCategoryWiseReport(tenantId: string, fromDate: string, toDate: string, accountId?: string): Promise<any[]> {
+    const params: any[] = [tenantId, fromDate, toDate];
+    let extra = '';
+    if (accountId) {
+      extra = ' AND e.account_id = $4';
+      params.push(accountId);
+    }
     const rows = await this.db.query(
       `SELECT ec.name as category_name, e.category_id, COALESCE(SUM(e.amount), 0) as total
        FROM expenses e
        LEFT JOIN expense_categories ec ON e.category_id = ec.id AND ec.tenant_id = e.tenant_id
-       WHERE e.tenant_id = $1 AND e.expense_date >= $2 AND e.expense_date <= $3
+       WHERE e.tenant_id = $1 AND e.expense_date >= $2 AND e.expense_date <= $3${extra}
        GROUP BY e.category_id, ec.name
        ORDER BY total DESC`,
-      [tenantId, fromDate, toDate]
+      params
     );
     return rows.map((r: any) => ({
       categoryName: r.category_name || 'Uncategorized',
       categoryId: r.category_id,
       total: parseFloat(r.total) || 0,
+    }));
+  }
+
+  /** Total expenses in range (optional category / CoA filters) */
+  async getExpenseSummary(
+    tenantId: string,
+    fromDate: string,
+    toDate: string,
+    filters?: { categoryId?: string; accountId?: string }
+  ): Promise<{ total: number }> {
+    const conditions = ['tenant_id = $1', 'expense_date >= $2', 'expense_date <= $3'];
+    const params: any[] = [tenantId, fromDate, toDate];
+    let idx = 4;
+    if (filters?.categoryId) {
+      conditions.push(`category_id = $${idx}`);
+      params.push(filters.categoryId);
+      idx++;
+    }
+    if (filters?.accountId) {
+      conditions.push(`account_id = $${idx}`);
+      params.push(filters.accountId);
+      idx++;
+    }
+    const row = await this.db.query(
+      `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE ${conditions.join(' AND ')}`,
+      params
+    );
+    return { total: parseFloat(String(row[0]?.total ?? 0)) || 0 };
+  }
+
+  /** Monthly totals for trend chart */
+  async getMonthlyExpenseTrend(
+    tenantId: string,
+    fromDate: string,
+    toDate: string,
+    filters?: { categoryId?: string; accountId?: string }
+  ): Promise<{ month: string; total: number }[]> {
+    const fmt =
+      this.db.getType() === 'sqlite'
+        ? `substr(e.expense_date, 1, 7)`
+        : `to_char(e.expense_date, 'YYYY-MM')`;
+    const conditions = ['e.tenant_id = $1', 'e.expense_date >= $2', 'e.expense_date <= $3'];
+    const params: any[] = [tenantId, fromDate, toDate];
+    let idx = 4;
+    if (filters?.categoryId) {
+      conditions.push(`e.category_id = $${idx}`);
+      params.push(filters.categoryId);
+      idx++;
+    }
+    if (filters?.accountId) {
+      conditions.push(`e.account_id = $${idx}`);
+      params.push(filters.accountId);
+      idx++;
+    }
+    const where = conditions.join(' AND ');
+    const rows = await this.db.query(
+      `SELECT ${fmt} AS month, COALESCE(SUM(e.amount), 0) AS total
+       FROM expenses e
+       WHERE ${where}
+       GROUP BY ${fmt}
+       ORDER BY month ASC`,
+      params
+    );
+    return rows.map((r: any) => ({
+      month: String(r.month),
+      total: parseFloat(String(r.total ?? 0)) || 0,
     }));
   }
 

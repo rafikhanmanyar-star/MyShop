@@ -104,6 +104,8 @@ export const publicApi = {
         return request(`${API_BASE}/${slug}/products${qs ? `?${qs}` : ''}`);
     },
     getProduct: (slug: string, id: string) => request(`${API_BASE}/${slug}/products/${id}`),
+    getProductRecommendations: (slug: string, id: string) =>
+        request(`${API_BASE}/${slug}/products/${encodeURIComponent(id)}/recommendations`),
     getOffers: (slug: string) => request(`${API_BASE}/${slug}/offers`),
     getOffer: (slug: string, offerId: string) => request(`${API_BASE}/${slug}/offers/${offerId}`),
     getBrands: (slug: string) => request(`${API_BASE}/${slug}/brands`),

@@ -5,22 +5,18 @@
 
 const DB_NAME = 'myshop_expense_sync';
 const STORE_NAME = 'pending';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface PendingExpenseItem {
   localId: string;
   payload: {
     expenseDate: string;
     categoryId: string;
+    accountId: string;
     amount: number;
-    paymentMethod: 'Cash' | 'Bank' | 'Credit';
-    payeeName?: string;
-    vendorId?: string;
+    paymentMethod: 'CASH' | 'BANK' | 'OTHER';
     description?: string;
-    attachmentUrl?: string;
-    branchId?: string;
     referenceNumber?: string;
-    taxAmount?: number;
     paymentAccountId?: string;
   };
   createdAt: string;
@@ -41,6 +37,15 @@ function openDb(): Promise<IDBDatabase> {
     req.onupgradeneeded = (e) => {
       const db = (e.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'localId' });
+      }
+      if (e.oldVersion < 2) {
+        // Payload shape changed; clear stale queue so sync does not post invalid bodies
+        try {
+          db.deleteObjectStore(STORE_NAME);
+        } catch {
+          /* ignore */
+        }
         db.createObjectStore(STORE_NAME, { keyPath: 'localId' });
       }
     };

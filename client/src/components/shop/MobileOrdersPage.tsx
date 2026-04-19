@@ -341,6 +341,42 @@ function MobileOrdersPageContent() {
         }
     };
 
+    const handlePrintUnpaidReceipt = async (order: MobileOrder) => {
+        try {
+            const orderToPrint = order.items?.length ? order : await mobileOrdersApi.getOrder(order.id);
+            const { createThermalPrinter } = await import('../../services/printer/thermalPrinter');
+            const printer = createThermalPrinter();
+
+            await printer.printReceipt({
+                storeName: branding?.company_name || 'My Shop',
+                storeAddress: branding?.address || '',
+                receiptNumber: orderToPrint.order_number,
+                date: new Date(orderToPrint.created_at).toLocaleDateString(),
+                time: new Date(orderToPrint.created_at).toLocaleTimeString(),
+                cashier: 'Mobile Order',
+                customer: `${orderToPrint.customer_name || ''} - ${orderToPrint.customer_phone || ''}`,
+                items: (orderToPrint.items || []).map(item => ({
+                    name: item.product_name,
+                    quantity: parseFloat(String(item.quantity)),
+                    unitPrice: parseFloat(String(item.unit_price)),
+                    total: parseFloat(String(item.subtotal)),
+                    discount: parseFloat(String(item.discount_amount || 0)),
+                })),
+                subtotal: parseFloat(String(orderToPrint.subtotal)),
+                discount: 0,
+                tax: parseFloat(String(orderToPrint.tax_total)),
+                total: parseFloat(String(orderToPrint.grand_total)),
+                payments: [
+                    { method: formatMobilePaymentMethod(orderToPrint.payment_method), amount: parseFloat(String(orderToPrint.grand_total)) }
+                ],
+                footer: `UNPAID MOBILE ORDER\nDelivery: ${formatMobilePaymentMethod(orderToPrint.payment_method)}\nDelivery Fee: PKR ${orderToPrint.delivery_fee}\n${orderToPrint.delivery_address ? `Address: ${orderToPrint.delivery_address}\n` : ''}${orderToPrint.delivery_notes || ''}`,
+                showBarcode: true,
+            });
+        } catch (err: any) {
+            alert(err.error || err.message || 'Failed to print receipt');
+        }
+    };
+
     const handleStatusUpdate = async (orderId: string, newStatus: string) => {
         setActionLoading(orderId);
         try {
@@ -956,6 +992,7 @@ function MobileOrdersPageContent() {
                                 setSelectedBankAccount('');
                                 setPaymentType('bank');
                             }}
+                            onPrintUnpaid={handlePrintUnpaidReceipt}
                             actionLoading={actionLoading}
                             formatPrice={formatPrice}
                             formatDate={formatFullDate}
@@ -1311,12 +1348,13 @@ function MobileUsersPanel({
 
 // ─── Order Detail Panel ───────────────────────────────────
 function OrderDetailPanel({
-    order, onStatusUpdate, onCollectPayment, actionLoading, formatPrice, formatDate,
+    order, onStatusUpdate, onCollectPayment, onPrintUnpaid, actionLoading, formatPrice, formatDate,
     assignableRiders, onAssignRider, assignLoadingOrderId, riderAssignmentMode,
 }: {
     order: MobileOrder;
     onStatusUpdate: (id: string, status: string) => void;
     onCollectPayment: (order: MobileOrder) => void;
+    onPrintUnpaid: (order: MobileOrder) => void | Promise<void>;
     actionLoading: string;
     formatPrice: (p: any) => string;
     formatDate: (d: string) => string;
@@ -1335,7 +1373,9 @@ function OrderDetailPanel({
         !riderLocked &&
         order.status !== 'Delivered' &&
         order.status !== 'Cancelled';
+    const canPrintUnpaid = order.payment_status !== 'Paid' && order.status !== 'Cancelled';
     const [manualRiderId, setManualRiderId] = useState('');
+    const [printing, setPrinting] = useState(false);
 
     useEffect(() => {
         setManualRiderId('');
@@ -1627,39 +1667,59 @@ function OrderDetailPanel({
                 </div>
             </div>
 
-            {nextStatus && !riderLocked && (
-                <div className="shrink-0 border-t border-border p-3 sm:p-4 flex gap-2">
+            {/* Action buttons */}
+            <div className="shrink-0 border-t border-border p-3 sm:p-4 space-y-2">
+                {/* Print receipt — always available for unpaid/active orders */}
+                {canPrintUnpaid && (
                     <button
                         type="button"
-                        onClick={() => onStatusUpdate(order.id, nextStatus)}
-                        disabled={actionLoading === order.id}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                        disabled={printing}
+                        onClick={async () => {
+                            setPrinting(true);
+                            try { await onPrintUnpaid(order); } finally { setPrinting(false); }
+                        }}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 py-2.5 text-sm font-bold text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-950/70"
                     >
-                        {actionLoading === order.id ? (
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                        ) : (
-                            <Check className="h-4 w-4" />
-                        )}
-                        {nextStatus === 'Delivered'
-                            ? order.status === 'Packed' && order.payment_method === 'SelfCollection'
-                                ? 'Mark Collected'
-                                : 'Mark Delivered'
-                            : `Mark as ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
+                        {printing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                        Print Unpaid Receipt
                     </button>
-                    {order.status === 'Pending' && (
+                )}
+
+                {/* Status progression */}
+                {nextStatus && !riderLocked && (
+                    <div className="flex gap-2">
                         <button
                             type="button"
-                            onClick={() => onStatusUpdate(order.id, 'Cancelled')}
+                            onClick={() => onStatusUpdate(order.id, nextStatus)}
                             disabled={actionLoading === order.id}
-                            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-950/70"
+                            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
                         >
-                            Cancel
+                            {actionLoading === order.id ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Check className="h-4 w-4" />
+                            )}
+                            {nextStatus === 'Delivered'
+                                ? order.status === 'Packed' && order.payment_method === 'SelfCollection'
+                                    ? 'Mark Collected'
+                                    : 'Mark Delivered'
+                                : `Mark as ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}
                         </button>
-                    )}
-                </div>
-            )}
-            {isUnpaid && (
-                <div className="shrink-0 border-t border-border p-3 sm:p-4">
+                        {order.status === 'Pending' && (
+                            <button
+                                type="button"
+                                onClick={() => onStatusUpdate(order.id, 'Cancelled')}
+                                disabled={actionLoading === order.id}
+                                className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-950/70"
+                            >
+                                Cancel
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Collect payment */}
+                {isUnpaid && (
                     <button
                         type="button"
                         onClick={() => onCollectPayment(order)}
@@ -1668,8 +1728,8 @@ function OrderDetailPanel({
                         <Banknote className="h-4 w-4 shrink-0" />
                         Collect payment — {formatPrice(order.grand_total)}
                     </button>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }

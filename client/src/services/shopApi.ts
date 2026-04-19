@@ -418,18 +418,38 @@ export const accountingApi = {
 
 // --- Expenses API ---
 export const expensesApi = {
-  getCategories: () => apiClient.get<any[]>('/shop/expenses/categories'),
+  getCategories: (includeInactive?: boolean) =>
+    apiClient.get<any[]>(
+      `/shop/expenses/categories${includeInactive ? '?includeInactive=true' : ''}`
+    ),
   createCategory: (data: { name: string; accountId: string }) => apiClient.post<any>('/shop/expenses/categories', data),
-  list: (params?: { fromDate?: string; toDate?: string; categoryId?: string; vendorId?: string; paymentMethod?: string; search?: string; limit?: number; offset?: number }) => {
+  updateCategory: (id: string, data: Partial<{ name: string; accountId: string; isActive: boolean }>) =>
+    apiClient.put<any>(`/shop/expenses/categories/${encodeURIComponent(id)}`, data),
+  list: (params?: {
+    fromDate?: string;
+    toDate?: string;
+    categoryId?: string;
+    accountId?: string;
+    vendorId?: string;
+    paymentMethod?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+    page?: number;
+  }) => {
     const q = new URLSearchParams();
     if (params?.fromDate) q.set('fromDate', params.fromDate);
     if (params?.toDate) q.set('toDate', params.toDate);
     if (params?.categoryId) q.set('categoryId', params.categoryId);
+    if (params?.accountId) q.set('accountId', params.accountId);
     if (params?.vendorId) q.set('vendorId', params.vendorId);
     if (params?.paymentMethod) q.set('paymentMethod', params.paymentMethod);
     if (params?.search) q.set('search', params.search);
-    if (params?.limit != null) q.set('limit', String(params.limit));
-    if (params?.offset != null) q.set('offset', String(params.offset));
+    const limit = params?.limit ?? 25;
+    const offset =
+      params?.page != null ? (params.page - 1) * limit : (params?.offset ?? 0);
+    q.set('limit', String(limit));
+    q.set('offset', String(offset));
     const query = q.toString();
     return apiClient.get<{ rows: any[]; total: number }>(`/shop/expenses${query ? `?${query}` : ''}`);
   },
@@ -441,17 +461,32 @@ export const expensesApi = {
     formData.append('attachment', file);
     return apiClient.post<{ attachmentUrl: string }>('/shop/expenses/upload-attachment', formData);
   },
-  recurring: {
-    list: () => apiClient.get<any[]>('/shop/expenses/recurring/list'),
-    create: (data: any) => apiClient.post<{ id: string }>('/shop/expenses/recurring', data),
-    processDue: (upToDate?: string) => apiClient.post<{ created: number }>('/shop/expenses/recurring/process-due', { upToDate }),
-  },
   reports: {
-    monthlySummary: (year: number, month: number) => apiClient.get<any>(`/shop/expenses/reports/monthly-summary?year=${year}&month=${month}`),
-    categoryWise: (fromDate: string, toDate: string) => apiClient.get<any[]>(`/shop/expenses/reports/category-wise?fromDate=${fromDate}&toDate=${toDate}`),
-    expenseVsRevenue: (fromDate: string, toDate: string) => apiClient.get<any>(`/shop/expenses/reports/expense-vs-revenue?fromDate=${fromDate}&toDate=${toDate}`),
+    summary: (fromDate: string, toDate: string, filters?: { categoryId?: string; accountId?: string }) => {
+      const q = new URLSearchParams({ fromDate, toDate });
+      if (filters?.categoryId) q.set('categoryId', filters.categoryId);
+      if (filters?.accountId) q.set('accountId', filters.accountId);
+      return apiClient.get<{ total: number }>(`/shop/expenses/reports/summary?${q.toString()}`);
+    },
+    monthlyTrend: (fromDate: string, toDate: string, filters?: { categoryId?: string; accountId?: string }) => {
+      const q = new URLSearchParams({ fromDate, toDate });
+      if (filters?.categoryId) q.set('categoryId', filters.categoryId);
+      if (filters?.accountId) q.set('accountId', filters.accountId);
+      return apiClient.get<{ month: string; total: number }[]>(`/shop/expenses/reports/monthly-trend?${q.toString()}`);
+    },
+    monthlySummary: (year: number, month: number) =>
+      apiClient.get<any>(`/shop/expenses/reports/monthly-summary?year=${year}&month=${month}`),
+    categoryWise: (fromDate: string, toDate: string, accountId?: string) => {
+      const q = new URLSearchParams({ fromDate, toDate });
+      if (accountId) q.set('accountId', accountId);
+      return apiClient.get<any[]>(`/shop/expenses/reports/category-wise?${q.toString()}`);
+    },
+    expenseVsRevenue: (fromDate: string, toDate: string) =>
+      apiClient.get<any>(`/shop/expenses/reports/expense-vs-revenue?fromDate=${fromDate}&toDate=${toDate}`),
     vendor: (fromDate?: string, toDate?: string) =>
-      apiClient.get<any[]>(`/shop/expenses/reports/vendor${fromDate != null ? `?fromDate=${fromDate}${toDate ? `&toDate=${toDate}` : ''}` : ''}`),
+      apiClient.get<any[]>(
+        `/shop/expenses/reports/vendor${fromDate != null ? `?fromDate=${fromDate}${toDate ? `&toDate=${toDate}` : ''}` : ''}`
+      ),
   },
 };
 
