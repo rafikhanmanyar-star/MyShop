@@ -94,7 +94,6 @@ export default function ProductListCard({
                     handleCardClick();
                 }
             }}
-            {...longPress}
         >
             {p.is_on_sale && (p.discount_percentage ?? 0) > 0 && (
                 <div className="discount-badge">-{Math.round(Number(p.discount_percentage))}%</div>

@@ -16,11 +16,13 @@ export type ExpensePaymentMethod = 'CASH' | 'BANK' | 'OTHER';
 
 export interface CreateExpenseInput {
   expenseDate: string;
-  categoryId: string;
+  /** Optional: resolved from expense account when omitted (match or auto-create category for that CoA) */
+  categoryId?: string;
   /** Chart of Accounts expense account to debit */
   accountId: string;
   amount: number;
-  paymentMethod: ExpensePaymentMethod;
+  /** Inferred from pay-from account type when omitted */
+  paymentMethod?: ExpensePaymentMethod;
   payeeName?: string;
   vendorId?: string;
   description?: string;
@@ -29,7 +31,7 @@ export interface CreateExpenseInput {
   recurring?: boolean;
   referenceNumber?: string;
   taxAmount?: number;
-  /** Required when paymentMethod is CASH or BANK (shop bank/cash → chart account for credit line) */
+  /** Shop cash/bank row — required for paid expenses (chart credit line) */
   paymentAccountId?: string;
   createdBy?: string;
 }
@@ -76,14 +78,8 @@ export class ExpenseService {
 
   /** Create expense and post double-entry journal. CASH/BANK: Dr expense account Cr cash/bank chart. OTHER: Dr expense Cr AP */
   async createExpense(tenantId: string, input: CreateExpenseInput): Promise<any> {
-    if (!input.expenseDate || !input.categoryId || !input.accountId || input.amount == null || input.amount <= 0) {
-      const err: any = new Error('Expense date, category, account, and a positive amount are required.');
-      err.statusCode = 400;
-      throw err;
-    }
-    const pm = input.paymentMethod;
-    if ((pm === 'CASH' || pm === 'BANK') && !input.paymentAccountId) {
-      const err: any = new Error('Payment account is required for CASH and BANK expenses.');
+    if (!input.expenseDate || !input.accountId || input.amount == null || input.amount <= 0) {
+      const err: any = new Error('Expense date, expense account, and a positive amount are required.');
       err.statusCode = 400;
       throw err;
     }
@@ -91,28 +87,111 @@ export class ExpenseService {
     const result = await this.db.transaction(async (client: any) => {
       await this.ensureDefaultCategories(tenantId);
 
-      const categoryRow = await client.query(
-        `SELECT ec.id, ec.name as category_name FROM expense_categories ec
-         WHERE ec.id = $1 AND ec.tenant_id = $2 AND ec.is_active = TRUE`,
-        [input.categoryId, tenantId]
-      );
-      if (categoryRow.length === 0) {
-        const err: any = new Error('Expense category not found or inactive.');
-        err.statusCode = 404;
-        throw err;
-      }
-      const categoryName = categoryRow[0].category_name;
-
-      const accRow = await client.query(
-        `SELECT id FROM accounts WHERE id = $1 AND tenant_id = $2 AND type = 'Expense'`,
+      const accMeta = await client.query(
+        `SELECT name, code FROM accounts WHERE id = $1 AND tenant_id = $2 AND type = 'Expense'`,
         [input.accountId, tenantId]
       );
-      if (accRow.length === 0) {
+      if (accMeta.length === 0) {
         const err: any = new Error('Invalid expense account for this tenant.');
         err.statusCode = 400;
         throw err;
       }
+
+      let categoryId = input.categoryId?.trim() || '';
+      if (categoryId) {
+        const categoryRow = await client.query(
+          `SELECT ec.id, ec.name as category_name FROM expense_categories ec
+           WHERE ec.id = $1 AND ec.tenant_id = $2 AND ec.is_active IS NOT FALSE`,
+          [categoryId, tenantId]
+        );
+        if (categoryRow.length === 0) {
+          const err: any = new Error('Expense category not found or inactive.');
+          err.statusCode = 404;
+          throw err;
+        }
+      } else {
+        const orderSql =
+          this.db.getType() === 'sqlite'
+            ? `SELECT id, name FROM expense_categories
+               WHERE tenant_id = $1 AND account_id = $2
+               ORDER BY sort_order ASC, name ASC
+               LIMIT 1`
+            : `SELECT id, name FROM expense_categories
+               WHERE tenant_id = $1 AND account_id = $2
+               ORDER BY sort_order ASC NULLS LAST, name ASC
+               LIMIT 1`;
+        const match = await client.query(orderSql, [tenantId, input.accountId]);
+        if (match.length > 0) {
+          categoryId = match[0].id;
+        } else {
+          const baseName = accMeta[0].code
+            ? `${accMeta[0].code} — ${accMeta[0].name}`
+            : accMeta[0].name || 'Expense';
+          let insertName = baseName;
+          for (let attempt = 0; attempt < 10; attempt++) {
+            const dup = await client.query(
+              `SELECT id, account_id FROM expense_categories WHERE tenant_id = $1 AND LOWER(name) = LOWER($2)`,
+              [tenantId, insertName]
+            );
+            if (dup.length === 0) break;
+            if (dup[0].account_id === input.accountId) {
+              categoryId = dup[0].id;
+              insertName = '';
+              break;
+            }
+            insertName = `${baseName} (${attempt + 2})`;
+          }
+          if (!categoryId && insertName) {
+            const isSqlite = this.db.getType() === 'sqlite';
+            const ins = await client.query(
+              isSqlite
+                ? `INSERT INTO expense_categories (tenant_id, name, account_id, is_system, sort_order, is_active)
+                   VALUES ($1, $2, $3, 0, 999, 1) RETURNING id`
+                : `INSERT INTO expense_categories (tenant_id, name, account_id, is_system, sort_order, is_active)
+                   VALUES ($1, $2, $3, FALSE, 999, TRUE) RETURNING id`,
+              [tenantId, insertName, input.accountId]
+            );
+            categoryId = ins[0].id;
+          }
+        }
+      }
+
+      const categoryNameRow = await client.query(
+        `SELECT name FROM expense_categories WHERE id = $1 AND tenant_id = $2`,
+        [categoryId, tenantId]
+      );
+      const categoryName = categoryNameRow[0]?.name || accMeta[0].name || 'Expense';
+
+      if (!categoryId) {
+        const err: any = new Error('Could not resolve expense category for this account.');
+        err.statusCode = 400;
+        throw err;
+      }
+
       const expenseAccountId = input.accountId;
+
+      let pm: ExpensePaymentMethod;
+      if (input.paymentMethod === 'OTHER') {
+        pm = 'OTHER';
+      } else if (!input.paymentAccountId) {
+        const err: any = new Error('Pay-from account is required.');
+        err.statusCode = 400;
+        throw err;
+      } else if (input.paymentMethod === 'CASH' || input.paymentMethod === 'BANK') {
+        pm = input.paymentMethod;
+      } else {
+        const payRows = await client.query(
+          `SELECT account_type FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2`,
+          [input.paymentAccountId, tenantId]
+        );
+        if (payRows.length === 0) {
+          const err: any = new Error('Pay-from account not found.');
+          err.statusCode = 400;
+          throw err;
+        }
+        const pt = String(payRows[0]?.account_type || 'bank').toLowerCase();
+        pm = pt === 'cash' ? 'CASH' : 'BANK';
+      }
 
       const status = pm === 'OTHER' ? 'unpaid' : 'paid';
       const ref = input.referenceNumber || `EXP-${Date.now()}`;
@@ -160,7 +239,7 @@ export class ExpenseService {
         [
           tenantId,
           input.branchId || null,
-          input.categoryId,
+          categoryId,
           input.vendorId || null,
           input.payeeName || null,
           input.amount,

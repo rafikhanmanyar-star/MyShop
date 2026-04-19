@@ -554,12 +554,6 @@ img {
   color: white;
 }
 
-.page--home .home-hero h1 {
-  font-size: 20px;
-  font-weight: 800;
-  margin-bottom: 2px;
-}
-
 .page--home .home-hero .home-hero-sub {
   opacity: 0.85;
   font-size: 13px;

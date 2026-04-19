@@ -5,16 +5,14 @@
 
 const DB_NAME = 'myshop_expense_sync';
 const STORE_NAME = 'pending';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export interface PendingExpenseItem {
   localId: string;
   payload: {
     expenseDate: string;
-    categoryId: string;
     accountId: string;
     amount: number;
-    paymentMethod: 'CASH' | 'BANK' | 'OTHER';
     description?: string;
     referenceNumber?: string;
     paymentAccountId?: string;
@@ -39,8 +37,7 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'localId' });
       }
-      if (e.oldVersion < 2) {
-        // Payload shape changed; clear stale queue so sync does not post invalid bodies
+      if (e.oldVersion > 0 && e.oldVersion < 3) {
         try {
           db.deleteObjectStore(STORE_NAME);
         } catch {

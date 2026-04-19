@@ -7,8 +7,6 @@ import { accountingApi, expensesApi, shopApi } from '../../../services/shopApi';
 import { createExpenseOfflineFirst } from '../../../services/expenseSyncService';
 import { CURRENCY } from '../../../constants';
 
-export type ExpensePaymentMethod = 'CASH' | 'BANK' | 'OTHER';
-
 interface ExpenseFormModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -16,7 +14,6 @@ interface ExpenseFormModalProps {
 }
 
 const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({ isOpen, onClose, onSaved }) => {
-  const [categories, setCategories] = useState<{ id: string; name: string; accountId: string }[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<{ id: string; name: string; code?: string }[]>([]);
   const [bankAccounts, setBankAccounts] = useState<{ id: string; name: string; account_type: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,10 +23,8 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({ isOpen, onClose, on
 
   const [form, setForm] = useState({
     expenseDate: new Date().toISOString().slice(0, 10),
-    categoryId: '',
     accountId: '',
     amount: '',
-    paymentMethod: 'CASH' as ExpensePaymentMethod,
     paymentAccountId: '',
     description: '',
     referenceNumber: '',
@@ -40,69 +35,46 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({ isOpen, onClose, on
     setLoading(true);
     setError('');
     setOfflineMessage('');
-    Promise.all([
-      expensesApi.getCategories(false),
-      accountingApi.getAccounts(),
-      shopApi.getBankAccounts(true),
-    ])
-      .then(([catRes, accRes, bankRes]) => {
-        const cats = Array.isArray(catRes) ? catRes : (catRes as any)?.data ?? [];
+    Promise.all([accountingApi.getAccounts(), shopApi.getBankAccounts(true)])
+      .then(([accRes, bankRes]) => {
         const accountsRaw = Array.isArray(accRes) ? accRes : (accRes as any)?.data ?? [];
         const expenseAcc = accountsRaw.filter((a: any) => a.type === 'Expense');
         const banks = Array.isArray(bankRes) ? bankRes : (bankRes as any)?.data ?? [];
-        setCategories(cats);
         setExpenseAccounts(
           expenseAcc.map((a: any) => ({ id: a.id, name: a.name, code: a.code }))
         );
         setBankAccounts(banks);
-        if (cats.length) {
-          const first = cats[0];
-          setForm((f) => ({
-            ...f,
-            categoryId: first.id,
-            accountId: first.accountId || f.accountId,
-          }));
-        }
+        const firstExp = expenseAcc[0];
         const cash = banks.find((b: any) => b.account_type === 'Cash');
-        if (cash) setForm((f) => ({ ...f, paymentAccountId: f.paymentAccountId || cash.id }));
+        setForm((f) => ({
+          ...f,
+          accountId: firstExp?.id ?? '',
+          paymentAccountId: cash?.id ?? banks[0]?.id ?? '',
+        }));
       })
       .catch((e) => setError(e?.response?.data?.error || e?.message || 'Failed to load'))
       .finally(() => setLoading(false));
   }, [isOpen]);
-
-  const handleCategoryChange = (categoryId: string) => {
-    const cat = categories.find((c) => c.id === categoryId);
-    setForm((f) => ({
-      ...f,
-      categoryId,
-      accountId: cat?.accountId ?? f.accountId,
-    }));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setOfflineMessage('');
     const amount = parseFloat(form.amount);
-    if (!form.expenseDate || !form.categoryId || !form.accountId || !amount || amount <= 0) {
-      setError('Date, category, account, and a positive amount are required.');
+    if (!form.expenseDate || !form.accountId || !amount || amount <= 0) {
+      setError('Date, expense account, and a positive amount are required.');
       return;
     }
-    if ((form.paymentMethod === 'CASH' || form.paymentMethod === 'BANK') && !form.paymentAccountId) {
-      setError('Select a cash/bank account for this payment method.');
+    if (!form.paymentAccountId) {
+      setError('Select the bank or cash account to pay from.');
       return;
     }
     setSaving(true);
     const payload = {
       expenseDate: form.expenseDate,
-      categoryId: form.categoryId,
       accountId: form.accountId,
       amount,
-      paymentMethod: form.paymentMethod,
-      paymentAccountId:
-        form.paymentMethod === 'CASH' || form.paymentMethod === 'BANK'
-          ? form.paymentAccountId
-          : undefined,
+      paymentAccountId: form.paymentAccountId,
       description: form.description || undefined,
       referenceNumber: form.referenceNumber || undefined,
     };
@@ -112,13 +84,12 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({ isOpen, onClose, on
         if (result.localId) {
           setOfflineMessage('Saved offline. It will sync when you are back online.');
         }
+        const cash = bankAccounts.find((b: any) => b.account_type === 'Cash');
         setForm({
           expenseDate: new Date().toISOString().slice(0, 10),
-          categoryId: categories[0]?.id ?? '',
-          accountId: categories[0]?.accountId ?? '',
+          accountId: expenseAccounts[0]?.id ?? '',
           amount: '',
-          paymentMethod: 'CASH',
-          paymentAccountId: bankAccounts.find((b: any) => b.account_type === 'Cash')?.id ?? '',
+          paymentAccountId: cash?.id ?? bankAccounts[0]?.id ?? '',
           description: '',
           referenceNumber: '',
         });
@@ -152,38 +123,26 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({ isOpen, onClose, on
               {offlineMessage}
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Date"
-              type="date"
-              required
-              value={form.expenseDate}
-              onChange={(e) => setForm((f) => ({ ...f, expenseDate: e.target.value }))}
-            />
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Category</label>
-              <Select
-                value={form.categoryId}
-                onChange={(e) => handleCategoryChange(e.target.value)}
-                required
-              >
-                <option value="">Select category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
+          <Input
+            label="Date"
+            type="date"
+            required
+            value={form.expenseDate}
+            onChange={(e) => setForm((f) => ({ ...f, expenseDate: e.target.value }))}
+          />
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Expense account (Chart of Accounts)</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">
+              Category (expense account)
+            </label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Choose the chart of accounts expense line for this cost (e.g. Transportation, Rent).
+            </p>
             <Select
               value={form.accountId}
               onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
               required
             >
-              <option value="">Select account</option>
+              <option value="">Select expense account</option>
               {expenseAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.code ? `${a.code} — ${a.name}` : a.name}
@@ -200,40 +159,23 @@ const ExpenseFormModal: React.FC<ExpenseFormModalProps> = ({ isOpen, onClose, on
             value={form.amount}
             onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
           />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Payment method</label>
-              <Select
-                value={form.paymentMethod}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    paymentMethod: e.target.value as ExpensePaymentMethod,
-                  }))
-                }
-              >
-                <option value="CASH">Cash</option>
-                <option value="BANK">Bank</option>
-                <option value="OTHER">Other (accrual / unpaid)</option>
-              </Select>
-            </div>
-            {(form.paymentMethod === 'CASH' || form.paymentMethod === 'BANK') && (
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1.5">Pay from</label>
-                <Select
-                  value={form.paymentAccountId}
-                  onChange={(e) => setForm((f) => ({ ...f, paymentAccountId: e.target.value }))}
-                  required
-                >
-                  <option value="">Select cash/bank</option>
-                  {bankAccounts.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} ({b.account_type})
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            )}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Pay from</label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Cash or bank account the payment is drawn from (amount is credited here in the journal).
+            </p>
+            <Select
+              value={form.paymentAccountId}
+              onChange={(e) => setForm((f) => ({ ...f, paymentAccountId: e.target.value }))}
+              required
+            >
+              <option value="">Select cash or bank</option>
+              {bankAccounts.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.account_type})
+                </option>
+              ))}
+            </Select>
           </div>
           <Input
             label="Description"

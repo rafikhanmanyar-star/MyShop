@@ -141,7 +141,6 @@ export default function Home() {
                     background: `linear-gradient(135deg, var(--primary) 0%, ${state.shop?.brand_color || '#4F46E5'}dd 100%)`,
                 }}
             >
-                <h1>{state.shop?.company_name || state.shop?.name}</h1>
                 <p className="home-hero-sub">
                     Order online • {state.settings?.estimated_delivery_minutes || 60} min delivery
                 </p>
