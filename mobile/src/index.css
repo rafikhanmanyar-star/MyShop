@@ -1182,6 +1182,44 @@ img {
   animation: slideDown 0.3s ease-out;
 }
 
+/* Branch closed — outside POS “Orders from / until” window */
+.order-closed-banner {
+  position: sticky;
+  top: 60px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border-bottom: 1px solid #f59e0b;
+  color: #78350f;
+  font-size: 13px;
+  line-height: 1.45;
+  z-index: 998;
+}
+
+.order-closed-banner__icon {
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.order-closed-banner__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.order-closed-banner__sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #92400e;
+  opacity: 0.95;
+}
+
 /* ─── Main Header ─────────────────────────────────────────── */
 .main-header {
   position: sticky;

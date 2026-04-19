@@ -259,7 +259,7 @@ export default function ProductDetail() {
         !isPreOrder && stock <= 0 ? 'Out of stock' : isPreOrder && stock <= 0 ? 'Pre-order' : 'In stock';
 
     return (
-        <div className="page fade-in" style={{ padding: 0, paddingBottom: 'calc(120px + var(--safe-bottom))' }}>
+        <div className="page fade-in" style={{ padding: 0, paddingBottom: 'calc(80px + var(--safe-bottom))' }}>
             <div
                 style={{
                     width: '100%',
@@ -505,44 +505,6 @@ export default function ProductDetail() {
                     </section>
                 )}
             </div>
-
-            {canPurchase && (
-                <div
-                    style={{
-                        position: 'sticky',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        padding: '12px 16px calc(12px + var(--safe-bottom))',
-                        background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.96) 18%, #fff 100%)',
-                        borderTop: '1px solid var(--border)',
-                        zIndex: 20,
-                    }}
-                >
-                    <div
-                        style={{
-                            display: 'flex',
-                            gap: 12,
-                            alignItems: 'center',
-                            maxWidth: 560,
-                            margin: '0 auto',
-                        }}
-                    >
-                        <div className="qty-controls">
-                            <button type="button" onClick={() => setQty(Math.max(1, qty - 1))}>
-                                −
-                            </button>
-                            <span>{qty}</span>
-                            <button type="button" onClick={() => setQty(Math.min(maxQty, qty + 1))}>
-                                +
-                            </button>
-                        </div>
-                        <button type="button" className="btn btn-primary btn-full" onClick={handleAdd}>
-                            + Add to Cart — {formatPrice(Number(product.price) * qty)}
-                        </button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
