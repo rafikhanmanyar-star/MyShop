@@ -40,14 +40,27 @@ const SalesReturnCreatePage = lazy(() => import('./components/shop/salesReturns/
 const SalesReturnDetailPage = lazy(() => import('./components/shop/salesReturns/SalesReturnDetailPage'));
 const ShopRealtimeBridge = lazy(() => import('./components/shop/ShopRealtimeBridge'));
 
-type NavItem = { path: string; label: string; icon: React.ComponentType<{ className?: string }>; roles: string[] };
+type NavItem = {
+  path: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles: string[];
+  /** Optional tooltip (e.g. merged dashboard description). */
+  title?: string;
+};
 type NavSection = { section: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
   {
     section: 'MAIN',
     items: [
-      { path: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant'] },
+      {
+        path: '/',
+        label: 'Dashboard',
+        title: 'Daily report + business overview (KPIs, trends, alerts)',
+        icon: LayoutDashboard,
+        roles: ['admin', 'accountant'],
+      },
       { path: '/cashier-dashboard', label: 'Cashier Dashboard', icon: ClipboardList, roles: ['pos_cashier'] },
       { path: '/pos', label: 'POS', icon: ShoppingCart, roles: ['admin', 'pos_cashier'] },
       { path: '/sales-returns', label: 'Sales Return', icon: Undo2, roles: ['admin', 'pos_cashier', 'accountant'] },
@@ -178,6 +191,7 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
                   key={item.path}
                   to={item.path}
                   end={item.path === '/'}
+                  title={item.title ?? item.label}
                   className={({ isActive }) =>
                     `nav-sidebar-link group relative flex items-center gap-3 rounded-lg px-3 py-2 transition-colors duration-200
                     ${isActive

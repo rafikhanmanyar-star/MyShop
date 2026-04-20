@@ -44,7 +44,7 @@ const InventoryContent: React.FC = () => {
     useRegisterInventoryPageHeader(inventoryHeaderPayload);
 
     return (
-        <div className="flex w-full min-w-0 flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800">
+        <div className="flex h-full min-h-0 min-w-0 w-full flex-1 flex-col bg-gray-50 dark:bg-slate-950">
             {/* Content area: flex so Stock Master / Dashboard / Movements can fill and scroll internally; other tabs can scroll here */}
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${['stock', 'dashboard', 'movements', 'categories', 'incomplete'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>

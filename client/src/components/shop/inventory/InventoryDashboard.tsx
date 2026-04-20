@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ArrowUpDown, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
+import { ArrowUpDown, CalendarX, ChevronDown, ChevronUp, CircleSlash, Clock, Pencil, Timer } from 'lucide-react';
 import { useInventory } from '../../../context/InventoryContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
@@ -12,7 +12,21 @@ import WarehouseHeatmapModal from './WarehouseHeatmapModal';
 import { showAppToast } from '../../../utils/appToast';
 import { userMessageForApiError } from '../../../utils/apiConnectivity';
 
-const BAR_COLORS = ['bg-indigo-600', 'bg-emerald-500', 'bg-amber-500'];
+/** Warehouse utilization bar: primary blue palette + red when share is dominant (reference UI). */
+function utilizationBarStyle(pct: number, index: number): { bar: string; sub?: string } {
+    if (pct >= 85) {
+        return { bar: 'bg-[#D32F2F]', sub: 'Critical capacity reached' };
+    }
+    const blues = ['bg-[#0047AB]', 'bg-[#2563EB]', 'bg-[#60A5FA]', 'bg-[#475569]'];
+    return { bar: blues[index % blues.length] };
+}
+
+function formatCompactCurrency(value: number, symbol: string): string {
+    const abs = Math.abs(value);
+    if (abs >= 1_000_000) return `${symbol} ${(value / 1_000_000).toFixed(1)}M`.replace(/\.0M$/, 'M');
+    if (abs >= 1_000) return `${symbol} ${(value / 1_000).toFixed(1)}K`.replace(/\.0K$/, 'K');
+    return `${symbol} ${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
 
 type CriticalSortKey = 'name' | 'category' | 'onHand' | 'reorderPoint' | 'status';
 
@@ -31,7 +45,7 @@ type SummaryFilter =
 
 const MIN_COL_PX = 72;
 const DEFAULT_COL_WIDTHS: Record<ColWidthKey, number> = {
-    item: 220,
+    item: 280,
     category: 140,
     onHand: 100,
     reorder: 120,
@@ -39,16 +53,17 @@ const DEFAULT_COL_WIDTHS: Record<ColWidthKey, number> = {
 };
 
 function SortGlyph({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
-    if (!active) return <ArrowUpDown className="w-3.5 h-3.5 shrink-0 opacity-40 dark:opacity-50" strokeWidth={2} aria-hidden />;
+    if (!active) return <ArrowUpDown className="h-3.5 w-3.5 shrink-0 opacity-40 dark:opacity-50" strokeWidth={2} aria-hidden />;
     return dir === 'asc' ? (
-        <ChevronUp className="w-3.5 h-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" strokeWidth={2} aria-hidden />
+        <ChevronUp className="h-3.5 w-3.5 shrink-0 text-[#0047AB] dark:text-[#5b8cff]" strokeWidth={2} aria-hidden />
     ) : (
-        <ChevronDown className="w-3.5 h-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" strokeWidth={2} aria-hidden />
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#0047AB] dark:text-[#5b8cff]" strokeWidth={2} aria-hidden />
     );
 }
 
 type ExpiryRow = {
     id: string;
+    product_id?: string;
     product_name?: string;
     sku?: string;
     warehouse_name?: string;
@@ -75,6 +90,26 @@ const InventoryDashboard: React.FC = () => {
     const [batchExpiryModal, setBatchExpiryModal] = useState<ExpiryRow | null>(null);
     const [batchExpiryDraft, setBatchExpiryDraft] = useState('');
     const [batchExpirySaving, setBatchExpirySaving] = useState(false);
+    const [expiryViewAll, setExpiryViewAll] = useState(false);
+    const expirySectionRef = useRef<HTMLDivElement>(null);
+    const [utilSnapshotAt, setUtilSnapshotAt] = useState(() => Date.now());
+    const [utilTimeTicker, setUtilTimeTicker] = useState(0);
+
+    useEffect(() => {
+        setUtilSnapshotAt(Date.now());
+    }, [items.length, warehouses.length]);
+
+    useEffect(() => {
+        const id = window.setInterval(() => setUtilTimeTicker((n) => n + 1), 60000);
+        return () => window.clearInterval(id);
+    }, []);
+
+    const utilSnapshotLabel = useMemo(() => {
+        const m = Math.floor((Date.now() - utilSnapshotAt) / 60000);
+        if (m < 1) return 'Just now';
+        if (m === 1) return '1 min ago';
+        return `${m} mins ago`;
+    }, [utilSnapshotAt, utilTimeTicker]);
 
     const loadExpirySummary = useCallback(() => {
         shopApi
@@ -105,15 +140,26 @@ const InventoryDashboard: React.FC = () => {
         loadExpirySummary();
     }, [loadExpirySummary]);
 
-    // Real branch/warehouse inventory: units per warehouse and % of total stock
+    /** Share of on-hand units by warehouse (shown as utilization-style bars in the reference UI). */
     const warehouseUtilization = React.useMemo(() => {
         const totalUnits = items.reduce((sum, i) => sum + i.onHand, 0);
-        return warehouses.map((wh, i) => {
+        const rows = warehouses.map((wh) => {
             const unitsAtWh = items.reduce((sum, item) => sum + (item.warehouseStock?.[wh.id] ?? 0), 0);
             const pct = totalUnits > 0 ? Math.round((unitsAtWh / totalUnits) * 100) : 0;
-            return { id: wh.id, name: wh.name, units: unitsAtWh, pct, color: BAR_COLORS[i % BAR_COLORS.length] };
+            return { id: wh.id, name: wh.name, units: unitsAtWh, pct };
+        });
+        const sorted = [...rows].sort((a, b) => b.pct - a.pct);
+        return sorted.map((row, i) => {
+            const { bar, sub } = utilizationBarStyle(row.pct, i);
+            return { ...row, barClass: bar, sub };
         });
     }, [warehouses, items]);
+
+    const itemImageById = useMemo(() => {
+        const m = new Map<string, string | undefined>();
+        for (const i of items) m.set(i.id, i.imageUrl);
+        return m;
+    }, [items]);
 
     /** Product IDs with batch expiry in each bucket (from expiry-summary rows). */
     const expiryProductIdSets = useMemo(() => {
@@ -283,95 +329,82 @@ const InventoryDashboard: React.FC = () => {
     }, [batchExpiryModal, batchExpiryDraft, loadExpirySummary, refreshItems]);
 
     const summaryCards = useMemo(() => {
-        const core: {
+        const lowCount = items.filter((i) => i.onHand > 0 && i.onHand <= i.reorderPoint).length;
+        const outCount = items.filter((i) => i.onHand <= 0).length;
+        const ex = expiryKpi ?? {};
+        type CardDef = {
             key: SummaryFilter;
             label: string;
             value: React.ReactNode;
-            icon: React.ReactElement;
-            color: string;
-            bg: string;
+            icon: React.ReactNode;
+            iconWrap: string;
+            valueClass: string;
             border?: string;
-        }[] = [
+        };
+        const stockValueDisplay = formatCompactCurrency(totalInventoryValue, CURRENCY);
+        const cards: CardDef[] = [
             {
                 key: 'total_skus',
                 label: 'Total SKUs',
-                value: items.length,
-                icon: ICONS.package,
-                color: 'text-indigo-600 dark:text-indigo-400',
-                bg: 'bg-indigo-50 dark:bg-indigo-950/40',
+                value: items.length.toLocaleString(),
+                icon: ICONS.folder,
+                iconWrap: 'bg-[#0047AB]/10 text-[#0047AB]',
+                valueClass: 'text-[#0047AB]',
             },
             {
                 key: 'low_stock',
                 label: 'Low Stock',
-                value: lowStockItems.length,
-                icon: ICONS.trendingDown,
-                color: 'text-amber-600 dark:text-amber-400',
-                bg: 'bg-amber-50 dark:bg-amber-950/40',
+                value: lowCount.toLocaleString(),
+                icon: ICONS.alertTriangle,
+                iconWrap: 'bg-[#F57C00]/12 text-[#F57C00]',
+                valueClass: 'text-[#F57C00]',
             },
             {
                 key: 'out_of_stock',
                 label: 'Out of Stock',
-                value: items.filter((i) => i.onHand <= 0).length,
-                icon: ICONS.xCircle,
-                color: 'text-rose-600 dark:text-rose-400',
-                bg: 'bg-rose-50 dark:bg-rose-950/40',
+                value: outCount.toLocaleString(),
+                icon: <CircleSlash className="h-4 w-4" strokeWidth={2} aria-hidden />,
+                iconWrap: 'bg-[#D32F2F]/10 text-[#D32F2F]',
+                valueClass: 'text-[#D32F2F]',
             },
             {
                 key: 'stock_value',
                 label: 'Stock Value',
-                value: `${CURRENCY} ${totalInventoryValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+                value: stockValueDisplay,
                 icon: ICONS.dollarSign,
-                color: 'text-emerald-600 dark:text-emerald-400',
-                bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-            },
-        ];
-        if (expiryKpi === null) return core;
-        return [
-            ...core,
-            {
-                key: 'expired' as const,
-                label: 'Expired (on hand)',
-                value: (
-                    <>
-                        {Number(expiryKpi.expired_qty ?? 0).toLocaleString()}{' '}
-                        <span className="text-[10px] font-medium opacity-90">units</span>
-                    </>
-                ),
-                icon: ICONS.alertTriangle,
-                color: 'text-rose-700 dark:text-rose-300',
-                bg: 'bg-rose-50/80 dark:bg-rose-950/35',
-                border: 'border-rose-200 dark:border-rose-900/50',
+                iconWrap: 'bg-[#0047AB]/10 text-[#0047AB]',
+                valueClass: 'text-[#0047AB]',
             },
             {
-                key: 'expiring_7' as const,
-                label: 'Expiring ≤ 7 days',
-                value: (
-                    <>
-                        {Number(expiryKpi.expiring_7_qty ?? 0).toLocaleString()}{' '}
-                        <span className="text-[10px] font-medium opacity-90">units</span>
-                    </>
-                ),
-                icon: ICONS.clock,
-                color: 'text-amber-800 dark:text-amber-200',
-                bg: 'bg-amber-50/80 dark:bg-amber-950/35',
-                border: 'border-amber-200 dark:border-amber-900/50',
+                key: 'expired',
+                label: 'Expired',
+                value: Number(ex.expired_qty ?? 0).toLocaleString(),
+                icon: <CalendarX className="h-4 w-4" strokeWidth={2} aria-hidden />,
+                iconWrap: 'bg-[#D32F2F]/10 text-[#D32F2F]',
+                valueClass: 'text-[#D32F2F]',
+                border: 'border-[#E5E7EB]',
             },
             {
-                key: 'expiring_30' as const,
-                label: 'Expiring ≤ 30 days',
-                value: (
-                    <>
-                        {Number(expiryKpi.expiring_30_qty ?? 0).toLocaleString()}{' '}
-                        <span className="text-[10px] font-medium opacity-90">units</span>
-                    </>
-                ),
+                key: 'expiring_7',
+                label: 'Expiring ≤ 7 Days',
+                value: Number(ex.expiring_7_qty ?? 0).toLocaleString(),
+                icon: <Timer className="h-4 w-4" strokeWidth={2} aria-hidden />,
+                iconWrap: 'bg-[#F57C00]/12 text-[#F57C00]',
+                valueClass: 'text-[#F57C00]',
+                border: 'border-[#E5E7EB]',
+            },
+            {
+                key: 'expiring_30',
+                label: 'Expiring ≤ 30 Days',
+                value: Number(ex.expiring_30_qty ?? 0).toLocaleString(),
                 icon: ICONS.calendar,
-                color: 'text-emerald-800 dark:text-emerald-200',
-                bg: 'bg-emerald-50/80 dark:bg-emerald-950/35',
-                border: 'border-emerald-200 dark:border-emerald-900/50',
+                iconWrap: 'bg-[#0047AB]/10 text-[#0047AB]',
+                valueClass: 'text-[#0047AB]',
+                border: 'border-[#E5E7EB]',
             },
         ];
-    }, [items, lowStockItems, totalInventoryValue, expiryKpi]);
+        return cards;
+    }, [items, totalInventoryValue, expiryKpi]);
 
     const emptyTableHint = useMemo(() => {
         if (filteredLowStockItems.length > 0) return '';
@@ -418,10 +451,14 @@ const InventoryDashboard: React.FC = () => {
         }
     }, [summaryFilter]);
 
+    const scrollToExpiry = useCallback(() => {
+        expirySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, []);
+
     return (
-        <div className="flex flex-col h-full min-h-0 overflow-hidden gap-8 animate-fade-in">
-            {/* KPI row — compact, single row; scroll on narrow viewports. Default view = critical (no card selected); click a card to filter; click again to reset. */}
-            <div className="flex flex-nowrap gap-2 overflow-x-auto pb-1 flex-shrink-0 [scrollbar-gutter:stable]">
+        <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white p-4 animate-fade-in dark:border-slate-700 dark:bg-slate-900/40 md:p-6">
+            {/* KPI row — reference-style metric tiles; click filters the alerts table; click again to reset to critical. */}
+            <div className="flex flex-shrink-0 flex-nowrap gap-2 overflow-x-auto pb-1 [scrollbar-gutter:stable]">
                 {summaryCards.map((stat) => {
                     const selected = summaryFilter === stat.key;
                     return (
@@ -430,111 +467,148 @@ const InventoryDashboard: React.FC = () => {
                             key={stat.key}
                             title={`Filter table: ${stat.label}. ${selected ? 'Click again to show critical alerts only.' : ''}`}
                             onClick={() => toggleSummaryFilter(stat.key)}
-                            className={`flex min-w-[5.5rem] max-w-[170px] shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left shadow-sm transition-colors sm:min-w-[7.25rem] ${
-                                stat.border ?? 'border-border'
-                            } bg-card ${
+                            className={`flex min-w-[6.5rem] max-w-[180px] shrink-0 items-center gap-2.5 rounded-lg border bg-white px-2.5 py-2 text-left shadow-sm transition-colors dark:bg-slate-900 sm:min-w-[7.5rem] ${
+                                stat.border ?? 'border-[#E5E7EB]'
+                            } ${
                                 selected
-                                    ? 'ring-2 ring-primary-500 ring-offset-1 ring-offset-background dark:ring-offset-slate-900'
-                                    : 'hover:bg-muted/50 dark:hover:bg-muted/30'
+                                    ? 'ring-2 ring-[#0047AB] ring-offset-2 ring-offset-white dark:ring-offset-slate-900'
+                                    : 'hover:bg-gray-50 dark:hover:bg-slate-800/80'
                             } ${summaryFilter === 'critical' && !selected ? 'opacity-95' : ''}`}
                         >
-                            <div
-                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${stat.bg} ${stat.color}`}
-                            >
-                                {React.cloneElement(stat.icon as React.ReactElement<any>, { width: 16, height: 16 })}
+                            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg [&>svg]:h-4 [&>svg]:w-4 ${stat.iconWrap}`}>
+                                {stat.icon}
                             </div>
                             <div className="min-w-0 flex-1">
-                                <p className="text-[9px] font-semibold uppercase leading-tight tracking-wide text-muted-foreground line-clamp-2">
+                                <p className="line-clamp-2 text-[9px] font-bold uppercase leading-tight tracking-wide text-gray-500 dark:text-gray-400">
                                     {stat.label}
                                 </p>
-                                <p className="truncate text-xs font-semibold tabular-nums text-foreground sm:text-sm">{stat.value}</p>
+                                <p className={`truncate text-sm font-bold tabular-nums sm:text-base ${stat.valueClass}`}>{stat.value}</p>
                             </div>
                         </button>
                     );
                 })}
             </div>
 
-            {expiryRows.length > 0 && (
-                <Card className="border-none shadow-sm p-0 overflow-hidden flex-shrink-0">
-                    <div className="border-b border-border px-6 py-4">
-                        <h3 className="font-bold text-foreground">Expiry monitoring (batches)</h3>
-                        <p className="text-sm text-muted-foreground">Nearest dated stock with remaining quantity (up to 400 lines).</p>
+            <div ref={expirySectionRef}>
+                <Card className="flex-shrink-0 overflow-hidden border border-[#E5E7EB] p-0 shadow-sm dark:border-slate-700">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] px-4 py-4 dark:border-slate-700 md:px-6">
+                        <div className="flex items-center gap-2">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0047AB]/10 text-[#0047AB]">
+                                <Clock className="h-4 w-4" strokeWidth={2} aria-hidden />
+                            </span>
+                            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Expiry Monitoring</h3>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setExpiryViewAll((v) => !v);
+                                scrollToExpiry();
+                                void loadExpirySummary();
+                            }}
+                            className="text-sm font-semibold text-[#0047AB] hover:underline dark:text-[#5b8cff]"
+                        >
+                            {expiryViewAll ? 'Show less' : 'View All Records'}
+                        </button>
                     </div>
-                    <div className="max-h-64 overflow-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-muted/60 text-xs uppercase text-muted-foreground sticky top-0">
-                                <tr>
-                                    <th className="px-4 py-2">Product</th>
-                                    <th className="px-4 py-2">SKU</th>
-                                    <th className="px-4 py-2">Warehouse</th>
-                                    <th className="px-4 py-2">Batch</th>
-                                    <th className="px-4 py-2">Expiry</th>
-                                    <th className="px-4 py-2 text-right">Qty</th>
-                                    <th className="px-4 py-2 text-right w-24">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {expiryRows.map((r) => {
-                                    const exp = r.expiry_date ? String(r.expiry_date).slice(0, 10) : '';
-                                    const d = exp ? new Date(exp + 'T12:00:00') : null;
-                                    const today = new Date();
-                                    today.setHours(0, 0, 0, 0);
-                                    const cls =
-                                        d && d < today
-                                            ? 'bg-rose-500/10'
-                                            : d &&
-                                                d.getTime() - today.getTime() <= 7 * 86400000
-                                              ? 'bg-amber-500/10'
-                                              : '';
-                                    return (
-                                        <tr key={r.id} className={`border-b border-border ${cls}`}>
-                                            <td className="px-4 py-2 font-medium">{r.product_name}</td>
-                                            <td className="px-4 py-2 text-muted-foreground">{r.sku}</td>
-                                            <td className="px-4 py-2">{r.warehouse_name}</td>
-                                            <td className="px-4 py-2 font-mono text-xs">{r.batch_no}</td>
-                                            <td className="px-4 py-2 tabular-nums">{exp || '—'}</td>
-                                            <td className="px-4 py-2 text-right tabular-nums">
-                                                {Number(r.quantity_remaining ?? 0).toLocaleString()}
-                                            </td>
-                                            <td className="px-4 py-2 text-right">
-                                                <button
-                                                    type="button"
-                                                    title="Correct expiry date"
-                                                    onClick={() => openBatchExpiryEdit(r)}
-                                                    className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                                                >
-                                                    <Pencil className="h-4 w-4" aria-hidden />
-                                                    <span className="sr-only">Edit expiry</span>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                    <div className={expiryViewAll ? 'max-h-[min(70vh,32rem)] overflow-auto' : 'max-h-64 overflow-auto'}>
+                        {expiryRows.length > 0 ? (
+                            <table className="w-full text-left text-sm">
+                                <thead className="sticky top-0 bg-gray-50 text-xs font-semibold uppercase text-gray-500 dark:bg-slate-800 dark:text-gray-400">
+                                    <tr>
+                                        <th className="px-4 py-3">Product Name</th>
+                                        <th className="px-4 py-3">SKU Code</th>
+                                        <th className="px-4 py-3">Warehouse Location</th>
+                                        <th className="px-4 py-3">Batch</th>
+                                        <th className="px-4 py-3 text-right">Current Stock</th>
+                                        <th className="px-4 py-3">Expiry Date</th>
+                                        <th className="w-24 px-4 py-3 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[#E5E7EB] dark:divide-slate-700">
+                                    {expiryRows.map((r) => {
+                                        const exp = r.expiry_date ? String(r.expiry_date).slice(0, 10) : '';
+                                        const d = exp ? new Date(`${exp}T12:00:00`) : null;
+                                        const today = new Date();
+                                        today.setHours(0, 0, 0, 0);
+                                        const cls =
+                                            d && d < today
+                                                ? 'bg-[#D32F2F]/5'
+                                                : d && d.getTime() - today.getTime() <= 7 * 86400000
+                                                  ? 'bg-[#F57C00]/8'
+                                                  : '';
+                                        const expDisplay =
+                                            d && !Number.isNaN(d.getTime())
+                                                ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                                : '—';
+                                        const pid = String(r.product_id ?? '');
+                                        const img = pid ? itemImageById.get(pid) : undefined;
+                                        return (
+                                            <tr key={r.id} className={cls}>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-[#E5E7EB] bg-gray-50 dark:border-slate-600 dark:bg-slate-800">
+                                                            {img ? (
+                                                                <img src={img} alt="" className="h-full w-full object-cover" />
+                                                            ) : (
+                                                                <div className="flex h-full w-full items-center justify-center text-gray-300 dark:text-gray-600">
+                                                                    {ICONS.package}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <span className="font-medium text-gray-900 dark:text-gray-100">{r.product_name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 font-mono text-gray-600 dark:text-gray-300">{r.sku}</td>
+                                                <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{r.warehouse_name}</td>
+                                                <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-200">{r.batch_no}</td>
+                                                <td className="px-4 py-3 text-right tabular-nums font-medium text-gray-900 dark:text-gray-100">
+                                                    {Number(r.quantity_remaining ?? 0).toLocaleString()} <span className="text-xs font-normal text-gray-500">units</span>
+                                                </td>
+                                                <td className="px-4 py-3 tabular-nums text-gray-800 dark:text-gray-200">{expDisplay}</td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <button
+                                                        type="button"
+                                                        title="Edit expiry date"
+                                                        onClick={() => openBatchExpiryEdit(r)}
+                                                        className="inline-flex items-center justify-center rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-[#0047AB] dark:hover:bg-slate-800"
+                                                    >
+                                                        <Pencil className="h-4 w-4" aria-hidden />
+                                                        <span className="sr-only">Edit expiry</span>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        ) : (
+                            <p className="px-6 py-12 text-center text-sm italic text-gray-500 dark:text-gray-400">
+                                No batch expiry rows yet. When batches with expiry dates exist, they will appear here.
+                            </p>
+                        )}
                     </div>
                 </Card>
-            )}
+            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0 overflow-hidden">
-                {/* Low Stock Table */}
-                <Card className="lg:col-span-2 border-none shadow-sm overflow-hidden flex flex-col min-h-0">
-                    <div className="p-6 border-b border-border flex flex-wrap justify-between items-center gap-4 flex-shrink-0">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-hidden lg:grid-cols-3">
+                {/* Critical alerts / filtered SKU table */}
+                <Card className="flex min-h-0 flex-col overflow-hidden border border-[#E5E7EB] shadow-sm dark:border-slate-700 lg:col-span-2">
+                    <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-4 border-b border-[#E5E7EB] p-4 dark:border-slate-700 md:p-6">
                         <div>
-                            <h3 className="font-bold text-foreground">{alertsTableHeading.title}</h3>
+                            <h3 className="font-bold text-gray-900 dark:text-gray-100">{alertsTableHeading.title}</h3>
                             {alertsTableHeading.subtitle ? (
-                                <p className="mt-0.5 text-xs text-muted-foreground">{alertsTableHeading.subtitle}</p>
+                                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{alertsTableHeading.subtitle}</p>
                             ) : null}
                         </div>
-                        <div className="flex items-center gap-3">
-                            <label htmlFor="critical-alerts-category" className="text-xs font-bold text-muted-foreground whitespace-nowrap">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <label htmlFor="critical-alerts-category" className="whitespace-nowrap text-xs font-bold text-gray-500 dark:text-gray-400">
                                 Category:
                             </label>
                             <select
                                 id="critical-alerts-category"
                                 value={selectedCategoryId}
                                 onChange={(e) => setSelectedCategoryId(e.target.value)}
-                                className="block rounded-lg border border-border bg-card py-2 pl-3 pr-8 text-sm font-medium text-foreground shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[160px] dark:border-slate-600"
+                                className="block min-w-[160px] rounded-lg border border-[#E5E7EB] bg-white py-2 pl-3 pr-8 text-sm font-medium text-gray-900 shadow-sm focus:border-[#0047AB] focus:ring-2 focus:ring-[#0047AB]/30 dark:border-slate-600 dark:bg-slate-900 dark:text-gray-100"
                             >
                                 <option value="">All categories</option>
                                 <option value="General">General</option>
@@ -542,28 +616,30 @@ const InventoryDashboard: React.FC = () => {
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                             </select>
-                            <span className="px-2 py-1 bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300 text-xs font-semibold rounded uppercase">Immediate Action Needed</span>
+                            <span className="rounded-full bg-[#D32F2F]/12 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-[#D32F2F] dark:bg-[#D32F2F]/20 dark:text-[#ff6b6b]">
+                                Immediate action needed
+                            </span>
                         </div>
                     </div>
-                    <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
+                    <div className="custom-scrollbar min-h-0 flex-1 overflow-x-auto overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
                         <table className="w-full table-fixed text-left">
-                            <thead className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground sticky top-0 z-10">
+                            <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold uppercase text-gray-500 dark:bg-slate-800 dark:text-gray-400">
                                 <tr>
                                     <th
                                         style={{ width: colWidths.item, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-muted/80 group align-bottom"
+                                        className="group relative bg-gray-50 px-6 py-4 align-bottom dark:bg-slate-800"
                                         {...(sortKey === 'name' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-gray-700 dark:hover:text-gray-200"
                                             onClick={() => toggleSort('name')}
                                         >
                                             Item Name / SKU
                                             <SortGlyph active={sortKey === 'name'} dir={sortDir} />
                                         </button>
                                         <div
-                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30 dark:hover:bg-indigo-400/20"
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-[#0047AB]/20"
                                             onMouseDown={(e) => beginColumnResize(e, 'item')}
                                             title="Drag to resize"
                                             role="separator"
@@ -572,19 +648,19 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                     <th
                                         style={{ width: colWidths.category, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-muted/80 group align-bottom"
+                                        className="group relative bg-gray-50 px-6 py-4 align-bottom dark:bg-slate-800"
                                         {...(sortKey === 'category' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-gray-700 dark:hover:text-gray-200"
                                             onClick={() => toggleSort('category')}
                                         >
                                             Category
                                             <SortGlyph active={sortKey === 'category'} dir={sortDir} />
                                         </button>
                                         <div
-                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30 dark:hover:bg-indigo-400/20"
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-[#0047AB]/20"
                                             onMouseDown={(e) => beginColumnResize(e, 'category')}
                                             title="Drag to resize"
                                             role="separator"
@@ -593,19 +669,19 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                     <th
                                         style={{ width: colWidths.onHand, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-muted/80 group align-bottom"
+                                        className="group relative bg-gray-50 px-6 py-4 align-bottom dark:bg-slate-800"
                                         {...(sortKey === 'onHand' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-gray-700 dark:hover:text-gray-200"
                                             onClick={() => toggleSort('onHand')}
                                         >
                                             On Hand
                                             <SortGlyph active={sortKey === 'onHand'} dir={sortDir} />
                                         </button>
                                         <div
-                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30 dark:hover:bg-indigo-400/20"
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-[#0047AB]/20"
                                             onMouseDown={(e) => beginColumnResize(e, 'onHand')}
                                             title="Drag to resize"
                                             role="separator"
@@ -614,19 +690,19 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                     <th
                                         style={{ width: colWidths.reorder, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-muted/80 group align-bottom"
+                                        className="group relative bg-gray-50 px-6 py-4 align-bottom dark:bg-slate-800"
                                         {...(sortKey === 'reorderPoint' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-gray-700 dark:hover:text-gray-200"
                                             onClick={() => toggleSort('reorderPoint')}
                                         >
                                             Reorder Point
                                             <SortGlyph active={sortKey === 'reorderPoint'} dir={sortDir} />
                                         </button>
                                         <div
-                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-indigo-400/30 dark:hover:bg-indigo-400/20"
+                                            className="absolute right-0 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-[#0047AB]/20"
                                             onMouseDown={(e) => beginColumnResize(e, 'reorder')}
                                             title="Drag to resize"
                                             role="separator"
@@ -635,12 +711,12 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                     <th
                                         style={{ width: colWidths.status, minWidth: MIN_COL_PX }}
-                                        className="relative px-6 py-4 bg-muted/80 align-bottom"
+                                        className="relative bg-gray-50 px-6 py-4 align-bottom dark:bg-slate-800"
                                         {...(sortKey === 'status' ? { 'aria-sort': sortDir === 'asc' ? ('ascending' as const) : ('descending' as const) } : {})}
                                     >
                                         <button
                                             type="button"
-                                            className="flex w-full items-center gap-1.5 text-left hover:text-muted-foreground"
+                                            className="flex w-full items-center gap-1.5 text-left hover:text-gray-700 dark:hover:text-gray-200"
                                             onClick={() => toggleSort('status')}
                                         >
                                             Status
@@ -649,26 +725,49 @@ const InventoryDashboard: React.FC = () => {
                                     </th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-border">
+                            <tbody className="divide-y divide-[#E5E7EB] dark:divide-slate-700">
                                 {filteredLowStockItems.length > 0 ? sortedLowStockItems.map(item => (
-                                    <tr key={item.id} className="hover:bg-muted/50 transition-colors">
+                                    <tr key={item.id} className="transition-colors hover:bg-gray-50/80 dark:hover:bg-slate-800/50">
                                         <td className="min-w-0 px-6 py-4">
-                                            <div className="truncate font-bold text-foreground text-sm" title={item.name}>{item.name}</div>
-                                            <div className="truncate text-xs text-muted-foreground font-mono italic" title={item.sku}>{item.sku}</div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-md border border-[#E5E7EB] bg-gray-50 dark:border-slate-600 dark:bg-slate-800">
+                                                    {item.imageUrl ? (
+                                                        <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+                                                    ) : (
+                                                        <div className="flex h-full w-full items-center justify-center text-gray-300 dark:text-gray-600 [&>svg]:h-5 [&>svg]:w-5">
+                                                            {ICONS.package}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-sm font-bold text-gray-900 dark:text-gray-100" title={item.name}>{item.name}</div>
+                                                    <div className="truncate font-mono text-xs italic text-gray-500 dark:text-gray-400" title={item.sku}>{item.sku}</div>
+                                                </div>
+                                            </div>
                                         </td>
                                         <td className="min-w-0 px-6 py-4">
-                                            <span className="text-sm font-medium text-muted-foreground">{getCategoryDisplayName(item.category)}</span>
+                                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">{getCategoryDisplayName(item.category)}</span>
                                         </td>
-                                        <td className="min-w-0 px-6 py-4 text-sm font-semibold font-mono">{item.onHand} {item.unit}</td>
-                                        <td className="min-w-0 px-6 py-4 text-sm font-medium text-muted-foreground font-mono">{item.reorderPoint}</td>
+                                        <td
+                                            className={`min-w-0 px-6 py-4 font-mono text-sm font-bold ${
+                                                item.onHand <= 0
+                                                    ? 'text-[#D32F2F]'
+                                                    : item.onHand <= item.reorderPoint
+                                                      ? 'text-[#F57C00]'
+                                                      : 'text-gray-900 dark:text-gray-100'
+                                            }`}
+                                        >
+                                            {String(item.onHand).padStart(2, '0')} {item.unit}
+                                        </td>
+                                        <td className="min-w-0 px-6 py-4 font-mono text-sm font-medium text-gray-600 dark:text-gray-300">{item.reorderPoint}</td>
                                         <td className="min-w-0 px-6 py-4">
                                             <span
-                                                className={`px-2 py-1 rounded text-xs font-bold ${
+                                                className={`rounded px-2 py-1 text-xs font-bold ${
                                                     item.onHand <= 0
-                                                        ? 'bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300'
+                                                        ? 'bg-[#D32F2F] text-white dark:bg-[#D32F2F]'
                                                         : item.onHand <= item.reorderPoint
-                                                          ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'
-                                                          : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                          ? 'bg-[#F57C00]/20 text-[#E65100] dark:bg-[#F57C00]/25 dark:text-[#ffb74d]'
+                                                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
                                                 }`}
                                             >
                                                 {item.onHand <= 0
@@ -681,7 +780,7 @@ const InventoryDashboard: React.FC = () => {
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground italic text-sm">
+                                        <td colSpan={5} className="px-6 py-12 text-center text-sm italic text-gray-500 dark:text-gray-400">
                                             {emptyTableHint}
                                         </td>
                                     </tr>
@@ -691,35 +790,47 @@ const InventoryDashboard: React.FC = () => {
                     </div>
                 </Card>
 
-                {/* Warehouse Snapshot */}
-                <Card className="border-none shadow-sm p-6 space-y-6 flex-shrink-0 lg:flex-shrink">
-                    <h3 className="font-bold text-foreground">Warehouse Utilization</h3>
-                    <div className="space-y-6">
+                <Card className="flex flex-shrink-0 flex-col space-y-6 border border-[#E5E7EB] p-6 shadow-sm dark:border-slate-700 lg:flex-shrink">
+                    <div className="flex items-center gap-2">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0047AB]/10 text-[#0047AB] [&>svg]:h-4 [&>svg]:w-4">
+                            {ICONS.barChart}
+                        </span>
+                        <h3 className="font-bold text-gray-900 dark:text-gray-100">Warehouse Utilization</h3>
+                    </div>
+                    <div className="space-y-5">
                         {warehouseUtilization.length > 0 ? warehouseUtilization.map((wh) => (
-                            <div key={wh.id} className="space-y-2">
+                            <div key={wh.id} className="space-y-1.5">
                                 <div className="flex justify-between text-xs font-bold">
-                                    <span className="text-muted-foreground">{wh.name}</span>
-                                    <span className="text-muted-foreground">{wh.pct}% of stock</span>
+                                    <span className="text-gray-600 dark:text-gray-300">{wh.name}</span>
+                                    <span className="tabular-nums text-gray-800 dark:text-gray-200">{wh.pct}%</span>
                                 </div>
-                                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                <div className="h-2.5 overflow-hidden rounded-full bg-gray-100 dark:bg-slate-800">
                                     <div
-                                        className={`h-full rounded-full transition-all duration-1000 ${wh.color}`}
+                                        className={`h-full rounded-full transition-all duration-700 ${wh.barClass}`}
                                         style={{ width: `${Math.min(100, wh.pct)}%` }}
                                     />
                                 </div>
+                                {wh.sub ? (
+                                    <p className="text-[11px] font-medium text-[#D32F2F] dark:text-[#ff6b6b]">{wh.sub}</p>
+                                ) : null}
                             </div>
                         )) : (
-                            <p className="text-sm text-muted-foreground italic">No warehouses. Add branches to see inventory by location.</p>
+                            <p className="text-sm italic text-gray-500 dark:text-gray-400">No warehouses. Add branches to see inventory by location.</p>
                         )}
                     </div>
 
-                    <div className="pt-6 border-t border-border">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Last snapshot: <span className="font-semibold text-gray-700 dark:text-gray-300">{utilSnapshotLabel}</span>
+                    </p>
+
+                    <div className="border-t border-[#E5E7EB] pt-4 dark:border-slate-700">
                         <button
                             type="button"
                             onClick={() => setHeatmapOpen(true)}
-                            className="w-full py-3 bg-card border border-border text-muted-foreground rounded-xl text-xs font-bold hover:bg-muted/50 hover:border-indigo-200 dark:hover:border-indigo-500/40 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all flex items-center justify-center gap-2"
+                            className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#0047AB]/40 bg-[#0047AB]/8 py-3 text-xs font-bold uppercase tracking-wide text-[#0047AB] transition-all hover:bg-[#0047AB]/15 dark:border-[#5b8cff]/40 dark:bg-[#0047AB]/15 dark:text-[#5b8cff] dark:hover:bg-[#0047AB]/25 [&>svg]:h-4 [&>svg]:w-4"
                         >
-                            {ICONS.trendingUp} View Detailed Heatmap
+                            {ICONS.trendingUp}
+                            Optimize space
                         </button>
                     </div>
                 </Card>

@@ -19,6 +19,7 @@ import { getDashboardCache, setDashboardCache, type DashboardStats } from '../se
 import { getTenantId } from '../services/posOfflineDb';
 import { mobileOrdersApi } from '../services/mobileOrdersApi';
 import Card from '../components/ui/Card';
+import DailyReportSummaryPanel from '../components/shop/accounting/DailyReportSummaryPanel';
 import { CURRENCY, ICONS } from '../constants';
 import {
   Package,
@@ -355,9 +356,14 @@ export default function DashboardPage() {
 
   return (
     <div className="-mx-4 min-h-full bg-[#F8F9FA] px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:bg-background">
-      <div className="space-y-6">
+      <div className="space-y-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <h1 className="text-2xl font-bold tracking-tight text-[#212529] dark:text-foreground">Dashboard</h1>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-[#212529] dark:text-foreground">Dashboard</h1>
+            <p className="mt-1 max-w-2xl text-sm text-[#6C757D] dark:text-muted-foreground">
+              Daily accounting totals at the top, then catalog-wide KPIs, trends, and alerts.
+            </p>
+          </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             <span className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-[#6C757D] shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
               <Calendar className="h-4 w-4 shrink-0 text-[#4A90E2]" strokeWidth={2} aria-hidden />
@@ -367,7 +373,7 @@ export default function DashboardPage() {
               to="/accounting/reports/daily"
               className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-[#212529] shadow-sm transition-colors hover:border-[#4A90E2]/50 hover:text-[#4A90E2] dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:text-primary-400"
             >
-              {ICONS.barChart} Daily Report
+              {ICONS.barChart} Daily report (full page)
             </Link>
           </div>
         </div>
@@ -377,6 +383,30 @@ export default function DashboardPage() {
             Offline — showing cached data. Last updated: {new Date(cachedAt).toLocaleString()}
           </div>
         )}
+
+        <section id="daily-report" className="scroll-mt-6 space-y-3" aria-labelledby="daily-report-heading">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <h2 id="daily-report-heading" className="text-lg font-semibold text-[#212529] dark:text-foreground">
+              Daily report
+            </h2>
+            <p className="text-xs text-[#6C757D] dark:text-muted-foreground">
+              POS, mobile, inventory movement, expenses, khata, and net profit for the date you select.
+            </p>
+          </div>
+          <div className="rounded-[10px] border border-gray-200 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card sm:p-6">
+            <DailyReportSummaryPanel />
+          </div>
+        </section>
+
+        <section id="business-overview" className="scroll-mt-6 space-y-4" aria-labelledby="overview-heading">
+          <div>
+            <h2 id="overview-heading" className="text-lg font-semibold text-[#212529] dark:text-foreground">
+              Business overview
+            </h2>
+            <p className="mt-0.5 text-sm text-[#6C757D] dark:text-muted-foreground">
+              Overall stats (catalog, sales, loyalty), 7-day revenue trend, category mix, and operational alerts.
+            </p>
+          </div>
 
         {/* KPI grid — 2×4 */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
@@ -587,6 +617,7 @@ export default function DashboardPage() {
             </div>
           </Card>
         </div>
+        </section>
       </div>
     </div>
   );

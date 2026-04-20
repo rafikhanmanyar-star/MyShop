@@ -199,53 +199,57 @@ export default function AppHeader({ className = '' }: { className?: string }) {
     const { activeTab, setActiveTab, onNewSku, tabs } = inventoryHeader;
     return (
       <header
-        className={`mb-3 flex shrink-0 flex-col gap-3 border-b border-gray-200 pb-3 dark:border-gray-700 lg:flex-row lg:items-center lg:gap-4 ${className}`}
+        className={`mb-3 flex shrink-0 flex-col gap-3 border-b border-[#E5E7EB] pb-3 dark:border-gray-700 lg:flex-row lg:items-start lg:justify-between lg:gap-6 ${className}`}
       >
-        <div className="min-w-0 shrink-0 lg:max-w-[14rem]">
-          <h1 className="truncate text-lg font-semibold tracking-tight text-foreground md:text-xl">
+        <div className="min-w-0 shrink-0 lg:max-w-md">
+          <h1 className="truncate text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100 md:text-2xl">
             Inventory Management
           </h1>
-          <p className="truncate text-xs text-muted-foreground md:text-sm">
-            Enterprise-level stock control and logistics.
+          <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-gray-400">
+            Enterprise-level stock control and analytics.
           </p>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-          <nav
-            className="flex min-h-[2.25rem] min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-lg border border-border/60 bg-muted/30 px-1 py-0.5 dark:border-slate-600/80 dark:bg-slate-900/40 sm:border-0 sm:bg-transparent sm:p-0 dark:sm:bg-transparent"
-            aria-label="Inventory sections"
-          >
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-xs font-bold transition-colors sm:gap-2 sm:px-2.5 sm:text-sm ${
-                    isActive
-                      ? 'bg-primary-600 text-white shadow-sm dark:bg-primary-500'
-                      : 'text-muted-foreground hover:bg-muted/80 hover:text-foreground dark:hover:bg-slate-800'
-                  }`}
-                >
-                  {React.cloneElement(tab.icon as React.ReactElement<{ width?: number; height?: number }>, {
-                    width: 16,
-                    height: 16,
-                  })}
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              onClick={onNewSku}
-              className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-md shadow-primary-900/20 transition-all hover:bg-primary-700 dark:shadow-primary-950/40"
+        <div className="flex min-w-0 flex-1 flex-col gap-3 lg:max-w-4xl xl:max-w-none">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-end xl:gap-4">
+            <nav
+              className="flex min-h-[2.5rem] min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border border-[#E5E7EB] bg-gray-100/80 px-1 py-1 dark:border-slate-600 dark:bg-slate-900/60"
+              aria-label="Inventory sections"
             >
-              {ICONS.plus}
-              New SKU
-            </button>
-            <AppHeaderToolbar />
+              {tabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition-colors sm:text-sm ${
+                      isActive
+                        ? 'bg-white text-[#0047AB] shadow-sm dark:bg-slate-800 dark:text-[#5b8cff]'
+                        : 'text-gray-600 hover:bg-white/70 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-slate-800/80 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    {React.cloneElement(tab.icon as React.ReactElement<{ width?: number; height?: number }>, {
+                      width: 16,
+                      height: 16,
+                    })}
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="flex shrink-0 items-center justify-end gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={onNewSku}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#0047AB] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#003694] dark:bg-[#0047AB] dark:hover:bg-[#003694]"
+              >
+                <span className="flex h-4 w-4 items-center justify-center [&>svg]:h-4 [&>svg]:w-4" aria-hidden>
+                  {ICONS.plus}
+                </span>
+                New SKU
+              </button>
+              <AppHeaderToolbar />
+            </div>
           </div>
         </div>
       </header>

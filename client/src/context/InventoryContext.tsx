@@ -196,6 +196,7 @@ function mapMovementRows(movementList: any[]): StockMovement[] {
         id: m.id,
         itemId: m.product_id,
         itemName: m.product_name || 'Unknown Item',
+        sku: m.sku || undefined,
         type: m.type as any,
         quantity: parseFloat(m.quantity),
         beforeQty: 0,

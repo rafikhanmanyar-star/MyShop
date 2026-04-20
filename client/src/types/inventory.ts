@@ -37,12 +37,24 @@ export interface InventoryItem {
     salesDeactivated?: boolean;
 }
 
-export type MovementType = 'Sale' | 'Purchase' | 'Transfer' | 'Adjustment' | 'Return' | 'Damage' | 'Shrinkage';
+export type MovementType =
+    | 'Sale'
+    | 'Purchase'
+    | 'Transfer'
+    | 'Adjustment'
+    | 'Return'
+    | 'Damage'
+    | 'Shrinkage'
+    | 'MobileSale'
+    | 'Reserve'
+    | 'ReleaseReserve';
 
 export interface StockMovement {
     id: string;
     itemId: string;
     itemName: string;
+    /** Product SKU when provided by the movements API */
+    sku?: string;
     type: MovementType;
     quantity: number; // Positive for increase, negative for decrease
     beforeQty: number;

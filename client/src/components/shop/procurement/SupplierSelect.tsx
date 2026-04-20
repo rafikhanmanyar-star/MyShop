@@ -7,6 +7,8 @@ export type VendorOption = {
   name: string;
   company_name?: string;
   companyName?: string;
+  /** Shown as a sublabel on purchase bill list (e.g. category / segment). */
+  description?: string;
 };
 
 function vendorLabel(v: VendorOption): string {
@@ -136,7 +138,7 @@ export default function SupplierSelect({
         </ul>
       )}
       {!loadingData && vendors.length === 0 && (
-        <p className="text-xs text-warning">No vendors yet. Add one with &quot;Add Supplier&quot; or in Settings.</p>
+        <p className="text-xs text-warning">No vendors yet. Add one with &quot;Add Supplier&quot; or under Procurement → Vendor Directory.</p>
       )}
     </div>
   );

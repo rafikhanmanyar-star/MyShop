@@ -6,7 +6,7 @@ import { useAppContext } from '../../../context/AppContext';
 import { useInventory } from '../../../context/InventoryContext';
 import Button from '../../ui/Button';
 import { CURRENCY } from '../../../constants';
-import { MessageCircle, Pencil, Trash2, Wallet } from 'lucide-react';
+import { Pencil, Trash2, Wallet, Eye, Share2, ChevronLeft, ChevronRight, AlertTriangle, Info } from 'lucide-react';
 import {
   generatePurchaseOrderPdfBlob,
   sharePurchaseOrderPdfToWhatsApp,
@@ -21,7 +21,6 @@ import PurchaseItemRow, { type LineItem } from './PurchaseItemRow';
 import TotalSummaryCard from './TotalSummaryCard';
 import PaymentSelector, { type PaymentStatus } from './PaymentSelector';
 import { showProcurementToast } from './utils/showProcurementToast';
-import Badge from '../../ui/Badge';
 import Modal from '../../ui/Modal';
 
 function newLineId(): string {
@@ -90,6 +89,60 @@ function procurementHttpErr(err: unknown, fallback: string): string {
   return e?.error || e?.response?.data?.error || e?.message || fallback;
 }
 
+const BILL_LIST_PAGE_SIZE = 12;
+
+const ROW_AVATAR_COLORS = [
+  'bg-sky-100 text-sky-700',
+  'bg-indigo-100 text-indigo-600',
+  'bg-emerald-100 text-emerald-600',
+  'bg-amber-100 text-amber-700',
+  'bg-rose-100 text-rose-600',
+  'bg-cyan-100 text-cyan-700',
+  'bg-violet-100 text-violet-600',
+];
+
+function rowAvatarColor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return ROW_AVATAR_COLORS[Math.abs(hash) % ROW_AVATAR_COLORS.length];
+}
+
+function vendorInitialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function formatBillDateDisplay(ymd: string | undefined): string {
+  if (!ymd) return '—';
+  const t = String(ymd).trim().slice(0, 10);
+  const d = new Date(`${t}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return t;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+type ProcurementRowStatus = 'PAID' | 'POSTED' | 'AWAITING';
+
+function getProcurementRowStatus(b: { is_posted?: unknown; status?: unknown }): ProcurementRowStatus {
+  const posted = b.is_posted !== false && b.is_posted !== 0;
+  const st = String(b.status ?? '').trim();
+  if (!posted) return 'AWAITING';
+  if (st === 'Paid') return 'PAID';
+  if (st === 'Partial') return 'AWAITING';
+  return 'POSTED';
+}
+
+/** Days overdue if due date is before today and there is an outstanding balance. */
+function overdueDaysIfAny(dueYmd: string | undefined, balanceDue: number): number | null {
+  if (!dueYmd || !(balanceDue > 0)) return null;
+  const t = String(dueYmd).trim().slice(0, 10);
+  const due = new Date(`${t}T12:00:00`);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const diff = Math.floor((today.getTime() - due.getTime()) / (24 * 60 * 60 * 1000));
+  return diff > 0 ? diff : null;
+}
+
 export interface PurchaseBillsSectionHandle {
   openNewPurchaseBill: () => void;
 }
@@ -130,6 +183,10 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     const [editBillId, setEditBillId] = useState<string | null>(null);
     const [editingIsDraft, setEditingIsDraft] = useState(false);
     const [deleteConfirmBillId, setDeleteConfirmBillId] = useState<string | null>(null);
+    const [billListPage, setBillListPage] = useState(1);
+    const [viewingBillId, setViewingBillId] = useState<string | null>(null);
+    const [viewingBillDetail, setViewingBillDetail] = useState<any | null>(null);
+    const [viewBillLoading, setViewBillLoading] = useState(false);
     const [updating, setUpdating] = useState(false);
     const [sharePdfToWhatsAppAfterSave, setSharePdfToWhatsAppAfterSave] = useState(false);
     const [receiptShop, setReceiptShop] = useState<{ name?: string; address?: string; phone?: string }>({});
@@ -137,6 +194,52 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     const [formErrors, setFormErrors] = useState<{ supplier?: string; items?: string }>({});
 
     const vendors: VendorOption[] = (vendorsFromApi.length > 0 ? vendorsFromApi : appState.vendors || []) as VendorOption[];
+
+    const vendorById = useMemo(() => {
+      const m = new Map<string, VendorOption>();
+      for (const v of vendors) {
+        if (v?.id) m.set(v.id, v);
+      }
+      return m;
+    }, [vendors]);
+
+    const sortedBills = useMemo(() => {
+      return [...bills].sort((a, b) => {
+        const ad = String(a.bill_date ?? a.billDate ?? '').slice(0, 10);
+        const bd = String(b.bill_date ?? b.billDate ?? '').slice(0, 10);
+        return bd.localeCompare(ad);
+      });
+    }, [bills]);
+
+    const billTotalPages = Math.max(1, Math.ceil(sortedBills.length / BILL_LIST_PAGE_SIZE));
+    const billSafePage = Math.min(billListPage, billTotalPages);
+    const pagedBills = sortedBills.slice((billSafePage - 1) * BILL_LIST_PAGE_SIZE, billSafePage * BILL_LIST_PAGE_SIZE);
+
+    useEffect(() => {
+      setBillListPage(1);
+    }, [bills.length]);
+
+    const procurementInsight = useMemo(() => {
+      const openAp = sortedBills.reduce((s, b) => s + (Number(b.balance_due) > 0 ? Number(b.balance_due) || 0 : 0), 0);
+      const overdueCount = sortedBills.filter((b) => {
+        const bal = Number(b.balance_due) || 0;
+        return overdueDaysIfAny(String(b.due_date ?? b.dueDate ?? '').slice(0, 10), bal) != null;
+      }).length;
+      return { openAp, overdueCount, totalBills: sortedBills.length };
+    }, [sortedBills]);
+
+    const topOverdueAlert = useMemo(() => {
+      const withBalance = sortedBills.filter((b) => (Number(b.balance_due) || 0) > 0);
+      let best: { bill: any; days: number } | null = null;
+      for (const bill of withBalance) {
+        const due = String(bill.due_date ?? bill.dueDate ?? '').slice(0, 10);
+        const days = overdueDaysIfAny(due, Number(bill.balance_due) || 0);
+        if (days != null && (!best || days > best.days)) best = { bill, days };
+      }
+      if (!best) return null;
+      const name = best.bill.supplier_name || 'A supplier';
+      return { name, days: best.days, billNum: best.bill.bill_number || best.bill.billNumber };
+    }, [sortedBills]);
 
     const selectedVendor = vendors.find((v) => v.id === form.supplierId);
     const vendorDisplayName = selectedVendor
@@ -240,6 +343,30 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     useEffect(() => {
       loadBillsAndFormData();
     }, [loadBillsAndFormData]);
+
+    useEffect(() => {
+      if (!viewingBillId) {
+        setViewingBillDetail(null);
+        return;
+      }
+      let cancelled = false;
+      setViewBillLoading(true);
+      setViewingBillDetail(null);
+      procurementApi
+        .getPurchaseBillById(viewingBillId)
+        .then((bill) => {
+          if (!cancelled) setViewingBillDetail(bill);
+        })
+        .catch(() => {
+          if (!cancelled) setViewingBillDetail(null);
+        })
+        .finally(() => {
+          if (!cancelled) setViewBillLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [viewingBillId]);
 
     useEffect(() => {
       shopApi
@@ -740,11 +867,6 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
 
     return (
       <div className="space-y-6">
-        <div>
-          <h2 className="section-title">Purchase bills</h2>
-          <p className="body-text text-muted-foreground">Review and manage recorded purchase bills.</p>
-        </div>
-
         <Modal
           isOpen={showForm}
           onClose={() => {
@@ -982,155 +1104,414 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           </div>
         </Modal>
 
-        <div className="card overflow-hidden p-0">
+        <div className="card overflow-hidden p-0 shadow-sm">
           <div className="overflow-x-auto">
-            <table className="table-modern min-w-[800px]">
-              <thead>
-                <tr>
-                  <th className="table-header py-3 px-4">Bill #</th>
-                  <th className="table-header p-3">Supplier</th>
-                  <th className="table-header p-3">Date</th>
-                  <th className="table-header p-3 text-right">Total</th>
-                  <th className="table-header p-3 text-right">Paid</th>
-                  <th className="table-header p-3 text-right">Balance</th>
-                  <th className="table-header p-3">Status</th>
-                  <th className="table-header w-44 p-3 text-right">Actions</th>
+            <table className="w-full min-w-[960px] text-left">
+              <thead className="border-b border-border bg-muted/40">
+                <tr className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <th className="whitespace-nowrap px-4 py-3">Bill ID</th>
+                  <th className="whitespace-nowrap px-4 py-3">Vendor</th>
+                  <th className="whitespace-nowrap px-4 py-3">Issue date</th>
+                  <th className="whitespace-nowrap px-4 py-3">Due date</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-right">Amount</th>
+                  <th className="whitespace-nowrap px-4 py-3">Status</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {bills.map((b) => {
-                  const balanceDue = Number(b.balance_due) || 0;
-                  return (
-                    <tr
-                      key={b.id}
-                      className="transition-all duration-200 border-b border-border hover:bg-table-row-hover"
-                    >
-                      <td className="p-3 text-sm font-medium text-foreground">{b.bill_number}</td>
-                      <td className="p-3 text-sm text-foreground">{b.supplier_name}</td>
-                      <td className="p-3 text-sm text-muted-foreground">{b.bill_date?.slice(0, 10)}</td>
-                      <td className="numeric-data p-3 text-right text-foreground">
-                        {CURRENCY} {Number(b.total_amount).toLocaleString()}
-                      </td>
-                      <td className="numeric-data p-3 text-right text-muted-foreground">
-                        {CURRENCY} {Number(b.paid_amount).toLocaleString()}
-                      </td>
-                      <td className="numeric-data p-3 text-right text-foreground">
-                        {CURRENCY} {balanceDue.toLocaleString()}
-                      </td>
-                      <td className="p-3">
-                        <Badge
-                          variant={
-                            b.is_posted === false
-                              ? 'default'
-                              : b.status === 'Paid'
-                                ? 'success'
-                                : b.status === 'Partial'
-                                  ? 'warning'
-                                  : 'outline'
-                          }
-                        >
-                          {b.is_posted === false ? 'Draft' : b.status}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => shareExistingBillToWhatsApp(b.id)}
-                            disabled={!!sharingPdfBillId}
-                            className="transition-all duration-200 rounded-lg p-1.5 text-muted-foreground hover:bg-emerald-500/10 hover:text-success disabled:opacity-50"
-                            title="Share purchase order PDF on WhatsApp"
+              <tbody className="divide-y divide-border">
+                {loadingData && bills.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                      Loading purchase bills…
+                    </td>
+                  </tr>
+                ) : pagedBills.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                      No purchase bills yet
+                    </td>
+                  </tr>
+                ) : (
+                  pagedBills.map((b) => {
+                    const balanceDue = Number(b.balance_due) || 0;
+                    const rowStatus = getProcurementRowStatus(b);
+                    const sid = String(b.supplier_id ?? b.supplierId ?? '');
+                    const v = sid ? vendorById.get(sid) : undefined;
+                    const vendorTitle = String(v?.company_name || v?.companyName || b.supplier_name || '—').trim();
+                    const vendorSub = String(v?.description || '').trim() || 'Supplier';
+                    const issue = String(b.bill_date ?? b.billDate ?? '').slice(0, 10);
+                    const due = String(b.due_date ?? b.dueDate ?? '').slice(0, 10);
+                    const od = overdueDaysIfAny(due, balanceDue);
+                    const billNum = String(b.bill_number ?? b.billNumber ?? '');
+                    const showView = rowStatus !== 'PAID';
+                    const statusClass =
+                      rowStatus === 'PAID'
+                        ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                        : rowStatus === 'POSTED'
+                          ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                          : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200';
+
+                    return (
+                      <tr key={b.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-bold text-foreground">#{billNum}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rowAvatarColor(sid || b.id)}`}
+                            >
+                              {vendorInitialsFromName(vendorTitle || b.supplier_name || '?')}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-foreground">{vendorTitle}</div>
+                              <div className="truncate text-[11px] text-muted-foreground">{vendorSub}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">{formatBillDateDisplay(issue)}</td>
+                        <td className="px-4 py-3 text-sm">
+                          {due ? (
+                            <span className={od != null ? 'font-bold text-destructive' : 'text-muted-foreground'}>
+                              {formatBillDateDisplay(due)}
+                              {od != null && (
+                                <span className="ml-1 font-bold text-destructive">Overdue ({od}d)</span>
+                              )}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="numeric-data px-4 py-3 text-right text-sm font-bold text-foreground">
+                          {CURRENCY}{' '}
+                          {Number(b.total_amount ?? b.totalAmount ?? 0).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${statusClass}`}
                           >
-                            <MessageCircle className={`h-4 w-4 ${sharingPdfBillId === b.id ? 'animate-pulse' : ''}`} />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!purchaseBillCanEdit(b)}
-                            onClick={async () => {
-                              if (!purchaseBillCanEdit(b)) {
-                                alert('This bill cannot be edited because it has been paid (fully or partially).');
-                                return;
-                              }
-                              try {
-                                const bill = await procurementApi.getPurchaseBillById(b.id);
-                                if (!bill) {
-                                  alert('Could not load bill.');
-                                  return;
-                                }
-                                setEditingIsDraft(bill.is_posted === false || bill.is_posted === 0);
-                                setForm({
-                                  supplierId: bill.supplier_id || bill.supplierId || '',
-                                  billNumber: bill.bill_number || bill.billNumber || '',
-                                  billDate: (bill.bill_date || bill.billDate || '').toString().slice(0, 10),
-                                  dueDate: (bill.due_date || bill.dueDate || '').toString().slice(0, 10) || '',
-                                  items: (bill.items || []).map((it: any) => ({
-                                    lineId: newLineId(),
-                                    productId: it.product_id || it.productId,
-                                    quantity: Number(it.quantity) || 1,
-                                    unitCost: Number(it.unit_cost ?? it.unitCost) || 0,
-                                    taxAmount: Number(it.tax_amount ?? it.taxAmount) || 0,
-                                    subtotal: Number(it.subtotal) || 0,
-                                    expiryDate: isoDateFromPurchaseApi(it.expiry_date ?? it.expiryDate),
-                                    expiryHighlight: false,
-                                    batchNo: String(it.batch_no ?? it.batchNo ?? ''),
-                                  })),
-                                  paymentStatus: 'Credit',
-                                  paidAmount: 0,
-                                  bankAccountId: '',
-                                  notes: bill.notes || '',
-                                });
-                                setVendorSearch(bill.supplier_name || '');
-                                setEditBillId(b.id);
-                                setShowForm(true);
-                              } catch (err: any) {
-                                alert(procurementHttpErr(err, 'Failed to load bill'));
-                              }
-                            }}
-                            className={`transition-all duration-200 rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-primary disabled:pointer-events-none disabled:opacity-40`}
-                            title={
-                              purchaseBillCanEdit(b)
-                                ? 'Edit bill'
-                                : 'Paid bills cannot be edited'
-                            }
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteConfirmBillId(b.id)}
-                            className="transition-all duration-200 rounded-lg p-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-destructive"
-                            title="Delete bill"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                          {onPayRemaining && purchaseBillCanPay(b) && (
+                            {rowStatus}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-0.5">
+                            {showView && (
+                              <button
+                                type="button"
+                                onClick={() => setViewingBillId(b.id)}
+                                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+                                title="View bill"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() =>
-                                onPayRemaining({
-                                  id: b.id,
-                                  supplier_id: b.supplier_id,
-                                  supplier_name: b.supplier_name,
-                                  balance_due: balanceDue,
-                                })
-                              }
-                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-primary transition-all duration-200 hover:bg-accent"
-                              title="Pay remaining amount"
+                              disabled={!purchaseBillCanEdit(b)}
+                              onClick={async () => {
+                                if (!purchaseBillCanEdit(b)) {
+                                  alert('This bill cannot be edited because it has been paid (fully or partially).');
+                                  return;
+                                }
+                                try {
+                                  const bill = await procurementApi.getPurchaseBillById(b.id);
+                                  if (!bill) {
+                                    alert('Could not load bill.');
+                                    return;
+                                  }
+                                  setEditingIsDraft(bill.is_posted === false || bill.is_posted === 0);
+                                  setForm({
+                                    supplierId: bill.supplier_id || bill.supplierId || '',
+                                    billNumber: bill.bill_number || bill.billNumber || '',
+                                    billDate: (bill.bill_date || bill.billDate || '').toString().slice(0, 10),
+                                    dueDate: (bill.due_date || bill.dueDate || '').toString().slice(0, 10) || '',
+                                    items: (bill.items || []).map((it: any) => ({
+                                      lineId: newLineId(),
+                                      productId: it.product_id || it.productId,
+                                      quantity: Number(it.quantity) || 1,
+                                      unitCost: Number(it.unit_cost ?? it.unitCost) || 0,
+                                      taxAmount: Number(it.tax_amount ?? it.taxAmount) || 0,
+                                      subtotal: Number(it.subtotal) || 0,
+                                      expiryDate: isoDateFromPurchaseApi(it.expiry_date ?? it.expiryDate),
+                                      expiryHighlight: false,
+                                      batchNo: String(it.batch_no ?? it.batchNo ?? ''),
+                                    })),
+                                    paymentStatus: 'Credit',
+                                    paidAmount: 0,
+                                    bankAccountId: '',
+                                    notes: bill.notes || '',
+                                  });
+                                  setVendorSearch(bill.supplier_name || '');
+                                  setEditBillId(b.id);
+                                  setShowForm(true);
+                                } catch (err: any) {
+                                  alert(procurementHttpErr(err, 'Failed to load bill'));
+                                }
+                              }}
+                              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary disabled:pointer-events-none disabled:opacity-40"
+                              title={purchaseBillCanEdit(b) ? 'Edit bill' : 'Paid bills cannot be edited'}
                             >
-                              <Wallet className="h-4 w-4" />
-                              Pay
+                              <Pencil className="h-4 w-4" />
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmBillId(b.id)}
+                              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-destructive"
+                              title="Delete bill"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => shareExistingBillToWhatsApp(b.id)}
+                              disabled={!!sharingPdfBillId}
+                              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+                              title="Share purchase order PDF on WhatsApp"
+                            >
+                              <Share2 className={`h-4 w-4 ${sharingPdfBillId === b.id ? 'animate-pulse' : ''}`} />
+                            </button>
+                            {onPayRemaining && purchaseBillCanPay(b) && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onPayRemaining({
+                                    id: b.id,
+                                    supplier_id: b.supplier_id,
+                                    supplier_name: b.supplier_name,
+                                    balance_due: balanceDue,
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-primary transition-colors hover:bg-accent"
+                                title="Pay remaining amount"
+                              >
+                                <Wallet className="h-4 w-4" />
+                                Pay
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
-          {bills.length === 0 && <p className="p-6 text-center text-muted-foreground">No purchase bills yet</p>}
+
+          {sortedBills.length > 0 && (
+            <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs text-muted-foreground">
+                Showing {(billSafePage - 1) * BILL_LIST_PAGE_SIZE + 1} to{' '}
+                {Math.min(billSafePage * BILL_LIST_PAGE_SIZE, sortedBills.length)} of {sortedBills.length} entries
+              </span>
+              <div className="flex items-center justify-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => setBillListPage((p) => Math.max(1, p - 1))}
+                  disabled={billSafePage <= 1}
+                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                {Array.from({ length: Math.min(billTotalPages, 5) }, (_, i) => {
+                  let pageNum: number;
+                  if (billTotalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (billSafePage <= 3) {
+                    pageNum = i + 1;
+                  } else if (billSafePage >= billTotalPages - 2) {
+                    pageNum = billTotalPages - 4 + i;
+                  } else {
+                    pageNum = billSafePage - 2 + i;
+                  }
+                  return (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      onClick={() => setBillListPage(pageNum)}
+                      className={`h-8 min-w-[32px] rounded-md text-xs font-semibold transition-colors ${
+                        billSafePage === pageNum
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setBillListPage((p) => Math.min(billTotalPages, p + 1))}
+                  disabled={billSafePage >= billTotalPages}
+                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-amber-200/80 bg-amber-50/80 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden />
+              <div>
+                <h3 className="text-sm font-bold text-amber-900 dark:text-amber-100">Procurement alert</h3>
+                {topOverdueAlert ? (
+                  <p className="mt-1 text-sm leading-relaxed text-amber-900/90 dark:text-amber-50/90">
+                    <span className="font-medium">{topOverdueAlert.name}</span> has bill{' '}
+                    <span className="font-mono">#{topOverdueAlert.billNum}</span> overdue by {topOverdueAlert.days} day
+                    {topOverdueAlert.days === 1 ? '' : 's'}. Review payment terms or schedule supplier payment.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-amber-900/85 dark:text-amber-50/85">
+                    No overdue payables with an open balance. Outstanding accounts payable total{' '}
+                    <span className="font-semibold tabular-nums">
+                      {CURRENCY} {procurementInsight.openAp.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </span>
+                    .
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-sky-200/80 bg-sky-50/80 p-4 dark:border-sky-900/50 dark:bg-sky-950/30">
+            <div className="flex gap-3">
+              <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-600" aria-hidden />
+              <div>
+                <h3 className="text-sm font-bold text-sky-900 dark:text-sky-100">System insight</h3>
+                <p className="mt-1 text-sm leading-relaxed text-sky-900/90 dark:text-sky-50/90">
+                  You have <span className="font-semibold">{procurementInsight.totalBills}</span> purchase bill
+                  {procurementInsight.totalBills === 1 ? '' : 's'} on record
+                  {procurementInsight.overdueCount > 0 ? (
+                    <>
+                      ; <span className="font-semibold text-destructive">{procurementInsight.overdueCount}</span> with
+                      overdue due dates and open balance.
+                    </>
+                  ) : (
+                    <>; no overdue due dates with open balance.</>
+                  )}{' '}
+                  Open AP:{' '}
+                  <span className="font-semibold tabular-nums">
+                    {CURRENCY} {procurementInsight.openAp.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </span>
+                  .
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <Modal
+          isOpen={!!viewingBillId}
+          onClose={() => {
+            setViewingBillId(null);
+            setViewingBillDetail(null);
+          }}
+          title={viewingBillDetail ? `Bill #${viewingBillDetail.bill_number || viewingBillDetail.billNumber || ''}` : 'Purchase bill'}
+          size="lg"
+        >
+          {viewBillLoading ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+          ) : viewingBillDetail ? (
+            <div className="space-y-4 text-sm">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Supplier</span>
+                  <p className="font-medium text-foreground">
+                    {viewingBillDetail.supplier_name || viewingBillDetail.supplierName || '—'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</span>
+                  <p className="font-medium text-foreground">
+                    {viewingBillDetail.is_posted === false || viewingBillDetail.is_posted === 0
+                      ? 'Draft'
+                      : viewingBillDetail.status || '—'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Issue date</span>
+                  <p className="text-foreground">
+                    {formatBillDateDisplay(String(viewingBillDetail.bill_date || viewingBillDetail.billDate || '').slice(0, 10))}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Due date</span>
+                  <p className="text-foreground">
+                    {viewingBillDetail.due_date || viewingBillDetail.dueDate
+                      ? formatBillDateDisplay(String(viewingBillDetail.due_date || viewingBillDetail.dueDate).slice(0, 10))
+                      : '—'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total</span>
+                  <p className="font-semibold tabular-nums text-foreground">
+                    {CURRENCY}{' '}
+                    {Number(viewingBillDetail.total_amount ?? viewingBillDetail.totalAmount ?? 0).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Balance due</span>
+                  <p className="font-semibold tabular-nums text-foreground">
+                    {CURRENCY}{' '}
+                    {Number(viewingBillDetail.balance_due ?? viewingBillDetail.balanceDue ?? 0).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </p>
+                </div>
+              </div>
+              {Array.isArray(viewingBillDetail.items) && viewingBillDetail.items.length > 0 && (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/60 text-[10px] font-semibold uppercase text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">Product</th>
+                        <th className="px-3 py-2 text-right">Qty</th>
+                        <th className="px-3 py-2 text-right">Unit</th>
+                        <th className="px-3 py-2 text-right">Subtotal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {viewingBillDetail.items.map((it: any, idx: number) => (
+                        <tr key={idx}>
+                          <td className="px-3 py-2 text-foreground">
+                            {it.product_name || it.productName || it.product_id || '—'}
+                          </td>
+                          <td className="numeric-data px-3 py-2 text-right">{Number(it.quantity) || 0}</td>
+                          <td className="numeric-data px-3 py-2 text-right">
+                            {CURRENCY} {Number(it.unit_cost ?? it.unitCost ?? 0).toLocaleString()}
+                          </td>
+                          <td className="numeric-data px-3 py-2 text-right font-medium">
+                            {CURRENCY} {Number(it.subtotal ?? 0).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {(viewingBillDetail.notes || '').trim() ? (
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notes</span>
+                  <p className="mt-1 whitespace-pre-wrap text-foreground">{String(viewingBillDetail.notes)}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted-foreground">Could not load this bill.</p>
+          )}
+        </Modal>
 
         {deleteConfirmBillId && (
           <div

@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Smartphone, Printer, Truck, MapPin, ShieldCheck, Search, ChevronLeft, ChevronRight, ChevronDown, Upload, Bike } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { useAppContext } from '../../context/AppContext';
 import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
-import { shopApi, accountingApi, ShopBankAccount, ShopVendor, ShopRider, RiderActivityRow } from '../../services/shopApi';
+import { shopApi, accountingApi, ShopBankAccount, ShopRider, RiderActivityRow } from '../../services/shopApi';
 import Card from '../ui/Card';
 import { AccountingProvider } from '../../context/AccountingContext';
 import ChartOfAccounts from './accounting/ChartOfAccounts';
@@ -16,18 +15,6 @@ import BackupRestoreSection from './settings/BackupRestoreSection';
 import { BranchConfigurationSection } from './settings/BranchConfigurationSection';
 import { useSettingsEditLock } from '../../hooks/useSettingsEditLock';
 import { getFullImageUrl } from '../../config/apiUrl';
-
-function toState(v: ShopVendor) {
-    return {
-        id: v.id,
-        name: v.name,
-        companyName: v.company_name,
-        contactNo: v.contact_no,
-        email: v.email,
-        address: v.address,
-        description: v.description,
-    };
-}
 
 import { generateReceiptHTML, ReceiptSaleData, RECEIPT_PRINT_FONT_OPTIONS } from '../../services/receipt/receiptBuilder';
 import QRCode from 'qrcode';
@@ -115,17 +102,12 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any; logoUrlOverride?: st
     );
 };
 
-const VENDOR_PAGE_SIZE = 10;
 const USER_PAGE_SIZE = 10;
 
 function getInitials(name: string): string {
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return name.slice(0, 2).toUpperCase();
-}
-
-function getVendorInitials(name: string): string {
-    return getInitials(name);
 }
 
 const AVATAR_COLORS = [
@@ -161,284 +143,6 @@ function roleLabel(role: string) {
     if (role === 'pos_cashier') return 'CASHER';
     return role.replace(/_/g, ' ').toUpperCase();
 }
-
-interface VendorManagementTabProps {
-    vendors: ShopVendor[];
-    vendorsLoading: boolean;
-    openNewVendor: () => void;
-    openEditVendor: (v: ShopVendor) => void;
-    handleDeactivateVendor: (id: string) => void;
-    handleActivateVendor: (id: string) => void;
-}
-
-const VendorManagementTab: React.FC<VendorManagementTabProps> = ({
-    vendors,
-    vendorsLoading,
-    openNewVendor,
-    openEditVendor,
-    handleDeactivateVendor,
-    handleActivateVendor,
-}) => {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-    const [sortBy, setSortBy] = useState<'last_active' | 'name' | 'company'>('last_active');
-    const [currentPage, setCurrentPage] = useState(1);
-
-    const activeCount = useMemo(() => vendors.filter(v => v.is_active).length, [vendors]);
-    const inactiveCount = useMemo(() => vendors.filter(v => !v.is_active).length, [vendors]);
-
-    const filteredVendors = useMemo(() => {
-        let result = [...vendors];
-        if (statusFilter === 'active') result = result.filter(v => v.is_active);
-        else if (statusFilter === 'inactive') result = result.filter(v => !v.is_active);
-
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase();
-            result = result.filter(v =>
-                v.name.toLowerCase().includes(q) ||
-                (v.company_name && v.company_name.toLowerCase().includes(q)) ||
-                (v.email && v.email.toLowerCase().includes(q)) ||
-                (v.contact_no && v.contact_no.toLowerCase().includes(q))
-            );
-        }
-
-        result.sort((a, b) => {
-            if (sortBy === 'name') return a.name.localeCompare(b.name);
-            if (sortBy === 'company') return (a.company_name || '').localeCompare(b.company_name || '');
-            const aDate = a.updated_at || a.created_at || '';
-            const bDate = b.updated_at || b.created_at || '';
-            return bDate.localeCompare(aDate);
-        });
-
-        return result;
-    }, [vendors, searchQuery, statusFilter, sortBy]);
-
-    const totalPages = Math.max(1, Math.ceil(filteredVendors.length / VENDOR_PAGE_SIZE));
-    const safePage = Math.min(currentPage, totalPages);
-    const pagedVendors = filteredVendors.slice((safePage - 1) * VENDOR_PAGE_SIZE, safePage * VENDOR_PAGE_SIZE);
-
-    useEffect(() => { setCurrentPage(1); }, [searchQuery, statusFilter]);
-
-    const filterButtons: { key: typeof statusFilter; label: string }[] = [
-        { key: 'all', label: 'All' },
-        { key: 'active', label: 'Active' },
-        { key: 'inactive', label: 'Inactive' },
-    ];
-
-    return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <div className="flex items-center gap-3">
-                        <h2 className="text-2xl font-bold text-foreground tracking-tight">Vendor Management</h2>
-                        <span className="text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">
-                            {vendors.length} Vendors
-                        </span>
-                    </div>
-                    <p className="text-muted-foreground text-sm mt-1">Manage vendors used in procurement and stock operations</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-4 mr-2">
-                        <div className="text-center px-4 py-2 rounded-lg bg-card border border-border">
-                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active</div>
-                            <div className="text-xl font-bold text-foreground">{activeCount}</div>
-                        </div>
-                        <div className="text-center px-4 py-2 rounded-lg bg-card border border-border">
-                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Inactive</div>
-                            <div className="text-xl font-bold text-foreground">{inactiveCount}</div>
-                        </div>
-                    </div>
-                    <Button onClick={openNewVendor} className="flex items-center gap-2 bg-primary-600 hover:bg-primary-700">
-                        {ICONS.plus} Add Vendor
-                    </Button>
-                </div>
-            </div>
-
-            {/* Search & Filters */}
-            <Card className="border-none shadow-sm p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <div className="relative flex-1 max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                        <input
-                            type="text"
-                            placeholder="Search by name, company, or email..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="input w-full pl-10 pr-3 py-2 text-sm"
-                        />
-                    </div>
-                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                        {filterButtons.map(fb => (
-                            <button
-                                key={fb.key}
-                                onClick={() => setStatusFilter(fb.key)}
-                                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                                    statusFilter === fb.key
-                                        ? 'bg-card text-foreground shadow-sm'
-                                        : 'text-muted-foreground hover:text-foreground'
-                                }`}
-                            >
-                                {fb.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="flex items-center gap-2 ml-auto">
-                        <select
-                            value={sortBy}
-                            onChange={e => setSortBy(e.target.value as typeof sortBy)}
-                            className="input text-xs py-1.5 pl-2 pr-7 rounded-md"
-                            aria-label="Sort vendors"
-                        >
-                            <option value="last_active">Sort by: Last Active</option>
-                            <option value="name">Sort by: Name</option>
-                            <option value="company">Sort by: Company</option>
-                        </select>
-                    </div>
-                </div>
-            </Card>
-
-            {/* Table */}
-            <Card className="border-none shadow-sm overflow-hidden">
-                {vendorsLoading ? (
-                    <div className="p-12 text-center text-muted-foreground">Loading...</div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-muted/60 text-[11px] font-semibold uppercase text-muted-foreground tracking-wider">
-                                <tr>
-                                    <th className="px-6 py-3">Vendor Name</th>
-                                    <th className="px-6 py-3">Company</th>
-                                    <th className="px-6 py-3">Contact</th>
-                                    <th className="px-6 py-3">Email</th>
-                                    <th className="px-6 py-3">Status</th>
-                                    <th className="px-6 py-3">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                                {pagedVendors.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground text-sm">
-                                            {searchQuery || statusFilter !== 'all'
-                                                ? 'No vendors match your filters.'
-                                                : 'No vendors yet. Create one to use in Procurement.'}
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    pagedVendors.map(v => {
-                                        const shortId = v.id.length > 8 ? v.id.slice(0, 8).toUpperCase() : v.id.toUpperCase();
-                                        return (
-                                            <tr key={v.id} className="hover:bg-muted/40 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${getAvatarColor(v.id)}`}>
-                                                            {getVendorInitials(v.name)}
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-semibold text-foreground">{v.name}</div>
-                                                            <div className="text-[11px] text-muted-foreground">ID: VEN-{shortId}</div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-sm text-muted-foreground">{v.company_name || '—'}</td>
-                                                <td className="px-6 py-4 text-sm text-muted-foreground">{v.contact_no || '—'}</td>
-                                                <td className="px-6 py-4 text-sm text-muted-foreground">{v.email || '—'}</td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`text-[11px] font-bold uppercase px-2.5 py-1 rounded-full ${
-                                                        v.is_active
-                                                            ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200'
-                                                            : 'bg-amber-50 text-amber-600 ring-1 ring-amber-200'
-                                                    }`}>
-                                                        {v.is_active ? 'Active' : 'Inactive'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-1">
-                                                        {v.is_active ? (
-                                                            <>
-                                                                <button onClick={() => openEditVendor(v)} className="p-1.5 rounded-md text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Edit">
-                                                                    {React.cloneElement(ICONS.edit as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
-                                                                </button>
-                                                                <button onClick={() => handleDeactivateVendor(v.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors" title="Deactivate">
-                                                                    {React.cloneElement(ICONS.trash as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
-                                                                </button>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <button onClick={() => handleActivateVendor(v.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 transition-colors" title="Activate">
-                                                                    {React.cloneElement(ICONS.checkCircle as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
-                                                                </button>
-                                                                <button onClick={() => openEditVendor(v)} className="p-1.5 rounded-md text-muted-foreground hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Edit">
-                                                                    {React.cloneElement(ICONS.edit as React.ReactElement<{ width?: number; height?: number }>, { width: 16, height: 16 })}
-                                                                </button>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-
-                {/* Pagination */}
-                {!vendorsLoading && filteredVendors.length > VENDOR_PAGE_SIZE && (
-                    <div className="flex items-center justify-between px-6 py-3 border-t border-border text-sm">
-                        <span className="text-muted-foreground text-xs">
-                            Showing {(safePage - 1) * VENDOR_PAGE_SIZE + 1} to {Math.min(safePage * VENDOR_PAGE_SIZE, filteredVendors.length)} of {filteredVendors.length} results
-                        </span>
-                        <div className="flex items-center gap-1">
-                            <button
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={safePage <= 1}
-                                className="p-1.5 rounded-md text-muted-foreground hover:bg-muted disabled:opacity-30 transition-colors"
-                                title="Previous page"
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </button>
-                            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                                let pageNum: number;
-                                if (totalPages <= 5) {
-                                    pageNum = i + 1;
-                                } else if (safePage <= 3) {
-                                    pageNum = i + 1;
-                                } else if (safePage >= totalPages - 2) {
-                                    pageNum = totalPages - 4 + i;
-                                } else {
-                                    pageNum = safePage - 2 + i;
-                                }
-                                return (
-                                    <button
-                                        key={pageNum}
-                                        onClick={() => setCurrentPage(pageNum)}
-                                        className={`min-w-[32px] h-8 rounded-md text-xs font-semibold transition-colors ${
-                                            safePage === pageNum
-                                                ? 'bg-primary-600 text-white'
-                                                : 'text-muted-foreground hover:bg-muted'
-                                        }`}
-                                    >
-                                        {pageNum}
-                                    </button>
-                                );
-                            })}
-                            <button
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={safePage >= totalPages}
-                                className="p-1.5 rounded-md text-muted-foreground hover:bg-muted disabled:opacity-30 transition-colors"
-                                title="Next page"
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </Card>
-        </div>
-    );
-};
 
 interface UserManagementTabProps {
     users: any[];
@@ -846,9 +550,8 @@ const UserManagementTab: React.FC<UserManagementTabProps> = ({
 const SettingsContent: React.FC = () => {
     const { user } = useAuth();
     const settingsLock = useSettingsEditLock(user?.userId, user?.name || user?.username || 'User');
-    const { dispatch } = useAppContext();
     const isCashier = user?.role === 'pos_cashier';
-    const [activeTab, setActiveTab] = useState<'coa' | 'vendors' | 'users' | 'mobileBranding' | 'branchConfig' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
+    const [activeTab, setActiveTab] = useState<'coa' | 'users' | 'mobileBranding' | 'branchConfig' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
 
     const [posSettings, setPosSettings] = useState({
         auto_print_receipt: true,
@@ -893,14 +596,6 @@ const SettingsContent: React.FC = () => {
             if (receiptLogoBlobUrl) URL.revokeObjectURL(receiptLogoBlobUrl);
         };
     }, [receiptLogoBlobUrl]);
-
-    const [vendors, setVendors] = useState<ShopVendor[]>([]);
-    const [vendorsLoading, setVendorsLoading] = useState(true);
-    const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
-    const [editingVendor, setEditingVendor] = useState<ShopVendor | null>(null);
-    const [vendorForm, setVendorForm] = useState({
-        name: '', company_name: '', contact_no: '', email: '', address: '', description: ''
-    });
 
     const [users, setUsers] = useState<any[]>([]);
     const [usersLoading, setUsersLoading] = useState(true);
@@ -949,18 +644,6 @@ const SettingsContent: React.FC = () => {
     const handleQuitAndInstall = useCallback(() => {
         if (!window.electronAPI) return;
         window.electronAPI?.quitAndInstall?.();
-    }, []);
-
-    const loadVendors = useCallback(async () => {
-        try {
-            setVendorsLoading(true);
-            const list = await shopApi.getVendors();
-            setVendors(Array.isArray(list) ? list : []);
-        } catch {
-            setVendors([]);
-        } finally {
-            setVendorsLoading(false);
-        }
     }, []);
 
     const loadUsers = useCallback(async () => {
@@ -1031,12 +714,11 @@ const SettingsContent: React.FC = () => {
             loadPosSettings();
             loadReceiptSettings();
         }
-        if (activeTab === 'vendors') loadVendors();
         if (activeTab === 'users') {
             loadUsers();
             loadRiders();
         }
-    }, [activeTab, loadVendors, loadUsers, loadRiders, loadPosSettings, loadReceiptSettings]);
+    }, [activeTab, loadUsers, loadRiders, loadPosSettings, loadReceiptSettings]);
 
     const handleSavePosSettings = async () => {
         try {
@@ -1089,25 +771,6 @@ const SettingsContent: React.FC = () => {
         }
     }, [receiptSettings]);
 
-    const openNewVendor = () => {
-        setEditingVendor(null);
-        setVendorForm({ name: '', company_name: '', contact_no: '', email: '', address: '', description: '' });
-        setIsVendorModalOpen(true);
-    };
-
-    const openEditVendor = (v: ShopVendor) => {
-        setEditingVendor(v);
-        setVendorForm({
-            name: v.name,
-            company_name: v.company_name || '',
-            contact_no: v.contact_no || '',
-            email: v.email || '',
-            address: v.address || '',
-            description: v.description || ''
-        });
-        setIsVendorModalOpen(true);
-    };
-
     const openNewUser = () => {
         setEditingUser(null);
         setUserForm({ username: '', name: '', email: '', password: '', role: 'pos_cashier' });
@@ -1126,23 +789,6 @@ const SettingsContent: React.FC = () => {
         setIsUserModalOpen(true);
     };
 
-    const handleSaveVendor = async () => {
-        if (!vendorForm.name.trim()) return;
-        try {
-            if (editingVendor) {
-                await shopApi.updateVendor(editingVendor.id, vendorForm);
-                dispatch({ type: 'UPDATE_VENDOR', payload: toState({ ...vendorForm, id: editingVendor.id } as ShopVendor) });
-            } else {
-                const created = await shopApi.createVendor(vendorForm);
-                dispatch({ type: 'ADD_VENDOR', payload: toState(created) });
-            }
-            setIsVendorModalOpen(false);
-            loadVendors();
-        } catch (e: any) {
-            alert(e?.message || 'Failed to save vendor');
-        }
-    };
-
     const handleSaveUser = async () => {
         if (!userForm.username || !userForm.name || (!editingUser && !userForm.password)) {
             alert('Please fill in all required fields');
@@ -1159,25 +805,6 @@ const SettingsContent: React.FC = () => {
             loadUsers();
         } catch (e: any) {
             alert(e?.message || 'Failed to save user');
-        }
-    };
-
-    const handleDeactivateVendor = async (id: string) => {
-        if (!confirm('Deactivate this vendor? They will no longer appear in Procurement.')) return;
-        try {
-            await shopApi.deleteVendor(id);
-            loadVendors();
-        } catch (e: any) {
-            alert(e?.message || 'Failed to deactivate');
-        }
-    };
-
-    const handleActivateVendor = async (id: string) => {
-        try {
-            await shopApi.updateVendor(id, { is_active: true });
-            loadVendors();
-        } catch (e: any) {
-            alert(e?.message || 'Failed to activate vendor');
         }
     };
 
@@ -1281,7 +908,6 @@ const SettingsContent: React.FC = () => {
 
     const allTabs = [
         { id: 'coa' as const, label: 'Chart of Accounts', icon: ICONS.list },
-        { id: 'vendors' as const, label: 'Vendor Management', icon: ICONS.briefcase },
         { id: 'users' as const, label: 'User Management', icon: ICONS.users },
         { id: 'mobileBranding' as const, label: 'Mobile branding', icon: <Smartphone /> },
         { id: 'branchConfig' as const, label: 'Branch configuration', icon: <MapPin /> },
@@ -1408,17 +1034,6 @@ const SettingsContent: React.FC = () => {
                             )}
                         </Card>
                     </div>
-                )}
-
-                {!isCashier && activeTab === 'vendors' && (
-                    <VendorManagementTab
-                        vendors={vendors}
-                        vendorsLoading={vendorsLoading}
-                        openNewVendor={openNewVendor}
-                        openEditVendor={openEditVendor}
-                        handleDeactivateVendor={handleDeactivateVendor}
-                        handleActivateVendor={handleActivateVendor}
-                    />
                 )}
 
                 {!isCashier && activeTab === 'users' && (
@@ -2089,60 +1704,6 @@ const SettingsContent: React.FC = () => {
                 </div>
             </Modal>
 
-            {/* Vendor Modal */}
-            <Modal
-                isOpen={isVendorModalOpen}
-                onClose={() => setIsVendorModalOpen(false)}
-                title={editingVendor ? 'Edit Vendor' : 'New Vendor'}
-                size="lg"
-            >
-                <div className="space-y-4">
-                    <Input
-                        label="Vendor Name"
-                        placeholder="Contact or business name"
-                        value={vendorForm.name}
-                        onChange={e => setVendorForm({ ...vendorForm, name: e.target.value })}
-                    />
-                    <Input
-                        label="Company Name"
-                        placeholder="Optional"
-                        value={vendorForm.company_name}
-                        onChange={e => setVendorForm({ ...vendorForm, company_name: e.target.value })}
-                    />
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Contact No"
-                            placeholder="Phone"
-                            value={vendorForm.contact_no}
-                            onChange={e => setVendorForm({ ...vendorForm, contact_no: e.target.value })}
-                        />
-                        <Input
-                            label="Email"
-                            placeholder="Optional"
-                            value={vendorForm.email}
-                            onChange={e => setVendorForm({ ...vendorForm, email: e.target.value })}
-                        />
-                    </div>
-                    <Input
-                        label="Address"
-                        placeholder="Optional"
-                        value={vendorForm.address}
-                        onChange={e => setVendorForm({ ...vendorForm, address: e.target.value })}
-                    />
-                    <Input
-                        label="Description / Notes"
-                        placeholder="Optional"
-                        value={vendorForm.description}
-                        onChange={e => setVendorForm({ ...vendorForm, description: e.target.value })}
-                    />
-                    <div className="flex justify-end gap-3 mt-4">
-                        <Button variant="secondary" onClick={() => setIsVendorModalOpen(false)}>Cancel</Button>
-                        <Button onClick={handleSaveVendor} disabled={!vendorForm.name.trim()}>
-                            {editingVendor ? 'Update' : 'Create'}
-                        </Button>
-                    </div>
-                </div>
-            </Modal>
             </div>
             {settingsLock.mode === 'loading' && (
                 <div className="absolute inset-0 z-[100] flex items-center justify-center bg-background/85 backdrop-blur-[2px] pointer-events-auto">
