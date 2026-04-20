@@ -157,6 +157,10 @@ export const customerApi = {
     getProfile: () => request(`${API_BASE}/profile`),
     updateProfile: (data: any) =>
         request(`${API_BASE}/profile`, { method: 'PUT', body: JSON.stringify(data) }),
+    getDeliveryAddressSuggestions: (limit?: number) => {
+        const qs = limit != null && Number.isFinite(limit) ? `?limit=${limit}` : '';
+        return request(`${API_BASE}/delivery-address-suggestions${qs}`);
+    },
     placeOrder: (data: any) =>
         request(`${API_BASE}/orders`, { method: 'POST', body: JSON.stringify(data) }),
     getOrders: (cursor?: string) =>

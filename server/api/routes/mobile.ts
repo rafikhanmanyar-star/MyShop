@@ -527,6 +527,22 @@ router.put('/profile', mobileAuthMiddleware(db), async (req: any, res) => {
     }
 });
 
+// Past delivery locations for checkout quick-pick (from order history)
+router.get('/delivery-address-suggestions', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const raw = req.query?.limit;
+        const limit = raw != null ? parseInt(String(raw), 10) : 12;
+        const suggestions = await getMobileCustomerService().listDeliveryAddressSuggestions(
+            req.tenantId,
+            req.customerId,
+            Number.isFinite(limit) ? limit : 12
+        );
+        res.json({ suggestions });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Loyalty points (same balance as POS; value uses shop redemption ratio)
 const loyaltyPointsHandler = async (req: any, res: express.Response) => {
     try {

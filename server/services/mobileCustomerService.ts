@@ -425,6 +425,48 @@ export class MobileCustomerService {
         return rows[0];
     }
 
+    /**
+     * Distinct delivery pins from past mobile orders (home delivery only), newest first.
+     * Used on checkout for quick re-selection.
+     */
+    async listDeliveryAddressSuggestions(tenantId: string, customerId: string, limit = 12) {
+        const cap = Math.min(Math.max(Number(limit) || 12, 1), 30);
+        const rows = await this.db.query<{
+            delivery_lat: unknown;
+            delivery_lng: unknown;
+            delivery_address: string | null;
+            created_at: Date | string;
+        }>(
+            `SELECT delivery_lat, delivery_lng, delivery_address, created_at
+             FROM mobile_orders
+             WHERE tenant_id = $1 AND customer_id = $2
+               AND delivery_lat IS NOT NULL AND delivery_lng IS NOT NULL
+               AND COALESCE(payment_method, '') != 'SelfCollection'
+             ORDER BY created_at DESC
+             LIMIT 200`,
+            [tenantId, customerId]
+        );
+        const seen = new Set<string>();
+        const out: { deliveryLat: number; deliveryLng: number; deliveryAddress: string; lastUsedAt: string }[] = [];
+        for (const r of rows) {
+            const lat = r.delivery_lat != null ? parseFloat(String(r.delivery_lat)) : NaN;
+            const lng = r.delivery_lng != null ? parseFloat(String(r.delivery_lng)) : NaN;
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+            const key = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const ts = r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at);
+            out.push({
+                deliveryLat: lat,
+                deliveryLng: lng,
+                deliveryAddress: (r.delivery_address && String(r.delivery_address).trim()) || '',
+                lastUsedAt: ts,
+            });
+            if (out.length >= cap) break;
+        }
+        return out;
+    }
+
     async updateProfile(tenantId: string, customerId: string, data: {
         name?: string;
         email?: string;
