@@ -6,6 +6,7 @@ import { useOnline } from '../hooks/useOnline';
 import { placeOrderOfflineFirst } from '../services/orderSyncService';
 import { getCurrentGeoPosition, reverseGeocodeApprox } from '../utils/deliveryLocation';
 import GoogleMapPickerModal from '../components/GoogleMapPickerModal';
+import OsmMapPickerModal from '../components/OsmMapPickerModal';
 
 type PaymentChoice = 'COD' | 'SelfCollection' | 'EasypaisaJazzcashOnline';
 type DeliveryAddressChoice = 'permanent' | 'current';
@@ -40,6 +41,7 @@ export default function Checkout() {
     const [suggestions, setSuggestions] = useState<DeliverySuggestion[]>([]);
 
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+    const useGoogleMaps = Boolean(mapsApiKey && String(mapsApiKey).trim());
 
     const parseCoord = (v: unknown): number | null => {
         if (v == null) return null;
@@ -205,6 +207,24 @@ export default function Checkout() {
         } finally {
             setLocating(false);
         }
+    };
+
+    const handleMapLocationConfirm = (lat: number, lng: number) => {
+        setDeliveryLat(lat);
+        setDeliveryLng(lng);
+        void (async () => {
+            const approx = await reverseGeocodeApprox(lat, lng);
+            const nextAddr =
+                approx ||
+                address.trim() ||
+                `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            setAddress(nextAddr);
+            const isHome = deliveryAddressTypeRef.current === 'permanent';
+            showToast(isHome ? 'Home location saved' : 'Location saved from map');
+            if (isHome) {
+                await persistPermanentToProfile(nextAddr, lat, lng);
+            }
+        })();
     };
 
     const handlePlaceOrder = async () => {
@@ -561,16 +581,14 @@ export default function Checkout() {
                         >
                             {locating ? 'Getting location…' : 'Use my location'}
                         </button>
-                        {mapsApiKey ? (
-                            <button
-                                type="button"
-                                className="btn"
-                                onClick={() => setMapOpen(true)}
-                                style={{ fontSize: 13, padding: '8px 12px' }}
-                            >
-                                {deliveryAddressType === 'permanent' ? 'Set location on map' : 'Choose on map'}
-                            </button>
-                        ) : null}
+                        <button
+                            type="button"
+                            className="btn"
+                            onClick={() => setMapOpen(true)}
+                            style={{ fontSize: 13, padding: '8px 12px' }}
+                        >
+                            {deliveryAddressType === 'permanent' ? 'Set location on map' : 'Choose on map'}
+                        </button>
                         {deliveryLat != null && deliveryLng != null && (
                             <button
                                 type="button"
@@ -690,30 +708,23 @@ export default function Checkout() {
                 )}
             </button>
 
-            {mapsApiKey && !isPickup && (
+            {!isPickup && useGoogleMaps && (
                 <GoogleMapPickerModal
-                    apiKey={mapsApiKey}
+                    apiKey={mapsApiKey!}
                     open={mapOpen}
                     initialLat={deliveryLat}
                     initialLng={deliveryLng}
                     onClose={() => setMapOpen(false)}
-                    onConfirm={(lat, lng) => {
-                        setDeliveryLat(lat);
-                        setDeliveryLng(lng);
-                        void (async () => {
-                            const approx = await reverseGeocodeApprox(lat, lng);
-                            const nextAddr =
-                                approx ||
-                                address.trim() ||
-                                `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-                            setAddress(nextAddr);
-                            const isHome = deliveryAddressTypeRef.current === 'permanent';
-                            showToast(isHome ? 'Home location saved' : 'Location saved from map');
-                            if (isHome) {
-                                await persistPermanentToProfile(nextAddr, lat, lng);
-                            }
-                        })();
-                    }}
+                    onConfirm={handleMapLocationConfirm}
+                />
+            )}
+            {!isPickup && !useGoogleMaps && (
+                <OsmMapPickerModal
+                    open={mapOpen}
+                    initialLat={deliveryLat}
+                    initialLng={deliveryLng}
+                    onClose={() => setMapOpen(false)}
+                    onConfirm={handleMapLocationConfirm}
                 />
             )}
         </div>
