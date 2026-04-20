@@ -802,8 +802,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                         </details>
                                     </section>
 
-                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
-                                        <section>
+                                    <div className="flex min-w-0 flex-col gap-4">
+                                        <section className="min-w-0">
                                             <div className="mb-1.5 flex items-center gap-1.5">
                                                 <span className="h-1 w-1 shrink-0 rounded-full bg-violet-600" />
                                                 <h2 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-700">
@@ -912,36 +912,38 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                             </div>
                                         </section>
 
-                                        <section>
+                                        <section className="min-w-0">
                                             <div className="mb-1.5 flex items-center gap-1.5">
                                                 <span className="h-1 w-1 shrink-0 rounded-full bg-violet-600" />
                                                 <h2 className="text-[10px] font-semibold uppercase tracking-[0.12em] text-violet-700">Financials</h2>
                                             </div>
                                             <div className="space-y-2">
-                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-                                                    <Input
-                                                        label={`Cost (${CURRENCY})`}
-                                                        compact
-                                                        type="number"
-                                                        value={formData.costPrice}
-                                                        onChange={(e) => {
-                                                            const cost = Number(e.target.value);
-                                                            const next = { ...formData, costPrice: cost };
-                                                            if (formData.retailPriceMode === 'percentage') {
-                                                                next.retailPrice =
-                                                                    Math.round(cost * (1 + formData.retailMarkupPercent / 100) * 100) / 100;
-                                                            }
-                                                            setFormData(next);
-                                                        }}
-                                                        className="rounded-md border-slate-200 bg-white"
-                                                    />
-                                                    <div className="space-y-1">
-                                                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                                <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:items-start sm:gap-3">
+                                                    <div className="min-w-0">
+                                                        <Input
+                                                            label={`Cost (${CURRENCY})`}
+                                                            compact
+                                                            type="number"
+                                                            value={formData.costPrice}
+                                                            onChange={(e) => {
+                                                                const cost = Number(e.target.value);
+                                                                const next = { ...formData, costPrice: cost };
+                                                                if (formData.retailPriceMode === 'percentage') {
+                                                                    next.retailPrice =
+                                                                        Math.round(cost * (1 + formData.retailMarkupPercent / 100) * 100) / 100;
+                                                                }
+                                                                setFormData(next);
+                                                            }}
+                                                            className="rounded-md border-slate-200 bg-white"
+                                                        />
+                                                    </div>
+                                                    <div className="min-w-0 space-y-1">
+                                                        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+                                                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                                                                 Retail ({CURRENCY})
                                                             </span>
                                                             <div
-                                                                className="inline-flex w-full rounded-md border border-slate-200 bg-slate-100 p-0.5 sm:w-auto"
+                                                                className="inline-flex w-full shrink-0 rounded-md border border-slate-200 bg-slate-100 p-0.5 sm:w-auto sm:max-w-full"
                                                                 role="group"
                                                                 aria-label="Retail price mode"
                                                             >

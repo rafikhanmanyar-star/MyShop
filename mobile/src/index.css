@@ -845,6 +845,16 @@ img {
   border-bottom: none;
 }
 
+.cart-item--navigable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s ease;
+}
+
+.cart-item--navigable:active {
+  opacity: 0.88;
+}
+
 .cart-item .item-image {
   width: 60px;
   height: 60px;

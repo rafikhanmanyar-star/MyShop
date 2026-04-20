@@ -34,6 +34,16 @@ export default function Cart() {
         dispatch({ type: 'REMOVE_FROM_CART', productId });
     };
 
+    const openProductDetail = (productId: string) => {
+        if (!shopSlug) return;
+        navigate(`/${shopSlug}/products/${productId}`);
+    };
+
+    const openOfferDetail = (offerId: string) => {
+        if (!shopSlug) return;
+        navigate(`/${shopSlug}/offers/${offerId}`);
+    };
+
     const isEmpty = state.cart.length === 0 && state.offerBundles.length === 0;
 
     if (isEmpty) {
@@ -64,7 +74,12 @@ export default function Cart() {
                 {state.offerBundles.map(o => {
                     const line = (o.merchandisePerBundle + o.taxPerBundle) * o.quantity;
                     return (
-                        <div key={o.offerId} className="cart-item" style={{ borderLeft: '3px solid var(--primary)' }}>
+                        <div
+                            key={o.offerId}
+                            className="cart-item cart-item--navigable"
+                            style={{ borderLeft: '3px solid var(--primary)' }}
+                            onClick={() => openOfferDetail(o.offerId)}
+                        >
                             <div className="item-image" style={{
                                 background: 'linear-gradient(135deg, var(--primary), var(--accent))',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 12,
@@ -80,12 +95,15 @@ export default function Cart() {
                                 <button
                                     type="button"
                                     className="cart-item-remove"
-                                    onClick={() => dispatch({ type: 'REMOVE_OFFER_BUNDLE', offerId: o.offerId })}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        dispatch({ type: 'REMOVE_OFFER_BUNDLE', offerId: o.offerId });
+                                    }}
                                 >
                                     Remove
                                 </button>
                             </div>
-                            <div className="qty-controls">
+                            <div className="qty-controls" onClick={(e) => e.stopPropagation()}>
                                 <button
                                     type="button"
                                     onClick={() => o.quantity === 1
@@ -105,7 +123,11 @@ export default function Cart() {
                     );
                 })}
                 {state.cart.map(item => (
-                    <div key={item.productId} className="cart-item">
+                    <div
+                        key={item.productId}
+                        className="cart-item cart-item--navigable"
+                        onClick={() => openProductDetail(item.productId)}
+                    >
                         <div className="item-image">
                             <CachedImage
                                 path={item.image_url}
@@ -120,14 +142,18 @@ export default function Cart() {
                             <button
                                 type="button"
                                 className="cart-item-remove"
-                                onClick={() => handleRemoveFromCart(item.productId)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveFromCart(item.productId);
+                                }}
                                 aria-label={`Remove ${item.name} from cart`}
                             >
                                 Remove
                             </button>
                         </div>
-                        <div className="qty-controls">
+                        <div className="qty-controls" onClick={(e) => e.stopPropagation()}>
                             <button
+                                type="button"
                                 onClick={() => item.quantity === 1
                                     ? handleRemoveFromCart(item.productId)
                                     : dispatch({ type: 'UPDATE_QTY', productId: item.productId, quantity: item.quantity - 1 })
@@ -138,6 +164,7 @@ export default function Cart() {
                             </button>
                             <span>{item.quantity}</span>
                             <button
+                                type="button"
                                 onClick={() => dispatch({ type: 'UPDATE_QTY', productId: item.productId, quantity: item.quantity + 1 })}
                                 disabled={item.quantity >= item.available_stock}
                                 aria-label="Increase quantity"
