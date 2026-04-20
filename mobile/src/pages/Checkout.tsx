@@ -8,6 +8,7 @@ import { getCurrentGeoPosition, reverseGeocodeApprox } from '../utils/deliveryLo
 import GoogleMapPickerModal from '../components/GoogleMapPickerModal';
 
 type PaymentChoice = 'COD' | 'SelfCollection' | 'EasypaisaJazzcashOnline';
+type DeliveryAddressChoice = 'permanent' | 'current';
 
 export default function Checkout() {
     const { shopSlug } = useParams();
@@ -16,6 +17,8 @@ export default function Checkout() {
     const online = useOnline();
 
     const [address, setAddress] = useState('');
+    const [deliveryAddressType, setDeliveryAddressType] = useState<DeliveryAddressChoice>('permanent');
+    const deliveryAddressTypeRef = useRef<DeliveryAddressChoice>('permanent');
     const [notes, setNotes] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>('COD');
     const [loading, setLoading] = useState(false);
@@ -24,6 +27,7 @@ export default function Checkout() {
     const [locating, setLocating] = useState(false);
     const [mapOpen, setMapOpen] = useState(false);
     const defaultAddressFetched = useRef(false);
+    const permanentAddressRef = useRef('');
 
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 
@@ -40,7 +44,10 @@ export default function Checkout() {
                     profile.postal_code,
                 ].filter(Boolean);
                 const defaultAddr = parts.join(', ').trim();
-                if (defaultAddr) setAddress(defaultAddr);
+                permanentAddressRef.current = defaultAddr;
+                if (deliveryAddressTypeRef.current === 'permanent') {
+                    setAddress(defaultAddr);
+                }
             })
             .catch(() => {});
     }, [online, state.customerId]);
@@ -78,16 +85,30 @@ export default function Checkout() {
         setDeliveryLng(null);
     };
 
+    const setDeliveryAddressTypeChoice = (choice: DeliveryAddressChoice) => {
+        deliveryAddressTypeRef.current = choice;
+        setDeliveryAddressType(choice);
+        if (choice === 'permanent') {
+            setMapOpen(false);
+            setAddress(permanentAddressRef.current);
+            setDeliveryLat(null);
+            setDeliveryLng(null);
+        } else {
+            setAddress('');
+            setDeliveryLat(null);
+            setDeliveryLng(null);
+        }
+    };
+
     const handleUseGps = async () => {
         setLocating(true);
         try {
             const pos = await getCurrentGeoPosition();
             setDeliveryLat(pos.latitude);
             setDeliveryLng(pos.longitude);
-            if (!address.trim()) {
-                const approx = await reverseGeocodeApprox(pos.latitude, pos.longitude);
-                if (approx) setAddress(approx);
-            }
+            const approx = await reverseGeocodeApprox(pos.latitude, pos.longitude);
+            if (approx) setAddress(approx);
+            else if (!address.trim()) setAddress(`${pos.latitude.toFixed(5)}, ${pos.longitude.toFixed(5)}`);
             showToast('Location captured');
         } catch (e: unknown) {
             showToast(e instanceof Error ? e.message : 'Could not get location');
@@ -97,6 +118,10 @@ export default function Checkout() {
     };
 
     const handlePlaceOrder = async () => {
+        if (!isPickup && deliveryAddressType === 'current' && (!address.trim() || deliveryLat == null || deliveryLng == null)) {
+            showToast('Please set your current location with GPS or the map');
+            return;
+        }
         if (!isPickup && !address.trim()) {
             showToast('Please enter your delivery address');
             return;
@@ -149,7 +174,15 @@ export default function Checkout() {
         }
     };
 
-    const canSubmit = isPickup || address.trim().length > 0;
+    const canSubmit =
+        isPickup ||
+        (deliveryAddressType === 'current'
+            ? address.trim().length > 0 &&
+              deliveryLat != null &&
+              deliveryLng != null &&
+              Number.isFinite(deliveryLat) &&
+              Number.isFinite(deliveryLng)
+            : address.trim().length > 0);
 
     if (state.cart.length === 0 && state.offerBundles.length === 0) {
         navigate(`/${shopSlug}/cart`, { replace: true });
@@ -272,16 +305,68 @@ export default function Checkout() {
                     border: '1px solid var(--border-light)', padding: 16, marginBottom: 16,
                 }}>
                     <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>📍 Delivery Address</h3>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                        <button
+                            type="button"
+                            onClick={() => setDeliveryAddressTypeChoice('permanent')}
+                            style={optionCard(deliveryAddressType === 'permanent')}
+                        >
+                            <div style={{
+                                width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                                border: '2px solid var(--primary)', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                {deliveryAddressType === 'permanent' && (
+                                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--primary)' }} />
+                                )}
+                            </div>
+                            <div>
+                                <div style={{ fontWeight: 600, fontSize: 14 }}>Permanent address</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                    Deliver to the address saved on your account. You can edit it below for this order only.
+                                </div>
+                            </div>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setDeliveryAddressTypeChoice('current')}
+                            style={optionCard(deliveryAddressType === 'current')}
+                        >
+                            <div style={{
+                                width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                                border: '2px solid var(--primary)', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                {deliveryAddressType === 'current' && (
+                                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--primary)' }} />
+                                )}
+                            </div>
+                            <div>
+                                <div style={{ fontWeight: 600, fontSize: 14 }}>Current address</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                    Deliver where you are now. Use GPS or the map to set your location and address.
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+
                     <textarea
                         className="input"
-                        placeholder="Enter your full delivery address"
+                        placeholder={
+                            deliveryAddressType === 'permanent'
+                                ? 'Enter your full delivery address'
+                                : 'Address will be filled from your location, or type it here'
+                        }
                         rows={3}
                         value={address}
                         onChange={e => setAddress(e.target.value)}
                         style={{ resize: 'none' }}
                     />
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
-                        Your default address from registration is shown. You can edit it for this order.
+                        {deliveryAddressType === 'permanent'
+                            ? 'Your default address from registration is shown. You can edit it for this order.'
+                            : 'Tap “Use my location” or “Choose on map” to set your current delivery point. You can adjust the address text if needed.'}
                     </p>
 
                     <div
@@ -297,7 +382,7 @@ export default function Checkout() {
                             type="button"
                             className="btn"
                             onClick={() => void handleUseGps()}
-                            disabled={locating}
+                            disabled={locating || deliveryAddressType === 'permanent'}
                             style={{ fontSize: 13, padding: '8px 12px' }}
                         >
                             {locating ? 'Getting location…' : 'Use my location'}
@@ -307,12 +392,13 @@ export default function Checkout() {
                                 type="button"
                                 className="btn"
                                 onClick={() => setMapOpen(true)}
+                                disabled={deliveryAddressType === 'permanent'}
                                 style={{ fontSize: 13, padding: '8px 12px' }}
                             >
                                 Choose on map
                             </button>
                         ) : null}
-                        {deliveryLat != null && deliveryLng != null && (
+                        {deliveryAddressType === 'current' && deliveryLat != null && deliveryLng != null && (
                             <button
                                 type="button"
                                 onClick={clearDeliveryPin}
@@ -330,9 +416,9 @@ export default function Checkout() {
                             </button>
                         )}
                     </div>
-                    {deliveryLat != null && deliveryLng != null && (
+                    {deliveryAddressType === 'current' && deliveryLat != null && deliveryLng != null && (
                         <p style={{ fontSize: 12, color: 'var(--accent)', marginTop: 8, marginBottom: 0 }}>
-                            Delivery pin set ({deliveryLat.toFixed(5)}, {deliveryLng.toFixed(5)})
+                            Current delivery pin set ({deliveryLat.toFixed(5)}, {deliveryLng.toFixed(5)})
                         </p>
                     )}
 
@@ -441,10 +527,9 @@ export default function Checkout() {
                         setDeliveryLat(lat);
                         setDeliveryLng(lng);
                         void (async () => {
-                            if (!address.trim()) {
-                                const approx = await reverseGeocodeApprox(lat, lng);
-                                if (approx) setAddress(approx);
-                            }
+                            const approx = await reverseGeocodeApprox(lat, lng);
+                            if (approx) setAddress(approx);
+                            else if (!address.trim()) setAddress(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
                             showToast('Location saved from map');
                         })();
                     }}
