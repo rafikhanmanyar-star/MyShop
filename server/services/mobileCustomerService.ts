@@ -202,7 +202,9 @@ export class MobileCustomerService {
     }
 
     async updateMobileSettings(tenantId: string, data: any) {
-        const riderMode = data.rider_assignment_mode === 'manual' ? 'manual' : 'auto';
+        const raw = data.rider_assignment_mode;
+        const riderMode =
+            raw === 'manual' || raw === 'third_party' ? raw : 'auto';
         const rows = await this.db.query(
             `INSERT INTO mobile_ordering_settings (
         tenant_id, is_enabled, minimum_order_amount, delivery_fee,

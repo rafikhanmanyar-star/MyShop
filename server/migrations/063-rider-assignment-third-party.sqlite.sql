@@ -1,0 +1,1 @@
+-- SQLite: no CHECK constraint on rider_assignment_mode in 058; third_party values are allowed.

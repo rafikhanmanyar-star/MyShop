@@ -735,7 +735,7 @@ export class MobileOrderService {
             } | null = null;
             if (paymentMethod !== 'SelfCollection') {
                 const riderMode = settingsRes.length > 0 ? (settingsRes[0].rider_assignment_mode || 'auto') : 'auto';
-                if (riderMode !== 'manual') {
+                if (riderMode === 'auto') {
                     deliveryAssign = await tryAutoAssignRiderForMobileOrder(client, tenantId, orderId, {
                         deliveryLat: input.deliveryLat,
                         deliveryLng: input.deliveryLng,

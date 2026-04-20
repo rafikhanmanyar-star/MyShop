@@ -5,9 +5,9 @@ import { mobileOrdersApi, MobileOrder, PosRidersOverview, MobileOnlineUser, Mobi
 import { QRCodeSVG } from 'qrcode.react';
 import {
     Smartphone, RefreshCw, Package, Truck, Check, X, Clock,
-    ChevronRight, WifiOff, Wifi, QrCode, Settings as SettingsIcon,
+    ChevronRight, WifiOff, Wifi, Bike, CloudUpload,
     Eye, Bell, MapPin, Phone, User, FileText, ShoppingBag,
-    Printer, Download, Copy, CheckCircle, Upload, Palette, Monitor, Store,
+    Printer, Copy, CheckCircle, Store,
     Banknote, Building2, Wallet, ExternalLink, Navigation, Users,
     ShoppingCart, Activity, UserCheck, Globe, CircleDot, BookOpen, BadgeCheck,
 } from 'lucide-react';
@@ -1379,7 +1379,7 @@ function OrderDetailPanel({
     assignableRiders: { id: string; name: string }[];
     onAssignRider: (orderId: string, riderId: string) => void | Promise<void>;
     assignLoadingOrderId: string | null;
-    riderAssignmentMode: 'auto' | 'manual';
+    riderAssignmentMode: 'auto' | 'manual' | 'third_party';
 }) {
     const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.Pending;
     const DetailStatusIcon = cfg.icon;
@@ -1513,7 +1513,13 @@ function OrderDetailPanel({
                         </div>
                     )}
 
-                    {canManualAssign && (
+                    {canManualAssign && riderAssignmentMode === 'third_party' && (
+                        <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-3 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-100">
+                            Rider logistics is set to third-party couriers. Assign and track delivery outside the in-app rider workflow when needed.
+                        </div>
+                    )}
+
+                    {canManualAssign && riderAssignmentMode !== 'third_party' && (
                         <div className="rounded-xl border border-dashed border-indigo-300/80 bg-indigo-50/40 px-3 py-3 dark:border-indigo-700/50 dark:bg-indigo-950/25">
                             <h4 className="text-[0.65rem] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                                 <Truck className="w-3.5 h-3.5 shrink-0" />
@@ -1794,31 +1800,38 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
         mobileOrdersApi.getQRCode(branchId).then(setQrData).catch(() => setQrData(null));
     }, [selectedBranchId]);
 
-    const handleSaveSettings = async () => {
-        if (!localSettings) return;
-        setSaving(true);
+    const handleDiscard = async () => {
         try {
-            await updateSettings(localSettings);
-        } catch (err: any) {
-            alert(err.error || 'Failed to save');
+            await loadSettings();
+            await loadBranding();
+            const branchId = selectedBranchId || undefined;
+            const [b, qr] = await Promise.all([
+                mobileOrdersApi.getBranding(branchId),
+                mobileOrdersApi.getQRCode(branchId).catch(() => null),
+            ]);
+            if (b) setLocalBranding({ ...b });
+            if (qr) setQrData(qr);
+        } catch {
+            alert('Failed to discard changes.');
         }
-        setSaving(false);
     };
 
-    const handleSaveBranding = async () => {
-        if (!localBranding) return;
+    const handleSaveConfiguration = async () => {
         setSaving(true);
         try {
-            const payload = { ...localBranding };
-            if (selectedBranchId) payload.branchId = selectedBranchId;
-            await mobileOrdersApi.updateBranding(payload);
-            await loadBranding();
-            if (selectedBranchId) {
-                mobileOrdersApi.getQRCode(selectedBranchId).then(setQrData).catch(() => {});
+            if (localSettings) {
+                await updateSettings(localSettings);
             }
-            alert('Branding updated successfully!');
+            if (localBranding) {
+                const payload = { ...localBranding };
+                if (selectedBranchId) payload.branchId = selectedBranchId;
+                await mobileOrdersApi.updateBranding(payload);
+                await loadBranding();
+                mobileOrdersApi.getQRCode(selectedBranchId || undefined).then(setQrData).catch(() => {});
+            }
+            alert('Configuration saved.');
         } catch (err: any) {
-            alert((err as any)?.error || 'Failed to save');
+            alert(err?.error || err?.message || 'Failed to save configuration.');
         }
         setSaving(false);
     };
@@ -1844,31 +1857,6 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
         navigator.clipboard.writeText(qrData.url);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    };
-
-    const handleDownloadQR = () => {
-        if (!qrRef.current) return;
-        const svg = qrRef.current.querySelector('svg');
-        if (!svg) return;
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d')!;
-        const svgData = new XMLSerializer().serializeToString(svg);
-        const img = new Image();
-
-        canvas.width = 1024;
-        canvas.height = 1024;
-
-        img.onload = () => {
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, 1024, 1024);
-            ctx.drawImage(img, 0, 0, 1024, 1024);
-            const a = document.createElement('a');
-            a.download = `qr-${qrData?.slug || 'shop'}.png`;
-            a.href = canvas.toDataURL('image/png');
-            a.click();
-        };
-        img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
     };
 
     const handlePrintSticker = () => {
@@ -1923,455 +1911,466 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
         printWindow.document.close();
     };
 
+    const MB_PRIMARY = '#004494';
+    const MB_ACCENT = '#FF8C00';
+
+    const shopUrlPrefix = (() => {
+        if (!qrData?.url) return '';
+        try {
+            const u = new URL(qrData.url);
+            return `${u.host}/`;
+        } catch {
+            return '';
+        }
+    })();
+
+    const primaryHex = localBranding?.primary_color || localBranding?.brand_color || MB_PRIMARY;
+    const accentHex = localBranding?.accent_color || MB_ACCENT;
+
+    const logoFileLabel = (() => {
+        const url = localBranding?.logo_url;
+        if (!url) return 'vantage_logo_dark.png';
+        const clean = url.split('?')[0];
+        const base = clean.split('/').pop();
+        return base && base.length > 0 ? base : 'logo.png';
+    })();
+
+    const riderMode = localSettings?.rider_assignment_mode || 'auto';
+
     return (
-        <div className="w-full min-w-0 space-y-4">
-            {/* Header */}
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                    {onBack && (
-                        <button type="button" onClick={onBack} className="shrink-0 p-2 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-lg hover:bg-muted dark:hover:bg-slate-800 transition-colors">
-                            <ChevronRight className="w-5 h-5 text-muted-foreground rotate-180" />
-                        </button>
-                    )}
-                    <div className="min-w-0">
-                        <h1 className="text-xl font-bold text-foreground dark:text-slate-200 tracking-tight">Mobile branding</h1>
-                        <p className="text-sm text-muted-foreground mt-0.5 leading-snug">QR for in-store scanning, colors and logo for the customer app.</p>
-                    </div>
-                </div>
-            </div>
+        <div className="w-full min-w-0 space-y-10 pb-2">
+            {onBack && (
+                <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    <ChevronRight className="w-4 h-4 rotate-180" />
+                    Back
+                </button>
+            )}
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                {/* QR Code Card */}
-                <div className="bg-card dark:bg-slate-900/90 rounded-xl border border-border dark:border-slate-600 p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <QrCode className="w-5 h-5 shrink-0 text-indigo-600 dark:text-indigo-400" />
-                            <h2 className="text-base font-bold text-foreground dark:text-slate-200">Shop QR code</h2>
+            {/* —— Mobile Branding —— */}
+            <section>
+                <h2 className="text-2xl font-bold text-foreground tracking-tight text-balance">Mobile Branding</h2>
+
+                <div className="mt-6 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-8 xl:gap-10">
+                    <div className="space-y-6 min-w-0">
+                        {/* Shop Access QR */}
+                        <div className="rounded-2xl border border-slate-200/90 bg-card p-5 shadow-sm dark:border-slate-600 dark:bg-slate-900/90">
+                            {qrData ? (
+                                <div className="flex flex-col sm:flex-row gap-5 sm:items-center">
+                                    <div className="flex flex-col items-center shrink-0">
+                                        <div ref={qrRef} className="bg-black rounded-xl p-3 shadow-inner">
+                                            <QRCodeSVG
+                                                value={qrData.url}
+                                                size={140}
+                                                level="H"
+                                                includeMargin={false}
+                                                bgColor="#FFFFFF"
+                                                fgColor="#0f172a"
+                                            />
+                                            <p className="text-center text-[10px] font-extrabold tracking-[0.35em] text-white pt-2">SHOP</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex-1 min-w-0 flex flex-col justify-center gap-3">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-foreground">Shop Access QR</h3>
+                                            <p className="text-sm text-muted-foreground mt-0.5">Instant customer access to your mobile shop.</p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={handlePrintSticker}
+                                                className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 min-w-[8rem] rounded-xl bg-[#004494] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#003a7a]"
+                                            >
+                                                <Printer className="w-4 h-4 shrink-0" />
+                                                Print Code
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleCopyUrl}
+                                                className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 min-w-[8rem] rounded-xl border-2 border-[#004494] bg-card px-5 py-2.5 text-sm font-semibold text-[#004494] transition-colors hover:bg-[#004494]/5"
+                                            >
+                                                {copied ? <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" /> : <Copy className="w-4 h-4 shrink-0" />}
+                                                {copied ? 'Copied' : 'Copy URL'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col sm:flex-row gap-5 items-center justify-center py-8 text-center">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#004494] border-t-transparent" />
+                                    <p className="text-sm text-muted-foreground">Generating QR code…</p>
+                                </div>
+                            )}
                         </div>
-                    </div>
 
-                    <p className="text-xs text-muted-foreground leading-relaxed mb-3">
-                        Customers scan with the phone camera to open your ordering page. No save needed—URL updates when you change the slug and save branding.
-                    </p>
-
-                    {qrData ? (
-                        <div className="flex flex-col sm:flex-row gap-4 sm:items-start">
-                            <div ref={qrRef} className="shrink-0 mx-auto sm:mx-0 inline-block bg-white p-2 rounded-lg border border-border shadow-sm dark:bg-white">
-                                <QRCodeSVG
-                                    value={qrData.url}
-                                    size={168}
-                                    level="H"
-                                    includeMargin={false}
-                                    bgColor="#FFFFFF"
-                                    fgColor="#0f172a"
-                                />
-                            </div>
-
-                            <div className="flex-1 min-w-0 flex flex-col gap-2.5">
-                                <div className="rounded-lg bg-muted/60 dark:bg-slate-800/80 px-2.5 py-2 border border-border/60">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Ordering URL</p>
-                                    <p className="text-xs font-mono text-foreground break-all leading-snug select-all">{qrData.url}</p>
-                                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                                        <span className="text-[10px] text-muted-foreground">Slug</span>
-                                        <code className="text-[11px] bg-background dark:bg-slate-900 px-1.5 py-0.5 rounded font-mono text-indigo-600 dark:text-indigo-400">{qrData.slug}</code>
+                        {localBranding ? (
+                            <>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="sm:col-span-2">
+                                        <label htmlFor="mobile-branding-branch" className="block text-sm font-medium text-foreground mb-1.5">Branch (QR &amp; orders)</label>
+                                        <select
+                                            id="mobile-branding-branch"
+                                            value={selectedBranchId}
+                                            onChange={e => setSelectedBranchId(e.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 bg-[#F4F4F9] px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-[#004494] focus:ring-2 focus:ring-[#004494]/20 dark:border-slate-600 dark:bg-slate-800/80"
+                                        >
+                                            <option value="">Default (first branch)</option>
+                                            {branches.map(b => (
+                                                <option key={b.id} value={b.id}>{b.name}{b.code ? ` (${b.code})` : ''}</option>
+                                            ))}
+                                        </select>
+                                        {(localBranding.branch_name || localBranding.branch_location) && (
+                                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                                                {[localBranding.branch_name, localBranding.branch_location].filter(Boolean).join(' · ')}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <label htmlFor="mobile-branding-shop-slug" className="block text-sm font-medium text-foreground mb-1.5">Shop URL</label>
+                                        <div className="flex rounded-xl border border-slate-200 bg-[#F4F4F9] overflow-hidden dark:border-slate-600 dark:bg-slate-800/80">
+                                            {shopUrlPrefix && (
+                                                <span className="shrink-0 px-3 py-2.5 text-sm text-muted-foreground border-r border-slate-200/80 dark:border-slate-600">
+                                                    {shopUrlPrefix}
+                                                </span>
+                                            )}
+                                            <input
+                                                id="mobile-branding-shop-slug"
+                                                type="text"
+                                                value={localBranding.slug || ''}
+                                                onChange={e => setLocalBranding({ ...localBranding, slug: e.target.value })}
+                                                placeholder="your-shop-slug"
+                                                className="flex-1 min-w-0 bg-transparent border-0 px-3 py-2.5 text-sm text-foreground outline-none font-mono"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-muted-foreground mt-1">Orders from this link go to the selected branch&apos;s POS.</p>
                                     </div>
                                 </div>
 
-                                <button
-                                    type="button"
-                                    onClick={handlePrintSticker}
-                                    className="flex items-center justify-center gap-2 w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
-                                >
-                                    <Printer className="w-4 h-4 shrink-0" />
-                                    Print QR sticker
-                                </button>
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={handleDownloadQR}
-                                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 bg-muted dark:bg-slate-800 text-foreground rounded-lg text-xs font-semibold hover:bg-muted/80 dark:hover:bg-slate-700 transition-colors"
-                                    >
-                                        <Download className="w-3.5 h-3.5 shrink-0" />
-                                        PNG
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleCopyUrl}
-                                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 bg-muted dark:bg-slate-800 text-foreground rounded-lg text-xs font-semibold hover:bg-muted/80 dark:hover:bg-slate-700 transition-colors"
-                                    >
-                                        {copied ? <CheckCircle className="w-3.5 h-3.5 text-green-600 dark:text-green-400 shrink-0" /> : <Copy className="w-3.5 h-3.5 shrink-0" />}
-                                        {copied ? 'Copied' : 'Copy URL'}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="text-center py-6 rounded-lg border border-dashed border-border">
-                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 dark:border-indigo-400 mx-auto mb-2" />
-                            <p className="text-sm text-muted-foreground">Generating QR code…</p>
-                            <p className="text-xs text-muted-foreground mt-1 px-2">Set a shop slug in branding below, then save.</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Branding Card */}
-                <div className="bg-card dark:bg-slate-900/90 rounded-xl border border-border dark:border-slate-600 p-4 shadow-sm overflow-hidden flex flex-col min-h-0">
-                    <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <Palette className="w-5 h-5 shrink-0 text-indigo-600 dark:text-indigo-400" />
-                            <div>
-                                <h2 className="text-base font-bold text-foreground dark:text-slate-200 leading-tight">App branding</h2>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Logo, colors, slug, and branch—click save when done.</p>
-                            </div>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={handleSaveBranding}
-                            disabled={saving}
-                            className="shrink-0 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                        >
-                            {saving ? 'Saving…' : 'Save branding'}
-                        </button>
-                    </div>
-
-                    {localBranding ? (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Branch (QR & orders)</label>
-                                    <select
-                                        value={selectedBranchId}
-                                        onChange={e => setSelectedBranchId(e.target.value)}
-                                        className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-card dark:bg-slate-800/80 text-foreground"
-                                    >
-                                        <option value="">Default (first branch)</option>
-                                        {branches.map(b => (
-                                            <option key={b.id} value={b.id}>{b.name} {b.code ? `(${b.code})` : ''}</option>
-                                        ))}
-                                    </select>
-                                    {(localBranding.branch_name || localBranding.branch_location) && (
-                                        <p className="text-[11px] text-indigo-600 dark:text-indigo-400 mt-1 truncate">
-                                            {[localBranding.branch_name, localBranding.branch_location].filter(Boolean).join(' · ')}
-                                        </p>
-                                    )}
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Shop URL slug</label>
-                                    <input
-                                        type="text"
-                                        value={localBranding.slug || ''}
-                                        onChange={e => setLocalBranding({ ...localBranding, slug: e.target.value })}
-                                        placeholder="my-shop"
-                                        className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-indigo-600 dark:text-indigo-400 bg-background dark:bg-slate-800/80"
-                                    />
-                                </div>
-                            </div>
-                            <p className="text-[11px] text-muted-foreground -mt-1">Orders from this link go to the selected branch&apos;s POS.</p>
-
-                            <div className="space-y-2 pt-2 border-t border-border/60">
-                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Shop address &amp; map</label>
-                                <textarea
-                                    value={localBranding.address || ''}
-                                    onChange={e => setLocalBranding({ ...localBranding, address: e.target.value })}
-                                    placeholder="Full address"
-                                    rows={2}
-                                    className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground resize-y min-h-[2.5rem]"
-                                />
-                                <div className="grid grid-cols-2 gap-2">
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        value={localBranding.lat || ''}
-                                        onChange={e => setLocalBranding({ ...localBranding, lat: e.target.value ? parseFloat(e.target.value) : null })}
-                                        placeholder="Latitude"
-                                        className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-xs font-mono bg-background dark:bg-slate-800/80 text-foreground"
-                                    />
-                                    <input
-                                        type="number"
-                                        step="any"
-                                        value={localBranding.lng || ''}
-                                        onChange={e => setLocalBranding({ ...localBranding, lng: e.target.value ? parseFloat(e.target.value) : null })}
-                                        placeholder="Longitude"
-                                        className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-xs font-mono bg-background dark:bg-slate-800/80 text-foreground"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 rounded-lg border border-dashed border-border dark:border-slate-600 bg-muted/40 dark:bg-slate-800/40 px-2.5 py-2">
-                                <div className="w-14 h-14 rounded-lg bg-card dark:bg-slate-900 shadow-sm border border-border dark:border-slate-600 overflow-hidden flex items-center justify-center shrink-0">
-                                    {localBranding.logo_url ? (
-                                        <img src={getFullImageUrl(localBranding.logo_url)} alt="Logo" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <Store className="w-7 h-7 text-muted-foreground" />
-                                    )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-semibold text-foreground">App logo</p>
-                                    <p className="text-[11px] text-muted-foreground leading-snug">PNG or JPG; shown in the mobile header.</p>
-                                    <input
-                                        type="file"
-                                        ref={fileInputRef}
-                                        onChange={handleLogoUpload}
-                                        className="hidden"
-                                        accept="image/*"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        disabled={uploading}
-                                        className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 bg-card dark:bg-slate-800 border border-border dark:border-slate-600 rounded-md text-[11px] font-semibold text-foreground hover:bg-muted dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
-                                    >
-                                        <Upload className="w-3 h-3" />
-                                        {uploading ? 'Uploading…' : 'Upload'}
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-1 border-t border-border/60">
-                                <div className="space-y-3">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Primary</label>
-                                            <div className="flex items-center gap-1.5">
-                                                <input
-                                                    type="color"
-                                                    value={localBranding.primary_color || localBranding.brand_color || '#4F46E5'}
-                                                    onChange={e => setLocalBranding({ ...localBranding, primary_color: e.target.value, brand_color: e.target.value })}
-                                                    className="h-8 w-9 rounded border border-border cursor-pointer shrink-0 p-0"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={localBranding.primary_color || localBranding.brand_color || '#4F46E5'}
-                                                    onChange={e => setLocalBranding({ ...localBranding, primary_color: e.target.value, brand_color: e.target.value })}
-                                                    className="flex-1 min-w-0 px-2 py-1 border border-border dark:border-slate-600 rounded-md text-[11px] font-mono bg-background dark:bg-slate-800/80 text-foreground"
-                                                />
-                                            </div>
+                                    <label className="block text-sm font-medium text-foreground mb-1.5">Logo Upload</label>
+                                    <div className="flex items-center gap-4 rounded-2xl border border-dashed border-slate-300 bg-[#F4F4F9] px-4 py-4 dark:border-slate-600 dark:bg-slate-800/50">
+                                        <CloudUpload className="w-8 h-8 shrink-0 text-[#004494]/80" />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-foreground truncate">{logoFileLabel}</p>
+                                            <input
+                                                type="file"
+                                                ref={fileInputRef}
+                                                onChange={handleLogoUpload}
+                                                className="hidden"
+                                                accept="image/*"
+                                                aria-label="Upload shop logo image file"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                disabled={uploading}
+                                                className="mt-0.5 text-sm font-semibold text-[#004494] hover:underline disabled:opacity-50"
+                                            >
+                                                {uploading ? 'Uploading…' : 'Replace'}
+                                            </button>
                                         </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Accent</label>
-                                            <div className="flex items-center gap-1.5">
-                                                <input
-                                                    type="color"
-                                                    value={localBranding.accent_color || '#f59e0b'}
-                                                    onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
-                                                    className="h-8 w-9 rounded border border-border cursor-pointer shrink-0 p-0"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={localBranding.accent_color || '#f59e0b'}
-                                                    onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
-                                                    className="flex-1 min-w-0 px-2 py-1 border border-border dark:border-slate-600 rounded-md text-[11px] font-mono bg-background dark:bg-slate-800/80 text-foreground"
-                                                />
-                                            </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label htmlFor="mobile-branding-address" className="block text-sm font-medium text-foreground mb-1.5">Business Address</label>
+                                    <textarea
+                                        id="mobile-branding-address"
+                                        value={localBranding.address || ''}
+                                        onChange={e => setLocalBranding({ ...localBranding, address: e.target.value })}
+                                        placeholder="123 Precision Way, Suite 400..."
+                                        rows={2}
+                                        className="w-full rounded-2xl border border-slate-200 bg-[#F4F4F9] px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-[#004494] focus:ring-2 focus:ring-[#004494]/20 resize-y min-h-[3rem] dark:border-slate-600 dark:bg-slate-800/80"
+                                    />
+                                </div>
+
+                                <details className="rounded-xl border border-slate-200/80 bg-muted/30 px-3 py-2 text-sm dark:border-slate-600">
+                                    <summary className="cursor-pointer font-medium text-muted-foreground">Map coordinates (optional)</summary>
+                                    <div className="grid grid-cols-2 gap-2 mt-3 pb-1">
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={localBranding.lat ?? ''}
+                                            onChange={e => setLocalBranding({ ...localBranding, lat: e.target.value ? parseFloat(e.target.value) : null })}
+                                            placeholder="Latitude"
+                                            className="rounded-lg border border-slate-200 bg-card px-2.5 py-2 text-xs font-mono dark:border-slate-600"
+                                        />
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            value={localBranding.lng ?? ''}
+                                            onChange={e => setLocalBranding({ ...localBranding, lng: e.target.value ? parseFloat(e.target.value) : null })}
+                                            placeholder="Longitude"
+                                            className="rounded-lg border border-slate-200 bg-card px-2.5 py-2 text-xs font-mono dark:border-slate-600"
+                                        />
+                                    </div>
+                                </details>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-1">
+                                    <div>
+                                        <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Primary Color</label>
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="color"
+                                                value={primaryHex}
+                                                onChange={e => setLocalBranding({
+                                                    ...localBranding,
+                                                    primary_color: e.target.value,
+                                                    brand_color: e.target.value,
+                                                    secondary_color: localBranding.secondary_color || e.target.value,
+                                                })}
+                                                className="h-10 w-10 shrink-0 cursor-pointer rounded-full border-2 border-white shadow-md p-0"
+                                                aria-label="Primary color"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={primaryHex}
+                                                onChange={e => setLocalBranding({
+                                                    ...localBranding,
+                                                    primary_color: e.target.value,
+                                                    brand_color: e.target.value,
+                                                })}
+                                                className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-[#F4F4F9] px-3 py-2 text-sm font-mono uppercase dark:border-slate-600 dark:bg-slate-800/80"
+                                                aria-label="Primary color hex value"
+                                            />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">App theme</label>
-                                        <div className="grid grid-cols-3 gap-1.5">
-                                            {['light', 'dark', 'auto'].map(mode => (
-                                                <button
-                                                    key={mode}
-                                                    type="button"
-                                                    onClick={() => setLocalBranding({ ...localBranding, theme_mode: mode })}
-                                                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold capitalize border transition-all ${localBranding.theme_mode === mode
-                                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/60 dark:border-indigo-700 dark:text-indigo-300'
-                                                        : 'bg-card dark:bg-slate-800/80 border-border dark:border-slate-600 text-muted-foreground hover:border-border dark:hover:border-slate-500'
-                                                        }`}
-                                                >
-                                                    {mode}
-                                                </button>
-                                            ))}
+                                        <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Accent Color</label>
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="color"
+                                                value={accentHex}
+                                                onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
+                                                className="h-10 w-10 shrink-0 cursor-pointer rounded-full border-2 border-white shadow-md p-0"
+                                                aria-label="Accent color"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={accentHex}
+                                                onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
+                                                className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-[#F4F4F9] px-3 py-2 text-sm font-mono uppercase dark:border-slate-600 dark:bg-slate-800/80"
+                                                aria-label="Accent color hex value"
+                                            />
                                         </div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                                <RefreshCw className="w-5 h-5 animate-spin text-[#004494]" />
+                                <span>Loading branding…</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Live Preview */}
+                    <div className="rounded-2xl border border-slate-200/90 bg-[#F4F4F9] p-5 shadow-sm dark:border-slate-600 dark:bg-slate-900/40 xl:sticky xl:top-4 h-fit">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
+                            <Smartphone className="w-4 h-4 text-[#004494]" />
+                            Live Preview
+                        </div>
+                        <div
+                            className="mx-auto flex w-[260px] flex-col overflow-hidden rounded-[2rem] border-[10px] border-slate-800 bg-white shadow-xl dark:border-slate-700"
+                            style={{ minHeight: '420px' }}
+                        >
+                            <div
+                                className="flex shrink-0 flex-col items-center justify-center px-4 pt-8 pb-6"
+                                style={{ backgroundColor: primaryHex }}
+                            >
+                                <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white shadow-md ring-4 ring-white/30 overflow-hidden">
+                                    {localBranding?.logo_url ? (
+                                        <img src={getFullImageUrl(localBranding.logo_url)} alt="" className="h-full w-full object-cover" />
+                                    ) : (
+                                        <Store className="w-9 h-9 text-slate-400" />
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex flex-1 flex-col gap-3 bg-white px-4 pb-6 pt-4">
+                                <div className="h-2.5 w-3/4 rounded-full bg-slate-200" />
+                                <div className="h-2.5 w-1/2 rounded-full bg-slate-100" />
+                                <div className="mt-2 space-y-2">
+                                    <div className="h-16 rounded-xl bg-slate-100" />
+                                    <div className="h-16 rounded-xl bg-slate-100" />
+                                </div>
+                                <div className="mt-auto pt-6">
+                                    <div
+                                        className="w-full rounded-2xl py-3.5 text-center text-sm font-bold text-white shadow-md"
+                                        style={{ backgroundColor: accentHex }}
+                                    >
+                                        Check Out
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* —— Ordering Parameters —— */}
+            {localSettings && (
+                <section>
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-foreground tracking-tight">Ordering Parameters</h2>
+                            <p className="text-sm text-muted-foreground mt-1 max-w-xl">
+                                Configure fulfillment logic, fees, and operational windows for your mobile storefront.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            className="flex items-center gap-3 shrink-0"
+                            onClick={() => setLocalSettings({ ...localSettings, is_enabled: !localSettings.is_enabled })}
+                            aria-pressed={localSettings.is_enabled}
+                            aria-label="Mobile ordering active"
+                        >
+                            <div className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${localSettings.is_enabled ? 'bg-[#004494]' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                <span
+                                    className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${localSettings.is_enabled ? 'left-7' : 'left-1'}`}
+                                />
+                            </div>
+                            <span className="text-sm font-semibold text-foreground whitespace-nowrap">Mobile Ordering Active</span>
+                        </button>
+                    </div>
+
+                    <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="rounded-2xl bg-[#F4F4F9] p-5 sm:p-6 dark:bg-slate-800/40">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label htmlFor="mobile-order-min" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Minimum Order Value</label>
+                                    <input
+                                        id="mobile-order-min"
+                                        type="number"
+                                        value={localSettings.minimum_order_amount ?? 0}
+                                        onChange={e => setLocalSettings({ ...localSettings, minimum_order_amount: parseFloat(e.target.value) })}
+                                        className="w-full rounded-xl border-0 bg-white px-3.5 py-2.5 text-sm shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-900 dark:ring-slate-600"
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="mobile-order-delivery-fee" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Standard Delivery Fee</label>
+                                    <input
+                                        id="mobile-order-delivery-fee"
+                                        type="number"
+                                        value={localSettings.delivery_fee ?? 0}
+                                        onChange={e => setLocalSettings({ ...localSettings, delivery_fee: parseFloat(e.target.value) })}
+                                        className="w-full rounded-xl border-0 bg-white px-3.5 py-2.5 text-sm shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-900 dark:ring-slate-600"
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="mobile-order-free-threshold" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Free Delivery Threshold</label>
+                                    <input
+                                        id="mobile-order-free-threshold"
+                                        type="number"
+                                        value={localSettings.free_delivery_above ?? ''}
+                                        onChange={e => setLocalSettings({ ...localSettings, free_delivery_above: e.target.value ? parseFloat(e.target.value) : null })}
+                                        placeholder="—"
+                                        className="w-full rounded-xl border-0 bg-white px-3.5 py-2.5 text-sm shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-900 dark:ring-slate-600"
+                                    />
+                                </div>
+                                <div>
+                                    <label htmlFor="mobile-order-est-mins" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Est. Delivery Time</label>
+                                    <div className="flex rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80 focus-within:ring-2 focus-within:ring-[#004494] dark:bg-slate-900 dark:ring-slate-600">
+                                        <input
+                                            id="mobile-order-est-mins"
+                                            type="number"
+                                            min={1}
+                                            value={localSettings.estimated_delivery_minutes ?? 45}
+                                            onChange={e => setLocalSettings({ ...localSettings, estimated_delivery_minutes: parseInt(e.target.value, 10) || 0 })}
+                                            className="w-full min-w-0 rounded-l-xl border-0 bg-transparent px-3.5 py-2.5 text-sm outline-none"
+                                        />
+                                        <span className="flex items-center pr-3 text-xs font-bold text-muted-foreground tabular-nums">MINS</span>
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Preview</label>
-                                    <div
-                                        className="mx-auto lg:mx-0 w-[112px] h-[200px] border-[3px] border-gray-800 dark:border-slate-600 rounded-[1.25rem] overflow-hidden bg-card shadow-md flex flex-col"
-                                        style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#1e293b' : 'white' }}
-                                    >
-                                        <div
-                                            className="h-7 flex items-center px-2.5 justify-between border-b border-border/60 shrink-0"
-                                            style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#0f172a' : 'white', borderColor: localBranding.theme_mode === 'dark' ? '#1e293b' : '#f1f5f9' }}
-                                        >
-                                            <div className="w-3.5 h-3.5 rounded bg-muted flex items-center justify-center overflow-hidden">
-                                                {localBranding.logo_url ? (
-                                                    <img src={getFullImageUrl(localBranding.logo_url)} alt="" className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="w-full h-full rounded" style={{ backgroundColor: localBranding.primary_color || localBranding.brand_color }} />
-                                                )}
-                                            </div>
-                                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: localBranding.secondary_color || '#10b981' }} />
-                                        </div>
-                                        <div className="flex-1 p-2 space-y-2 min-h-0">
-                                            <div className="h-8 rounded-md" style={{ background: `linear-gradient(135deg, ${localBranding.primary_color || localBranding.brand_color || '#4338ca'}, ${localBranding.secondary_color || '#10b981'})` }} />
-                                            <div className="space-y-1">
-                                                <div className="h-1.5 w-10 rounded" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
-                                                <div className="flex gap-1">
-                                                    <div className="h-3 w-7 rounded-full" style={{ backgroundColor: localBranding.primary_color || localBranding.brand_color }} />
-                                                    <div className="h-3 w-7 rounded-full" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
-                                                </div>
-                                            </div>
-                                            <div className="p-1.5 rounded-md border border-border/60 space-y-1" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#0f172a' : 'white', borderColor: localBranding.theme_mode === 'dark' ? '#1e293b' : '#f1f5f9' }}>
-                                                <div className="h-1.5 w-12 rounded" style={{ backgroundColor: localBranding.theme_mode === 'dark' ? '#334155' : '#f1f5f9' }} />
-                                                <div className="flex justify-end">
-                                                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: localBranding.accent_color || '#f59e0b' }} />
-                                                </div>
-                                            </div>
-                                        </div>
+                                    <label htmlFor="mobile-order-from" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Accept Orders From</label>
+                                    <div className="relative">
+                                        <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                        <input
+                                            id="mobile-order-from"
+                                            type="time"
+                                            value={localSettings.order_acceptance_start || '09:00'}
+                                            onChange={e => setLocalSettings({ ...localSettings, order_acceptance_start: e.target.value })}
+                                            className="w-full rounded-xl border-0 bg-white py-2.5 pl-10 pr-3 text-sm shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-900 dark:ring-slate-600"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="mobile-order-until" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Orders Until</label>
+                                    <div className="relative">
+                                        <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                        <input
+                                            id="mobile-order-until"
+                                            type="time"
+                                            value={localSettings.order_acceptance_end || '22:00'}
+                                            onChange={e => setLocalSettings({ ...localSettings, order_acceptance_end: e.target.value })}
+                                            className="w-full rounded-xl border-0 bg-white py-2.5 pl-10 pr-3 text-sm shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-900 dark:ring-slate-600"
+                                        />
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center py-8">
-                            <RefreshCw className="w-7 h-7 text-indigo-400 animate-spin mb-2" />
-                            <p className="text-sm text-muted-foreground">Loading branding…</p>
-                        </div>
-                    )}
-                </div>
 
-                {/* Ordering Settings */}
-                <div className="xl:col-span-2 bg-card dark:bg-slate-900/90 rounded-xl border border-border dark:border-slate-600 p-4 shadow-sm">
-                    <div className="flex items-center gap-2 mb-3">
-                        <SettingsIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                        <div>
-                            <h2 className="text-base font-bold text-foreground dark:text-slate-200 leading-tight">Ordering settings</h2>
-                            <p className="text-[11px] text-muted-foreground">Fees, hours, and confirmation—separate from branding above.</p>
+                        <div
+                            className="rounded-2xl p-5 sm:p-6 text-white shadow-md"
+                            style={{ backgroundColor: MB_PRIMARY }}
+                        >
+                            <div className="flex items-start gap-3">
+                                <Bike className="w-6 h-6 shrink-0 opacity-95" />
+                                <div>
+                                    <h3 className="text-lg font-bold">Rider Logistics</h3>
+                                    <p className="text-sm text-white/85 mt-0.5">Select how order assignments are handled for delivery.</p>
+                                </div>
+                            </div>
+
+                            <div className="mt-5 space-y-3">
+                                {([
+                                    { id: 'auto' as const, title: 'Automatic Dispatch', sub: 'Nearest available rider notified' },
+                                    { id: 'manual' as const, title: 'Manual Assignment', sub: 'Administrator assigns each trip' },
+                                    { id: 'third_party' as const, title: 'Third Party Only', sub: 'Redirect to external couriers' },
+                                ]).map(opt => (
+                                    <label
+                                        key={opt.id}
+                                        className={`flex cursor-pointer gap-3 rounded-xl border-2 px-4 py-3 transition-colors ${
+                                            riderMode === opt.id
+                                                ? 'border-white bg-white/15 shadow-inner'
+                                                : 'border-transparent bg-white/10 hover:bg-white/15'
+                                        }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            name="rider_mode_settings"
+                                            className="mt-1 h-4 w-4 shrink-0 border-white/50 text-white focus:ring-white/50"
+                                            checked={riderMode === opt.id}
+                                            onChange={() => setLocalSettings({ ...localSettings, rider_assignment_mode: opt.id })}
+                                        />
+                                        <span>
+                                            <span className="block text-sm font-bold">{opt.title}</span>
+                                            <span className="block text-xs text-white/80 mt-0.5">{opt.sub}</span>
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
                         </div>
                     </div>
+                </section>
+            )}
 
-                    {localSettings && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            <div className="sm:col-span-2 lg:col-span-3">
-                                <div
-                                    className="flex items-center gap-3 cursor-pointer"
-                                    onClick={() => setLocalSettings({ ...localSettings, is_enabled: !localSettings.is_enabled })}
-                                >
-                                    <div className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${localSettings.is_enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-slate-600'}`}>
-                                        <div className={`absolute top-0.5 w-6 h-6 bg-white dark:bg-slate-200 rounded-full shadow transition-transform ${localSettings.is_enabled ? 'left-5' : 'left-0.5'}`} />
-                                    </div>
-                                    <span className="text-sm font-semibold text-foreground dark:text-slate-200">Mobile ordering enabled</span>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Min order (PKR)</label>
-                                <input
-                                    type="number"
-                                    value={localSettings.minimum_order_amount || 0}
-                                    onChange={e => setLocalSettings({ ...localSettings, minimum_order_amount: parseFloat(e.target.value) })}
-                                    className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Delivery fee (PKR)</label>
-                                <input
-                                    type="number"
-                                    value={localSettings.delivery_fee || 0}
-                                    onChange={e => setLocalSettings({ ...localSettings, delivery_fee: parseFloat(e.target.value) })}
-                                    className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Free delivery above (PKR)</label>
-                                <input
-                                    type="number"
-                                    value={localSettings.free_delivery_above || ''}
-                                    onChange={e => setLocalSettings({ ...localSettings, free_delivery_above: e.target.value ? parseFloat(e.target.value) : null })}
-                                    placeholder="None"
-                                    className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Est. delivery (mins)</label>
-                                <input
-                                    type="number"
-                                    value={localSettings.estimated_delivery_minutes || 60}
-                                    onChange={e => setLocalSettings({ ...localSettings, estimated_delivery_minutes: parseInt(e.target.value) })}
-                                    className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Orders from</label>
-                                <input
-                                    type="time"
-                                    value={localSettings.order_acceptance_start || '09:00'}
-                                    onChange={e => setLocalSettings({ ...localSettings, order_acceptance_start: e.target.value })}
-                                    className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Orders until</label>
-                                <input
-                                    type="time"
-                                    value={localSettings.order_acceptance_end || '21:00'}
-                                    onChange={e => setLocalSettings({ ...localSettings, order_acceptance_end: e.target.value })}
-                                    className="w-full px-2.5 py-1.5 border border-border dark:border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-background dark:bg-slate-800/80 text-foreground"
-                                />
-                            </div>
-
-                            <div className="col-span-1 sm:col-span-2 lg:col-span-3 flex items-start gap-3 pt-1">
-                                <label className="flex items-start gap-2.5 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={localSettings.auto_confirm_orders}
-                                        onChange={e => setLocalSettings({ ...localSettings, auto_confirm_orders: e.target.checked })}
-                                        className="w-4 h-4 mt-0.5 rounded border-gray-300 dark:border-slate-600 dark:bg-slate-800 text-indigo-600 focus:ring-indigo-500 shrink-0"
-                                    />
-                                    <span className="text-sm text-foreground leading-snug">Auto-confirm new orders (skip manual approval)</span>
-                                </label>
-                            </div>
-
-                            <div className="col-span-1 sm:col-span-2 lg:col-span-3">
-                                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Rider assignment</label>
-                                <div className="flex gap-3">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="rider_assignment_mode"
-                                            checked={(localSettings.rider_assignment_mode || 'auto') === 'auto'}
-                                            onChange={() => setLocalSettings({ ...localSettings, rider_assignment_mode: 'auto' })}
-                                            className="w-4 h-4 text-indigo-600 border-gray-300 dark:border-slate-600 dark:bg-slate-800 focus:ring-indigo-500"
-                                        />
-                                        <span className="text-sm text-foreground">Auto-assign nearest rider</span>
-                                    </label>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="rider_assignment_mode"
-                                            checked={localSettings.rider_assignment_mode === 'manual'}
-                                            onChange={() => setLocalSettings({ ...localSettings, rider_assignment_mode: 'manual' })}
-                                            className="w-4 h-4 text-indigo-600 border-gray-300 dark:border-slate-600 dark:bg-slate-800 focus:ring-indigo-500"
-                                        />
-                                        <span className="text-sm text-foreground">Manual — assign from POS</span>
-                                    </label>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                                    {localSettings.rider_assignment_mode === 'manual'
-                                        ? 'Orders will arrive without a rider. Assign a rider manually from the order detail panel.'
-                                        : 'The nearest available rider is automatically assigned when the customer places an order.'}
-                                </p>
-                            </div>
-
-                            <div className="col-span-1 sm:col-span-2 lg:col-span-3">
-                                <button
-                                    type="button"
-                                    onClick={handleSaveSettings}
-                                    disabled={saving}
-                                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                                >
-                                    {saving ? 'Saving…' : 'Save ordering settings'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
+            <div className="flex flex-wrap items-center justify-end gap-4 border-t border-slate-200 pt-6 dark:border-slate-700">
+                <button
+                    type="button"
+                    onClick={handleDiscard}
+                    disabled={saving}
+                    className="text-sm font-semibold text-slate-600 hover:text-foreground transition-colors disabled:opacity-50 dark:text-slate-400"
+                >
+                    Discard Changes
+                </button>
+                <button
+                    type="button"
+                    onClick={handleSaveConfiguration}
+                    disabled={saving || !localBranding || !localSettings}
+                    className="min-w-[200px] rounded-xl bg-[#004494] px-8 py-3 text-sm font-bold text-white shadow-md transition-colors hover:bg-[#003a7a] disabled:opacity-50"
+                >
+                    {saving ? 'Saving…' : 'Save Configuration'}
+                </button>
             </div>
         </div>
     );

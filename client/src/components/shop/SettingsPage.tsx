@@ -1,5 +1,25 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Smartphone, Printer, Truck, MapPin, ShieldCheck, Search, ChevronLeft, ChevronRight, ChevronDown, Upload, Bike } from 'lucide-react';
+import {
+    Smartphone,
+    Printer,
+    Truck,
+    MapPin,
+    ShieldCheck,
+    Search,
+    ChevronLeft,
+    ChevronRight,
+    ChevronDown,
+    Upload,
+    Bike,
+    Store,
+    Ruler,
+    Barcode,
+    Image as ImageIcon,
+    ListChecks,
+    MessageSquare,
+    HelpCircle,
+    Camera,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
@@ -16,7 +36,7 @@ import { BranchConfigurationSection } from './settings/BranchConfigurationSectio
 import { useSettingsEditLock } from '../../hooks/useSettingsEditLock';
 import { getFullImageUrl } from '../../config/apiUrl';
 
-import { generateReceiptHTML, ReceiptSaleData, RECEIPT_PRINT_FONT_OPTIONS } from '../../services/receipt/receiptBuilder';
+import { generateReceiptHTML, ReceiptSaleData } from '../../services/receipt/receiptBuilder';
 import QRCode from 'qrcode';
 
 /** Stable hash so iframe `key` changes whenever preview HTML changes (forces remount; some browsers ignore `srcDoc` updates). */
@@ -29,10 +49,74 @@ function previewContentKey(html: string): string {
     return `${html.length}:${h >>> 0}`;
 }
 
-const ReceiptPreviewPanel: React.FC<{ receiptSettings: any; logoUrlOverride?: string | null }> = ({
-    receiptSettings,
-    logoUrlOverride
-}) => {
+const POS_PRINTER_PRESETS = ['EPSON TM-T88VI', 'EPSON TM-T20II', 'Star TSP143III'] as const;
+
+function PosSwitch({
+    checked,
+    onChange,
+    disabled,
+    ariaLabel,
+}: {
+    checked: boolean;
+    onChange: (next: boolean) => void;
+    disabled?: boolean;
+    /** Accessible name for the switch (required for icon-only use). */
+    ariaLabel: string;
+}) {
+    return (
+        <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={ariaLabel}
+            disabled={disabled}
+            onClick={() => !disabled && onChange(!checked)}
+            className="relative h-6 w-10 shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50 disabled:opacity-50"
+        >
+            <span
+                className={`absolute inset-0 rounded-full transition-colors ${checked ? 'bg-primary-900 dark:bg-primary-600' : 'bg-slate-300 dark:bg-muted-foreground/40'}`}
+            />
+            <span
+                className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-card shadow transition-transform ${checked ? 'translate-x-4' : ''}`}
+            />
+        </button>
+    );
+}
+
+function PosPrefCard({
+    title,
+    icon,
+    right,
+    children,
+    className = '',
+}: {
+    title: string;
+    icon: React.ReactNode;
+    right?: React.ReactNode;
+    children: React.ReactNode;
+    className?: string;
+}) {
+    return (
+        <Card className={`border border-border/70 shadow-sm bg-card p-5 ${className}`}>
+            <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                    <span className="shrink-0 text-primary-900 dark:text-primary-400 [&>svg]:h-5 [&>svg]:w-5">{icon}</span>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">{title}</h3>
+                </div>
+                {right}
+            </div>
+            {children}
+        </Card>
+    );
+}
+
+const ReceiptPreviewPanel: React.FC<{
+    receiptSettings: any;
+    logoUrlOverride?: string | null;
+    onReceiptPatch: (patch: Record<string, unknown>) => void;
+    onTestPrint: () => void;
+    testPrinting: boolean;
+}> = ({ receiptSettings, logoUrlOverride, onReceiptPatch, onTestPrint, testPrinting }) => {
     const [mobileQrDataUrl, setMobileQrDataUrl] = useState<string | null>(null);
     useEffect(() => {
         if (receiptSettings?.show_mobile_url_qr && receiptSettings?.mobile_order_url) {
@@ -46,32 +130,33 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any; logoUrlOverride?: st
 
     const { previewHtml, iframeKey, containerWidth } = useMemo(() => {
         const saleData: ReceiptSaleData = {
-            storeName: receiptSettings.shop_name || 'My Store',
-            storeAddress: receiptSettings.shop_address || '123 Fake Street',
-            storePhone: receiptSettings.shop_phone || '021-1234567',
-            taxId: receiptSettings.tax_id || '',
+            storeName: receiptSettings.shop_name || 'PBooksPro Retail Hub',
+            storeAddress: receiptSettings.shop_address || 'Silicon Valley, CA',
+            storePhone: receiptSettings.shop_phone || '+1 (555) 012-3456',
+            taxId: receiptSettings.tax_id || 'TX-882910-B',
             logoUrl:
                 logoUrlOverride ??
                 getFullImageUrl(receiptSettings.logo_url?.trim()) ??
                 receiptSettings.logo_url ??
                 null,
             receiptNumber: 'SALE-TEST-001',
-            date: new Date().toLocaleDateString(),
-            time: new Date().toLocaleTimeString(),
-            cashier: 'John Cashier',
-            shiftNumber: '1',
-            customer: 'Walk-in Customer',
+            date: '24/05/2024',
+            time: '14:32',
+            cashier: 'J. DOE',
+            shiftNumber: '04',
+            customer: 'Walk-in',
             items: [
-                { name: 'Test Product 1', quantity: 1, unitPrice: 25.00, total: 25.00 },
-                { name: 'Test Product 2', quantity: 2, unitPrice: 15.00, total: 30.00 }
+                { name: 'Stylus', quantity: 2, unitPrice: 22.5, total: 45.0 },
+                { name: 'Keyboard', quantity: 1, unitPrice: 120.0, total: 120.0 },
+                { name: 'Desk Mat', quantity: 1, unitPrice: 35.0, total: 35.0 },
             ],
-            subtotal: 55.00,
-            discount: 5.00,
-            tax: 5.00,
-            total: 55.00,
-            payments: [{ method: 'Cash', amount: 55.00 }],
+            subtotal: 200.0,
+            discount: 0,
+            tax: 17.0,
+            total: 200.0,
+            payments: [{ method: 'Cash', amount: 200.0 }],
             change: 0,
-            barcode_value: 'SALE-TEST-001'
+            barcode_value: 'SALE-TEST-001',
         };
 
         const settingsWithQr = mobileQrDataUrl
@@ -86,19 +171,88 @@ const ReceiptPreviewPanel: React.FC<{ receiptSettings: any; logoUrlOverride?: st
         };
     }, [receiptSettings, mobileQrDataUrl, logoUrlOverride]);
 
+    const fontSize = receiptSettings.print_font_size ?? 12;
+    const lineSpacing = receiptSettings.print_line_spacing ?? 1.2;
+
     return (
-        <Card id="pos-receipt-live-preview" className="border-none shadow-sm p-6 bg-muted flex flex-col items-center overflow-hidden">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4 self-start">Live Preview</h3>
-            <div className="bg-card shadow-xl border border-border transition-all overflow-hidden relative" style={{ width: containerWidth }}>
+        <div id="pos-receipt-live-preview" className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold uppercase tracking-wide text-primary-900 dark:text-primary-300">Receipt preview</h3>
+                <span className="rounded-full bg-primary-900 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white dark:bg-primary-700">
+                    Live mode
+                </span>
+            </div>
+            <Card className="border border-border/70 bg-muted/40 p-4 shadow-sm">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                        <label htmlFor="pos-sidebar-font-size" className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Font size
+                        </label>
+                        <select
+                            id="pos-sidebar-font-size"
+                            className="h-10 w-full rounded-xl border-2 border-border bg-muted/80 px-3 text-sm font-bold text-foreground"
+                            value={String(fontSize)}
+                            onChange={(e) => {
+                                const n = parseInt(e.target.value, 10);
+                                onReceiptPatch({
+                                    print_font_size: Number.isFinite(n) ? Math.min(18, Math.max(10, n)) : 12,
+                                });
+                            }}
+                        >
+                            {[10, 11, 12, 13, 14, 15, 16, 17, 18].map((px) => (
+                                <option key={px} value={String(px)}>
+                                    {px}px
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <Input
+                        label="Line height"
+                        type="number"
+                        min={1}
+                        max={2}
+                        step={0.05}
+                        compact
+                        value={String(lineSpacing)}
+                        onChange={(e) => {
+                            const n = parseFloat(e.target.value);
+                            onReceiptPatch({
+                                print_line_spacing: Number.isFinite(n) ? Math.min(2, Math.max(1, n)) : 1.2,
+                            });
+                        }}
+                    />
+                </div>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    className="mt-3 w-full border-primary-200/80 bg-primary-50 text-primary-900 hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-950/40 dark:text-primary-100 dark:hover:bg-primary-900/50"
+                    onClick={onTestPrint}
+                    disabled={testPrinting}
+                >
+                    <Printer className="h-4 w-4" />
+                    {testPrinting ? 'Printing…' : 'Print test slip'}
+                </Button>
+            </Card>
+            <div className="bg-card shadow-xl relative overflow-hidden rounded-lg border border-border transition-all" style={{ width: containerWidth }}>
                 <iframe
                     key={iframeKey}
                     srcDoc={previewHtml}
-                    style={{ width: '100%', height: '500px', border: 'none', backgroundColor: '#fff' }}
+                    style={{ width: '100%', height: '480px', border: 'none', backgroundColor: '#fff' }}
                     title="Receipt Preview"
                 />
             </div>
-            <p className="text-xs text-muted-foreground mt-4 text-center">This is an approximate software rendering.<br />Actual thermal paper may look slightly different.</p>
-        </Card>
+            <Card className="border-none bg-primary-900 p-4 text-primary-50 shadow-md dark:bg-primary-950">
+                <div className="flex gap-3">
+                    <HelpCircle className="mt-0.5 h-5 w-5 shrink-0 opacity-90" />
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-wider">System help</p>
+                        <p className="mt-1 text-xs leading-relaxed opacity-95">
+                            Syncing to all hardware terminals. Print a test slip to verify layout width.
+                        </p>
+                    </div>
+                </div>
+            </Card>
+        </div>
     );
 };
 
@@ -590,6 +744,9 @@ const SettingsContent: React.FC = () => {
     const receiptLogoFileInputRef = useRef<HTMLInputElement>(null);
     const [receiptLogoBlobUrl, setReceiptLogoBlobUrl] = useState<string | null>(null);
     const [receiptLogoUploading, setReceiptLogoUploading] = useState(false);
+    const [posPreferencesSaving, setPosPreferencesSaving] = useState(false);
+    const [testPrintBusy, setTestPrintBusy] = useState(false);
+    const [printerForceCustom, setPrinterForceCustom] = useState(false);
 
     useEffect(() => {
         return () => {
@@ -680,7 +837,15 @@ const SettingsContent: React.FC = () => {
         try {
             setPosSettingsLoading(true);
             const data = await shopApi.getPosSettings();
-            if (data) setPosSettings(prev => ({ ...prev, ...data, auto_logout_minutes: data.auto_logout_minutes ?? prev.auto_logout_minutes }));
+            if (data) {
+                const d = (data.default_printer_name || '').trim();
+                setPrinterForceCustom(!!d && !POS_PRINTER_PRESETS.includes(d as (typeof POS_PRINTER_PRESETS)[number]));
+                setPosSettings((prev) => ({
+                    ...prev,
+                    ...data,
+                    auto_logout_minutes: data.auto_logout_minutes ?? prev.auto_logout_minutes,
+                }));
+            }
         } catch (e: any) {
             console.error('Failed to load POS settings', e);
         } finally {
@@ -720,30 +885,6 @@ const SettingsContent: React.FC = () => {
         }
     }, [activeTab, loadUsers, loadRiders, loadPosSettings, loadReceiptSettings]);
 
-    const handleSavePosSettings = async () => {
-        try {
-            const result = await shopApi.updatePosSettings(posSettings);
-            setPosSettings(result);
-            alert('POS settings saved successfully');
-        } catch (e: any) {
-            const msg = e?.message || e?.error || 'Failed to save POS settings';
-            alert(msg);
-            loadPosSettings();
-        }
-    };
-
-    const handleSaveReceiptSettings = async () => {
-        try {
-            const result = await shopApi.updateReceiptSettings(receiptSettings);
-            setReceiptSettings(result);
-            alert('Receipt template settings saved');
-        } catch (e: any) {
-            const msg = e?.message || e?.error || 'Failed to save receipt settings';
-            alert(msg);
-            loadReceiptSettings();
-        }
-    };
-
     const handleReceiptLogoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -763,13 +904,106 @@ const SettingsContent: React.FC = () => {
             setReceiptLogoBlobUrl(null);
         } catch (err) {
             console.error(err);
-            alert('Failed to upload or save logo. Try a smaller file or click Save receipt template after choosing a file.');
+            alert('Failed to upload or save logo. Try a smaller file or click Save Changes after choosing a file.');
             setReceiptLogoBlobUrl(null);
         } finally {
             setReceiptLogoUploading(false);
             e.target.value = '';
         }
     }, [receiptSettings]);
+
+    const patchReceiptSettings = useCallback((patch: Record<string, unknown>) => {
+        setReceiptSettings((prev) => ({ ...prev, ...patch }));
+    }, []);
+
+    const handleResetPosPreferences = useCallback(async () => {
+        setReceiptLogoBlobUrl(null);
+        await loadPosSettings();
+        await loadReceiptSettings();
+    }, [loadPosSettings, loadReceiptSettings]);
+
+    const handleSaveAllPosPreferences = useCallback(async () => {
+        try {
+            setPosPreferencesSaving(true);
+            const posPayload = {
+                ...posSettings,
+                default_printer_name: (posSettings.default_printer_name || '').trim(),
+            };
+            await shopApi.updatePosSettings(posPayload);
+            const savedReceipt = await shopApi.updateReceiptSettings(receiptSettings);
+            setReceiptSettings(savedReceipt);
+            const p = await shopApi.getPosSettings();
+            if (p) {
+                setPosSettings((prev) => ({
+                    ...prev,
+                    ...p,
+                    auto_logout_minutes: p.auto_logout_minutes ?? prev.auto_logout_minutes,
+                }));
+            }
+            alert('POS preferences saved.');
+        } catch (e: any) {
+            const msg = e?.message || e?.error || 'Failed to save POS preferences';
+            alert(msg);
+            await loadPosSettings();
+            await loadReceiptSettings();
+        } finally {
+            setPosPreferencesSaving(false);
+        }
+    }, [posSettings, receiptSettings, loadPosSettings, loadReceiptSettings]);
+
+    const handleTestPrintSlip = useCallback(async () => {
+        setTestPrintBusy(true);
+        try {
+            const { createThermalPrinter } = await import('../../services/printer/thermalPrinter');
+            let mobileQrDataUrl: string | null = null;
+            if (receiptSettings?.show_mobile_url_qr && receiptSettings?.mobile_order_url) {
+                try {
+                    mobileQrDataUrl = await QRCode.toDataURL(receiptSettings.mobile_order_url, { width: 200, margin: 1 });
+                } catch {
+                    mobileQrDataUrl = null;
+                }
+            }
+            const settingsWithQr = mobileQrDataUrl
+                ? { ...receiptSettings, mobile_qr_data_url: mobileQrDataUrl }
+                : receiptSettings;
+            const printer = createThermalPrinter({ receiptSettings: settingsWithQr });
+            const logoUrl =
+                receiptLogoBlobUrl ??
+                getFullImageUrl(receiptSettings.logo_url?.trim()) ??
+                receiptSettings.logo_url ??
+                null;
+            await printer.printReceipt({
+                storeName: receiptSettings.shop_name || 'My Store',
+                storeAddress: receiptSettings.shop_address || '',
+                storePhone: receiptSettings.shop_phone || '',
+                taxId: receiptSettings.tax_id || '',
+                logoUrl: logoUrl || undefined,
+                receiptNumber: 'SALE-TEST-001',
+                date: '24/05/2024',
+                time: '14:32',
+                cashier: 'J. DOE',
+                shiftNumber: '04',
+                customer: 'Walk-in',
+                items: [
+                    { name: 'Stylus', quantity: 2, unitPrice: 22.5, total: 45.0 },
+                    { name: 'Keyboard', quantity: 1, unitPrice: 120.0, total: 120.0 },
+                    { name: 'Desk Mat', quantity: 1, unitPrice: 35.0, total: 35.0 },
+                ],
+                subtotal: 200,
+                discount: 0,
+                tax: 17,
+                total: 200,
+                payments: [{ method: 'Cash', amount: 200 }],
+                footer: receiptSettings.footer_message || undefined,
+                barcode_value: 'SALE-TEST-001',
+            });
+        } catch (e) {
+            console.error(e);
+            alert('Could not open the print dialog. Allow pop-ups or try again.');
+        } finally {
+            setTestPrintBusy(false);
+        }
+    }, [receiptSettings, receiptLogoBlobUrl]);
 
     const openNewUser = () => {
         setEditingUser(null);
@@ -922,6 +1156,15 @@ const SettingsContent: React.FC = () => {
         settingsLock.mode === 'blocked' ||
         settingsLock.lostLock;
 
+    const rawPrinterName = posSettings.default_printer_name || '';
+    const printerSelectValue = printerForceCustom
+        ? '__custom__'
+        : POS_PRINTER_PRESETS.includes(rawPrinterName as (typeof POS_PRINTER_PRESETS)[number])
+          ? rawPrinterName
+          : rawPrinterName.trim()
+            ? '__custom__'
+            : '';
+
     return (
         <div className="relative flex w-full min-w-0 flex-col h-full bg-muted/80">
             <div className={settingsLockedOut ? 'pointer-events-none opacity-40 min-h-0 flex flex-col flex-1' : 'min-h-0 flex flex-col flex-1'}>
@@ -1058,115 +1301,163 @@ const SettingsContent: React.FC = () => {
                 )}
 
                 {activeTab === 'pos' && (
-                    <div className="flex w-full min-w-0 flex-col xl:flex-row gap-6">
-                        <div className="w-full min-w-0 flex-1 space-y-4">
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                <Card className="border-none shadow-sm p-5">
-                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Printer</h3>
+                    <div className="flex w-full min-w-0 flex-col gap-6 xl:flex-row">
+                        <div className="min-w-0 flex-1 space-y-4">
+                            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                                <div>
+                                    <h2 className="text-2xl font-bold tracking-tight text-primary-900 dark:text-foreground">
+                                        POS Preferences
+                                    </h2>
+                                    <p className="mt-1 text-sm text-muted-foreground">Terminal &amp; receipt configuration.</p>
+                                </div>
+                                <div className="flex shrink-0 gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        disabled={posSettingsLoading || receiptSettingsLoading || posPreferencesSaving || settingsLockedOut}
+                                        onClick={() => void handleResetPosPreferences()}
+                                        className="border-primary-200/70 bg-primary-50 text-primary-900 hover:bg-primary-100 dark:border-primary-800 dark:bg-primary-950/40 dark:text-primary-100 dark:hover:bg-primary-900/50"
+                                    >
+                                        Reset
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        disabled={posSettingsLoading || receiptSettingsLoading || posPreferencesSaving || settingsLockedOut}
+                                        onClick={() => void handleSaveAllPosPreferences()}
+                                        className="bg-primary-900 text-white hover:bg-primary-950 dark:bg-primary-600 dark:hover:bg-primary-700"
+                                    >
+                                        {posPreferencesSaving ? 'Saving…' : 'Save Changes'}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                                <PosPrefCard
+                                    title="Printer"
+                                    icon={<Printer className="h-5 w-5" />}
+                                    right={
+                                        <PosSwitch
+                                            checked={posSettings.auto_print_receipt}
+                                            onChange={(v) => setPosSettings({ ...posSettings, auto_print_receipt: v })}
+                                            disabled={posSettingsLoading}
+                                            ariaLabel="Printer and auto-print"
+                                        />
+                                    }
+                                >
                                     {posSettingsLoading ? (
-                                        <p className="text-muted-foreground text-sm">Loading...</p>
+                                        <p className="text-sm text-muted-foreground">Loading…</p>
                                     ) : (
                                         <div className="space-y-3">
-                                            <label className="flex items-center gap-3 cursor-pointer">
-                                                <div className="relative shrink-0">
-                                                    <input
-                                                        type="checkbox"
-                                                        className="sr-only"
-                                                        checked={posSettings.auto_print_receipt}
-                                                        onChange={e => setPosSettings({ ...posSettings, auto_print_receipt: e.target.checked })}
-                                                    />
-                                                    <div className={`block w-10 h-6 rounded-full transition-colors ${posSettings.auto_print_receipt ? 'bg-indigo-600' : 'bg-slate-300'}`} />
-                                                    <div className={`dot absolute left-1 top-1 bg-card w-4 h-4 rounded-full transition-transform ${posSettings.auto_print_receipt ? 'transform translate-x-4' : ''}`} />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="font-bold text-sm text-foreground">Auto-print after sale</p>
-                                                    <p className="text-xs text-muted-foreground">Opens the print dialog when a sale completes.</p>
-                                                </div>
-                                            </label>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                <Input
-                                                    label="Default printer (optional)"
-                                                    placeholder="e.g. Black Copper"
-                                                    compact
-                                                    value={posSettings.default_printer_name || ''}
-                                                    onChange={e => setPosSettings({ ...posSettings, default_printer_name: e.target.value })}
-                                                />
-                                                <Input
-                                                    label="Copies"
-                                                    type="number"
-                                                    min={1}
-                                                    max={5}
-                                                    compact
-                                                    value={String(posSettings.receipt_copies || 1)}
-                                                    onChange={e => setPosSettings({ ...posSettings, receipt_copies: parseInt(e.target.value, 10) || 1 })}
-                                                />
+                                            <div>
+                                                <label htmlFor="pos-default-device" className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                    Default device
+                                                </label>
+                                                <select
+                                                    id="pos-default-device"
+                                                    className="h-10 w-full rounded-xl border-2 border-border bg-muted/80 px-3 text-sm font-bold text-foreground"
+                                                    value={printerSelectValue}
+                                                    onChange={(e) => {
+                                                        const v = e.target.value;
+                                                        if (v === '__custom__') {
+                                                            setPrinterForceCustom(true);
+                                                            setPosSettings({ ...posSettings, default_printer_name: '' });
+                                                        } else {
+                                                            setPrinterForceCustom(false);
+                                                            setPosSettings({ ...posSettings, default_printer_name: v });
+                                                        }
+                                                    }}
+                                                >
+                                                    <option value="">System default</option>
+                                                    {POS_PRINTER_PRESETS.map((p) => (
+                                                        <option key={p} value={p}>
+                                                            {p}
+                                                        </option>
+                                                    ))}
+                                                    <option value="__custom__">Custom…</option>
+                                                </select>
+                                                {printerSelectValue === '__custom__' && (
+                                                    <div className="mt-2">
+                                                        <Input
+                                                            label="Custom printer name"
+                                                            placeholder="Exact name as in your OS"
+                                                            compact
+                                                            value={rawPrinterName}
+                                                            onChange={(e) => setPosSettings({ ...posSettings, default_printer_name: e.target.value })}
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
-                                            <Button type="button" size="sm" onClick={handleSavePosSettings}>Save printer settings</Button>
+                                            <Input
+                                                label="Copies"
+                                                type="number"
+                                                min={1}
+                                                max={5}
+                                                compact
+                                                value={String(posSettings.receipt_copies || 1)}
+                                                onChange={(e) => setPosSettings({ ...posSettings, receipt_copies: parseInt(e.target.value, 10) || 1 })}
+                                            />
                                         </div>
                                     )}
-                                </Card>
-                                <Card className="border-none shadow-sm p-5">
-                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                                        <ShieldCheck className="h-4 w-4" /> Security
-                                    </h3>
+                                </PosPrefCard>
+
+                                <PosPrefCard
+                                    title="Security"
+                                    icon={<ShieldCheck className="h-5 w-5" />}
+                                    right={
+                                        <PosSwitch
+                                            checked={posSettings.auto_logout_minutes > 0}
+                                            onChange={(v) => setPosSettings({ ...posSettings, auto_logout_minutes: v ? 15 : 0 })}
+                                            disabled={posSettingsLoading}
+                                            ariaLabel="Security timeout"
+                                        />
+                                    }
+                                >
                                     {posSettingsLoading ? (
-                                        <p className="text-muted-foreground text-sm">Loading...</p>
+                                        <p className="text-sm text-muted-foreground">Loading…</p>
                                     ) : (
                                         <div className="space-y-3">
-                                            <label className="flex items-center gap-3 cursor-pointer">
-                                                <div className="relative shrink-0">
-                                                    <input
-                                                        type="checkbox"
-                                                        className="sr-only"
-                                                        checked={posSettings.auto_logout_minutes > 0}
-                                                        onChange={e => setPosSettings({ ...posSettings, auto_logout_minutes: e.target.checked ? 15 : 0 })}
-                                                    />
-                                                    <div className={`block w-10 h-6 rounded-full transition-colors ${posSettings.auto_logout_minutes > 0 ? 'bg-indigo-600' : 'bg-slate-300'}`} />
-                                                    <div className={`dot absolute left-1 top-1 bg-card w-4 h-4 rounded-full transition-transform ${posSettings.auto_logout_minutes > 0 ? 'transform translate-x-4' : ''}`} />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="font-bold text-sm text-foreground">Auto-logout on inactivity</p>
-                                                    <p className="text-xs text-muted-foreground">Automatically sign out after a period of no activity.</p>
-                                                </div>
-                                            </label>
                                             {posSettings.auto_logout_minutes > 0 && (
                                                 <Input
-                                                    label="Timeout (minutes)"
+                                                    label="Timeout (min)"
                                                     type="number"
                                                     min={1}
                                                     max={480}
                                                     compact
                                                     value={String(posSettings.auto_logout_minutes)}
-                                                    onChange={e => {
+                                                    onChange={(e) => {
                                                         const n = parseInt(e.target.value, 10);
-                                                        setPosSettings({ ...posSettings, auto_logout_minutes: Number.isFinite(n) ? Math.min(480, Math.max(1, n)) : 15 });
+                                                        setPosSettings({
+                                                            ...posSettings,
+                                                            auto_logout_minutes: Number.isFinite(n) ? Math.min(480, Math.max(1, n)) : 15,
+                                                        });
                                                     }}
                                                 />
                                             )}
-                                            <Button type="button" size="sm" onClick={handleSavePosSettings}>Save POS settings</Button>
                                         </div>
                                     )}
-                                </Card>
-                                <Card className="border-none shadow-sm p-5">
-                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Paper &amp; margins</h3>
-                                    <p className="text-xs text-muted-foreground mb-3">Margins are in millimeters. Increase the right margin if the last column is cut off on your thermal printer.</p>
+                                </PosPrefCard>
+
+                                <PosPrefCard title="Paper / Margins" icon={<Ruler className="h-5 w-5" />} className="lg:col-span-2">
                                     {receiptSettingsLoading ? (
-                                        <p className="text-muted-foreground text-sm">Loading...</p>
+                                        <p className="text-sm text-muted-foreground">Loading…</p>
                                     ) : (
                                         <div className="space-y-3">
                                             <div>
-                                                <label htmlFor="pos-receipt-roll-width" className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Roll width</label>
+                                                <label htmlFor="pos-receipt-roll-width" className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                    Width
+                                                </label>
                                                 <select
                                                     id="pos-receipt-roll-width"
-                                                    className="w-full h-10 px-3 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground"
+                                                    className="h-10 w-full rounded-xl border-2 border-border bg-muted/80 px-3 text-sm font-bold text-foreground"
                                                     value={receiptSettings.receipt_width || '80mm'}
-                                                    onChange={e => setReceiptSettings({ ...receiptSettings, receipt_width: e.target.value })}
+                                                    onChange={(e) => setReceiptSettings({ ...receiptSettings, receipt_width: e.target.value })}
                                                 >
-                                                    <option value="80mm">80mm</option>
-                                                    <option value="58mm">58mm</option>
+                                                    <option value="80mm">80mm Standard</option>
+                                                    <option value="58mm">58mm Compact</option>
                                                 </select>
                                             </div>
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            <p className="text-xs text-muted-foreground">Margins in millimeters.</p>
+                                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                                 <Input
                                                     label="Top"
                                                     type="number"
@@ -1176,27 +1467,13 @@ const SettingsContent: React.FC = () => {
                                                     compact
                                                     helperText="mm"
                                                     value={String(receiptSettings.margin_top_mm ?? 2)}
-                                                    onChange={e => {
+                                                    onChange={(e) => {
                                                         const n = parseFloat(e.target.value);
                                                         setReceiptSettings({ ...receiptSettings, margin_top_mm: Number.isFinite(n) ? n : 2 });
                                                     }}
                                                 />
                                                 <Input
-                                                    label="Right"
-                                                    type="number"
-                                                    min={0}
-                                                    max={25}
-                                                    step={0.5}
-                                                    compact
-                                                    helperText="mm"
-                                                    value={String(receiptSettings.margin_right_mm ?? 4)}
-                                                    onChange={e => {
-                                                        const n = parseFloat(e.target.value);
-                                                        setReceiptSettings({ ...receiptSettings, margin_right_mm: Number.isFinite(n) ? n : 4 });
-                                                    }}
-                                                />
-                                                <Input
-                                                    label="Bottom"
+                                                    label="Bot"
                                                     type="number"
                                                     min={0}
                                                     max={25}
@@ -1204,13 +1481,13 @@ const SettingsContent: React.FC = () => {
                                                     compact
                                                     helperText="mm"
                                                     value={String(receiptSettings.margin_bottom_mm ?? 2)}
-                                                    onChange={e => {
+                                                    onChange={(e) => {
                                                         const n = parseFloat(e.target.value);
                                                         setReceiptSettings({ ...receiptSettings, margin_bottom_mm: Number.isFinite(n) ? n : 2 });
                                                     }}
                                                 />
                                                 <Input
-                                                    label="Left"
+                                                    label="Lft"
                                                     type="number"
                                                     min={0}
                                                     max={25}
@@ -1218,277 +1495,266 @@ const SettingsContent: React.FC = () => {
                                                     compact
                                                     helperText="mm"
                                                     value={String(receiptSettings.margin_left_mm ?? 2)}
-                                                    onChange={e => {
+                                                    onChange={(e) => {
                                                         const n = parseFloat(e.target.value);
                                                         setReceiptSettings({ ...receiptSettings, margin_left_mm: Number.isFinite(n) ? n : 2 });
+                                                    }}
+                                                />
+                                                <Input
+                                                    label="Rgt"
+                                                    type="number"
+                                                    min={0}
+                                                    max={25}
+                                                    step={0.5}
+                                                    compact
+                                                    helperText="mm"
+                                                    value={String(receiptSettings.margin_right_mm ?? 4)}
+                                                    onChange={(e) => {
+                                                        const n = parseFloat(e.target.value);
+                                                        setReceiptSettings({ ...receiptSettings, margin_right_mm: Number.isFinite(n) ? n : 4 });
                                                     }}
                                                 />
                                             </div>
                                         </div>
                                     )}
-                                </Card>
-                            </div>
-                            <Card className="border-none shadow-sm p-5">
-                                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">🧾 Receipt Print Settings</h3>
-                                <p className="text-xs text-muted-foreground mb-4">Monospace fonts keep columns aligned on thermal paper. If a web font cannot load, text falls back to Courier New.</p>
-                                {receiptSettingsLoading ? (
-                                    <p className="text-muted-foreground text-sm">Loading...</p>
-                                ) : (
-                                    <div className="space-y-4">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                                            <div className="sm:col-span-2 xl:col-span-1">
-                                                <label htmlFor="pos-print-font-family" className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Font family</label>
-                                                <select
-                                                    id="pos-print-font-family"
-                                                    className="w-full h-10 px-3 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground"
-                                                    value={receiptSettings.print_font_family || 'roboto_mono'}
-                                                    onChange={e => setReceiptSettings({ ...receiptSettings, print_font_family: e.target.value })}
-                                                >
-                                                    {RECEIPT_PRINT_FONT_OPTIONS.map((opt) => (
-                                                        <option key={opt.value} value={opt.value}>
-                                                            {opt.label}{opt.monospace ? ' — best for alignment (recommended)' : ''}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                </PosPrefCard>
+
+                                <PosPrefCard title="Store branding" icon={<Store className="h-5 w-5" />} className="lg:col-span-2">
+                                    {receiptSettingsLoading ? (
+                                        <p className="text-sm text-muted-foreground">Loading…</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                            <Input
+                                                label="Shop name"
+                                                placeholder="PBooksPro Retail Hub"
+                                                compact
+                                                value={receiptSettings.shop_name || ''}
+                                                onChange={(e) => setReceiptSettings({ ...receiptSettings, shop_name: e.target.value })}
+                                            />
+                                            <Input
+                                                label="Phone"
+                                                placeholder="+1 (555) 012-3456"
+                                                compact
+                                                value={receiptSettings.shop_phone || ''}
+                                                onChange={(e) => setReceiptSettings({ ...receiptSettings, shop_phone: e.target.value })}
+                                            />
+                                            <div className="sm:col-span-2">
+                                                <Input
+                                                    label="Address"
+                                                    placeholder="123 Tech Avenue, Silicon Valley, CA"
+                                                    compact
+                                                    value={receiptSettings.shop_address || ''}
+                                                    onChange={(e) => setReceiptSettings({ ...receiptSettings, shop_address: e.target.value })}
+                                                />
                                             </div>
                                             <Input
-                                                label="Font size (px)"
-                                                type="number"
-                                                min={10}
-                                                max={18}
+                                                label="Tax ID"
+                                                placeholder="TX-882910-B"
                                                 compact
-                                                value={String(receiptSettings.print_font_size ?? 12)}
-                                                onChange={e => {
-                                                    const n = parseInt(e.target.value, 10);
-                                                    setReceiptSettings({
-                                                        ...receiptSettings,
-                                                        print_font_size: Number.isFinite(n) ? Math.min(18, Math.max(10, n)) : 12
-                                                    });
-                                                }}
-                                            />
-                                            <div>
-                                                <label htmlFor="pos-print-font-weight" className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Font weight</label>
-                                                <select
-                                                    id="pos-print-font-weight"
-                                                    className="w-full h-10 px-3 bg-muted/80 border-2 border-border rounded-xl text-sm font-bold text-foreground"
-                                                    value={receiptSettings.print_font_weight || 'normal'}
-                                                    onChange={e => setReceiptSettings({ ...receiptSettings, print_font_weight: e.target.value })}
-                                                >
-                                                    <option value="normal">Normal</option>
-                                                    <option value="medium">Medium</option>
-                                                    <option value="bold">Bold</option>
-                                                </select>
-                                            </div>
-                                            <Input
-                                                label="Line spacing"
-                                                type="number"
-                                                min={1}
-                                                max={2}
-                                                step={0.05}
-                                                compact
-                                                helperText="line height"
-                                                value={String(receiptSettings.print_line_spacing ?? 1.2)}
-                                                onChange={e => {
-                                                    const n = parseFloat(e.target.value);
-                                                    setReceiptSettings({
-                                                        ...receiptSettings,
-                                                        print_line_spacing: Number.isFinite(n) ? Math.min(2, Math.max(1, n)) : 1.2
-                                                    });
-                                                }}
+                                                value={receiptSettings.tax_id || ''}
+                                                onChange={(e) => setReceiptSettings({ ...receiptSettings, tax_id: e.target.value })}
                                             />
                                         </div>
-                                        {(() => {
-                                            const sel = RECEIPT_PRINT_FONT_OPTIONS.find((o) => o.value === (receiptSettings.print_font_family || 'roboto_mono'));
-                                            if (sel?.monospace) {
-                                                return <p className="text-[11px] text-muted-foreground">Monospace fonts keep quantity and price columns aligned.</p>;
-                                            }
-                                            return (
-                                                <p className="text-[11px] text-amber-700 dark:text-amber-400/90">
-                                                    Proportional fonts can make narrow thermal columns look uneven; fixed column widths still help. Unsupported fonts fall back to Courier New.
-                                                </p>
-                                            );
-                                        })()}
-                                        <div className="flex flex-wrap gap-2 items-center">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => document.getElementById('pos-receipt-live-preview')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })}
-                                            >
-                                                Preview sample receipt
-                                            </Button>
-                                            <span className="text-[11px] text-muted-foreground">Scrolls to the live preview (right, or below on small screens).</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </Card>
-                            <Card className="border-none shadow-sm p-5">
-                                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Store on receipt</h3>
-                                {receiptSettingsLoading ? (
-                                    <p className="text-muted-foreground text-sm">Loading...</p>
-                                ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <Input label="Shop name" placeholder="e.g. My Store" compact value={receiptSettings.shop_name || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_name: e.target.value })} />
-                                        <Input label="Phone" placeholder="021-1234567" compact value={receiptSettings.shop_phone || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_phone: e.target.value })} />
-                                        <div className="sm:col-span-2">
-                                            <Input label="Address" placeholder="Street, city" compact value={receiptSettings.shop_address || ''} onChange={e => setReceiptSettings({ ...receiptSettings, shop_address: e.target.value })} />
-                                        </div>
-                                        <Input label="Tax ID / registration" placeholder="Optional" compact value={receiptSettings.tax_id || ''} onChange={e => setReceiptSettings({ ...receiptSettings, tax_id: e.target.value })} />
-                                        <div className="sm:col-span-2">
-                                            <span className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Receipt logo</span>
-                                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-muted/80 rounded-2xl border-2 border-dashed border-border">
-                                                <div className="w-20 h-20 rounded-xl bg-card shadow-sm border border-border overflow-hidden flex items-center justify-center shrink-0">
-                                                    {(receiptLogoBlobUrl || receiptSettings.logo_url) ? (
-                                                        <img
-                                                            src={receiptLogoBlobUrl || getFullImageUrl(receiptSettings.logo_url) || receiptSettings.logo_url}
-                                                            alt="Receipt logo"
-                                                            className="w-full h-full object-contain"
-                                                        />
-                                                    ) : (
-                                                        <span className="text-2xl text-muted-foreground" aria-hidden>🧾</span>
-                                                    )}
-                                                </div>
-                                                <div className="flex-1 min-w-0 space-y-2">
-                                                    <p className="text-xs text-muted-foreground">PNG, JPG, or WebP from your computer. Shown at the top of the receipt when &quot;Show logo&quot; is on. The preview updates as soon as you choose a file.</p>
-                                                    <input
-                                                        ref={receiptLogoFileInputRef}
-                                                        type="file"
-                                                        className="hidden"
-                                                        accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
-                                                        aria-label="Upload receipt logo image from your computer"
-                                                        onChange={handleReceiptLogoUpload}
+                                    )}
+                                </PosPrefCard>
+
+                                <PosPrefCard
+                                    title="Logo"
+                                    icon={<ImageIcon className="h-5 w-5" />}
+                                    className="lg:col-span-2"
+                                    right={
+                                        <PosSwitch
+                                            checked={!!receiptSettings.show_logo}
+                                            onChange={(v) => setReceiptSettings({ ...receiptSettings, show_logo: v })}
+                                            disabled={receiptSettingsLoading}
+                                            ariaLabel="Show logo on receipt"
+                                        />
+                                    }
+                                >
+                                    {receiptSettingsLoading ? (
+                                        <p className="text-sm text-muted-foreground">Loading…</p>
+                                    ) : (
+                                        <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch">
+                                            <div className="flex h-28 w-full shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/40 sm:h-auto sm:w-32">
+                                                {(receiptLogoBlobUrl || receiptSettings.logo_url) ? (
+                                                    <img
+                                                        src={receiptLogoBlobUrl || getFullImageUrl(receiptSettings.logo_url) || receiptSettings.logo_url}
+                                                        alt="Receipt logo"
+                                                        className="max-h-24 max-w-[90%] object-contain"
                                                     />
-                                                    <div className="flex flex-wrap gap-2">
+                                                ) : (
+                                                    <Camera className="h-10 w-10 text-muted-foreground/60" aria-hidden />
+                                                )}
+                                            </div>
+                                            <div className="min-w-0 flex-1 space-y-3">
+                                                <p className="text-xs text-muted-foreground">Max 2MB. PNG.</p>
+                                                <input
+                                                    ref={receiptLogoFileInputRef}
+                                                    type="file"
+                                                    className="hidden"
+                                                    accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                                                    aria-label="Upload receipt logo"
+                                                    onChange={handleReceiptLogoUpload}
+                                                />
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        disabled={receiptLogoUploading}
+                                                        onClick={() => receiptLogoFileInputRef.current?.click()}
+                                                        className="bg-primary-900 text-white hover:bg-primary-950 dark:bg-primary-600 dark:hover:bg-primary-700"
+                                                    >
+                                                        {receiptLogoUploading ? 'Uploading…' : 'Upload'}
+                                                    </Button>
+                                                    {(receiptSettings.logo_url || receiptLogoBlobUrl) && (
                                                         <Button
                                                             type="button"
                                                             variant="secondary"
                                                             size="sm"
                                                             disabled={receiptLogoUploading}
-                                                            onClick={() => receiptLogoFileInputRef.current?.click()}
+                                                            className="border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300"
+                                                            onClick={async () => {
+                                                                setReceiptLogoBlobUrl(null);
+                                                                try {
+                                                                    const next = { ...receiptSettings, logo_url: '' };
+                                                                    const saved = await shopApi.updateReceiptSettings(next);
+                                                                    setReceiptSettings(saved);
+                                                                } catch {
+                                                                    setReceiptSettings({ ...receiptSettings, logo_url: '' });
+                                                                    alert('Could not remove the logo on the server. Click Save Changes to retry.');
+                                                                }
+                                                            }}
                                                         >
-                                                            {receiptLogoUploading ? 'Uploading…' : 'Upload logo'}
+                                                            Del
                                                         </Button>
-                                                        {(receiptSettings.logo_url || receiptLogoBlobUrl) && (
-                                                            <Button
-                                                                type="button"
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                disabled={receiptLogoUploading}
-                                                                onClick={async () => {
-                                                                    setReceiptLogoBlobUrl(null);
-                                                                    try {
-                                                                        const next = { ...receiptSettings, logo_url: '' };
-                                                                        const saved = await shopApi.updateReceiptSettings(next);
-                                                                        setReceiptSettings(saved);
-                                                                    } catch {
-                                                                        setReceiptSettings({ ...receiptSettings, logo_url: '' });
-                                                                        alert('Could not save. Use Save receipt template to clear the logo on the server.');
-                                                                    }
-                                                                }}
-                                                            >
-                                                                Remove logo
-                                                            </Button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <label className="flex items-center gap-2 cursor-pointer sm:col-span-2">
-                                            <input type="checkbox" checked={!!receiptSettings.show_logo} onChange={e => setReceiptSettings({ ...receiptSettings, show_logo: e.target.checked })} className="rounded border-slate-300" />
-                                            <span className="text-sm font-bold text-foreground">Show logo</span>
-                                        </label>
-                                    </div>
-                                )}
-                            </Card>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                <Card className="border-none shadow-sm p-5">
-                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Barcode</h3>
-                                    {receiptSettingsLoading ? (
-                                        <p className="text-muted-foreground text-sm">Loading...</p>
-                                    ) : (
-                                        <div className="space-y-3">
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input type="checkbox" checked={!!receiptSettings.show_barcode} onChange={e => setReceiptSettings({ ...receiptSettings, show_barcode: e.target.checked })} className="rounded border-slate-300" />
-                                                <span className="text-sm font-bold text-foreground">Show barcode</span>
-                                            </label>
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                                <div>
-                                                    <label htmlFor="pos-barcode-type" className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Type</label>
-                                                    <select id="pos-barcode-type" className="w-full h-10 px-2 bg-muted/80 border-2 border-border rounded-xl text-xs font-bold text-foreground" value={receiptSettings.barcode_type || 'CODE128'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_type: e.target.value })}>
-                                                        <option value="CODE128">CODE128</option>
-                                                        <option value="CODE39">CODE39</option>
-                                                        <option value="EAN13">EAN13</option>
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label htmlFor="pos-barcode-size" className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Size</label>
-                                                    <select id="pos-barcode-size" className="w-full h-10 px-2 bg-muted/80 border-2 border-border rounded-xl text-xs font-bold text-foreground" value={receiptSettings.barcode_size || 'medium'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_size: e.target.value })}>
-                                                        <option value="small">Small</option>
-                                                        <option value="medium">Medium</option>
-                                                        <option value="large">Large</option>
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label htmlFor="pos-barcode-position" className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Position</label>
-                                                    <select id="pos-barcode-position" className="w-full h-10 px-2 bg-muted/80 border-2 border-border rounded-xl text-xs font-bold text-foreground" value={receiptSettings.barcode_position || 'footer'} onChange={e => setReceiptSettings({ ...receiptSettings, barcode_position: e.target.value })}>
-                                                        <option value="header">Header</option>
-                                                        <option value="footer">Footer</option>
-                                                    </select>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
                                     )}
-                                </Card>
-                                <Card className="border-none shadow-sm p-5">
-                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Receipt details</h3>
+                                </PosPrefCard>
+
+                                <PosPrefCard
+                                    title="Barcode"
+                                    icon={<Barcode className="h-5 w-5" />}
+                                    className="lg:col-span-2"
+                                    right={
+                                        <PosSwitch
+                                            checked={!!receiptSettings.show_barcode}
+                                            onChange={(v) => setReceiptSettings({ ...receiptSettings, show_barcode: v })}
+                                            disabled={receiptSettingsLoading}
+                                            ariaLabel="Show barcode on receipt"
+                                        />
+                                    }
+                                >
                                     {receiptSettingsLoading ? (
-                                        <p className="text-muted-foreground text-sm">Loading...</p>
+                                        <p className="text-sm text-muted-foreground">Loading…</p>
                                     ) : (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input type="checkbox" checked={!!receiptSettings.show_tax_breakdown} onChange={e => setReceiptSettings({ ...receiptSettings, show_tax_breakdown: e.target.checked })} className="rounded border-slate-300" />
-                                                <span className="text-sm font-medium text-foreground">Tax breakdown</span>
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                            <div>
+                                                <label htmlFor="pos-barcode-type" className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                    Type
+                                                </label>
+                                                <select
+                                                    id="pos-barcode-type"
+                                                    className="h-10 w-full rounded-xl border-2 border-border bg-muted/80 px-3 text-sm font-bold text-foreground"
+                                                    value={receiptSettings.barcode_type || 'CODE128'}
+                                                    onChange={(e) => setReceiptSettings({ ...receiptSettings, barcode_type: e.target.value })}
+                                                >
+                                                    <option value="CODE128">CODE128</option>
+                                                    <option value="CODE39">CODE39</option>
+                                                    <option value="EAN13">EAN13</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label htmlFor="pos-barcode-position" className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                    POS (Position)
+                                                </label>
+                                                <select
+                                                    id="pos-barcode-position"
+                                                    className="h-10 w-full rounded-xl border-2 border-border bg-muted/80 px-3 text-sm font-bold text-foreground"
+                                                    value={receiptSettings.barcode_position || 'footer'}
+                                                    onChange={(e) => setReceiptSettings({ ...receiptSettings, barcode_position: e.target.value })}
+                                                >
+                                                    <option value="header">Header</option>
+                                                    <option value="footer">Footer</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    )}
+                                </PosPrefCard>
+
+                                <PosPrefCard title="Footer" icon={<MessageSquare className="h-5 w-5" />} className="lg:col-span-2">
+                                    {receiptSettingsLoading ? (
+                                        <p className="text-sm text-muted-foreground">Loading…</p>
+                                    ) : (
+                                        <div>
+                                            <label htmlFor="pos-footer-message" className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                Message
                                             </label>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input type="checkbox" checked={!!receiptSettings.show_cashier_name} onChange={e => setReceiptSettings({ ...receiptSettings, show_cashier_name: e.target.checked })} className="rounded border-slate-300" />
-                                                <span className="text-sm font-medium text-foreground">Cashier name</span>
-                                            </label>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input type="checkbox" checked={!!receiptSettings.show_shift_number} onChange={e => setReceiptSettings({ ...receiptSettings, show_shift_number: e.target.checked })} className="rounded border-slate-300" />
-                                                <span className="text-sm font-medium text-foreground">Shift number</span>
-                                            </label>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input type="checkbox" checked={!!receiptSettings.show_mobile_url_qr} onChange={e => setReceiptSettings({ ...receiptSettings, show_mobile_url_qr: e.target.checked })} className="rounded border-slate-300" />
-                                                <span className="text-sm font-medium text-foreground">Mobile order QR</span>
-                                            </label>
+                                            <textarea
+                                                id="pos-footer-message"
+                                                rows={3}
+                                                className="w-full rounded-xl border-2 border-border bg-muted/40 px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary-500"
+                                                placeholder="Thank you for shopping! www.example.com"
+                                                value={receiptSettings.footer_message || ''}
+                                                onChange={(e) => setReceiptSettings({ ...receiptSettings, footer_message: e.target.value })}
+                                            />
+                                        </div>
+                                    )}
+                                </PosPrefCard>
+
+                                <PosPrefCard title="Field visibility" icon={<ListChecks className="h-5 w-5" />} className="lg:col-span-2">
+                                    {receiptSettingsLoading ? (
+                                        <p className="text-sm text-muted-foreground">Loading…</p>
+                                    ) : (
+                                        <div className="flex flex-wrap gap-3">
+                                            {(
+                                                [
+                                                    { key: 'show_tax_breakdown', label: 'Tax breakdown' },
+                                                    { key: 'show_shift_number', label: 'Shift no.' },
+                                                    { key: 'show_cashier_name', label: 'Cashier name' },
+                                                    { key: 'show_mobile_url_qr', label: 'Mobile QR' },
+                                                ] as const
+                                            ).map(({ key, label }) => (
+                                                <div
+                                                    key={key}
+                                                    className="flex min-w-[140px] flex-1 items-center justify-between gap-3 rounded-full border border-border bg-muted/50 px-4 py-2.5"
+                                                >
+                                                    <span className="text-xs font-semibold text-foreground">{label}</span>
+                                                    <PosSwitch
+                                                        checked={!!receiptSettings[key]}
+                                                        onChange={(v) => setReceiptSettings({ ...receiptSettings, [key]: v })}
+                                                        ariaLabel={`Show ${label} on receipt`}
+                                                    />
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
                                     {!receiptSettingsLoading && (
-                                        <p className="text-[11px] text-muted-foreground mt-2">QR shows &quot;Please scan to order from home&quot; when mobile ordering is enabled.</p>
+                                        <p className="mt-2 text-[11px] text-muted-foreground">
+                                            Mobile QR shows your order link when mobile ordering is enabled.
+                                        </p>
                                     )}
-                                </Card>
+                                </PosPrefCard>
                             </div>
-                            <Card className="border-none shadow-sm p-5">
-                                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Footer</h3>
-                                {receiptSettingsLoading ? (
-                                    <p className="text-muted-foreground text-sm">Loading...</p>
-                                ) : (
-                                    <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-                                        <div className="flex-1 min-w-0">
-                                            <Input label="Footer message" placeholder="Thank you for your business!" compact value={receiptSettings.footer_message || ''} onChange={e => setReceiptSettings({ ...receiptSettings, footer_message: e.target.value })} />
-                                        </div>
-                                        <Button type="button" className="shrink-0" onClick={handleSaveReceiptSettings}>Save receipt template</Button>
-                                    </div>
-                                )}
-                            </Card>
                         </div>
-                        <div className="w-full xl:w-[400px] xl:max-w-[400px] flex-shrink-0">
+
+                        <div className="w-full shrink-0 xl:w-[400px] xl:max-w-[400px]">
                             <div className="xl:sticky xl:top-6">
-                                <ReceiptPreviewPanel receiptSettings={receiptSettings} logoUrlOverride={receiptLogoBlobUrl} />
+                                <ReceiptPreviewPanel
+                                    receiptSettings={receiptSettings}
+                                    logoUrlOverride={receiptLogoBlobUrl}
+                                    onReceiptPatch={patchReceiptSettings}
+                                    onTestPrint={handleTestPrintSlip}
+                                    testPrinting={testPrintBusy}
+                                />
                             </div>
                         </div>
                     </div>
                 )}
+
+
             </div>
 
             {/* User Modal */}

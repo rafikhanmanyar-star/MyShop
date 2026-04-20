@@ -76,7 +76,7 @@ export interface MobileOrderingSettings {
     order_acceptance_start: string;
     order_acceptance_end: string;
     estimated_delivery_minutes: number;
-    rider_assignment_mode: 'auto' | 'manual';
+    rider_assignment_mode: 'auto' | 'manual' | 'third_party';
 }
 
 /** POS Mobile Orders — rider roster + aggregate availability (from GET /shop/mobile-orders/riders-overview). */
