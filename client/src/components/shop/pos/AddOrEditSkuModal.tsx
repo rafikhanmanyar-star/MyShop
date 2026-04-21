@@ -645,7 +645,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             hideHeader={showSkuForm}
             hideClose={showSkuForm}
             disableScroll={showSkuForm}
-            className={showSkuForm ? 'max-h-[min(92vh,620px)]' : undefined}
+            className={showSkuForm ? 'max-h-[min(92vh,56rem)]' : undefined}
         >
             <div className={showSkuForm ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'space-y-4'}>
                 {mode === 'choice' && (
@@ -778,8 +778,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
 
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white px-3 py-2 sm:px-4">
                             {editingItem && (
-                                <p className="mb-1.5 shrink-0 rounded border border-slate-100 bg-slate-50/90 px-2 py-1 text-[10px] leading-tight text-slate-600">
-                                    Barcodes must be unique. Use <strong className="text-slate-800">Stock Master</strong> for sales-off SKUs.
+                                <p className="mb-1.5 shrink-0 rounded-lg border border-sky-200/80 bg-sky-50/95 px-2.5 py-1.5 text-[10px] leading-snug text-sky-950">
+                                    Barcodes must be unique. Use <strong className="font-semibold text-sky-950">Stock Master</strong> for sales-off SKUs.
                                 </p>
                             )}
                             {formData.salesDeactivated && (
@@ -798,11 +798,12 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 </div>
                             )}
 
-                            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:items-stretch lg:gap-4">
-                                {/* Product preview (left) — fixed height to match reference density */}
-                                <div className="flex w-full shrink-0 flex-col lg:w-[168px] lg:max-w-[168px]">
-                                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">Product preview</p>
-                                    <div className="mt-1.5 h-20 w-full overflow-hidden rounded-xl bg-sky-100/90 ring-1 ring-sky-200/80 sm:h-[120px]">
+                            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-smooth overscroll-contain [-webkit-overflow-scrolling:touch] pr-0.5">
+                                <div className="flex flex-col gap-3 pb-3 lg:flex-row lg:items-start lg:gap-5">
+                                {/* Product preview (left) — sticky on wide screens while form scrolls */}
+                                <div className="flex w-full shrink-0 flex-col lg:sticky lg:top-0 lg:w-[180px] lg:max-w-[180px]">
+                                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Product preview</p>
+                                    <div className="mt-1.5 h-24 w-full overflow-hidden rounded-xl bg-gradient-to-b from-sky-50 to-sky-100/90 ring-1 ring-sky-200/70 sm:h-[128px]">
                                         {imagePreview ? (
                                             imagePreview.startsWith('blob:') ? (
                                                 <img src={imagePreview} alt="" className="h-full w-full object-contain p-1" />
@@ -836,7 +837,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 </div>
 
                                 {/* Fields (right) */}
-                                <div className="min-h-0 min-w-0 flex-1 space-y-3 overflow-hidden">
+                                <div className="min-w-0 flex-1 space-y-3">
                                     <section>
                                         <div className="mb-1.5 flex items-center gap-1.5">
                                             <span className="h-1 w-1 shrink-0 rounded-full bg-violet-600" />
@@ -1361,9 +1362,10 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                         )}
                                     </div>
                                 </div>
+                                </div>
                             </div>
 
-                            <div className="mt-1.5 flex shrink-0 flex-col gap-2 border-t border-slate-200 bg-slate-50/95 px-1 py-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="mt-auto flex shrink-0 flex-col gap-2 border-t border-slate-200/90 bg-slate-50/98 px-1 py-2 shadow-[0_-4px_12px_-4px_rgba(15,23,42,0.08)] sm:flex-row sm:items-center sm:justify-between">
                                 <div className="order-2 sm:order-1">
                                     {editingItem && !editingItem.id.startsWith('pending-') && (
                                         <button

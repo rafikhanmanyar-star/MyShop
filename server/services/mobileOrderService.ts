@@ -408,32 +408,43 @@ export class MobileOrderService {
     }
 
     /**
-     * Same-category recommendations: in-stock only, exclude current SKU, prefer high sellers.
-     * When the product has no category, falls back to tenant-wide in-stock best sellers.
+     * Recommendations: same category (and same subcategory when set), in-stock only, exclude current product.
+     * Pulls a small pool biased toward popular items, then shuffles so suggestions vary on each request.
+     * If too few matches in the subcategory, fills from the rest of the category.
      */
     async getProductRecommendationsForMobile(tenantId: string, productId: string, limit = 3) {
         const stockSubquery = mobileProductSellableStockSql();
         const meta = await this.db.query(
-            `SELECT category_id FROM shop_products
+            `SELECT category_id, subcategory_id FROM shop_products
        WHERE tenant_id = $1 AND id = $2 AND is_active = TRUE AND mobile_visible = TRUE AND COALESCE(sales_deactivated, FALSE) = FALSE`,
             [tenantId, productId]
         );
         if (meta.length === 0) return [];
 
         const categoryId = meta[0]?.category_id ?? null;
-        const params: any[] = [tenantId, productId];
-        let pIdx = 3;
-        let catFilter = '';
-        if (categoryId) {
-            catFilter = ` AND p.category_id = $${pIdx}`;
-            params.push(categoryId);
-            pIdx++;
-        }
+        const subcategoryId = meta[0]?.subcategory_id ?? null;
         const safeLimit = Math.min(Math.max(limit, 1), 10);
-        params.push(safeLimit);
-        const limitParam = pIdx;
+        const poolSize = Math.min(30, Math.max(safeLimit * 8, 12));
 
-        const query = `
+        const fetchPool = async (subOnly: boolean): Promise<any[]> => {
+            const params: any[] = [tenantId, productId];
+            let pIdx = 3;
+            let catFilter = '';
+            if (categoryId) {
+                catFilter = ` AND p.category_id = $${pIdx}`;
+                params.push(categoryId);
+                pIdx++;
+            }
+            let subFilter = '';
+            if (subOnly && subcategoryId) {
+                subFilter = ` AND p.subcategory_id = $${pIdx}`;
+                params.push(subcategoryId);
+                pIdx++;
+            }
+            params.push(poolSize);
+            const limitParam = pIdx;
+
+            const query = `
       SELECT p.id, p.name, p.sku, p.category_id, p.unit, p.retail_price, p.tax_rate, p.image_url,
              p.mobile_price, p.mobile_description, p.is_on_sale, p.is_pre_order, p.discount_percentage,
              p.rating_avg, p.rating_count,
@@ -445,12 +456,33 @@ export class MobileOrderService {
         AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
         AND p.id != $2
         ${catFilter}
+        ${subFilter}
         AND (${stockSubquery} > 0)
-      ORDER BY COALESCE(p.total_sales, 0) DESC, COALESCE(p.popularity_score, 0) DESC, p.id DESC
+      ORDER BY COALESCE(p.total_sales, 0) DESC, COALESCE(p.popularity_score, 0) DESC, RANDOM()
       LIMIT $${limitParam}
     `;
 
-        const rows = await this.db.query(query, params);
+            return this.db.query(query, params);
+        };
+
+        let rows = await fetchPool(true);
+        if (rows.length < safeLimit && subcategoryId) {
+            const wider = await fetchPool(false);
+            const seen = new Set(rows.map((r: any) => r.id));
+            for (const r of wider) {
+                if (!seen.has(r.id)) {
+                    rows.push(r);
+                    seen.add(r.id);
+                }
+            }
+        }
+
+        for (let i = rows.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [rows[i], rows[j]] = [rows[j], rows[i]];
+        }
+
+        rows = rows.slice(0, safeLimit);
         const LOW_STOCK_THRESHOLD = 5;
         return rows.map((row: any) => {
             const stock = parseFloat(row.available_stock) || 0;

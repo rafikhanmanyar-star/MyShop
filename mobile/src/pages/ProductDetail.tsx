@@ -5,17 +5,30 @@ import { publicApi, getProductImagePath } from '../api';
 import CachedImage from '../components/CachedImage';
 import { useOnline } from '../hooks/useOnline';
 import { getProductById } from '../services/offlineCache';
-import {
-    getSessionProductDetail,
-    setSessionProductDetail,
-    getSessionRecommendations,
-    setSessionRecommendations,
-} from '../services/productSessionCache';
+import { getSessionProductDetail, setSessionProductDetail } from '../services/productSessionCache';
 import ProductListCard, { type ProductListProduct } from '../components/ProductListCard';
 
 function detailText(product: any): string | null {
-    const d = product?.description ?? product?.mobile_description ?? '';
-    const s = typeof d === 'string' ? d.trim() : '';
+    const raw = product?.description ?? product?.mobile_description ?? '';
+    if (typeof raw !== 'string') return null;
+    let s = raw.trim();
+    if (!s) return null;
+    if (s.includes('<')) {
+        s = s
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>\s*/gi, '\n\n')
+            .replace(/<p[^>]*>/gi, '')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/[ \t]+\n/g, '\n')
+            .replace(/\n[ \t]+/g, '\n')
+            .replace(/[ \t]{2,}/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
     return s || null;
 }
 
@@ -105,14 +118,6 @@ export default function ProductDetail() {
         if (!shopSlug || !id || !product) return;
         let cancelled = false;
 
-        const cached = getSessionRecommendations(shopSlug, id) as ProductListProduct[] | undefined;
-        if (cached !== undefined) {
-            setRecs(cached);
-            return () => {
-                cancelled = true;
-            };
-        }
-
         if (!online) {
             setRecs([]);
             return () => {
@@ -125,10 +130,7 @@ export default function ProductDetail() {
             .getProductRecommendations(shopSlug, id)
             .then((data: { items?: ProductListProduct[] }) => {
                 const items = Array.isArray(data?.items) ? data.items : [];
-                if (!cancelled) {
-                    setSessionRecommendations(shopSlug, id, items);
-                    setRecs(items);
-                }
+                if (!cancelled) setRecs(items);
             })
             .catch(() => {
                 if (!cancelled) setRecs([]);
@@ -236,6 +238,7 @@ export default function ProductDetail() {
     };
 
     const desc = product ? detailText(product) : null;
+    const descShown = desc ?? 'No description available for this product.';
     const sizeVal = product?.size != null && String(product.size).trim() !== '' ? String(product.size).trim() : null;
     const weightUnitVal =
         product?.weight_unit != null && String(product.weight_unit).trim() !== ''
@@ -254,15 +257,6 @@ export default function ProductDetail() {
     const unitVal = product?.unit != null && String(product.unit).trim() !== '' ? String(product.unit).trim() : null;
     const brandLine =
         product?.brand != null && String(product.brand).trim() !== '' ? String(product.brand).trim() : null;
-    const skuCodeVal =
-        product?.sku_code != null && String(product.sku_code).trim() !== ''
-            ? String(product.sku_code).trim()
-            : product?.sku
-              ? String(product.sku).trim()
-              : null;
-    const barcodeVal =
-        product?.barcode != null && String(product.barcode).trim() !== '' ? String(product.barcode).trim() : null;
-
     const specRows = useMemo(() => {
         if (!product) return [];
         const rows: { label: string; value: string }[] = [];
@@ -278,14 +272,6 @@ export default function ProductDetail() {
 
         const b =
             product.brand != null && String(product.brand).trim() !== '' ? String(product.brand).trim() : null;
-        const skuC =
-            product.sku_code != null && String(product.sku_code).trim() !== ''
-                ? String(product.sku_code).trim()
-                : product.sku
-                  ? String(product.sku).trim()
-                  : null;
-        const bc =
-            product.barcode != null && String(product.barcode).trim() !== '' ? String(product.barcode).trim() : null;
         const u = product.unit != null && String(product.unit).trim() !== '' ? String(product.unit).trim() : null;
         const sz = product.size != null && String(product.size).trim() !== '' ? String(product.size).trim() : null;
         const wu =
@@ -303,8 +289,6 @@ export default function ProductDetail() {
         const wl = wn != null ? (wu ? `${wn} ${wu}` : String(wn)) : null;
 
         add('Brand', b);
-        add('SKU code', skuC);
-        add('Barcode', bc);
         add('Unit', u);
         add('Size', sz);
         add('Weight', wl);
@@ -318,9 +302,20 @@ export default function ProductDetail() {
                 : null;
 
         const skipAttrKeys = new Set(
-            ['brand', 'sku', 'barcode', 'unit', 'size', 'weight', 'color', 'material', 'origin', 'origin country', 'country of origin'].map(
-                (s) => s.toLowerCase()
-            )
+            [
+                'brand',
+                'sku',
+                'sku code',
+                'barcode',
+                'unit',
+                'size',
+                'weight',
+                'color',
+                'material',
+                'origin',
+                'origin country',
+                'country of origin',
+            ].map((s) => s.toLowerCase())
         );
         if (rawAttrs) {
             for (const [k, v] of Object.entries(rawAttrs)) {
@@ -332,11 +327,6 @@ export default function ProductDetail() {
         }
         return rows;
     }, [product]);
-
-    const specsGridRows = useMemo(
-        () => specRows.filter((r) => !['sku code', 'barcode'].includes(r.label.toLowerCase())),
-        [specRows]
-    );
 
     if (loading) {
         return (
@@ -536,43 +526,23 @@ export default function ProductDetail() {
                     </div>
                 </section>
 
-                {desc && (
-                    <section style={{ marginBottom: 22 }} aria-label="Description">
-                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Description</h2>
-                        <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>{desc}</p>
-                    </section>
-                )}
+                <section style={{ marginBottom: 22 }} aria-label="Description">
+                    <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Description</h2>
+                    <p
+                        style={{
+                            fontSize: 14,
+                            lineHeight: 1.6,
+                            color: desc ? 'var(--text-secondary)' : 'var(--text-muted)',
+                            margin: 0,
+                            whiteSpace: 'pre-wrap',
+                            fontStyle: desc ? 'normal' : 'italic',
+                        }}
+                    >
+                        {descShown}
+                    </p>
+                </section>
 
-                {(skuCodeVal || barcodeVal) && (
-                    <section style={{ marginBottom: 22 }} aria-label="Product identifiers">
-                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Product details</h2>
-                        <dl
-                            style={{
-                                margin: 0,
-                                display: 'grid',
-                                gridTemplateColumns: 'auto 1fr',
-                                gap: '8px 16px',
-                                fontSize: 14,
-                                color: 'var(--text-secondary)',
-                            }}
-                        >
-                            {skuCodeVal && (
-                                <>
-                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>SKU code</dt>
-                                    <dd style={{ margin: 0 }}>{skuCodeVal}</dd>
-                                </>
-                            )}
-                            {barcodeVal && (
-                                <>
-                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Barcode</dt>
-                                    <dd style={{ margin: 0, wordBreak: 'break-all' }}>{barcodeVal}</dd>
-                                </>
-                            )}
-                        </dl>
-                    </section>
-                )}
-
-                {specsVisible && specsGridRows.length > 0 && (
+                {specsVisible && specRows.length > 0 && (
                     <section style={{ marginBottom: 22 }} aria-label="Specifications">
                         <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Specifications</h2>
                         <dl
@@ -585,7 +555,7 @@ export default function ProductDetail() {
                                 color: 'var(--text-secondary)',
                             }}
                         >
-                            {specsGridRows.map((row, i) => (
+                            {specRows.map((row, i) => (
                                 <div key={`spec-${i}-${row.label}`} style={{ display: 'contents' }}>
                                     <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{row.label}</dt>
                                     <dd style={{ margin: 0, wordBreak: 'break-word' }}>{row.value}</dd>
@@ -654,8 +624,8 @@ export default function ProductDetail() {
                 )}
 
                 {!recsLoading && recs.length > 0 && shopSlug && (
-                    <section style={{ marginBottom: 8 }} aria-label="Recommendations">
-                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Recommendations</h2>
+                    <section style={{ marginBottom: 8 }} aria-label="Similar products">
+                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Similar products</h2>
                         <div className="home-product-row">
                             {recs.map((p) => (
                                 <div key={p.id} className="home-product-row__cell">
