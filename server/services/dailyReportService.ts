@@ -4,11 +4,17 @@ export interface DailyReportSummary {
   date: string;
   branchId: string | null;
   posSales: number;
-  /** Sum of POS sales returns (shop_sales_returns) for the day */
+  /** Sum of return documents tied to POS sales (original_sale_id set) */
   posReturns: number;
   /** posSales - posReturns */
   netPosSales: number;
   mobileSales: number;
+  /** Sum of return documents tied to mobile orders (original_mobile_order_id set) */
+  mobileReturns: number;
+  /** mobileSales - mobileReturns */
+  netMobileSales: number;
+  /** netPosSales + netMobileSales */
+  netTotalSales: number;
   inventoryOutQty: number;
   inventoryInQty: number;
   totalExpenses: number;
@@ -46,6 +52,16 @@ export class DailyReportService {
       `SELECT COALESCE(SUM(total_return_amount::numeric), 0)::text AS s
        FROM shop_sales_returns
        WHERE tenant_id = $1 AND return_date >= $2::timestamptz AND return_date < $3::timestamptz
+       AND original_sale_id IS NOT NULL
+       ${branchId ? 'AND branch_id = $4' : ''}`,
+      branchId ? [tenantId, start, end, branchId] : [tenantId, start, end]
+    );
+
+    const mobileReturns = await db.query<{ s: string }>(
+      `SELECT COALESCE(SUM(total_return_amount::numeric), 0)::text AS s
+       FROM shop_sales_returns
+       WHERE tenant_id = $1 AND return_date >= $2::timestamptz AND return_date < $3::timestamptz
+       AND original_mobile_order_id IS NOT NULL
        ${branchId ? 'AND branch_id = $4' : ''}`,
       branchId ? [tenantId, start, end, branchId] : [tenantId, start, end]
     );
@@ -103,8 +119,11 @@ export class DailyReportService {
 
     const posSales = parseFloat(pos[0]?.s || '0') || 0;
     const posReturnsAmt = parseFloat(posReturns[0]?.s || '0') || 0;
+    const mobileReturnsAmt = parseFloat(mobileReturns[0]?.s || '0') || 0;
     const netPosSales = Math.max(0, posSales - posReturnsAmt);
     const mobileSales = parseFloat(mobile[0]?.s || '0') || 0;
+    const netMobileSales = Math.max(0, mobileSales - mobileReturnsAmt);
+    const netTotalSales = netPosSales + netMobileSales;
     const inventoryOutQty = parseFloat(outQ[0]?.s || '0') || 0;
     const inventoryInQty = parseFloat(inQ[0]?.s || '0') || 0;
     const totalExpenses = parseFloat(exp[0]?.s || '0') || 0;
@@ -187,6 +206,9 @@ export class DailyReportService {
       posReturns: posReturnsAmt,
       netPosSales,
       mobileSales,
+      mobileReturns: mobileReturnsAmt,
+      netMobileSales,
+      netTotalSales,
       inventoryOutQty,
       inventoryInQty,
       totalExpenses,

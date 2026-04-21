@@ -47,8 +47,58 @@ const defaultForm = {
     reorderPoint: 10,
     unit: 'pcs',
     imageUrl: '',
-    salesDeactivated: false
+    salesDeactivated: false,
+    brand: '',
+    weight: '',
+    weightUnit: 'g',
+    size: '',
+    color: '',
+    material: '',
+    originCountry: '',
+    customAttrRows: [] as { key: string; value: string }[]
 };
+
+const WEIGHT_UNIT_PRESETS = [
+    { value: 'g', label: 'g' },
+    { value: 'kg', label: 'kg' },
+    { value: 'mL', label: 'mL' },
+    { value: 'L', label: 'L' },
+    { value: 'oz', label: 'oz' },
+    { value: 'lb', label: 'lb' }
+];
+
+function attrsToRows(a: Record<string, string | number | boolean> | null | undefined): { key: string; value: string }[] {
+    if (!a) return [];
+    return Object.entries(a).map(([key, value]) => ({ key, value: String(value) }));
+}
+
+function rowsToAttrs(rows: { key: string; value: string }[]): Record<string, string | number | boolean> | null {
+    const out: Record<string, string | number | boolean> = {};
+    for (const { key, value } of rows) {
+        const k = key.trim();
+        if (!k) continue;
+        const v = value.trim();
+        if (!v) continue;
+        if (/^-?\d+$/.test(v)) {
+            out[k] = parseInt(v, 10);
+        } else if (/^-?\d+\.\d+$/.test(v)) {
+            out[k] = parseFloat(v);
+        } else if (v === 'true' || v === 'false') {
+            out[k] = v === 'true';
+        } else {
+            out[k] = v;
+        }
+    }
+    return Object.keys(out).length ? out : null;
+}
+
+function parseWeightForSave(weightStr: string): number | null {
+    const t = weightStr.trim();
+    if (!t) return null;
+    const n = Number(t);
+    if (!Number.isFinite(n)) return null;
+    return n;
+}
 
 function deriveCategoryFormFromItem(
     item: InventoryItem,
@@ -137,7 +187,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             reorderPoint: 10,
             unit: 'pcs',
             imageUrl: '',
-            subcategoryId: ''
+            subcategoryId: '',
+            customAttrRows: []
         });
         setSelectedImage(null);
         setImagePreview(null);
@@ -160,7 +211,18 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 reorderPoint: editingItem.reorderPoint ?? 10,
                 unit: editingItem.unit || 'pcs',
                 imageUrl: editingItem.imageUrl || '',
-                salesDeactivated: editingItem.salesDeactivated === true
+                salesDeactivated: editingItem.salesDeactivated === true,
+                brand: editingItem.brand || '',
+                weight:
+                    editingItem.weight != null && Number.isFinite(editingItem.weight)
+                        ? String(editingItem.weight)
+                        : '',
+                weightUnit: editingItem.weightUnit || 'g',
+                size: editingItem.size || '',
+                color: editingItem.color || '',
+                material: editingItem.material || '',
+                originCountry: editingItem.originCountry || '',
+                customAttrRows: attrsToRows(editingItem.attributes ?? undefined)
             });
             setImagePreview(editingItem.imageUrl || null);
         }
@@ -236,6 +298,24 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 i.barcode.trim().toLowerCase() === barcodeNorm
         );
     }, [items, formData.barcode, editingItem?.id]);
+
+    /** Same SKU code as another product (create only; SKU is immutable on edit). */
+    const skuConflictItems = useMemo(() => {
+        const skuNorm = formData.sku.trim().toLowerCase();
+        const currentId = editingItem?.id ?? '';
+        if (!skuNorm) return [];
+        return items.filter(
+            (i) => i.id !== currentId && i.sku && i.sku.trim().toLowerCase() === skuNorm
+        );
+    }, [items, formData.sku, editingItem?.id]);
+
+    const hasSkuConflict = !editingItem && skuConflictItems.length > 0;
+
+    const weightInvalid = useMemo(() => {
+        const t = formData.weight.trim();
+        if (!t) return false;
+        return !Number.isFinite(Number(t));
+    }, [formData.weight]);
 
     /** Products that already use this name (excluding the one we're editing). */
     const nameConflictItems = useMemo(() => {
@@ -369,7 +449,18 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 reorderPoint: editingItem.reorderPoint ?? 10,
                 unit: editingItem.unit || 'pcs',
                 imageUrl: editingItem.imageUrl || '',
-                salesDeactivated: editingItem.salesDeactivated === true
+                salesDeactivated: editingItem.salesDeactivated === true,
+                brand: editingItem.brand || '',
+                weight:
+                    editingItem.weight != null && Number.isFinite(editingItem.weight)
+                        ? String(editingItem.weight)
+                        : '',
+                weightUnit: editingItem.weightUnit || 'g',
+                size: editingItem.size || '',
+                color: editingItem.color || '',
+                material: editingItem.material || '',
+                originCountry: editingItem.originCountry || '',
+                customAttrRows: attrsToRows(editingItem.attributes ?? undefined)
             });
             setSelectedImage(null);
             setImagePreview(editingItem.imageUrl || null);
@@ -381,7 +472,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 barcode: /^\d+$/.test(skuOrBarcode) ? skuOrBarcode : '',
                 retailPriceMode: 'fixed',
                 retailMarkupPercent: 0,
-                subcategoryId: ''
+                subcategoryId: '',
+                customAttrRows: []
             });
             setSelectedImage(null);
             setImagePreview(null);
@@ -389,7 +481,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     }, [editingItem, initialSkuOrBarcode]);
 
     const handleCreateNew = useCallback(async () => {
-        if (hasBlockingConflict) return;
+        if (hasBlockingConflict || hasSkuConflict || weightInvalid) return;
         setSaving(true);
         try {
             let imageUrl = formData.imageUrl;
@@ -399,6 +491,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 imageUrl = uploadRes.imageUrl || '';
                 imageAlreadyUploaded = true;
             }
+            const wSave = parseWeightForSave(formData.weight);
+            const attrSave = rowsToAttrs(formData.customAttrRows);
             const newItem = await addItem(
                 {
                     id: '',
@@ -418,7 +512,15 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                     reorderPoint: Number(formData.reorderPoint),
                     unit: formData.unit,
                     imageUrl,
-                    warehouseStock: {}
+                    warehouseStock: {},
+                    brand: formData.brand.trim() || undefined,
+                    weight: wSave,
+                    weightUnit: wSave != null ? formData.weightUnit.trim() || null : null,
+                    size: formData.size.trim() || undefined,
+                    color: formData.color.trim() || undefined,
+                    material: formData.material.trim() || undefined,
+                    originCountry: formData.originCountry.trim() || undefined,
+                    attributes: attrSave ?? undefined
                 },
                 imageAlreadyUploaded ? undefined : selectedImage || undefined
             );
@@ -432,10 +534,10 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         } finally {
             setSaving(false);
         }
-    }, [formData, selectedImage, addItem, handleClose, onItemReady, hasBlockingConflict]);
+    }, [formData, selectedImage, addItem, handleClose, onItemReady, hasBlockingConflict, hasSkuConflict, weightInvalid]);
 
     const handleUpdateExisting = useCallback(async () => {
-        if (!editingItem || hasBlockingConflict) return;
+        if (!editingItem || hasBlockingConflict || weightInvalid) return;
         setSaving(true);
         try {
             let imageUrl = formData.imageUrl;
@@ -443,6 +545,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 const uploadRes = await shopApi.uploadImage(selectedImage);
                 imageUrl = uploadRes.imageUrl || '';
             }
+            const wSave = parseWeightForSave(formData.weight);
+            const attrSave = rowsToAttrs(formData.customAttrRows);
             await updateItem(editingItem.id, {
                 sku: formData.sku,
                 barcode: formData.barcode || undefined,
@@ -455,11 +559,41 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 reorderPoint: Number(formData.reorderPoint),
                 unit: formData.unit,
                 imageUrl,
-                salesDeactivated: formData.salesDeactivated
+                salesDeactivated: formData.salesDeactivated,
+                brand: formData.brand.trim() || undefined,
+                weight: wSave,
+                weightUnit: wSave != null ? formData.weightUnit.trim() || null : null,
+                size: formData.size.trim() || undefined,
+                color: formData.color.trim() || undefined,
+                material: formData.material.trim() || undefined,
+                originCountry: formData.originCountry.trim() || undefined,
+                attributes: attrSave ?? {}
             });
             handleClose();
-            const updated = { ...editingItem, ...formData, barcode: formData.barcode || undefined };
-            onItemReady?.(updated as InventoryItem, 'updated');
+            const updated: InventoryItem = {
+                ...editingItem,
+                sku: formData.sku,
+                barcode: formData.barcode || undefined,
+                name: formData.name,
+                description: formData.description || undefined,
+                category: formData.category,
+                subcategoryId: formData.subcategoryId || undefined,
+                retailPrice: Number(formData.retailPrice),
+                costPrice: Number(formData.costPrice),
+                reorderPoint: Number(formData.reorderPoint),
+                unit: formData.unit,
+                imageUrl,
+                salesDeactivated: formData.salesDeactivated,
+                brand: formData.brand.trim() || undefined,
+                weight: wSave,
+                weightUnit: wSave != null ? formData.weightUnit.trim() || null : null,
+                size: formData.size.trim() || undefined,
+                color: formData.color.trim() || undefined,
+                material: formData.material.trim() || undefined,
+                originCountry: formData.originCountry.trim() || undefined,
+                attributes: attrSave ?? undefined
+            };
+            onItemReady?.(updated, 'updated');
         } catch (e) {
             console.error(e);
             if (isApiConnectivityFailure(e)) {
@@ -468,7 +602,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         } finally {
             setSaving(false);
         }
-    }, [editingItem, formData, selectedImage, updateItem, handleClose, onItemReady, hasBlockingConflict]);
+    }, [editingItem, formData, selectedImage, updateItem, handleClose, onItemReady, hasBlockingConflict, weightInvalid]);
 
     const handleDeleteSku = useCallback(async () => {
         if (!editingItem || editingItem.id.startsWith('pending-')) return;
@@ -714,7 +848,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                             <div className="space-y-1.5">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-code-input">
-                                                        SKU
+                                                        SKU code
                                                     </label>
                                                     {!editingItem && (
                                                         <span className="text-[10px] font-medium text-violet-600">Auto if empty</span>
@@ -759,6 +893,24 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                             ))}
                                                         </ul>
                                                     </div>
+                                                )}
+                                                {!editingItem && skuConflictItems.length > 0 && (
+                                                    <div className="rounded-md border border-rose-200 bg-rose-50 p-1.5 text-[10px] text-rose-900">
+                                                        <div className="mb-0.5 flex items-center gap-1 font-semibold">
+                                                            {React.cloneElement(ICONS.alertTriangle as React.ReactElement<any>, { size: 10 })}
+                                                            SKU code already in use
+                                                        </div>
+                                                        <ul className="max-h-12 space-y-0.5 overflow-hidden">
+                                                            {skuConflictItems.map((item) => (
+                                                                <li key={item.id} className="truncate">
+                                                                    {item.name} · {item.sku}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                                {weightInvalid && (
+                                                    <p className="text-[10px] font-medium text-rose-600">Weight must be a valid number.</p>
                                                 )}
                                             </div>
                                         </div>
@@ -911,6 +1063,149 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                 </div>
                                             </div>
                                         </section>
+
+                                        <details className="rounded-lg border border-slate-100 bg-slate-50/60 px-2 py-1.5">
+                                            <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+                                                Advanced details
+                                            </summary>
+                                            <div className="mt-2 space-y-2">
+                                                <Input
+                                                    label="Brand"
+                                                    compact
+                                                    placeholder="e.g. Nestlé"
+                                                    value={formData.brand}
+                                                    onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                                                    className="rounded-md border-slate-200 bg-white"
+                                                />
+                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-weight">
+                                                            Weight
+                                                        </label>
+                                                        <Input
+                                                            id="pos-sku-weight"
+                                                            compact
+                                                            type="text"
+                                                            inputMode="decimal"
+                                                            placeholder="e.g. 500"
+                                                            value={formData.weight}
+                                                            onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                                                            className="rounded-md border-slate-200 bg-white"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-weight-unit">
+                                                            Weight unit
+                                                        </label>
+                                                        <select
+                                                            id="pos-sku-weight-unit"
+                                                            className="block w-full rounded-md border border-slate-200 bg-white py-1.5 px-2 text-xs text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500/25"
+                                                            value={formData.weightUnit}
+                                                            onChange={(e) => setFormData({ ...formData, weightUnit: e.target.value })}
+                                                        >
+                                                            {WEIGHT_UNIT_PRESETS.map((o) => (
+                                                                <option key={o.value} value={o.value}>
+                                                                    {o.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <Input
+                                                    label="Size"
+                                                    compact
+                                                    placeholder="e.g. 500ml, Large"
+                                                    value={formData.size}
+                                                    onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                                                    className="rounded-md border-slate-200 bg-white"
+                                                />
+                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                    <Input
+                                                        label="Color (optional)"
+                                                        compact
+                                                        value={formData.color}
+                                                        onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                                                        className="rounded-md border-slate-200 bg-white"
+                                                    />
+                                                    <Input
+                                                        label="Material (optional)"
+                                                        compact
+                                                        value={formData.material}
+                                                        onChange={(e) => setFormData({ ...formData, material: e.target.value })}
+                                                        className="rounded-md border-slate-200 bg-white"
+                                                    />
+                                                </div>
+                                                <Input
+                                                    label="Country of origin"
+                                                    compact
+                                                    placeholder="e.g. Pakistan"
+                                                    value={formData.originCountry}
+                                                    onChange={(e) => setFormData({ ...formData, originCountry: e.target.value })}
+                                                    className="rounded-md border-slate-200 bg-white"
+                                                />
+                                            </div>
+                                        </details>
+
+                                        <details className="rounded-lg border border-slate-100 bg-slate-50/60 px-2 py-1.5">
+                                            <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+                                                Custom attributes
+                                            </summary>
+                                            <div className="mt-2 space-y-2">
+                                                <p className="text-[9px] text-slate-500">Optional key-value fields (e.g. Flavor → Orange).</p>
+                                                {formData.customAttrRows.map((row, idx) => (
+                                                    <div key={idx} className="flex flex-wrap items-end gap-2">
+                                                        <div className="min-w-[100px] flex-1">
+                                                            <label className="text-[9px] font-semibold uppercase text-slate-500">Key</label>
+                                                            <input
+                                                                value={row.key}
+                                                                onChange={(e) => {
+                                                                    const next = [...formData.customAttrRows];
+                                                                    next[idx] = { ...row, key: e.target.value };
+                                                                    setFormData({ ...formData, customAttrRows: next });
+                                                                }}
+                                                                className="mt-0.5 block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                                                                placeholder="Flavor"
+                                                            />
+                                                        </div>
+                                                        <div className="min-w-[100px] flex-1">
+                                                            <label className="text-[9px] font-semibold uppercase text-slate-500">Value</label>
+                                                            <input
+                                                                value={row.value}
+                                                                onChange={(e) => {
+                                                                    const next = [...formData.customAttrRows];
+                                                                    next[idx] = { ...row, value: e.target.value };
+                                                                    setFormData({ ...formData, customAttrRows: next });
+                                                                }}
+                                                                className="mt-0.5 block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                                                                placeholder="Orange"
+                                                            />
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            className="mb-0.5 text-[10px] font-semibold text-rose-600 hover:text-rose-700"
+                                                            onClick={() => {
+                                                                const next = formData.customAttrRows.filter((_, i) => i !== idx);
+                                                                setFormData({ ...formData, customAttrRows: next });
+                                                            }}
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                <button
+                                                    type="button"
+                                                    className="text-[10px] font-bold uppercase tracking-wide text-violet-700 hover:text-violet-900"
+                                                    onClick={() =>
+                                                        setFormData({
+                                                            ...formData,
+                                                            customAttrRows: [...formData.customAttrRows, { key: '', value: '' }]
+                                                        })
+                                                    }
+                                                >
+                                                    + Add attribute
+                                                </button>
+                                            </div>
+                                        </details>
 
                                         <section className="min-w-0">
                                             <div className="mb-1.5 flex items-center gap-1.5">
@@ -1094,7 +1389,12 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     {editingItem ? (
                                         <Button
                                             onClick={handleUpdateExisting}
-                                            disabled={!formData.name || saving || hasBlockingConflict}
+                                            disabled={
+                                                !formData.name ||
+                                                saving ||
+                                                hasBlockingConflict ||
+                                                weightInvalid
+                                            }
                                             size="sm"
                                             className="min-h-0 rounded-full bg-violet-600 px-5 py-2 text-xs shadow-sm hover:bg-violet-700"
                                         >
@@ -1103,7 +1403,13 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     ) : (
                                         <Button
                                             onClick={handleCreateNew}
-                                            disabled={!formData.name || saving || hasBlockingConflict}
+                                            disabled={
+                                                !formData.name ||
+                                                saving ||
+                                                hasBlockingConflict ||
+                                                hasSkuConflict ||
+                                                weightInvalid
+                                            }
                                             size="sm"
                                             className="min-h-0 rounded-full bg-violet-600 px-5 py-2 text-xs shadow-sm hover:bg-violet-700"
                                         >

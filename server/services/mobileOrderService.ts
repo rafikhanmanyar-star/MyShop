@@ -27,11 +27,17 @@ function safeNum(v: any): number {
 
 function parseAttributesJson(val: any): Record<string, unknown> | null {
     if (val == null) return null;
-    if (typeof val === 'object' && !Array.isArray(val)) return val as Record<string, unknown>;
+    if (typeof val === 'object' && !Array.isArray(val)) {
+        const o = val as Record<string, unknown>;
+        return Object.keys(o).length > 0 ? o : null;
+    }
     if (typeof val === 'string') {
         try {
             const j = JSON.parse(val);
-            if (j && typeof j === 'object' && !Array.isArray(j)) return j as Record<string, unknown>;
+            if (j && typeof j === 'object' && !Array.isArray(j)) {
+                const o = j as Record<string, unknown>;
+                return Object.keys(o).length > 0 ? o : null;
+            }
         } catch {
             return null;
         }
@@ -355,19 +361,49 @@ export class MobileOrderService {
         const r = rows[0];
         const stockNum = safeNum(r.available_stock);
         const attrs = parseAttributesJson((r as any).attributes);
+        const brandCol = (r as any).brand != null && String((r as any).brand).trim() ? String((r as any).brand).trim() : '';
+        const brandJoin = (r as any).brand_name != null && String((r as any).brand_name).trim() ? String((r as any).brand_name).trim() : '';
+        const brandDisplay = brandCol || brandJoin || null;
+        const rawW = (r as any).weight;
+        const weightNum =
+            rawW === null || rawW === undefined || rawW === ''
+                ? null
+                : (() => {
+                      const n = typeof rawW === 'number' ? rawW : parseFloat(String(rawW));
+                      return Number.isFinite(n) ? n : null;
+                  })();
+
         return {
-            ...r,
+            id: r.id,
+            name: r.name,
+            sku: r.sku,
+            sku_code: r.sku,
+            barcode: r.barcode ?? null,
+            brand: brandDisplay,
+            unit: r.unit ?? null,
+            weight: weightNum,
+            weight_unit: (r as any).weight_unit ?? null,
+            size: (r as any).size ?? null,
+            color: (r as any).color ?? null,
+            material: (r as any).material ?? null,
+            origin_country: (r as any).origin_country ?? null,
+            attributes: attrs,
             price: r.mobile_price != null ? parseFloat(r.mobile_price) : parseFloat(r.retail_price),
+            retail_price: parseFloat(r.retail_price),
+            mobile_price: r.mobile_price != null ? parseFloat(r.mobile_price) : null,
+            tax_rate: r.tax_rate,
+            image_url: r.image_url ?? null,
+            category_id: r.category_id ?? null,
+            category_name: r.category_name ?? null,
             available_stock: stockNum,
             stock: stockNum,
             description: r.mobile_description ?? (r as any).description ?? null,
-            image_url: r.image_url ?? null,
-            category_id: r.category_id ?? null,
-            size: (r as any).size ?? null,
-            weight: (r as any).weight ?? null,
-            unit: r.unit ?? null,
-            attributes: attrs,
+            mobile_description: r.mobile_description ?? null,
+            is_on_sale: r.is_on_sale,
+            is_pre_order: r.is_pre_order,
+            discount_percentage: r.discount_percentage,
             rating_avg: parseFloat(r.rating_avg) || 0,
+            rating_count: r.rating_count,
         };
     }
 

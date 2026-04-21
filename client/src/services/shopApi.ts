@@ -365,6 +365,9 @@ export const accountingApi = {
       posReturns: number;
       netPosSales: number;
       mobileSales: number;
+      mobileReturns: number;
+      netMobileSales: number;
+      netTotalSales: number;
       inventoryOutQty: number;
       inventoryInQty: number;
       totalExpenses: number;

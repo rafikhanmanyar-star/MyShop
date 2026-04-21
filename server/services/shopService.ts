@@ -18,6 +18,46 @@ function normalizeImageUrl(url: string | null | undefined): string | null {
   return trimmed;
 }
 
+function trimTextField(val: unknown): string | null {
+  if (val === null || val === undefined) return null;
+  const s = String(val).trim();
+  return s || null;
+}
+
+/** Parses weight; empty clears. Throws if non-numeric when a value is provided. */
+function parseProductWeight(val: unknown): number | null {
+  if (val === null || val === undefined || val === '') return null;
+  const n = typeof val === 'number' ? val : parseFloat(String(val).trim());
+  if (!Number.isFinite(n)) throw new Error('Weight must be numeric.');
+  return n;
+}
+
+function normalizeProductAttributesInput(val: unknown): Record<string, string | number | boolean> {
+  if (val === null || val === undefined || val === '') return {};
+  let raw: unknown = val;
+  if (typeof val === 'string') {
+    try {
+      raw = JSON.parse(val);
+    } catch {
+      throw new Error('Invalid attributes JSON.');
+    }
+  }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('Attributes must be a JSON object.');
+  }
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const key = String(k).trim();
+    if (!key) continue;
+    if (v === null || v === undefined) continue;
+    if (typeof v === 'object') continue;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      out[key] = v;
+    }
+  }
+  return out;
+}
+
 /** Short-lived cache for paginated inventory SKU list (reduces repeat load after tab switches). */
 const inventorySkuListCache = new Map<string, { expiresAt: number; payload: unknown }>();
 const INV_SKU_CACHE_TTL_MS = 25_000;
@@ -509,16 +549,28 @@ export class ShopService {
 
         const mobileDesc = data.mobile_description ?? data.description ?? null;
         const createdBy = data.created_by || data.createdBy || null;
+        const weight = parseProductWeight(data.weight);
+        const weightUnit = trimTextField(data.weight_unit ?? data.weightUnit);
+        const brand = trimTextField(data.brand);
+        const size = trimTextField(data.size);
+        const color = trimTextField(data.color);
+        const material = trimTextField(data.material);
+        const originCountry = trimTextField(data.origin_country ?? data.originCountry);
+        const attributesObj = normalizeProductAttributesInput(data.attributes);
+
         const res = await client.query(`
           INSERT INTO shop_products (
             tenant_id, name, sku, barcode, category_id, subcategory_id, unit,
-            cost_price, retail_price, tax_rate, reorder_point, image_url, is_active, mobile_description, created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *
+            cost_price, retail_price, tax_rate, reorder_point, image_url, is_active, mobile_description, created_by,
+            brand, weight, weight_unit, size, color, material, origin_country, attributes
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+            $16, $17, $18, $19, $20, $21, $22, $23::jsonb) RETURNING *
         `, [
           tenantId, name, sku, data.barcode || null,
           categoryId, subcategoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
           data.tax_rate || 0, data.reorder_point || 10, normalizeImageUrl(data.image_url), true, mobileDesc,
           createdBy,
+          brand, weight, weightUnit, size, color, material, originCountry, JSON.stringify(attributesObj),
         ]);
         if (!res.length) {
           throw new Error('Database write failed — no product row returned after insert.');
@@ -568,7 +620,8 @@ export class ShopService {
       try {
         const prevRows = await client.query(
           `SELECT name, sku, barcode, category_id, subcategory_id, unit, cost_price, retail_price, tax_rate,
-                  reorder_point, image_url, is_active, mobile_description, sales_deactivated
+                  reorder_point, image_url, is_active, mobile_description, sales_deactivated,
+                  brand, weight, weight_unit, size, color, material, origin_country, attributes
            FROM shop_products WHERE id = $1 AND tenant_id = $2`,
           [productId, tenantId]
         );
@@ -641,13 +694,45 @@ export class ShopService {
               : undefined;
         const salesDeactivatedParam =
           data.sales_deactivated !== undefined ? Boolean(data.sales_deactivated) : null;
+
+        let nextWeight = prev.weight;
+        if (data.weight !== undefined) {
+          if (data.weight === null || data.weight === '') nextWeight = null;
+          else nextWeight = parseProductWeight(data.weight) as any;
+        }
+        const nextWeightUnit =
+          data.weight_unit !== undefined || data.weightUnit !== undefined
+            ? trimTextField(data.weight_unit ?? data.weightUnit)
+            : prev.weight_unit;
+        const nextBrand =
+          data.brand !== undefined ? trimTextField(data.brand) : prev.brand;
+        const nextSize = data.size !== undefined ? trimTextField(data.size) : prev.size;
+        const nextColor = data.color !== undefined ? trimTextField(data.color) : prev.color;
+        const nextMaterial =
+          data.material !== undefined ? trimTextField(data.material) : prev.material;
+        const nextOrigin =
+          data.origin_country !== undefined || data.originCountry !== undefined
+            ? trimTextField(data.origin_country ?? data.originCountry)
+            : prev.origin_country;
+
+        let nextAttributesJson: string;
+        if (data.attributes !== undefined) {
+          nextAttributesJson = JSON.stringify(normalizeProductAttributesInput(data.attributes));
+        } else {
+          const a = prev.attributes;
+          nextAttributesJson =
+            typeof a === 'string' ? a : JSON.stringify(a && typeof a === 'object' ? a : {});
+        }
+
         const res = await client.query(`
           UPDATE shop_products
           SET name = $1, sku = $2, barcode = $3, category_id = $4, subcategory_id = $5, unit = $6,
               cost_price = $7, retail_price = $8, tax_rate = $9, reorder_point = $10,
               image_url = $11, is_active = $12, updated_at = NOW(),
               mobile_description = COALESCE($15, mobile_description),
-              sales_deactivated = COALESCE($16::boolean, sales_deactivated)
+              sales_deactivated = COALESCE($16::boolean, sales_deactivated),
+              brand = $17, weight = $18, weight_unit = $19, size = $20, color = $21, material = $22,
+              origin_country = $23, attributes = $24::jsonb
           WHERE id = $13 AND tenant_id = $14
           RETURNING *
         `, [
@@ -667,6 +752,14 @@ export class ShopService {
           tenantId,
           mobileDesc === undefined ? null : mobileDesc,
           salesDeactivatedParam,
+          nextBrand,
+          nextWeight,
+          nextWeightUnit,
+          nextSize,
+          nextColor,
+          nextMaterial,
+          nextOrigin,
+          nextAttributesJson,
         ]);
         if (!res.length) {
           throw new Error('Product not found or could not be updated (no matching row).');
@@ -914,6 +1007,14 @@ export class ShopService {
           p.image_url,
           p.mobile_description,
           COALESCE(p.sales_deactivated, FALSE) AS sales_deactivated,
+          p.brand,
+          p.weight,
+          p.weight_unit,
+          p.size,
+          p.color,
+          p.material,
+          p.origin_country,
+          p.attributes,
           COALESCE(ia.on_hand, 0)::numeric AS on_hand,
           COALESCE(ia.available, 0)::numeric AS available,
           COALESCE(ia.reserved_total, 0)::numeric AS reserved_total,

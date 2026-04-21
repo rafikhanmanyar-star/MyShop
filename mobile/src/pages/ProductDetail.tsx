@@ -19,6 +19,11 @@ function detailText(product: any): string | null {
     return s || null;
 }
 
+function formatSpecLabel(k: string): string {
+    const spaced = k.replace(/_/g, ' ');
+    return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function ProductDetail() {
     const { shopSlug, id } = useParams();
     const navigate = useNavigate();
@@ -30,6 +35,7 @@ export default function ProductDetail() {
     const [qty, setQty] = useState(1);
     const [recs, setRecs] = useState<ProductListProduct[]>([]);
     const [recsLoading, setRecsLoading] = useState(false);
+    const [specsVisible, setSpecsVisible] = useState(false);
 
     useEffect(() => {
         setQty(1);
@@ -38,6 +44,16 @@ export default function ProductDetail() {
     useEffect(() => {
         setRecs([]);
     }, [id]);
+
+    useEffect(() => {
+        if (!product) {
+            setSpecsVisible(false);
+            return;
+        }
+        setSpecsVisible(false);
+        const frame = requestAnimationFrame(() => setSpecsVisible(true));
+        return () => cancelAnimationFrame(frame);
+    }, [product?.id]);
 
     useEffect(() => {
         if (!shopSlug || !id) return;
@@ -221,11 +237,106 @@ export default function ProductDetail() {
 
     const desc = product ? detailText(product) : null;
     const sizeVal = product?.size != null && String(product.size).trim() !== '' ? String(product.size).trim() : null;
-    const weightVal = product?.weight != null && String(product.weight).trim() !== '' ? String(product.weight).trim() : null;
+    const weightUnitVal =
+        product?.weight_unit != null && String(product.weight_unit).trim() !== ''
+            ? String(product.weight_unit).trim()
+            : null;
+    const weightRaw = product?.weight;
+    const weightNum =
+        weightRaw === null || weightRaw === undefined || weightRaw === ''
+            ? null
+            : (() => {
+                  const n = typeof weightRaw === 'number' ? weightRaw : parseFloat(String(weightRaw));
+                  return Number.isFinite(n) ? n : null;
+              })();
+    const weightLine =
+        weightNum != null ? (weightUnitVal ? `${weightNum} ${weightUnitVal}` : String(weightNum)) : null;
     const unitVal = product?.unit != null && String(product.unit).trim() !== '' ? String(product.unit).trim() : null;
-    const attrs = product?.attributes && typeof product.attributes === 'object' && !Array.isArray(product.attributes)
-        ? (product.attributes as Record<string, unknown>)
-        : null;
+    const brandLine =
+        product?.brand != null && String(product.brand).trim() !== '' ? String(product.brand).trim() : null;
+    const skuCodeVal =
+        product?.sku_code != null && String(product.sku_code).trim() !== ''
+            ? String(product.sku_code).trim()
+            : product?.sku
+              ? String(product.sku).trim()
+              : null;
+    const barcodeVal =
+        product?.barcode != null && String(product.barcode).trim() !== '' ? String(product.barcode).trim() : null;
+
+    const specRows = useMemo(() => {
+        if (!product) return [];
+        const rows: { label: string; value: string }[] = [];
+        const seen = new Set<string>();
+        const add = (label: string, value: string | null | undefined) => {
+            const v = value != null && String(value).trim() ? String(value).trim() : '';
+            if (!v) return;
+            const key = label.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            rows.push({ label, value: v });
+        };
+
+        const b =
+            product.brand != null && String(product.brand).trim() !== '' ? String(product.brand).trim() : null;
+        const skuC =
+            product.sku_code != null && String(product.sku_code).trim() !== ''
+                ? String(product.sku_code).trim()
+                : product.sku
+                  ? String(product.sku).trim()
+                  : null;
+        const bc =
+            product.barcode != null && String(product.barcode).trim() !== '' ? String(product.barcode).trim() : null;
+        const u = product.unit != null && String(product.unit).trim() !== '' ? String(product.unit).trim() : null;
+        const sz = product.size != null && String(product.size).trim() !== '' ? String(product.size).trim() : null;
+        const wu =
+            product.weight_unit != null && String(product.weight_unit).trim() !== ''
+                ? String(product.weight_unit).trim()
+                : null;
+        const wr = product.weight;
+        const wn =
+            wr === null || wr === undefined || wr === ''
+                ? null
+                : (() => {
+                      const n = typeof wr === 'number' ? wr : parseFloat(String(wr));
+                      return Number.isFinite(n) ? n : null;
+                  })();
+        const wl = wn != null ? (wu ? `${wn} ${wu}` : String(wn)) : null;
+
+        add('Brand', b);
+        add('SKU code', skuC);
+        add('Barcode', bc);
+        add('Unit', u);
+        add('Size', sz);
+        add('Weight', wl);
+        add('Color', product.color != null ? String(product.color) : null);
+        add('Material', product.material != null ? String(product.material) : null);
+        add('Country of origin', product.origin_country != null ? String(product.origin_country) : null);
+
+        const rawAttrs =
+            product.attributes && typeof product.attributes === 'object' && !Array.isArray(product.attributes)
+                ? (product.attributes as Record<string, unknown>)
+                : null;
+
+        const skipAttrKeys = new Set(
+            ['brand', 'sku', 'barcode', 'unit', 'size', 'weight', 'color', 'material', 'origin', 'origin country', 'country of origin'].map(
+                (s) => s.toLowerCase()
+            )
+        );
+        if (rawAttrs) {
+            for (const [k, v] of Object.entries(rawAttrs)) {
+                if (v === null || v === undefined) continue;
+                const kl = k.toLowerCase().replace(/_/g, ' ');
+                if (skipAttrKeys.has(kl)) continue;
+                add(formatSpecLabel(k), String(v));
+            }
+        }
+        return rows;
+    }, [product]);
+
+    const specsGridRows = useMemo(
+        () => specRows.filter((r) => !['sku code', 'barcode'].includes(r.label.toLowerCase())),
+        [specRows]
+    );
 
     if (loading) {
         return (
@@ -309,69 +420,132 @@ export default function ProductDetail() {
             </div>
 
             <div style={{ padding: '20px 16px 12px' }}>
-                {product.category_name && (
-                    <span
+                <section style={{ marginBottom: 20 }} aria-label="Overview">
+                    {product.category_name && (
+                        <span
+                            style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: 'var(--primary)',
+                                background: 'rgba(79,70,229,0.08)',
+                                padding: '4px 10px',
+                                borderRadius: 'var(--radius-full)',
+                                marginBottom: 8,
+                                display: 'inline-block',
+                            }}
+                        >
+                            {product.category_name}
+                        </span>
+                    )}
+
+                    <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, lineHeight: 1.3 }}>{product.name}</h1>
+                    {brandLine && (
+                        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12, marginTop: 0 }}>{brandLine}</p>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14 }}>
+                        <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary)' }}>{formatPrice(product.price)}</span>
+                        {parseFloat(String(product.tax_rate ?? 0)) > 0 && (
+                            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>+{product.tax_rate}% tax</span>
+                        )}
+                    </div>
+
+                    {(sizeVal || weightLine || unitVal) && (
+                        <div
+                            style={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                gap: 8,
+                                marginBottom: 12,
+                            }}
+                        >
+                            {sizeVal && (
+                                <span
+                                    style={{
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: 'var(--text-secondary)',
+                                        background: 'var(--bg)',
+                                        padding: '6px 10px',
+                                        borderRadius: 'var(--radius-full)',
+                                        border: '1px solid var(--border)',
+                                    }}
+                                >
+                                    Size: {sizeVal}
+                                </span>
+                            )}
+                            {weightLine && (
+                                <span
+                                    style={{
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: 'var(--text-secondary)',
+                                        background: 'var(--bg)',
+                                        padding: '6px 10px',
+                                        borderRadius: 'var(--radius-full)',
+                                        border: '1px solid var(--border)',
+                                    }}
+                                >
+                                    Weight: {weightLine}
+                                </span>
+                            )}
+                            {unitVal && (
+                                <span
+                                    style={{
+                                        fontSize: 12,
+                                        fontWeight: 600,
+                                        color: 'var(--text-secondary)',
+                                        background: 'var(--bg)',
+                                        padding: '6px 10px',
+                                        borderRadius: 'var(--radius-full)',
+                                        border: '1px solid var(--border)',
+                                    }}
+                                >
+                                    Unit: {unitVal}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    <div
                         style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: 'var(--primary)',
-                            background: 'rgba(79,70,229,0.08)',
-                            padding: '4px 10px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 12px',
                             borderRadius: 'var(--radius-full)',
-                            marginBottom: 8,
-                            display: 'inline-block',
+                            background: canPurchase ? '#D1FAE5' : '#FEE2E2',
+                            color: canPurchase ? '#065F46' : '#991B1B',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            marginBottom: 4,
                         }}
                     >
-                        {product.category_name}
-                    </span>
-                )}
-
-                <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, lineHeight: 1.3 }}>{product.name}</h1>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>SKU: {product.sku}</p>
-
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
-                    <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary)' }}>{formatPrice(product.price)}</span>
-                    {parseFloat(String(product.tax_rate ?? 0)) > 0 && (
-                        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>+{product.tax_rate}% tax</span>
-                    )}
-                </div>
-
-                <div
-                    style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        padding: '6px 12px',
-                        borderRadius: 'var(--radius-full)',
-                        background: canPurchase ? '#D1FAE5' : '#FEE2E2',
-                        color: canPurchase ? '#065F46' : '#991B1B',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        marginBottom: 20,
-                    }}
-                >
-                    <span
-                        style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            background: canPurchase ? '#10B981' : '#EF4444',
-                        }}
-                    />
-                    {stockStatusLabel}
-                    {canPurchase && stock > 0 && <span style={{ fontWeight: 500, opacity: 0.85 }}> · {Math.floor(stock)} available</span>}
-                </div>
+                        <span
+                            style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                background: canPurchase ? '#10B981' : '#EF4444',
+                            }}
+                        />
+                        {stockStatusLabel}
+                        {canPurchase && stock > 0 && (
+                            <span style={{ fontWeight: 500, opacity: 0.85 }}> · {Math.floor(stock)} available</span>
+                        )}
+                    </div>
+                </section>
 
                 {desc && (
-                    <section style={{ marginBottom: 22 }}>
-                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Description</h2>
+                    <section style={{ marginBottom: 22 }} aria-label="Description">
+                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Description</h2>
                         <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0 }}>{desc}</p>
                     </section>
                 )}
 
-                {(sizeVal || weightVal || unitVal) && (
-                    <section style={{ marginBottom: 22 }}>
-                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Details</h2>
+                {(skuCodeVal || barcodeVal) && (
+                    <section style={{ marginBottom: 22 }} aria-label="Product identifiers">
+                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Product details</h2>
                         <dl
                             style={{
                                 margin: 0,
@@ -382,31 +556,25 @@ export default function ProductDetail() {
                                 color: 'var(--text-secondary)',
                             }}
                         >
-                            {sizeVal && (
+                            {skuCodeVal && (
                                 <>
-                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Size</dt>
-                                    <dd style={{ margin: 0 }}>{sizeVal}</dd>
+                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>SKU code</dt>
+                                    <dd style={{ margin: 0 }}>{skuCodeVal}</dd>
                                 </>
                             )}
-                            {weightVal && (
+                            {barcodeVal && (
                                 <>
-                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Weight</dt>
-                                    <dd style={{ margin: 0 }}>{weightVal}</dd>
-                                </>
-                            )}
-                            {unitVal && (
-                                <>
-                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Unit</dt>
-                                    <dd style={{ margin: 0 }}>{unitVal}</dd>
+                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Barcode</dt>
+                                    <dd style={{ margin: 0, wordBreak: 'break-all' }}>{barcodeVal}</dd>
                                 </>
                             )}
                         </dl>
                     </section>
                 )}
 
-                {attrs && Object.keys(attrs).length > 0 && (
-                    <section style={{ marginBottom: 22 }}>
-                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Attributes</h2>
+                {specsVisible && specsGridRows.length > 0 && (
+                    <section style={{ marginBottom: 22 }} aria-label="Specifications">
+                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Specifications</h2>
                         <dl
                             style={{
                                 margin: 0,
@@ -417,10 +585,10 @@ export default function ProductDetail() {
                                 color: 'var(--text-secondary)',
                             }}
                         >
-                            {Object.entries(attrs).map(([k, v]) => (
-                                <div key={k} style={{ display: 'contents' }}>
-                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{k}</dt>
-                                    <dd style={{ margin: 0 }}>{String(v)}</dd>
+                            {specsGridRows.map((row, i) => (
+                                <div key={`spec-${i}-${row.label}`} style={{ display: 'contents' }}>
+                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{row.label}</dt>
+                                    <dd style={{ margin: 0, wordBreak: 'break-word' }}>{row.value}</dd>
                                 </div>
                             ))}
                         </dl>
@@ -486,8 +654,8 @@ export default function ProductDetail() {
                 )}
 
                 {!recsLoading && recs.length > 0 && shopSlug && (
-                    <section style={{ marginBottom: 8 }}>
-                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Recommended for you</h2>
+                    <section style={{ marginBottom: 8 }} aria-label="Recommendations">
+                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Recommendations</h2>
                         <div className="home-product-row">
                             {recs.map((p) => (
                                 <div key={p.id} className="home-product-row__cell">

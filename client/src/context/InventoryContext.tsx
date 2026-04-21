@@ -55,6 +55,30 @@ function isRetryableServerOrNetworkError(error: any): boolean {
     return /unavailable|bad gateway|network|timed out|overloaded|failed to fetch|networkerror|no internet/i.test(msg);
 }
 
+function parseProductAttributesClient(val: unknown): Record<string, string | number | boolean> | undefined {
+    if (val == null) return undefined;
+    if (typeof val === 'object' && !Array.isArray(val)) {
+        const o = val as Record<string, unknown>;
+        const out: Record<string, string | number | boolean> = {};
+        for (const [k, v] of Object.entries(o)) {
+            if (v === null || v === undefined) continue;
+            if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+                out[k] = v;
+            }
+        }
+        return Object.keys(out).length ? out : undefined;
+    }
+    if (typeof val === 'string') {
+        try {
+            const j = JSON.parse(val);
+            return parseProductAttributesClient(j);
+        } catch {
+            return undefined;
+        }
+    }
+    return undefined;
+}
+
 async function withRetries<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
     let lastErr: any;
     for (let i = 0; i <= retries; i++) {
@@ -70,14 +94,30 @@ async function withRetries<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
 }
 
 function mapServerProductToItem(p: any): InventoryItem {
+    const w = p.weight;
+    const weight =
+        w === null || w === undefined || w === ''
+            ? undefined
+            : (() => {
+                  const n = typeof w === 'number' ? w : parseFloat(String(w));
+                  return Number.isFinite(n) ? n : undefined;
+              })();
     return {
         id: p.id,
         sku: p.sku,
         barcode: p.barcode || undefined,
         name: p.name,
+        brand: p.brand || undefined,
         category: p.category_id || 'General',
         subcategoryId: p.subcategory_id || undefined,
         unit: p.unit || 'pcs',
+        weight: weight ?? undefined,
+        weightUnit: p.weight_unit ?? undefined,
+        size: p.size ?? undefined,
+        color: p.color ?? undefined,
+        material: p.material ?? undefined,
+        originCountry: p.origin_country ?? undefined,
+        attributes: parseProductAttributesClient(p.attributes),
         onHand: 0,
         available: 0,
         reserved: 0,
@@ -121,14 +161,30 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
             : typeof exp === 'string'
               ? exp.slice(0, 10)
               : String(exp).slice(0, 10);
+    const w = r.weight;
+    const weight =
+        w === null || w === undefined || w === ''
+            ? undefined
+            : (() => {
+                  const n = typeof w === 'number' ? w : parseFloat(String(w));
+                  return Number.isFinite(n) ? n : undefined;
+              })();
     return {
         id: r.id,
         sku: r.sku,
         barcode: r.barcode || undefined,
         name: r.name,
+        brand: r.brand || undefined,
         category: r.category_id || 'General',
         subcategoryId: r.subcategory_id || undefined,
         unit: r.unit || 'pcs',
+        weight: weight ?? undefined,
+        weightUnit: r.weight_unit ?? undefined,
+        size: r.size ?? undefined,
+        color: r.color ?? undefined,
+        material: r.material ?? undefined,
+        originCountry: r.origin_country ?? undefined,
+        attributes: parseProductAttributesClient(r.attributes),
         onHand,
         available,
         reserved,
@@ -165,14 +221,31 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         stockMap[inv.product_id].sellable += Math.max(0, availRow);
         stockMap[inv.product_id].byWh[inv.warehouse_id] = qty;
     });
-    return products.map((p: any) => ({
+    return products.map((p: any) => {
+        const w = p.weight;
+        const weight =
+            w === null || w === undefined || w === ''
+                ? undefined
+                : (() => {
+                      const n = typeof w === 'number' ? w : parseFloat(String(w));
+                      return Number.isFinite(n) ? n : undefined;
+                  })();
+        return {
         id: p.id,
         sku: p.sku,
         barcode: p.barcode || undefined,
         name: p.name,
+        brand: p.brand || undefined,
         category: p.category_id || 'General',
         subcategoryId: p.subcategory_id || undefined,
         unit: p.unit || 'pcs',
+        weight: weight ?? undefined,
+        weightUnit: p.weight_unit ?? undefined,
+        size: p.size ?? undefined,
+        color: p.color ?? undefined,
+        material: p.material ?? undefined,
+        originCountry: p.origin_country ?? undefined,
+        attributes: parseProductAttributesClient(p.attributes),
         onHand: stockMap[p.id]?.total || 0,
         available:
             stockMap[p.id]?.sellable ??
@@ -188,7 +261,8 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         description: p.mobile_description || p.description || undefined,
         warehouseStock: stockMap[p.id]?.byWh || {},
         salesDeactivated: Boolean(p.sales_deactivated),
-    }));
+    };
+    });
 }
 
 function mapMovementRows(movementList: any[]): StockMovement[] {
@@ -516,6 +590,14 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             unit: item.unit,
             reorder_point: item.reorderPoint,
             description: item.description || null,
+            brand: item.brand ?? null,
+            weight: item.weight ?? null,
+            weight_unit: item.weightUnit ?? null,
+            size: item.size ?? null,
+            color: item.color ?? null,
+            material: item.material ?? null,
+            origin_country: item.originCountry ?? null,
+            attributes: item.attributes ?? null,
         };
 
         const saveOfflineAndReturn = async (): Promise<InventoryItem> => {
@@ -635,6 +717,14 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
             if (updates.description !== undefined) payload.mobile_description = updates.description;
             if (updates.salesDeactivated !== undefined) payload.sales_deactivated = updates.salesDeactivated;
+            if (updates.brand !== undefined) payload.brand = updates.brand;
+            if (updates.weight !== undefined) payload.weight = updates.weight;
+            if (updates.weightUnit !== undefined) payload.weight_unit = updates.weightUnit;
+            if (updates.size !== undefined) payload.size = updates.size;
+            if (updates.color !== undefined) payload.color = updates.color;
+            if (updates.material !== undefined) payload.material = updates.material;
+            if (updates.originCountry !== undefined) payload.origin_country = updates.originCountry;
+            if (updates.attributes !== undefined) payload.attributes = updates.attributes;
 
             const updateRes = await withRetries(() => shopApi.updateProduct(id, payload));
             if (!updateRes.success) {

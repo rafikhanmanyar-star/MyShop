@@ -12,11 +12,21 @@ export interface InventoryItem {
     sku: string;
     barcode?: string; // Barcode for scanning in POS
     name: string;
+    /** Free-text brand (mobile / PDP); optional */
+    brand?: string;
     /** Primary category id from catalog, or the literal `General` when uncategorized */
     category: string;
     /** Subcategory id when the product is filed under a child category */
     subcategoryId?: string;
     unit: string;
+    weight?: number | null;
+    weightUnit?: string | null;
+    size?: string | null;
+    color?: string | null;
+    material?: string | null;
+    originCountry?: string | null;
+    /** Extra key-value specs (JSON from server) */
+    attributes?: Record<string, string | number | boolean> | null;
     onHand: number;
     available: number;
     reserved: number;

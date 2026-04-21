@@ -19,6 +19,14 @@ export interface PendingProductPayload {
   unit: string;
   reorder_point: number;
   description?: string | null;
+  brand?: string | null;
+  weight?: number | null;
+  weight_unit?: string | null;
+  size?: string | null;
+  color?: string | null;
+  material?: string | null;
+  origin_country?: string | null;
+  attributes?: Record<string, string | number | boolean> | null;
   localImageId?: string;
 }
 
