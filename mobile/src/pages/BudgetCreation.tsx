@@ -94,8 +94,11 @@ export default function BudgetCreation() {
             const summary = await customerApi.getBudgetSummary(month, year);
             if (summary?.budgetId) {
                 const detail = await customerApi.getBudget(summary.budgetId);
-                if (detail?.items?.length) {
-                    setSelectedItems(detail.items.map((i: any) => ({
+                const withQty = (detail?.items || []).filter(
+                    (i: any) => parseFloat(i.planned_quantity) > 0,
+                );
+                if (withQty.length) {
+                    setSelectedItems(withQty.map((i: any) => ({
                         productId: i.product_id,
                         name: i.product_name,
                         price: parseFloat(i.planned_price),
@@ -116,10 +119,13 @@ export default function BudgetCreation() {
         setSuggestionsLoading(true);
         try {
             const data = await customerApi.getBudgetSuggestions(month, year);
-            setSuggestions(data.suggestions || []);
+            const sugg = (data.suggestions || []).filter(
+                (s: any) => Number(s.suggested_qty) > 0,
+            );
+            setSuggestions(sugg);
             setSuggestionsLoaded(true);
-            if (data.suggestions?.length && selectedItems.length === 0) {
-                setSelectedItems(data.suggestions.map((s: any) => ({
+            if (sugg.length && selectedItems.length === 0) {
+                setSelectedItems(sugg.map((s: any) => ({
                     productId: s.product_id,
                     name: s.product_name,
                     price: s.retail_price,
@@ -163,8 +169,11 @@ export default function BudgetCreation() {
         setCloneLoading(true);
         try {
             const detail = await customerApi.getBudget(budgetId);
-            if (detail?.items?.length) {
-                setSelectedItems(detail.items.map((i: any) => ({
+            const withQty = (detail?.items || []).filter(
+                (i: any) => parseFloat(i.planned_quantity) > 0,
+            );
+            if (withQty.length) {
+                setSelectedItems(withQty.map((i: any) => ({
                     productId: i.product_id,
                     name: i.product_name,
                     price: parseFloat(i.planned_price),
@@ -235,13 +244,18 @@ export default function BudgetCreation() {
     };
 
     const updateQuantity = (productId: string, q: number) => {
-        setSelectedItems(selectedItems.map(item => {
-            if (item.productId === productId) {
-                const newQ = Math.max(0, isNaN(q) ? 0 : q);
-                return { ...item, quantity: newQ, total: item.price * newQ };
-            }
-            return item;
-        }));
+        const newQ = Math.max(0, isNaN(q) ? 0 : q);
+        if (newQ === 0) {
+            setSelectedItems((prev) => prev.filter((i) => i.productId !== productId));
+            return;
+        }
+        setSelectedItems((prev) =>
+            prev.map((item) =>
+                item.productId === productId
+                    ? { ...item, quantity: newQ, total: item.price * newQ }
+                    : item,
+            ),
+        );
     };
 
     const removeItem = (productId: string) => {
@@ -251,7 +265,8 @@ export default function BudgetCreation() {
     const totalBudget = selectedItems.reduce((acc, i) => acc + i.total, 0);
 
     const handleSave = async () => {
-        if (selectedItems.length === 0) {
+        const lineItems = selectedItems.filter((i) => i.quantity > 0);
+        if (lineItems.length === 0) {
             showToast('Please add at least one product');
             return;
         }
@@ -259,11 +274,11 @@ export default function BudgetCreation() {
         try {
             await customerApi.createBudget({
                 month, year, type: budgetType,
-                items: selectedItems.map(i => ({
+                items: lineItems.map((i) => ({
                     productId: i.productId,
                     plannedQuantity: i.quantity,
                     plannedPrice: i.price,
-                }))
+                })),
             });
             showToast('Budget saved successfully!');
             navigate(`/${shopSlug}/budget`);

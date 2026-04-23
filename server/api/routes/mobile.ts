@@ -5,6 +5,10 @@ import multer from 'multer';
 import { getDatabaseService } from '../../services/databaseService.js';
 import { getMobileCustomerService } from '../../services/mobileCustomerService.js';
 import { getMobileOrderService } from '../../services/mobileOrderService.js';
+import {
+    effectiveBranchMaxDeliveryKm,
+    tenantDefaultKmFromMobileSettings,
+} from '../../services/mobileOrderBranchRouting.js';
 import { getOfferService } from '../../services/offerService.js';
 import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/mobileMiddleware.js';
 import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
@@ -184,9 +188,35 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
         } catch (_) { /* ignore */ }
 
         let branchName: string | null = null;
+        let delivery_area: {
+            branch_latitude: number;
+            branch_longitude: number;
+            max_delivery_km: number;
+        } | null = null;
+
+        const tenantDefaultKm = tenantDefaultKmFromMobileSettings(settings.max_delivery_radius_km);
+
         if (req.branchId) {
             const branchRows = await db.query('SELECT name FROM shop_branches WHERE id = $1 AND tenant_id = $2', [req.branchId, req.tenantId]);
             branchName = branchRows[0]?.name ?? null;
+
+            const geoRows = await db.query(
+                `SELECT latitude, longitude, max_delivery_distance_km FROM shop_branches
+                 WHERE id = $1 AND tenant_id = $2 AND COALESCE(is_active, TRUE) = TRUE`,
+                [req.branchId, req.tenantId]
+            );
+            if (geoRows.length > 0) {
+                const blat = parseFloat(geoRows[0].latitude);
+                const blng = parseFloat(geoRows[0].longitude);
+                if (Number.isFinite(blat) && Number.isFinite(blng)) {
+                    const maxKm = effectiveBranchMaxDeliveryKm(geoRows[0].max_delivery_distance_km, tenantDefaultKm);
+                    delivery_area = {
+                        branch_latitude: blat,
+                        branch_longitude: blng,
+                        max_delivery_km: maxKm,
+                    };
+                }
+            }
         }
 
         res.json({
@@ -200,6 +230,7 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
                 phone: phone ?? null,
                 branchId: req.branchId ?? null,
                 branchName: branchName ?? null,
+                delivery_area,
             },
             settings: {
                 minimum_order_amount: settings.minimum_order_amount,
@@ -436,9 +467,7 @@ router.put('/auth/change-password', mobileAuthMiddleware(db), async (req: any, r
         );
         res.json({ ok: true });
     } catch (error: any) {
-        const msg = String(error?.message || '');
-        const generic = msg.includes('blocked') ? msg : 'Invalid phone number or password';
-        res.status(400).json({ error: generic });
+        res.status(400).json({ error: String(error?.message || 'Could not change password') });
     }
 });
 

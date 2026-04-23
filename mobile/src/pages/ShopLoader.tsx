@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useParams } from 'react-router-dom';
+import { Outlet, useParams, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi } from '../api';
 import BottomNav from '../components/BottomNav';
@@ -7,6 +7,7 @@ import Header from '../components/Header';
 import FloatingCartBar from '../components/FloatingCartBar';
 import CustomerNotificationsBridge from '../components/CustomerNotificationsBridge';
 import OrderAcceptanceClosedBanner from '../components/OrderAcceptanceClosedBanner';
+import OrderAcceptanceClosedLoginModal from '../components/OrderAcceptanceClosedLoginModal';
 import { getShop, setShop } from '../services/offlineCache';
 import { syncCatalogForShop } from '../services/catalogSync';
 
@@ -27,7 +28,9 @@ function applyBranding(shopData: { shop: { company_name?: string; name: string; 
 
 export default function ShopLoader() {
     const { shopSlug } = useParams<{ shopSlug: string }>();
+    const { pathname } = useLocation();
     const { state, dispatch, cartCount } = useApp();
+    const hideFloatingCart = pathname.includes('/budget/create');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -127,11 +130,18 @@ export default function ShopLoader() {
         <>
             <CustomerNotificationsBridge />
             <Header />
+            <OrderAcceptanceClosedLoginModal />
             <OrderAcceptanceClosedBanner />
-            <div className={cartCount > 0 ? 'shop-outlet shop-outlet--cart-pad' : 'shop-outlet'}>
+            <div
+                className={
+                    cartCount > 0 && !hideFloatingCart
+                        ? 'shop-outlet shop-outlet--cart-pad'
+                        : 'shop-outlet'
+                }
+            >
                 <Outlet />
             </div>
-            <FloatingCartBar />
+            {!hideFloatingCart && <FloatingCartBar />}
             <BottomNav />
         </>
     );

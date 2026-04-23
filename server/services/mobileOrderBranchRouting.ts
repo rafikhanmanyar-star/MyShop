@@ -51,6 +51,20 @@ function maxKmForBranch(branchRow: { max_delivery_distance_km?: unknown }, tenan
     return tenantDefault;
 }
 
+/** Same default as DB routing when mobile_ordering_settings.max_delivery_radius_km is unset. */
+export function tenantDefaultKmFromMobileSettings(maxDeliveryRadiusKm: unknown): number {
+    if (maxDeliveryRadiusKm == null || String(maxDeliveryRadiusKm).trim() === '') {
+        return 15;
+    }
+    const v = parseFloat(String(maxDeliveryRadiusKm));
+    return Number.isFinite(v) && v > 0 ? v : 15;
+}
+
+/** Branch "Max delivery distance (km)" from POS, or tenant default when blank. */
+export function effectiveBranchMaxDeliveryKm(branchMaxDeliveryDistanceKm: unknown, tenantDefaultKm: number): number {
+    return maxKmForBranch({ max_delivery_distance_km: branchMaxDeliveryDistanceKm }, tenantDefaultKm);
+}
+
 async function fetchActiveBranchesWithGeo(client: any, tenantId: string) {
     const hit = branchGeoCache.get(tenantId);
     if (hit && Date.now() - hit.at < BRANCH_GEO_TTL_MS) {

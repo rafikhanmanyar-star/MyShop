@@ -25,6 +25,13 @@ export interface OfferCartItem {
     discountBadge: string;
 }
 
+/** When set, home-delivery pins can be validated against branch radius (POS branch max km or shop default). */
+export interface ShopDeliveryArea {
+    branch_latitude: number;
+    branch_longitude: number;
+    max_delivery_km: number;
+}
+
 export interface ShopInfo {
     name: string;
     company_name: string;
@@ -35,6 +42,7 @@ export interface ShopInfo {
     phone?: string | null;
     branchId?: string | null;
     branchName?: string | null;
+    delivery_area?: ShopDeliveryArea | null;
 }
 
 export interface TenantBranding {
@@ -540,7 +548,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             value={{ state, dispatch, cartTotal, cartTax: cartTaxRounded, cartCount, showToast, refreshLoyalty }}
         >
             {children}
-            {state.toast && <div className="toast">{state.toast}</div>}
+            {state.toast && (
+                <div className="toast" role="status" aria-live="polite">
+                    {state.toast}
+                </div>
+            )}
         </AppContext.Provider>
     );
 }

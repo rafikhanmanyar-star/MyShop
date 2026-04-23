@@ -397,6 +397,9 @@ export class MobileCustomerService {
 
     async changePassword(tenantId: string, customerId: string, oldPassword: string, newPassword: string) {
         assertMobilePasswordValid(newPassword);
+        if (oldPassword === undefined || oldPassword === null || !String(oldPassword).trim()) {
+            throw new Error('Please enter your current password.');
+        }
         const rows = await this.db.query(
             `SELECT c.password FROM customers c
        INNER JOIN mobile_customers mc ON mc.id = c.id AND mc.tenant_id = c.tenant_id
@@ -404,11 +407,11 @@ export class MobileCustomerService {
             [tenantId, customerId]
         );
         if (!rows.length || !rows[0].password) {
-            throw new Error('Invalid phone number or password');
+            throw new Error('Current password is incorrect.');
         }
         const ok = await bcrypt.compare(oldPassword, rows[0].password);
         if (!ok) {
-            throw new Error('Invalid phone number or password');
+            throw new Error('Current password is incorrect.');
         }
         await this.identity.setCustomerPasswordHash(customerId, tenantId, newPassword);
         return { success: true };

@@ -77,6 +77,10 @@ export default function AccountSettings() {
 
     const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!oldPassword.trim()) {
+            showToast('Please enter your current password.');
+            return;
+        }
         if (newPassword.length !== 4 || !/^[a-zA-Z0-9]+$/.test(newPassword)) {
             showToast('New password must be exactly 4 letters or digits');
             return;
@@ -301,8 +305,13 @@ export default function AccountSettings() {
                             onChange={(e) => setConfirmNewPassword(e.target.value)}
                         />
                     </div>
-                    <button type="submit" className="btn btn-secondary btn-full" disabled={pwSaving} style={{ marginTop: 12, padding: 14 }}>
-                        {pwSaving ? <span className="spinner" style={{ width: 18, height: 18 }} /> : 'Update password'}
+                    <button
+                        type="submit"
+                        className="btn btn-primary btn-full"
+                        disabled={pwSaving}
+                        style={{ marginTop: 16, padding: 16, fontSize: 16 }}
+                    >
+                        {pwSaving ? <span className="spinner" style={{ width: 20, height: 20 }} /> : 'Update password'}
                     </button>
                 </form>
             </div>

@@ -9,7 +9,7 @@ const TICK_MS = 45_000;
  */
 export default function OrderAcceptanceClosedBanner() {
     const { state } = useApp();
-    const { settings, shop } = state;
+    const { settings, shop, isLoggedIn } = state;
     const [closed, setClosed] = useState(false);
 
     useEffect(() => {
@@ -28,7 +28,7 @@ export default function OrderAcceptanceClosedBanner() {
         return () => window.clearInterval(id);
     }, [settings]);
 
-    if (!settings || !closed) return null;
+    if (!settings || !closed || isLoggedIn) return null;
 
     const range = formatOrderAcceptanceRange(
         settings.order_acceptance_start || '09:00',

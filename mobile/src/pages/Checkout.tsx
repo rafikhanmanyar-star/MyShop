@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { customerApi } from '../api';
 import { useOnline } from '../hooks/useOnline';
 import { placeOrderOfflineFirst } from '../services/orderSyncService';
-import { getCurrentGeoPosition, reverseGeocodeApprox } from '../utils/deliveryLocation';
+import { getCurrentGeoPosition, reverseGeocodeApprox, haversineDistanceKm } from '../utils/deliveryLocation';
 import GoogleMapPickerModal from '../components/GoogleMapPickerModal';
 import OsmMapPickerModal from '../components/OsmMapPickerModal';
 
@@ -49,6 +49,23 @@ export default function Checkout() {
         return Number.isFinite(n) ? n : null;
     };
 
+    /** Home delivery only: false if pin is outside branch radius (toast shown). Self collection skips this. */
+    const checkDeliveryPinAllowed = (lat: number, lng: number): boolean => {
+        if (paymentMethod === 'SelfCollection') return true;
+        const area = state.shop?.delivery_area;
+        if (!area) return true;
+        const d = haversineDistanceKm(lat, lng, area.branch_latitude, area.branch_longitude);
+        if (d <= area.max_delivery_km) return true;
+        const x =
+            area.max_delivery_km % 1 === 0
+                ? String(area.max_delivery_km)
+                : (Math.round(area.max_delivery_km * 10) / 10).toString();
+        showToast(
+            `You are outside our delivery area. Please select a location within ${x} km of the branch.`
+        );
+        return false;
+    };
+
     const persistPermanentToProfile = async (addr: string, lat: number, lng: number) => {
         if (!online) return;
         try {
@@ -66,6 +83,7 @@ export default function Checkout() {
     };
 
     const applySuggestion = (s: DeliverySuggestion) => {
+        if (!checkDeliveryPinAllowed(s.deliveryLat, s.deliveryLng)) return;
         const ph = permanentLatRef.current;
         const pl = permanentLngRef.current;
         const matchesHome =
@@ -190,6 +208,7 @@ export default function Checkout() {
         setLocating(true);
         try {
             const pos = await getCurrentGeoPosition();
+            if (!checkDeliveryPinAllowed(pos.latitude, pos.longitude)) return;
             setDeliveryLat(pos.latitude);
             setDeliveryLng(pos.longitude);
             const approx = await reverseGeocodeApprox(pos.latitude, pos.longitude);
@@ -210,6 +229,7 @@ export default function Checkout() {
     };
 
     const handleMapLocationConfirm = (lat: number, lng: number) => {
+        if (!checkDeliveryPinAllowed(lat, lng)) return;
         setDeliveryLat(lat);
         setDeliveryLng(lng);
         void (async () => {
@@ -244,6 +264,7 @@ export default function Checkout() {
                 );
                 return;
             }
+            if (!checkDeliveryPinAllowed(deliveryLat, deliveryLng)) return;
         }
 
         setLoading(true);
@@ -324,6 +345,10 @@ export default function Checkout() {
 
     const needsFirstTimeMap =
         !isPickup && deliveryAddressType === 'permanent' && !hasDeliveryPin;
+
+    /** Saved home: disable GPS/map once a home pin exists so checkout uses account data; still allow tools if no pin yet (first-time setup). */
+    const savedHomeLocationToolsDisabled =
+        deliveryAddressType === 'permanent' && hasDeliveryPin;
 
     if (state.cart.length === 0 && state.offerBundles.length === 0) {
         navigate(`/${shopSlug}/cart`, { replace: true });
@@ -465,7 +490,7 @@ export default function Checkout() {
                             <div>
                                 <div style={{ fontWeight: 600, fontSize: 14 }}>My saved home</div>
                                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                                    Uses the address and map pin saved on your account. Set or update the pin with GPS or the map.
+                                    We use the address and map pin from your account. To deliver somewhere else for this order only, select Different location.
                                 </div>
                             </div>
                         </button>
@@ -559,7 +584,9 @@ export default function Checkout() {
                     />
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
                         {deliveryAddressType === 'permanent'
-                            ? 'A map pin is required for delivery. Use GPS or the map to set or update your saved home; we store it on your account.'
+                            ? hasDeliveryPin
+                                ? 'Delivery uses the map pin saved on your account. For another place this order, choose Different location, then use GPS or the map.'
+                                : 'A map pin is required for delivery. Use GPS or the map to set your home; we will save it on your account.'
                             : 'Use GPS or the map to set the delivery pin for this order. You can adjust the address text if needed.'}
                     </p>
 
@@ -576,8 +603,13 @@ export default function Checkout() {
                             type="button"
                             className="btn"
                             onClick={() => void handleUseGps()}
-                            disabled={locating}
-                            style={{ fontSize: 13, padding: '8px 12px' }}
+                            disabled={locating || savedHomeLocationToolsDisabled}
+                            style={{
+                                fontSize: 13,
+                                padding: '8px 12px',
+                                opacity: locating || savedHomeLocationToolsDisabled ? 0.5 : 1,
+                                cursor: locating || savedHomeLocationToolsDisabled ? 'not-allowed' : 'pointer',
+                            }}
                         >
                             {locating ? 'Getting location…' : 'Use my location'}
                         </button>
@@ -585,7 +617,13 @@ export default function Checkout() {
                             type="button"
                             className="btn"
                             onClick={() => setMapOpen(true)}
-                            style={{ fontSize: 13, padding: '8px 12px' }}
+                            disabled={savedHomeLocationToolsDisabled}
+                            style={{
+                                fontSize: 13,
+                                padding: '8px 12px',
+                                opacity: savedHomeLocationToolsDisabled ? 0.5 : 1,
+                                cursor: savedHomeLocationToolsDisabled ? 'not-allowed' : 'pointer',
+                            }}
                         >
                             {deliveryAddressType === 'permanent' ? 'Set location on map' : 'Choose on map'}
                         </button>
@@ -593,13 +631,16 @@ export default function Checkout() {
                             <button
                                 type="button"
                                 onClick={clearDeliveryPin}
+                                disabled={savedHomeLocationToolsDisabled}
                                 style={{
                                     fontSize: 12,
-                                    color: 'var(--text-muted)',
+                                    color: savedHomeLocationToolsDisabled
+                                        ? 'var(--border-light)'
+                                        : 'var(--text-muted)',
                                     background: 'none',
                                     border: 'none',
                                     textDecoration: 'underline',
-                                    cursor: 'pointer',
+                                    cursor: savedHomeLocationToolsDisabled ? 'not-allowed' : 'pointer',
                                     padding: 0,
                                 }}
                             >
