@@ -184,6 +184,13 @@ export class OfferService {
          AND o.is_active = TRUE
          AND o.start_date <= NOW()
          AND o.end_date >= NOW()
+         AND EXISTS (
+           SELECT 1 FROM offer_items oi
+           INNER JOIN shop_products p ON p.id = oi.product_id AND p.tenant_id = o.tenant_id
+           WHERE oi.offer_id = o.id
+             AND p.is_active = TRUE AND p.mobile_visible = TRUE
+             AND COALESCE(p.mobile_price, p.retail_price) > 0
+         )
        ORDER BY o.end_date ASC, o.title ASC`,
       [tenantId]
     );
@@ -208,7 +215,8 @@ export class OfferService {
               p.tax_rate::float8 AS tax_rate
        FROM offer_items oi
        INNER JOIN shop_products p ON p.id = oi.product_id AND p.tenant_id = $2
-       WHERE oi.offer_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE`,
+       WHERE oi.offer_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE
+         AND COALESCE(p.mobile_price, p.retail_price) > 0`,
       [offerId, tenantId]
     );
     return { ...o, items };

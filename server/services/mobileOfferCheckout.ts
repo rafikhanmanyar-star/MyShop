@@ -63,7 +63,8 @@ async function loadOfferForCheckout(client: any, tenantId: string, offerId: stri
             COALESCE(p.mobile_price, p.retail_price)::float8 AS unit_price
      FROM offer_items oi
      INNER JOIN shop_products p ON p.id = oi.product_id AND p.tenant_id = $2
-     WHERE oi.offer_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE`,
+     WHERE oi.offer_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+       AND COALESCE(p.mobile_price, p.retail_price) > 0`,
     [offerId, tenantId]
   );
   if (items.length === 0) throw new Error(`Offer "${offer.title}" has no valid products`);

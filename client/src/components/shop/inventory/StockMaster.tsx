@@ -794,46 +794,132 @@ const StockMaster: React.FC = () => {
             <Modal
                 isOpen={isAdjustModalOpen}
                 onClose={() => setIsAdjustModalOpen(false)}
-                title={`Adjust Stock - ${selectedItem?.name}`}
+                title={selectedItem ? `Adjust Stock — ${selectedItem.name}` : 'Adjust Stock'}
+                size="lg"
             >
-                <div className="space-y-4">
-                    <Select
-                        label="Warehouse"
-                        value={adjustData.warehouseId}
-                        onChange={(e) => setAdjustData({ ...adjustData, warehouseId: e.target.value })}
-                    >
-                        <option value="">Select Warehouse</option>
-                        {warehouses.map(wh => (
-                            <option key={wh.id} value={wh.id}>{wh.name}</option>
-                        ))}
-                    </Select>
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-5">
+                    {selectedItem && (
+                        <div className="rounded-2xl border border-border bg-gradient-to-b from-muted/70 to-muted/35 dark:from-muted/30 dark:to-muted/15 p-4 sm:p-5 shadow-sm">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 sm:mb-4">
+                                Current SKU
+                            </p>
+                            <div className="grid grid-cols-2 gap-3 lg:grid-cols-6 lg:gap-x-4 lg:gap-y-4">
+                                <div className="min-w-0 col-span-2 lg:col-span-2">
+                                    <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                                        Name
+                                    </div>
+                                    <div
+                                        className="text-sm font-bold text-foreground leading-snug line-clamp-2"
+                                        title={selectedItem.name}
+                                    >
+                                        {selectedItem.name}
+                                    </div>
+                                    <div className="text-[11px] text-muted-foreground font-mono mt-1 truncate" title={selectedItem.sku}>
+                                        SKU: {selectedItem.sku}
+                                    </div>
+                                </div>
+                                <div className="min-w-0 col-span-1">
+                                    <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                                        Barcode
+                                    </div>
+                                    {selectedItem.barcode?.trim() ? (
+                                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg border border-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60 max-w-full">
+                                            <span className="text-xs font-mono font-bold truncate">{selectedItem.barcode}</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-xs italic text-muted-foreground">No barcode</span>
+                                    )}
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                                        On hand
+                                    </div>
+                                    <div className="text-lg font-semibold font-mono tabular-nums text-foreground">
+                                        {Number(selectedItem.onHand) || 0}
+                                        <span className="text-xs font-sans font-medium text-muted-foreground ml-1">
+                                            {selectedItem.unit}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                                        Available
+                                    </div>
+                                    <span
+                                        className={`inline-flex px-2 py-1 rounded-lg text-sm font-bold font-mono tabular-nums ${
+                                            Number(selectedItem.available) > 10
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                                        }`}
+                                    >
+                                        {Number(selectedItem.available) || 0}
+                                        <span className="text-xs font-sans font-semibold ml-1 opacity-90">{selectedItem.unit}</span>
+                                    </span>
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                                        In transit
+                                    </div>
+                                    <div className="text-lg font-semibold font-mono tabular-nums text-muted-foreground">
+                                        {Number(selectedItem.inTransit) || 0}
+                                        <span className="text-xs font-sans font-medium text-muted-foreground/80 ml-1">
+                                            {selectedItem.unit}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-4">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                            Adjustment details
+                        </p>
                         <Select
-                            label="Adjustment Type"
-                            value={adjustData.type}
-                            onChange={(e) => setAdjustData({ ...adjustData, type: e.target.value as any })}
+                            label="Warehouse"
+                            value={adjustData.warehouseId}
+                            onChange={(e) => setAdjustData({ ...adjustData, warehouseId: e.target.value })}
                         >
-                            <option value="Increase">Increase (+)</option>
-                            <option value="Decrease">Decrease (-)</option>
+                            <option value="">Select Warehouse</option>
+                            {warehouses.map(wh => (
+                                <option key={wh.id} value={wh.id}>{wh.name}</option>
+                            ))}
                         </Select>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Select
+                                label="Adjustment Type"
+                                value={adjustData.type}
+                                onChange={(e) => setAdjustData({ ...adjustData, type: e.target.value as any })}
+                            >
+                                <option value="Increase">Increase (+)</option>
+                                <option value="Decrease">Decrease (-)</option>
+                            </Select>
+                            <Input
+                                label="Quantity"
+                                type="number"
+                                min={0}
+                                value={adjustData.quantity}
+                                onChange={(e) => setAdjustData({ ...adjustData, quantity: Number(e.target.value) })}
+                            />
+                        </div>
                         <Input
-                            label="Quantity"
-                            type="number"
-                            value={adjustData.quantity}
-                            onChange={(e) => setAdjustData({ ...adjustData, quantity: Number(e.target.value) })}
+                            label="Reason"
+                            placeholder="Broken, Found, Gift, etc."
+                            value={adjustData.reason}
+                            onChange={(e) => setAdjustData({ ...adjustData, reason: e.target.value })}
                         />
-                    </div>
-                    <Input
-                        label="Reason"
-                        placeholder="Broken, Found, Gift, etc."
-                        value={adjustData.reason}
-                        onChange={(e) => setAdjustData({ ...adjustData, reason: e.target.value })}
-                    />
-                    <div className="flex justify-end gap-3 mt-4">
-                        <Button variant="secondary" onClick={() => setIsAdjustModalOpen(false)}>Cancel</Button>
-                        <Button onClick={handleAdjust} disabled={!adjustData.warehouseId || !adjustData.quantity}>
-                            Confirm Adjustment
-                        </Button>
+                        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-1">
+                            <Button variant="secondary" onClick={() => setIsAdjustModalOpen(false)} className="w-full sm:w-auto">
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleAdjust}
+                                disabled={!adjustData.warehouseId || !adjustData.quantity}
+                                className="w-full sm:w-auto"
+                            >
+                                Confirm Adjustment
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </Modal>

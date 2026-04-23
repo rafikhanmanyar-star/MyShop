@@ -200,7 +200,10 @@ export class BudgetService {
         const productIds = salesData.map((s: any) => s.product_id);
         const placeholders = productIds.map((_: string, i: number) => `$${i + 2}`).join(',');
         const productsResult = await this.db.query(
-            `SELECT id, name, sku, retail_price, image_url FROM shop_products WHERE id IN (${placeholders}) AND tenant_id = $1`,
+            `SELECT id, name, sku, retail_price, mobile_price, image_url
+             FROM shop_products
+             WHERE id IN (${placeholders}) AND tenant_id = $1
+               AND COALESCE(mobile_price, retail_price) > 0`,
             [tenantId, ...productIds]
         );
 
@@ -213,7 +216,10 @@ export class BudgetService {
                 const lastQty = parseFloat(s.total_qty) || 0;
                 const lastAmt = parseFloat(s.total_amount) || 0;
                 const suggestedQty = Math.ceil(lastQty * 1.1);
-                const currentPrice = parseFloat(product.retail_price) || 0;
+                const currentPrice =
+                    product.mobile_price != null && String(product.mobile_price) !== ''
+                        ? parseFloat(product.mobile_price) || 0
+                        : parseFloat(product.retail_price) || 0;
                 return {
                     product_id: s.product_id,
                     product_name: product.name,

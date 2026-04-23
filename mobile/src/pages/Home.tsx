@@ -5,6 +5,7 @@ import { publicApi, getProductImagePath } from '../api';
 import ProductListCard, { type ProductListProduct } from '../components/ProductListCard';
 import CategoryRailIcon from '../components/CategoryRailIcon';
 import { filterCategoriesWithListedProducts } from '../utils/catalogCategories';
+import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
 
 export default function Home() {
     const { shopSlug } = useParams();
@@ -39,9 +40,10 @@ export default function Home() {
         ])
             .then(([cats, bs, dl, nw]) => {
                 setCategories(Array.isArray(cats) ? cats : (cats as any)?.categories ?? []);
-                setBestSellers(bs.items || []);
-                setDeals(dl.items || []);
-                setNewArrivals(nw.items || []);
+                const priceOk = (items: any[]) => (Array.isArray(items) ? items.filter((p) => isMobileCatalogPriceListed(p)) : []);
+                setBestSellers(priceOk(bs.items || []));
+                setDeals(priceOk(dl.items || []));
+                setNewArrivals(priceOk(nw.items || []));
             })
             .catch(() => {})
             .finally(() => setLoading(false));

@@ -640,12 +640,12 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             isOpen={isOpen}
             onClose={handleClose}
             title={title}
-            size={showSkuForm ? 'lg' : 'xl'}
+            size="xl"
             maxContentHeight={showSkuForm ? undefined : 720}
             hideHeader={showSkuForm}
             hideClose={showSkuForm}
             disableScroll={showSkuForm}
-            className={showSkuForm ? 'max-h-[min(92vh,56rem)]' : undefined}
+            className={showSkuForm ? 'max-h-[min(96vh,52rem)] w-full min-[500px]:max-w-6xl' : undefined}
         >
             <div className={showSkuForm ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'space-y-4'}>
                 {mode === 'choice' && (
@@ -798,12 +798,12 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 </div>
                             )}
 
-                            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scroll-smooth overscroll-contain [-webkit-overflow-scrolling:touch] pr-0.5">
-                                <div className="flex flex-col gap-3 pb-3 lg:flex-row lg:items-start lg:gap-5">
-                                {/* Product preview (left) — sticky on wide screens while form scrolls */}
-                                <div className="flex w-full shrink-0 flex-col lg:sticky lg:top-0 lg:w-[180px] lg:max-w-[180px]">
+                            <div className="min-h-0 flex-1 overflow-x-hidden [-webkit-overflow-scrolling:touch] max-lg:max-h-[min(65vh,28rem)] max-lg:overflow-y-auto max-lg:scroll-smooth max-lg:overscroll-contain max-lg:pr-0.5 lg:overflow-hidden">
+                                <div className="grid items-start gap-2.5 pb-1.5 lg:grid-cols-[10.5rem_1fr] lg:gap-3">
+                                {/* Product preview (left) */}
+                                <div className="mx-auto flex w-full max-w-[12rem] shrink-0 flex-col sm:max-w-none lg:mx-0 lg:max-w-[10.5rem]">
                                     <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Product preview</p>
-                                    <div className="mt-1.5 h-24 w-full overflow-hidden rounded-xl bg-gradient-to-b from-sky-50 to-sky-100/90 ring-1 ring-sky-200/70 sm:h-[128px]">
+                                    <div className="mt-1.5 h-20 w-full overflow-hidden rounded-xl bg-gradient-to-b from-sky-50 to-sky-100/90 ring-1 ring-sky-200/70 sm:h-28">
                                         {imagePreview ? (
                                             imagePreview.startsWith('blob:') ? (
                                                 <img src={imagePreview} alt="" className="h-full w-full object-contain p-1" />
@@ -836,8 +836,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                     </div>
                                 </div>
 
-                                {/* Fields (right) */}
-                                <div className="min-w-0 flex-1 space-y-3">
+                                <div className="min-w-0 space-y-2">
+                                    <div className="grid min-w-0 grid-cols-1 gap-2.5 min-[1000px]:grid-cols-2 min-[1000px]:items-start min-[1000px]:gap-3">
                                     <section>
                                         <div className="mb-1.5 flex items-center gap-1.5">
                                             <span className="h-1 w-1 shrink-0 rounded-full bg-violet-600" />
@@ -845,7 +845,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                 Product identity
                                             </h2>
                                         </div>
-                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-2">
                                             <div className="space-y-1.5">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-code-input">
@@ -941,7 +941,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                 </div>
                                             )}
                                         </div>
-                                        <details className="group mt-2 rounded-lg border border-slate-100 bg-slate-50/70 px-2 py-1">
+                                        <details className="group mt-1.5 rounded-lg border border-slate-100 bg-slate-50/70 px-2 py-1">
                                             <summary className="cursor-pointer text-[10px] font-medium text-slate-600 marker:text-slate-400">
                                                 Description (mobile shop)
                                             </summary>
@@ -955,7 +955,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                         </details>
                                     </section>
 
-                                    <div className="flex min-w-0 flex-col gap-4">
+                                        <div className="min-w-0 space-y-2 min-[1000px]:min-h-0">
                                         <section className="min-w-0">
                                             <div className="mb-1.5 flex items-center gap-1.5">
                                                 <span className="h-1 w-1 shrink-0 rounded-full bg-violet-600" />
@@ -964,6 +964,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                 </h2>
                                             </div>
                                             <div className="space-y-2">
+                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:items-end">
                                                 <div className="space-y-1.5">
                                                     <label
                                                         htmlFor="pos-add-edit-sku-main-category"
@@ -1028,6 +1029,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                         {subcategoryHelperText}
                                                     </p>
                                                 </div>
+                                                </div>
                                                 <div className="space-y-1.5">
                                                     <label htmlFor="pos-sku-unit" className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                                                         Unit of measure
@@ -1064,149 +1066,6 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                 </div>
                                             </div>
                                         </section>
-
-                                        <details className="rounded-lg border border-slate-100 bg-slate-50/60 px-2 py-1.5">
-                                            <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
-                                                Advanced details
-                                            </summary>
-                                            <div className="mt-2 space-y-2">
-                                                <Input
-                                                    label="Brand"
-                                                    compact
-                                                    placeholder="e.g. Nestlé"
-                                                    value={formData.brand}
-                                                    onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                                                    className="rounded-md border-slate-200 bg-white"
-                                                />
-                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                                    <div className="space-y-1">
-                                                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-weight">
-                                                            Weight
-                                                        </label>
-                                                        <Input
-                                                            id="pos-sku-weight"
-                                                            compact
-                                                            type="text"
-                                                            inputMode="decimal"
-                                                            placeholder="e.g. 500"
-                                                            value={formData.weight}
-                                                            onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
-                                                            className="rounded-md border-slate-200 bg-white"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-weight-unit">
-                                                            Weight unit
-                                                        </label>
-                                                        <select
-                                                            id="pos-sku-weight-unit"
-                                                            className="block w-full rounded-md border border-slate-200 bg-white py-1.5 px-2 text-xs text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500/25"
-                                                            value={formData.weightUnit}
-                                                            onChange={(e) => setFormData({ ...formData, weightUnit: e.target.value })}
-                                                        >
-                                                            {WEIGHT_UNIT_PRESETS.map((o) => (
-                                                                <option key={o.value} value={o.value}>
-                                                                    {o.label}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                                <Input
-                                                    label="Size"
-                                                    compact
-                                                    placeholder="e.g. 500ml, Large"
-                                                    value={formData.size}
-                                                    onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                                                    className="rounded-md border-slate-200 bg-white"
-                                                />
-                                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                                    <Input
-                                                        label="Color (optional)"
-                                                        compact
-                                                        value={formData.color}
-                                                        onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                                                        className="rounded-md border-slate-200 bg-white"
-                                                    />
-                                                    <Input
-                                                        label="Material (optional)"
-                                                        compact
-                                                        value={formData.material}
-                                                        onChange={(e) => setFormData({ ...formData, material: e.target.value })}
-                                                        className="rounded-md border-slate-200 bg-white"
-                                                    />
-                                                </div>
-                                                <Input
-                                                    label="Country of origin"
-                                                    compact
-                                                    placeholder="e.g. Pakistan"
-                                                    value={formData.originCountry}
-                                                    onChange={(e) => setFormData({ ...formData, originCountry: e.target.value })}
-                                                    className="rounded-md border-slate-200 bg-white"
-                                                />
-                                            </div>
-                                        </details>
-
-                                        <details className="rounded-lg border border-slate-100 bg-slate-50/60 px-2 py-1.5">
-                                            <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
-                                                Custom attributes
-                                            </summary>
-                                            <div className="mt-2 space-y-2">
-                                                <p className="text-[9px] text-slate-500">Optional key-value fields (e.g. Flavor → Orange).</p>
-                                                {formData.customAttrRows.map((row, idx) => (
-                                                    <div key={idx} className="flex flex-wrap items-end gap-2">
-                                                        <div className="min-w-[100px] flex-1">
-                                                            <label className="text-[9px] font-semibold uppercase text-slate-500">Key</label>
-                                                            <input
-                                                                value={row.key}
-                                                                onChange={(e) => {
-                                                                    const next = [...formData.customAttrRows];
-                                                                    next[idx] = { ...row, key: e.target.value };
-                                                                    setFormData({ ...formData, customAttrRows: next });
-                                                                }}
-                                                                className="mt-0.5 block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
-                                                                placeholder="Flavor"
-                                                            />
-                                                        </div>
-                                                        <div className="min-w-[100px] flex-1">
-                                                            <label className="text-[9px] font-semibold uppercase text-slate-500">Value</label>
-                                                            <input
-                                                                value={row.value}
-                                                                onChange={(e) => {
-                                                                    const next = [...formData.customAttrRows];
-                                                                    next[idx] = { ...row, value: e.target.value };
-                                                                    setFormData({ ...formData, customAttrRows: next });
-                                                                }}
-                                                                className="mt-0.5 block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
-                                                                placeholder="Orange"
-                                                            />
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            className="mb-0.5 text-[10px] font-semibold text-rose-600 hover:text-rose-700"
-                                                            onClick={() => {
-                                                                const next = formData.customAttrRows.filter((_, i) => i !== idx);
-                                                                setFormData({ ...formData, customAttrRows: next });
-                                                            }}
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                                <button
-                                                    type="button"
-                                                    className="text-[10px] font-bold uppercase tracking-wide text-violet-700 hover:text-violet-900"
-                                                    onClick={() =>
-                                                        setFormData({
-                                                            ...formData,
-                                                            customAttrRows: [...formData.customAttrRows, { key: '', value: '' }]
-                                                        })
-                                                    }
-                                                >
-                                                    + Add attribute
-                                                </button>
-                                            </div>
-                                        </details>
 
                                         <section className="min-w-0">
                                             <div className="mb-1.5 flex items-center gap-1.5">
@@ -1332,9 +1191,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                 />
                                             </div>
                                         </section>
-                                    </div>
 
-                                    <div className="flex shrink-0 flex-col gap-1.5 rounded-lg border border-sky-100 bg-sky-50/80 px-2.5 py-1.5 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex min-w-0 shrink-0 flex-col gap-1.5 rounded-lg border border-sky-100 bg-sky-50/80 px-2.5 py-1.5 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="flex items-center gap-2">
                                             <button
                                                 type="button"
@@ -1361,8 +1219,155 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                             </span>
                                         )}
                                     </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-0 grid min-w-0 grid-cols-1 gap-2 min-[1000px]:grid-cols-2 min-[1000px]:items-start min-[1000px]:gap-2">
+                                    <details className="rounded-lg border border-slate-100 bg-slate-50/60 px-2 py-1.5">
+                                        <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+                                            Advanced details
+                                        </summary>
+                                        <div className="mt-2 space-y-2">
+                                            <Input
+                                                label="Brand"
+                                                compact
+                                                placeholder="e.g. Nestlé"
+                                                value={formData.brand}
+                                                onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                                                className="rounded-md border-slate-200 bg-white"
+                                            />
+                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-weight">
+                                                        Weight
+                                                    </label>
+                                                    <Input
+                                                        id="pos-sku-weight"
+                                                        compact
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        placeholder="e.g. 500"
+                                                        value={formData.weight}
+                                                        onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                                                        className="rounded-md border-slate-200 bg-white"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-weight-unit">
+                                                        Weight unit
+                                                    </label>
+                                                    <select
+                                                        id="pos-sku-weight-unit"
+                                                        className="block w-full rounded-md border border-slate-200 bg-white py-1.5 px-2 text-xs text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500/25"
+                                                        value={formData.weightUnit}
+                                                        onChange={(e) => setFormData({ ...formData, weightUnit: e.target.value })}
+                                                    >
+                                                        {WEIGHT_UNIT_PRESETS.map((o) => (
+                                                            <option key={o.value} value={o.value}>
+                                                                {o.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <Input
+                                                label="Size"
+                                                compact
+                                                placeholder="e.g. 500ml, Large"
+                                                value={formData.size}
+                                                onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                                                className="rounded-md border-slate-200 bg-white"
+                                            />
+                                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                                <Input
+                                                    label="Color (optional)"
+                                                    compact
+                                                    value={formData.color}
+                                                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                                                    className="rounded-md border-slate-200 bg-white"
+                                                />
+                                                <Input
+                                                    label="Material (optional)"
+                                                    compact
+                                                    value={formData.material}
+                                                    onChange={(e) => setFormData({ ...formData, material: e.target.value })}
+                                                    className="rounded-md border-slate-200 bg-white"
+                                                />
+                                            </div>
+                                            <Input
+                                                label="Country of origin"
+                                                compact
+                                                placeholder="e.g. Pakistan"
+                                                value={formData.originCountry}
+                                                onChange={(e) => setFormData({ ...formData, originCountry: e.target.value })}
+                                                className="rounded-md border-slate-200 bg-white"
+                                            />
+                                        </div>
+                                    </details>
+
+                                    <details className="rounded-lg border border-slate-100 bg-slate-50/60 px-2 py-1.5">
+                                        <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
+                                            Custom attributes
+                                        </summary>
+                                        <div className="mt-2 space-y-2">
+                                            <p className="text-[9px] text-slate-500">Optional key-value fields (e.g. Flavor → Orange).</p>
+                                            {formData.customAttrRows.map((row, idx) => (
+                                                <div key={idx} className="flex flex-wrap items-end gap-2">
+                                                    <div className="min-w-[100px] flex-1">
+                                                        <label className="text-[9px] font-semibold uppercase text-slate-500">Key</label>
+                                                        <input
+                                                            value={row.key}
+                                                            onChange={(e) => {
+                                                                const next = [...formData.customAttrRows];
+                                                                next[idx] = { ...row, key: e.target.value };
+                                                                setFormData({ ...formData, customAttrRows: next });
+                                                            }}
+                                                            className="mt-0.5 block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                                                            placeholder="Flavor"
+                                                        />
+                                                    </div>
+                                                    <div className="min-w-[100px] flex-1">
+                                                        <label className="text-[9px] font-semibold uppercase text-slate-500">Value</label>
+                                                        <input
+                                                            value={row.value}
+                                                            onChange={(e) => {
+                                                                const next = [...formData.customAttrRows];
+                                                                next[idx] = { ...row, value: e.target.value };
+                                                                setFormData({ ...formData, customAttrRows: next });
+                                                            }}
+                                                            className="mt-0.5 block w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                                                            placeholder="Orange"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        className="mb-0.5 text-[10px] font-semibold text-rose-600 hover:text-rose-700"
+                                                        onClick={() => {
+                                                            const next = formData.customAttrRows.filter((_, i) => i !== idx);
+                                                            setFormData({ ...formData, customAttrRows: next });
+                                                        }}
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                className="text-[10px] font-bold uppercase tracking-wide text-violet-700 hover:text-violet-900"
+                                                onClick={() =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        customAttrRows: [...formData.customAttrRows, { key: '', value: '' }]
+                                                    })
+                                                }
+                                            >
+                                                + Add attribute
+                                            </button>
+                                        </div>
+                                    </details>
                                 </div>
                                 </div>
+                            </div>
                             </div>
 
                             <div className="mt-auto flex shrink-0 flex-col gap-2 border-t border-slate-200/90 bg-slate-50/98 px-1 py-2 shadow-[0_-4px_12px_-4px_rgba(15,23,42,0.08)] sm:flex-row sm:items-center sm:justify-between">

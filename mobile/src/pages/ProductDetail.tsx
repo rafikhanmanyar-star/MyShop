@@ -7,6 +7,7 @@ import { useOnline } from '../hooks/useOnline';
 import { getProductById } from '../services/offlineCache';
 import { getSessionProductDetail, setSessionProductDetail } from '../services/productSessionCache';
 import ProductListCard, { type ProductListProduct } from '../components/ProductListCard';
+import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
 
 function detailText(product: any): string | null {
     const raw = product?.description ?? product?.mobile_description ?? '';
@@ -73,7 +74,7 @@ export default function ProductDetail() {
         let cancelled = false;
 
         const cached = getSessionProductDetail(shopSlug, id) as any;
-        if (cached) {
+        if (cached && isMobileCatalogPriceListed(cached)) {
             setProduct(cached);
             setLoading(false);
             return () => {
@@ -94,9 +95,10 @@ export default function ProductDetail() {
                 } else {
                     const p = await getProductById(shopSlug, id);
                     if (!cancelled) {
-                        setProduct(p);
-                        if (p) setSessionProductDetail(shopSlug, id, p);
-                        if (!p) showToast('Product not found');
+                        const ok = p && isMobileCatalogPriceListed(p);
+                        setProduct(ok ? p : null);
+                        if (ok) setSessionProductDetail(shopSlug, id, p!);
+                        if (!ok) showToast('Product not found');
                     }
                 }
             } catch {

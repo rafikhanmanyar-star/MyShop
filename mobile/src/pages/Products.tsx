@@ -9,6 +9,7 @@ import CategoryRailIcon from '../components/CategoryRailIcon';
 import { useOnline } from '../hooks/useOnline';
 import { getProducts as getCachedProducts, getCategories as getCachedCategories, getBrands as getCachedBrands } from '../services/offlineCache';
 import { filterCategoriesWithListedProducts, countListedProductsByCategoryId } from '../utils/catalogCategories';
+import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
 
 const LIST_LIMIT = 12;
 const DEFAULT_LOW_PRICE_MAX = '500';
@@ -278,7 +279,7 @@ export default function Products() {
 
     const displayedProducts = useMemo(() => {
         if (online) return products;
-        let list = [...products];
+        let list = [...products].filter((p: any) => isMobileCatalogPriceListed(p));
         if (!showUnavailable) {
             list = list.filter(
                 (p: any) => (Number(p.stock ?? p.available_stock) > 0 || p.is_pre_order)

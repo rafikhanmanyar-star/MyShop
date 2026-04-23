@@ -148,7 +148,8 @@ export class MobileOrderService {
         const params: any[] = [tenantId];
         let paramIdx = 2;
 
-        let where = `WHERE p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE`;
+        let where = `WHERE p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+            AND COALESCE(p.mobile_price, p.retail_price) > 0`;
 
         if (opts.categoryIds && opts.categoryIds.length > 0) {
             where += ` AND p.category_id = ANY($${paramIdx})`;
@@ -354,7 +355,8 @@ export class MobileOrderService {
        FROM shop_products p
        LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
        LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
-       WHERE p.id = $2 AND p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE`,
+       WHERE p.id = $2 AND p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+         AND COALESCE(p.mobile_price, p.retail_price) > 0`,
             [tenantId, productId]
         );
         if (rows.length === 0) return null;
@@ -454,6 +456,7 @@ export class MobileOrderService {
       LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
       WHERE p.tenant_id = $1
         AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+        AND COALESCE(p.mobile_price, p.retail_price) > 0
         AND p.id != $2
         ${catFilter}
         ${subFilter}
@@ -512,6 +515,7 @@ export class MobileOrderService {
             AND p.is_active = TRUE
             AND p.mobile_visible = TRUE
             AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+            AND COALESCE(p.mobile_price, p.retail_price) > 0
             AND ((${stockExpr}) > 0 OR COALESCE(p.is_pre_order, FALSE) = TRUE)
         ) AS product_count
        FROM categories c

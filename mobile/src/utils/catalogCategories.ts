@@ -1,3 +1,5 @@
+import { isMobileCatalogPriceListed } from './mobileProductPrice';
+
 /**
  * Categories from GET /mobile/:slug/categories may include `product_count` (sellable mobile-visible products
  * for that category_id). When missing (older caches), we optionally use per-id counts from cached products.
@@ -21,6 +23,7 @@ export function countListedProductsByCategoryId(products: any[]): Map<string, nu
     const m = new Map<string, number>();
     for (const p of products) {
         if (!p?.category_id) continue;
+        if (!isMobileCatalogPriceListed(p)) continue;
         const stock = Number(p.stock ?? p.available_stock) > 0;
         if (!stock && !p.is_pre_order) continue;
         const id = String(p.category_id);

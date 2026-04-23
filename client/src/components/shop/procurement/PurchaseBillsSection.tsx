@@ -29,8 +29,14 @@ function newLineId(): string {
     : `ln-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** Default expiry for new lines: same calendar day, one year ahead (YYYY-MM-DD). */
 function defaultExpiryDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** Normalize expiry from API (string, ISO datetime, or Date) without defaulting to today — used when loading existing bill lines */
