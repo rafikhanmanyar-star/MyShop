@@ -5,12 +5,24 @@ import { CURRENCY } from '../../../constants';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
-import { ArrowLeft, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Calendar, Search } from 'lucide-react';
 
 type LineState = Record<
   string,
-  { qty: string; restock: boolean; reason: string }
+  { qty: string; restock: boolean; reason: string; reasonIsCustom: boolean }
 >;
+
+const LINE_REASONS = [
+  { value: '', label: 'Select reason…' },
+  { value: 'Damaged', label: 'Damaged' },
+  { value: 'Wrong item', label: 'Wrong item' },
+  { value: 'Quality', label: 'Quality' },
+  { value: 'Changed mind', label: 'Changed mind' },
+] as const;
+
+const PRESET_REASONS = new Set<string>(
+  LINE_REASONS.map((o) => o.value).filter((v) => v !== '')
+);
 
 function lineKey(row: { saleLineItemId?: string; mobileOrderLineItemId?: string }) {
   return String(row.saleLineItemId || row.mobileOrderLineItemId || '');
@@ -19,6 +31,26 @@ function lineKey(row: { saleLineItemId?: string; mobileOrderLineItemId?: string 
 function formatMoney(n: number) {
   return new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
     Number.isFinite(n) ? n : 0
+  );
+}
+
+function SectionCard({
+  accent = 'primary' as 'primary' | 'muted',
+  children,
+  className = '',
+}: {
+  accent?: 'primary' | 'muted';
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const border =
+    accent === 'primary' ? 'border-l-primary-600 dark:border-l-primary-500' : 'border-l-slate-300 dark:border-l-slate-600';
+  return (
+    <section
+      className={`rounded-xl border border-border bg-card shadow-[var(--shadow-card-val)] pl-1 overflow-hidden ${border} border-l-4 ${className}`}
+    >
+      <div className="p-5 sm:p-6">{children}</div>
+    </section>
   );
 }
 
@@ -88,6 +120,7 @@ export default function SalesReturnCreatePage() {
           qty: '0',
           restock: true,
           reason: '',
+          reasonIsCustom: false,
         };
       }
       setLineState(next);
@@ -134,6 +167,7 @@ export default function SalesReturnCreatePage() {
         qty: avail > 0 ? String(avail) : '0',
         restock: next[k]?.restock ?? true,
         reason: next[k]?.reason || '',
+        reasonIsCustom: next[k]?.reasonIsCustom ?? false,
       };
     }
     setLineState(next);
@@ -158,19 +192,20 @@ export default function SalesReturnCreatePage() {
         setError(`Return qty exceeds available for ${row.productName || 'a line'}`);
         return;
       }
+      const reasonTrim = (st?.reason || '').trim();
       if (isMobile) {
         items.push({
           mobileOrderLineItemId: row.mobileOrderLineItemId,
           quantity: q,
           restock: st?.restock !== false,
-          reason: st?.reason || undefined,
+          reason: reasonTrim || undefined,
         });
       } else {
         items.push({
           saleLineItemId: row.saleLineItemId,
           quantity: q,
           restock: st?.restock !== false,
-          reason: st?.reason || undefined,
+          reason: reasonTrim || undefined,
         });
       }
     }
@@ -211,131 +246,215 @@ export default function SalesReturnCreatePage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6 pb-12">
-      <div className="flex items-center gap-4">
-        <Link to="/sales-returns" className="text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">New sales return</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Enter a POS invoice number or a mobile app order number (delivered and paid), then lines and refund method.
-          </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-4 min-w-0">
+          <Link
+            to="/sales-returns"
+            className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Back to sales returns"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">New return</h1>
+            <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+              Look up a POS invoice or mobile order, choose lines and reasons, then set refund method to match your
+              dashboard workflow.
+            </p>
+          </div>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 px-4 py-3 text-sm text-rose-800 dark:text-rose-200 flex gap-2 items-start">
+        <div className="inline-flex items-start gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-900 dark:bg-red-950/30 dark:border-red-900 dark:text-red-200">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-          {error}
+          <span>{error}</span>
         </div>
       )}
 
-      <section className="rounded-2xl border border-border dark:border-slate-700 p-6 space-y-4 bg-card dark:bg-slate-900/60">
-        <h2 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">1. Original sale</h2>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex-1 min-w-[200px]">
-            <Input
-              label="POS invoice or mobile order #"
-              value={invoiceInput}
-              onChange={(e) => setInvoiceInput(e.target.value)}
-              placeholder="e.g. INV-00042 or MO-1024"
-            />
+      <SectionCard>
+        <div className="flex flex-col gap-1 mb-4">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Step 1 · Original sale</span>
+          <p className="text-sm text-muted-foreground">Enter the invoice or order number, then load eligible lines.</p>
+        </div>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="flex-1 min-w-0">
+            <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Invoice / order #</label>
+            <div className="flex items-center gap-2 rounded-full border border-border bg-muted/30 dark:bg-slate-900/40 px-4 py-2 focus-within:ring-2 focus-within:ring-primary-500/25">
+              <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+              <input
+                type="text"
+                value={invoiceInput}
+                onChange={(e) => setInvoiceInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void loadEligibility()}
+                placeholder="e.g. INV-00042 or MO-1024"
+                className="flex-1 min-w-0 bg-transparent border-none text-sm p-0 focus:ring-0 placeholder:text-muted-foreground/70"
+              />
+            </div>
           </div>
-          <Button onClick={() => void loadEligibility()} disabled={loading}>
-            Load sale
+          <Button
+            type="button"
+            onClick={() => void loadEligibility()}
+            disabled={loading}
+            className="rounded-full gap-2 bg-primary-900 hover:bg-primary-950 dark:bg-primary-700 dark:hover:bg-primary-600 shadow-sm shrink-0"
+          >
+            {loading ? 'Loading…' : 'Load sale'}
           </Button>
         </div>
         {eligibility?.sale && (
-          <p className="text-sm text-muted-foreground">
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             {(returnSource === 'mobile' || eligibility.source === 'mobile') && (
-              <span className="mr-2 rounded-md bg-indigo-100 dark:bg-indigo-950 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:text-indigo-200">
-                Mobile order
+              <span className="inline-flex rounded-full bg-sky-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
+                Mobile
               </span>
             )}
             {(returnSource === 'pos' || eligibility.source === 'pos') && (
-              <span className="mr-2 rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium">POS</span>
+              <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-800 dark:bg-slate-800 dark:text-slate-200">
+                POS
+              </span>
             )}
-            Order total {CURRENCY} {formatMoney(parseFloat(eligibility.sale.grandTotal) || 0)} · Status{' '}
-            <span className="font-semibold text-foreground">{eligibility.sale.status}</span>
-            {(eligibility.sale as any).paymentStatus != null && (
-              <>
-                {' '}
-                · Payment{' '}
-                <span className="font-semibold text-foreground">{(eligibility.sale as any).paymentStatus}</span>
-              </>
-            )}
-          </p>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground">
+              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+              Total {CURRENCY} {formatMoney(parseFloat(eligibility.sale.grandTotal) || 0)}
+            </span>
+            <span>
+              Status <strong className="text-foreground">{eligibility.sale.status}</strong>
+              {(eligibility.sale as any).paymentStatus != null && (
+                <>
+                  {' '}
+                  · Payment <strong className="text-foreground">{(eligibility.sale as any).paymentStatus}</strong>
+                </>
+              )}
+            </span>
+          </div>
         )}
-      </section>
+      </SectionCard>
 
       {eligibility && (
         <>
           {blocked && (
-            <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-950/30 px-4 py-3 text-sm">
+            <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/90 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
               {eligibility.blockReason || 'Returns are not allowed for this sale.'}
             </div>
           )}
 
-          <section className="rounded-2xl border border-border dark:border-slate-700 p-6 space-y-4 bg-card dark:bg-slate-900/60">
-            <div className="flex flex-wrap justify-between gap-2">
-              <h2 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">2. Lines</h2>
-              <Button type="button" variant="secondary" size="sm" onClick={applyFullQuantities} disabled={blocked}>
+          <SectionCard>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Step 2 · Lines</span>
+                <p className="text-sm text-muted-foreground mt-0.5">Quantities, restock, and reason per SKU.</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full border-border"
+                onClick={applyFullQuantities}
+                disabled={blocked}
+              >
                 Fill full return
               </Button>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
-                    <th className="py-2 pr-2">Product</th>
-                    <th className="py-2 pr-2">Sold</th>
-                    <th className="py-2 pr-2 text-rose-600 dark:text-rose-400">Already returned</th>
-                    <th className="py-2 pr-2">Available</th>
-                    <th className="py-2 pr-2">Return qty</th>
-                    <th className="py-2 pr-2">Restock</th>
-                    <th className="py-2">Reason</th>
+                  <tr className="border-b border-border bg-muted/50 dark:bg-slate-800/60 text-left">
+                    <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Product</th>
+                    <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Sold</th>
+                    <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground text-rose-600 dark:text-rose-400">
+                      Returned
+                    </th>
+                    <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground text-emerald-600 dark:text-emerald-400">
+                      Available
+                    </th>
+                    <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Return qty</th>
+                    <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Restock</th>
+                    <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground min-w-[9rem]">
+                      Reason
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {eligibility.items.map((row: any) => {
+                  {eligibility.items.map((row: any, idx: number) => {
                     const lk = lineKey(row);
-                    const st = lineState[lk] || { qty: '0', restock: true, reason: '' };
+                    const st = lineState[lk] || {
+                      qty: '0',
+                      restock: true,
+                      reason: '',
+                      reasonIsCustom: false,
+                    };
+                    const reasonSelectValue =
+                      st.reasonIsCustom || (st.reason !== '' && !PRESET_REASONS.has(st.reason))
+                        ? '__custom__'
+                        : st.reason;
                     const avail = Number(row.availableToReturn) || 0;
                     const ret = Number(row.alreadyReturned) || 0;
+                    const zebra = idx % 2 === 0 ? 'bg-[var(--table-zebra)]' : '';
                     return (
-                      <tr key={lk} className="border-b border-border/60">
-                        <td className="py-2 pr-2 font-medium">{row.productName}</td>
-                        <td className="py-2 pr-2 font-mono">{row.soldQty}</td>
-                        <td className="py-2 pr-2 font-mono text-rose-600 dark:text-rose-400">{ret}</td>
-                        <td className="py-2 pr-2 font-mono text-emerald-600 dark:text-emerald-400">{avail}</td>
-                        <td className="py-2 pr-2">
+                      <tr
+                        key={lk}
+                        className={`border-b border-border/70 hover:bg-[var(--table-row-hover)] transition-colors ${zebra}`}
+                      >
+                        <td className="px-4 py-3 font-medium text-foreground max-w-[14rem]">{row.productName}</td>
+                        <td className="px-4 py-3 font-mono tabular-nums text-muted-foreground">{row.soldQty}</td>
+                        <td className="px-4 py-3 font-mono tabular-nums text-rose-600 dark:text-rose-400">{ret}</td>
+                        <td className="px-4 py-3 font-mono tabular-nums text-emerald-600 dark:text-emerald-400">{avail}</td>
+                        <td className="px-4 py-3">
                           <input
                             type="number"
                             min={0}
                             step="0.001"
                             max={avail}
                             disabled={blocked}
-                            className="w-24 rounded-md border border-input bg-background px-2 py-1 text-sm"
+                            className="w-24 rounded-full border border-border bg-background px-3 py-1.5 text-sm tabular-nums focus:ring-2 focus:ring-primary-500/25"
                             value={st.qty}
                             onChange={(e) => updateLine(lk, { qty: e.target.value })}
+                            aria-label={`Return quantity for ${row.productName}`}
                           />
                         </td>
-                        <td className="py-2 pr-2">
+                        <td className="px-4 py-3">
                           <input
                             type="checkbox"
                             checked={st.restock}
                             disabled={blocked}
                             onChange={(e) => updateLine(lk, { restock: e.target.checked })}
+                            className="h-4 w-4 rounded border-border text-primary-600 focus:ring-primary-500/40"
+                            title={`Restock ${row.productName}`}
+                            aria-label={`Restock ${row.productName} on return`}
                           />
                         </td>
-                        <td className="py-2">
-                          <input
-                            className="w-full min-w-[120px] rounded-md border border-input bg-background px-2 py-1 text-sm"
-                            placeholder="Optional"
-                            value={st.reason}
+                        <td className="px-4 py-3">
+                          <select
                             disabled={blocked}
-                            onChange={(e) => updateLine(lk, { reason: e.target.value })}
-                          />
+                            className="w-full rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-primary-500/25"
+                            value={reasonSelectValue}
+                            aria-label={`Return reason for ${row.productName}`}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === '__custom__') {
+                                updateLine(lk, { reasonIsCustom: true, reason: '' });
+                              } else {
+                                updateLine(lk, { reasonIsCustom: false, reason: v });
+                              }
+                            }}
+                          >
+                            {LINE_REASONS.map((o) => (
+                              <option key={o.label} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                            <option value="__custom__">Other (custom)</option>
+                          </select>
+                          {reasonSelectValue === '__custom__' ? (
+                            <input
+                              className="mt-2 w-full rounded-full border border-border bg-background px-3 py-1.5 text-xs"
+                              placeholder="Describe reason"
+                              value={st.reason}
+                              disabled={blocked}
+                              aria-label={`Custom return reason for ${row.productName}`}
+                              onChange={(e) => updateLine(lk, { reason: e.target.value })}
+                            />
+                          ) : null}
                         </td>
                       </tr>
                     );
@@ -343,87 +462,127 @@ export default function SalesReturnCreatePage() {
                 </tbody>
               </table>
             </div>
-          </section>
+          </SectionCard>
 
-          <section className="rounded-2xl border border-border dark:border-slate-700 p-6 space-y-4 bg-card dark:bg-slate-900/60">
-            <h2 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">3. Return type</h2>
-            <div className="flex flex-wrap gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="rt"
-                  checked={returnType === 'FULL'}
-                  onChange={() => setReturnType('FULL')}
-                  disabled={blocked}
-                />
+          <SectionCard>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block mb-3">
+              Step 3 · Return type
+            </span>
+            <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-semibold">
+              <button
+                type="button"
+                disabled={blocked}
+                onClick={() => setReturnType('FULL')}
+                className={`px-4 py-2 rounded-md transition-colors ${
+                  returnType === 'FULL'
+                    ? 'bg-primary-900 text-white dark:bg-primary-700 shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
                 Full
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="rt"
-                  checked={returnType === 'PARTIAL'}
-                  onChange={() => setReturnType('PARTIAL')}
-                  disabled={blocked}
-                />
+              </button>
+              <button
+                type="button"
+                disabled={blocked}
+                onClick={() => setReturnType('PARTIAL')}
+                className={`px-4 py-2 rounded-md transition-colors ${
+                  returnType === 'PARTIAL'
+                    ? 'bg-primary-900 text-white dark:bg-primary-700 shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
                 Partial
-              </label>
+              </button>
             </div>
-          </section>
+          </SectionCard>
 
-          <section className="rounded-2xl border border-border dark:border-slate-700 p-6 space-y-4 bg-card dark:bg-slate-900/60">
-            <h2 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">4. Refund method</h2>
-            <Select
-              label="Method"
-              value={refundMethod}
-              onChange={(e) => setRefundMethod(e.target.value as any)}
-              disabled={blocked}
-            >
-              <option value="CASH">Cash</option>
-              <option value="BANK">Bank</option>
-              <option value="WALLET">Wallet (store credit)</option>
-              <option value="ADJUSTMENT">Adjustment (A/R)</option>
-            </Select>
-            {refundMethod === 'BANK' && (
-              <Select label="Bank account" value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} disabled={blocked}>
-                <option value="">Select…</option>
-                {banks.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.account_type})
-                  </option>
-                ))}
+          <SectionCard>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block mb-3">
+              Step 4 · Refund & notes
+            </span>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Select
+                label="Refund method"
+                value={refundMethod}
+                onChange={(e) => setRefundMethod(e.target.value as typeof refundMethod)}
+                disabled={blocked}
+                className="!rounded-full font-medium"
+              >
+                <option value="CASH">Cash</option>
+                <option value="BANK">Bank (in review)</option>
+                <option value="WALLET">Wallet (store credit)</option>
+                <option value="ADJUSTMENT">Adjustment (pending / A/R)</option>
               </Select>
-            )}
-            <Input label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={blocked} />
-          </section>
+              {refundMethod === 'BANK' && (
+                <Select
+                  label="Bank account"
+                  value={bankAccountId}
+                  onChange={(e) => setBankAccountId(e.target.value)}
+                  disabled={blocked}
+                  className="!rounded-full font-medium"
+                >
+                  <option value="">Select…</option>
+                  {banks.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.account_type})
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </div>
+            <div className="mt-4">
+              <Input label="Internal notes" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={blocked} />
+            </div>
+          </SectionCard>
 
-          <section className="rounded-2xl border border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/20 p-6 space-y-2">
-            <h2 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">5. Summary</h2>
-            <p className="text-2xl font-semibold font-mono">
-              {CURRENCY} {formatMoney(totalReturn)}
-            </p>
-            <Button disabled={blocked || loading} onClick={() => setConfirmOpen(true)}>
-              Review & submit
-            </Button>
+          <section className="rounded-xl border border-primary-200 dark:border-primary-900 bg-primary-50/60 dark:bg-primary-950/25 shadow-[var(--shadow-card-val)] pl-1 border-l-4 border-l-primary-600 overflow-hidden">
+            <div className="p-5 sm:p-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-primary-900/80 dark:text-primary-200">
+                  Step 5 · Summary
+                </span>
+                <p className="text-3xl font-bold tabular-nums text-primary-950 dark:text-primary-100 mt-1">
+                  {CURRENCY} {formatMoney(totalReturn)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Estimated credit before posting.</p>
+              </div>
+              <Button
+                type="button"
+                disabled={blocked || loading}
+                onClick={() => setConfirmOpen(true)}
+                className="rounded-full gap-2 bg-primary-900 hover:bg-primary-950 dark:bg-primary-700 dark:hover:bg-primary-600 shadow-md px-8"
+              >
+                Review & submit
+              </Button>
+            </div>
           </section>
         </>
       )}
 
       {confirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-card dark:bg-slate-900 border border-border rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4">
-            <h3 className="text-lg font-bold">Confirm return</h3>
-            <p className="text-sm text-muted-foreground">
-              Post return for <strong>{CURRENCY} {formatMoney(totalReturn)}</strong> via <strong>{refundMethod}</strong>?
-              Inventory and accounts will update.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => void submit()} disabled={loading}>
-                {loading ? 'Submitting…' : 'Confirm'}
-              </Button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="bg-card dark:bg-slate-900 border border-border rounded-xl max-w-md w-full shadow-[var(--shadow-card-val)] overflow-hidden">
+            <div className="p-6 space-y-4">
+              <div className="border-l-4 border-l-primary-600 pl-4">
+                <h3 className="text-lg font-bold text-foreground">Confirm return</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Post return for <strong className="text-foreground">{CURRENCY} {formatMoney(totalReturn)}</strong> via{' '}
+                  <strong className="text-foreground">{refundMethod}</strong>? Inventory and accounts will update.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <Button type="button" variant="outline" className="rounded-full" onClick={() => setConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  className="rounded-full bg-primary-900 hover:bg-primary-950 dark:bg-primary-700"
+                  onClick={() => void submit()}
+                  disabled={loading}
+                >
+                  {loading ? 'Submitting…' : 'Confirm'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useRegisterInventoryPageHeader, type InventoryTabId } from '../../context/InventoryPageHeaderContext';
 import { InventoryProvider, useInventory } from '../../context/InventoryContext';
 import InventoryDashboard from './inventory/InventoryDashboard';
@@ -9,10 +10,36 @@ import InventoryCategories from './inventory/InventoryCategories';
 import IncompleteProductsTab from './inventory/IncompleteProductsTab';
 import { ICONS } from '../../constants';
 import AddOrEditSkuModal from './pos/AddOrEditSkuModal';
+const INVENTORY_TABS: readonly InventoryTabId[] = [
+    'dashboard', 'stock', 'movements', 'adjustments', 'categories', 'incomplete',
+];
+
 const InventoryContent: React.FC = () => {
     const { refreshItems } = useInventory();
-    const [activeTab, setActiveTab] = useState<InventoryTabId>('dashboard');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState<InventoryTabId>(() => {
+        try {
+            const p = new URLSearchParams(window.location.search).get('tab');
+            if (p && (INVENTORY_TABS as readonly string[]).includes(p)) return p as InventoryTabId;
+        } catch {
+            /* empty */
+        }
+        return 'dashboard';
+    });
     const [isNewSkuModalOpen, setIsNewSkuModalOpen] = useState(false);
+
+    const setTab = (t: InventoryTabId) => {
+        setActiveTab(t);
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                if (t === 'dashboard') next.delete('tab');
+                else next.set('tab', t);
+                return next;
+            },
+            { replace: true }
+        );
+    };
 
     useEffect(() => {
         refreshItems();
@@ -31,10 +58,19 @@ const InventoryContent: React.FC = () => {
         []
     );
 
+    useEffect(() => {
+        const p = searchParams.get('tab');
+        if (p && (INVENTORY_TABS as readonly string[]).includes(p)) {
+            setActiveTab(p as InventoryTabId);
+        } else {
+            setActiveTab('dashboard');
+        }
+    }, [searchParams]);
+
     const inventoryHeaderPayload = useMemo(
         () => ({
             activeTab,
-            setActiveTab,
+            setActiveTab: setTab,
             onNewSku: () => setIsNewSkuModalOpen(true),
             tabs: [...tabs],
         }),

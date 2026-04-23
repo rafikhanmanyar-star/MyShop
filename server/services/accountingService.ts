@@ -456,10 +456,21 @@ export class AccountingService {
   }
 
   /**
-   * Category performance from actual sales data
+   * Category performance from actual sales data.
+   * When `from` + `to` (ISO) are set, only sales in `[from, to)` are included.
    */
-  async getCategoryPerformance(tenantId: string) {
-    return this.db.query(`
+  async getCategoryPerformance(
+    tenantId: string,
+    range?: { from: string; to: string } | null
+  ) {
+    const dateFilter =
+      range?.from && range?.to
+        ? `AND s.created_at >= $2 AND s.created_at < $3`
+        : '';
+    const params: (string)[] =
+      range?.from && range?.to ? [tenantId, range.from, range.to] : [tenantId];
+    return this.db.query(
+      `
       SELECT
         COALESCE(c.name, 'Uncategorized') as category,
         COUNT(DISTINCT s.id) as total_sales,
@@ -470,10 +481,133 @@ export class AccountingService {
       JOIN shop_products p ON si.product_id = p.id AND p.tenant_id = $1
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE si.tenant_id = $1
+      ${dateFilter}
       GROUP BY c.name
-      ORDER BY revenue DESC
-      LIMIT 10
-    `, [tenantId]);
+      ORDER BY COALESCE(SUM(si.subtotal), 0) DESC
+      LIMIT 20
+    `,
+      params
+    );
+  }
+
+  private sumUnits(cats: { units_sold?: string | number }[]) {
+    return (cats || []).reduce((s, c) => s + (parseFloat(String(c.units_sold)) || 0), 0);
+  }
+
+  /**
+   * Aggregated data for the Supply Chain & Inventory IQ view (date window + prior period + heuristics).
+   */
+  async getInventoryIntelligence(tenantId: string, fromIso: string, toIso: string) {
+    const from = new Date(fromIso);
+    const to = new Date(toIso);
+    const len = Math.max(0, to.getTime() - from.getTime());
+    const priorTo = from.getTime();
+    const priorFrom = new Date(priorTo - len);
+
+    const isSql = this.db.getType() === 'sqlite';
+
+    const [currentCats, priorCats, newCatCount, whRows, movementAgg] = await Promise.all([
+      this.getCategoryPerformance(tenantId, { from: fromIso, to: toIso }),
+      this.getCategoryPerformance(tenantId, {
+        from: priorFrom.toISOString(),
+        to: from.toISOString(),
+      }),
+      this.db.query(
+        isSql
+          ? `
+        SELECT COUNT(*) as n FROM categories
+        WHERE tenant_id = $1
+          AND deleted_at IS NULL
+          AND (parent_id IS NULL OR parent_id = '')
+          AND datetime(created_at) >= datetime($2) AND datetime(created_at) < datetime($3)
+        `
+          : `
+        SELECT COUNT(*)::int as n FROM categories
+        WHERE tenant_id = $1
+          AND deleted_at IS NULL
+          AND (parent_id IS NULL)
+          AND created_at >= $2::timestamptz AND created_at < $3::timestamptz
+        `,
+        [tenantId, fromIso, toIso]
+      ),
+      this.db.query(
+        `
+        SELECT w.id, w.name,
+          COALESCE(SUM(CASE WHEN i.quantity_on_hand > 0 THEN i.quantity_on_hand ELSE 0 END), 0) as total_on_hand,
+          COALESCE(SUM(CASE WHEN COALESCE(i.quantity_on_hand,0) <= 0 THEN 1 ELSE 0 END), 0) as skus_out
+        FROM shop_warehouses w
+        LEFT JOIN shop_inventory i ON i.warehouse_id = w.id AND i.tenant_id = w.tenant_id
+        WHERE w.tenant_id = $1
+        GROUP BY w.id, w.name
+        ORDER BY w.name
+        LIMIT 5
+        `,
+        [tenantId]
+      ),
+      this.db.query(
+        isSql
+          ? `
+        SELECT COALESCE(SUM(ABS(quantity)), 0) as v
+        FROM shop_inventory_movements
+        WHERE tenant_id = $1
+          AND datetime(created_at) >= datetime($2) AND datetime(created_at) < datetime($3)
+          AND LOWER(COALESCE(type, '')) NOT IN (
+            'sale', 'purchase', 'salereturn', 'mobilesale', 'releasereserve', 'purchasereturn', 'return'
+          )
+        `
+          : `
+        SELECT COALESCE(SUM(ABS(quantity::numeric)), 0) as v
+        FROM shop_inventory_movements
+        WHERE tenant_id = $1
+          AND created_at >= $2::timestamptz AND created_at < $3::timestamptz
+          AND LOWER(COALESCE(type, '')) NOT IN (
+            'sale', 'purchase', 'salereturn', 'mobilesale', 'releasereserve', 'purchasereturn', 'return'
+          )
+        `,
+        [tenantId, fromIso, toIso]
+      ),
+    ]);
+
+    const onHand = await this.db.query(
+      `
+      SELECT COALESCE(SUM(
+        ${isSql ? 'CASE WHEN quantity_on_hand > 0 THEN quantity_on_hand ELSE 0 END' : 'GREATEST(0::numeric, quantity_on_hand::numeric)'}
+      ), 0) as q
+      FROM shop_inventory
+      WHERE tenant_id = $1
+      `,
+      [tenantId]
+    );
+    const totalOn = parseFloat(String((onHand[0] as any)?.q ?? 0)) || 0;
+    const nonRoutine = parseFloat(String((movementAgg[0] as any)?.v ?? 0)) || 0;
+    const stockVarianceRate =
+      totalOn > 0.01 ? Math.min(100, (nonRoutine / totalOn) * 100) : 0;
+
+    const curUnits = this.sumUnits(currentCats as any[]);
+    const prevUnits = this.sumUnits(priorCats as any[]);
+    const unitsChangePct = prevUnits > 0.01 ? ((curUnits - prevUnits) / prevUnits) * 100 : curUnits > 0 ? 100 : 0;
+
+    const warehouses = (whRows as any[]).map((r) => {
+      const t = parseFloat(String(r.total_on_hand)) || 0;
+      const out = parseInt(String(r.skus_out), 10) || 0;
+      const isWarning = out >= 3 || (t < 0.1 && out >= 1);
+      return {
+        name: r.name,
+        status: (isWarning ? 'warning' : 'optimized') as 'warning' | 'optimized',
+        totalOnHand: t,
+        skusOut: out,
+      };
+    });
+
+    return {
+      categoryPerformance: currentCats,
+      priorTotalUnits: prevUnits,
+      currentTotalUnits: curUnits,
+      unitsChangePct,
+      newCategoriesInPeriod: parseInt(String((newCatCount[0] as any)?.n ?? 0), 10) || 0,
+      stockVarianceRate,
+      warehouses,
+    };
   }
 
   /**

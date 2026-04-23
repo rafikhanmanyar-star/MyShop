@@ -350,7 +350,27 @@ export const accountingApi = {
   getBankBalances: () => apiClient.get<any[]>('/shop/accounting/bank-balances'),
   getSalesBySource: () => apiClient.get<any>('/shop/accounting/sales-by-source'),
   getDailyTrend: (days = 30) => apiClient.get<any>(`/shop/accounting/daily-trend?days=${days}`),
-  getCategoryPerformance: () => apiClient.get<any[]>('/shop/accounting/category-performance'),
+  getCategoryPerformance: (from?: string, to?: string) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    const s = q.toString();
+    return apiClient.get<any[]>(`/shop/accounting/category-performance${s ? `?${s}` : ''}`);
+  },
+  getInventoryIntelligence: (from: string, to: string) => {
+    const q = new URLSearchParams();
+    q.set('from', from);
+    q.set('to', to);
+    return apiClient.get<{
+      categoryPerformance: any[];
+      priorTotalUnits: number;
+      currentTotalUnits: number;
+      unitsChangePct: number;
+      newCategoriesInPeriod: number;
+      stockVarianceRate: number;
+      warehouses: { name: string; status: 'warning' | 'optimized'; totalOnHand: number; skusOut: number }[];
+    }>(`/shop/accounting/inventory-intelligence?${q.toString()}`);
+  },
   getTransactions: (limit = 50) => apiClient.get<any[]>(`/shop/accounting/transactions?limit=${limit}`),
   clearAllTransactions: () => apiClient.post<{ success: boolean; message: string }>('/shop/accounting/clear-transactions'),
 

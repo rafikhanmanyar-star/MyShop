@@ -1,5 +1,6 @@
 
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BIProvider, useBI } from '../../context/BIContext';
 import ExecutiveOverview from './bi/ExecutiveOverview';
 import SalesAnalytics from './bi/SalesAnalytics';
@@ -9,89 +10,138 @@ import { ICONS } from '../../constants';
 
 const ProcurementDemand = lazy(() => import('./bi/ProcurementDemand'));
 
+const BI_TAB_IDS = ['overview', 'sales', 'inventory', 'profit', 'procurement'] as const;
+type BITabId = (typeof BI_TAB_IDS)[number];
+
+const PERIOD_OPTIONS = ['Today', 'MTD', 'QTD', 'YTD'] as const;
+
+function isValidBITab(t: string | null): t is BITabId {
+    return t !== null && (BI_TAB_IDS as readonly string[]).includes(t);
+}
+
 const BIContent: React.FC = () => {
     const { dateRange, setDateRange } = useBI();
-    const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'inventory' | 'profit' | 'procurement'>('overview');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const tabParam = searchParams.get('tab');
+    const [activeTab, setActiveTab] = useState<BITabId>(() =>
+        isValidBITab(tabParam) ? tabParam : 'overview'
+    );
+
+    useEffect(() => {
+        if (isValidBITab(tabParam)) {
+            setActiveTab(tabParam);
+        }
+    }, [tabParam]);
+
+    const goToTab = (id: BITabId) => {
+        setActiveTab(id);
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.set('tab', id);
+                return next;
+            },
+            { replace: false }
+        );
+    };
 
     const handleExport = () => {
         alert(`Exporting BI Report for ${dateRange}...`);
     };
 
     const tabs = [
-        { id: 'overview', label: 'Executive Overview', icon: ICONS.barChart },
-        { id: 'sales', label: 'Sales Analytics', icon: ICONS.trendingUp },
-        { id: 'inventory', label: 'Inventory Intelligence', icon: ICONS.package },
-        { id: 'profit', label: 'Profitability Analysis', icon: ICONS.dollarSign },
-        { id: 'procurement', label: 'Procurement Demand', icon: ICONS.shoppingCart },
+        { id: 'overview' as const, label: 'Executive Overview' },
+        { id: 'sales' as const, label: 'Sales Analytics' },
+        { id: 'inventory' as const, label: 'Inventory Intelligence' },
+        { id: 'profit' as const, label: 'Profitability Analysis' },
+        { id: 'procurement' as const, label: 'Procurement Demand' },
     ];
 
     return (
-        <div className="flex w-full min-w-0 flex-col h-full min-h-0 flex-1 bg-muted/80 dark:bg-slate-800">
-            {/* Header / Tab Navigation */}
-            <div className="bg-slate-900 dark:bg-slate-950 border-b border-white/10 dark:border-slate-700/80 px-8 pt-8 shadow-2xl z-20 shrink-0">
-                <div className="flex justify-between items-center mb-8">
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-500 dark:bg-indigo-600 rounded-lg text-white shadow-lg shadow-indigo-500/20">
-                                {ICONS.globe}
-                            </div>
-                            <h1 className="text-2xl font-semibold text-white tracking-tight">Intelligence Engine</h1>
-                        </div>
-                        <p className="text-slate-400 text-sm font-medium mt-1">Enterprise Analytics & Predictive Decision Support.</p>
-                    </div>
-                    <div className="flex items-center gap-4 flex-wrap justify-end">
-                        <div className="flex bg-card/5 dark:bg-slate-800/50 rounded-xl p-1 border border-white/10 dark:border-slate-600">
-                            {['Today', 'MTD', 'QTD', 'YTD'].map(range => (
+        <div className="flex w-full min-w-0 min-h-0 flex-1 flex-col bg-[#ECEFF3] dark:bg-slate-900">
+            <header className="z-20 shrink-0 border-b border-slate-200/90 bg-white px-6 pt-6 shadow-sm dark:border-slate-700 dark:bg-slate-950 sm:px-8 sm:pt-8">
+                <div className="mb-6 max-w-5xl">
+                    <h1 className="text-2xl font-bold tracking-tight text-[#0B2A5B] dark:text-slate-100 sm:text-[1.65rem]">
+                        Intelligence Engine — Enterprise Analytics &amp; Predictive Decision Support
+                    </h1>
+                    <p className="mt-1.5 text-sm font-medium text-slate-500 dark:text-slate-400">
+                        Real-time performance monitoring and demand forecasting across your supply chain nodes.
+                    </p>
+                </div>
+
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <nav
+                        className="flex min-w-0 gap-0 overflow-x-auto border-b border-slate-200 dark:border-slate-700"
+                        aria-label="Analytics sections"
+                    >
+                        {tabs.map((tab) => {
+                            const isActive = activeTab === tab.id;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    type="button"
+                                    onClick={() => goToTab(tab.id)}
+                                    className={`relative shrink-0 whitespace-nowrap px-1 pb-3 text-sm font-semibold transition-colors sm:px-2 ${
+                                        isActive
+                                            ? 'text-[#0B2A5B] dark:text-[#7eb8ff]'
+                                            : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    {tab.label}
+                                    {isActive && (
+                                        <span
+                                            className="absolute bottom-0 left-0 right-0 h-1 rounded-t bg-[#0047AB] dark:bg-[#5b8cff]"
+                                            aria-hidden
+                                        />
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </nav>
+
+                    <div className="flex shrink-0 items-center gap-2 pb-3 lg:pb-0">
+                        <div className="flex items-center gap-0.5 rounded-full border border-slate-200/80 bg-slate-100/90 p-1 dark:border-slate-600 dark:bg-slate-800/80">
+                            {PERIOD_OPTIONS.map((range) => (
                                 <button
                                     key={range}
+                                    type="button"
                                     onClick={() => setDateRange(range)}
-                                    className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${dateRange === range
-                                        ? 'bg-indigo-600 text-white shadow-lg'
-                                        : 'text-slate-400 hover:text-white dark:text-slate-500 dark:hover:text-slate-200'
-                                        }`}
+                                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all sm:px-4 ${
+                                        dateRange === range
+                                            ? 'bg-[#0047AB] text-white shadow-sm dark:bg-[#0047AB]'
+                                            : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                                    }`}
                                 >
                                     {range}
                                 </button>
                             ))}
+                            <button
+                                type="button"
+                                onClick={handleExport}
+                                className="ml-0.5 flex h-8 w-8 items-center justify-center rounded-full text-slate-600 transition-colors hover:bg-white hover:text-[#0047AB] dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-[#5b8cff]"
+                                title="Download report"
+                                aria-label="Download report"
+                            >
+                                {ICONS.download}
+                            </button>
                         </div>
-                        <button
-                            onClick={handleExport}
-                            className="p-3 bg-card/5 dark:bg-slate-800/50 text-white rounded-xl border border-white/10 dark:border-slate-600 hover:bg-card/10 dark:hover:bg-slate-700/80 transition-all"
-                            title="Export Report"
-                        >
-                            {ICONS.download}
-                        </button>
                     </div>
                 </div>
+            </header>
 
-                <div className="flex gap-8 overflow-x-auto pb-1">
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
-                            className={`pb-4 text-sm tracking-wide transition-all duration-300 relative flex items-center gap-2 shrink-0 ${activeTab === tab.id
-                                ? 'text-primary font-semibold'
-                                : 'font-medium text-slate-400 hover:text-white dark:text-slate-500 dark:hover:text-slate-200'
-                                }`}
-                        >
-                            {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
-                            {tab.label}
-                            {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary rounded-t-full shadow-[0_-4px_12px_rgba(99,102,241,0.5)]"></div>
-                            )}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            {/* Scrollable Content Area */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-8 custom-scrollbar">
+            <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-6 sm:p-8">
                 {activeTab === 'overview' && <ExecutiveOverview />}
                 {activeTab === 'sales' && <SalesAnalytics />}
                 {activeTab === 'inventory' && <InventoryIntelligence />}
                 {activeTab === 'profit' && <ProfitabilityAnalysis />}
                 {activeTab === 'procurement' && (
-                    <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" /></div>}>
+                    <Suspense
+                        fallback={
+                            <div className="flex items-center justify-center py-20">
+                                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#0047AB] border-t-transparent" />
+                            </div>
+                        }
+                    >
                         <ProcurementDemand />
                     </Suspense>
                 )}

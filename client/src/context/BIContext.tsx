@@ -29,6 +29,22 @@ const defaultValue: BIContextValue = {
 
 const BIContext = createContext<BIContextValue>(defaultValue);
 
+function trendDaysForPeriod(range: string): number {
+  const now = new Date();
+  if (range === 'Today') return 1;
+  if (range === 'MTD') return Math.max(1, now.getDate());
+  if (range === 'QTD') {
+    const qStartMonth = Math.floor(now.getMonth() / 3) * 3;
+    const start = new Date(now.getFullYear(), qStartMonth, 1);
+    return Math.max(1, Math.ceil((now.getTime() - start.getTime()) / 86_400_000) + 1);
+  }
+  if (range === 'YTD') {
+    const start = new Date(now.getFullYear(), 0, 1);
+    return Math.max(1, Math.ceil((now.getTime() - start.getTime()) / 86_400_000) + 1);
+  }
+  return 30;
+}
+
 export function BIProvider({ children }: { children: ReactNode }) {
   const [dateRange, setDateRange] = useState('MTD');
   const [loading, setLoading] = useState(false);
@@ -42,9 +58,10 @@ export function BIProvider({ children }: { children: ReactNode }) {
   const refreshData = useCallback(async () => {
     setLoading(true);
     try {
+      const trendDays = trendDaysForPeriod(dateRange);
       const [sourceData, trendData, catData, txData, salesData] = await Promise.all([
         accountingApi.getSalesBySource().catch(() => null),
-        accountingApi.getDailyTrend(30).catch(() => ({ pos: [], mobile: [] })),
+        accountingApi.getDailyTrend(trendDays).catch(() => ({ pos: [], mobile: [] })),
         accountingApi.getCategoryPerformance().catch(() => []),
         accountingApi.getTransactions(50).catch(() => []),
         shopApi.getSales().catch(() => []),
@@ -101,34 +118,39 @@ export function BIProvider({ children }: { children: ReactNode }) {
 
       setKpis([
         {
-          label: 'Total Revenue (net POS)',
+          label: 'TOTAL REVENUE (NET POS)',
           value: `${(totalRev / 1000).toFixed(1)}K`,
           trend: 12, status: 'up',
+          subtext: 'VS LAST MONTH',
           sparkline: mergedTrend.slice(-8).map(d => d.revenue || 1),
         },
         {
-          label: 'POS Returns',
+          label: 'POS RETURNS',
           value: `${(totalReturnsPos / 1000).toFixed(1)}K`,
           trend: totalReturnsPos > 0 ? 4 : 0,
           status: totalReturnsPos > 0 ? 'down' : 'up',
+          subtext: 'IN-STORE RETURNS',
           sparkline: mergedTrend.slice(-8).map(d => Math.max(0.01, (d.posRevenue || 0) * 0.02)),
         },
         {
-          label: 'POS Net Sales',
+          label: 'POS NET SALES',
           value: `${(totalPosRev / 1000).toFixed(1)}K`,
           trend: 8, status: 'up',
+          subtext: 'PROCESSED ORDERS',
           sparkline: mergedTrend.slice(-8).map(d => d.posRevenue || 1),
         },
         {
-          label: 'Mobile Revenue',
+          label: 'MOBILE REVENUE',
           value: `${(totalMobileRev / 1000).toFixed(1)}K`,
           trend: totalMobileRev > 0 ? 15 : 0, status: totalMobileRev > 0 ? 'up' : 'down',
+          subtext: 'APP-DRIVEN GROWTH',
           sparkline: mergedTrend.slice(-8).map(d => d.mobileRevenue || 1),
         },
         {
-          label: 'Avg. Order Value',
-          value: avgOrderVal.toFixed(0),
+          label: 'AVG. ORDER VALUE',
+          value: Math.round(avgOrderVal).toLocaleString(),
           trend: 3, status: 'up',
+          subtext: 'PKR CURRENCY',
           sparkline: [avgOrderVal * 0.8, avgOrderVal * 0.9, avgOrderVal, avgOrderVal * 1.1, avgOrderVal * 0.95, avgOrderVal * 1.05, avgOrderVal, avgOrderVal * 1.02],
         },
       ]);

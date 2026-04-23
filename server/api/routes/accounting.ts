@@ -182,10 +182,31 @@ router.get('/daily-trend', checkRole(['admin', 'accountant']), async (req: any, 
 // --- Category Performance ---
 router.get('/category-performance', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const data = await getAccountingService().getCategoryPerformance(req.tenantId);
+        const from = (req.query.from as string) || '';
+        const to = (req.query.to as string) || '';
+        const data = await getAccountingService().getCategoryPerformance(
+            req.tenantId,
+            from && to ? { from, to } : null
+        );
         res.json(data);
     } catch (error: any) {
         console.error('❌ Error fetching category performance:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- Supply Chain & Inventory IQ (aggregated for Analytics tab) ---
+router.get('/inventory-intelligence', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const from = (req.query.from as string) || '';
+        const to = (req.query.to as string) || '';
+        if (!from || !to) {
+            return res.status(400).json({ error: 'from and to (ISO) query params are required' });
+        }
+        const data = await getAccountingService().getInventoryIntelligence(req.tenantId, from, to);
+        res.json(data);
+    } catch (error: any) {
+        console.error('❌ Error fetching inventory intelligence:', error);
         res.status(500).json({ error: error.message });
     }
 });

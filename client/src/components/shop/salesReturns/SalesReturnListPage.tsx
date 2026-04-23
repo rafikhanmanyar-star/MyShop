@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Bar,
   BarChart,
@@ -108,6 +108,7 @@ function reasonBadge(r: { returnType?: string; notes?: string | null }) {
 const DONUT_COLORS = ['#1e3a8a', '#3b82f6', '#f97316', '#93c5fd'];
 
 export default function SalesReturnListPage() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -645,12 +646,14 @@ export default function SalesReturnListPage() {
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Link to="/sales-returns/new">
-              <Button className="rounded-full gap-2 bg-primary-900 hover:bg-primary-950 dark:bg-primary-700 dark:hover:bg-primary-600 shadow-sm">
-                <Plus className="w-4 h-4" />
-                New return
-              </Button>
-            </Link>
+            <Button
+              type="button"
+              className="rounded-full gap-2 bg-primary-900 hover:bg-primary-950 dark:bg-primary-700 dark:hover:bg-primary-600 shadow-sm"
+              onClick={() => navigate('/sales-returns/new')}
+            >
+              <Plus className="w-4 h-4" />
+              New return
+            </Button>
           </div>
         </div>
 
