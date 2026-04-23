@@ -245,7 +245,7 @@ export default function SalesReturnCreatePage() {
   const blocked = eligibility?.blocked;
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-6 pb-12">
+    <div className="flex w-full min-w-0 flex-col gap-6 pb-12 rounded-2xl border border-border/80 bg-muted/20 dark:bg-slate-900/20 px-4 py-6 sm:px-6 sm:py-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-4 min-w-0">
           <Link
@@ -256,10 +256,10 @@ export default function SalesReturnCreatePage() {
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">New return</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">+ New Return</h1>
             <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-              Look up a POS invoice or mobile order, choose lines and reasons, then set refund method to match your
-              dashboard workflow.
+              Look up a POS invoice or mobile order, set line reasons and FULL / PARTIAL type, then choose how the refund
+              is settled—matching your returns dashboard.
             </p>
           </div>
         </div>

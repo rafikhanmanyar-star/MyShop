@@ -137,9 +137,11 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
     .filter(section => section.items.length > 0);
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-gray-200 bg-white shadow-sm transition-all duration-300 ease-in-out dark:border-gray-700 dark:bg-gray-900 ${collapsed ? 'w-20' : 'w-72'}`}>
-      {/* Header: Logo + Toggle */}
-      <div className="flex h-20 shrink-0 items-center justify-between px-5">
+    <aside
+      className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-sky-200/80 shadow-sm transition-all duration-300 ease-in-out dark:border-slate-600 ${collapsed ? 'w-20' : 'w-72'}`}
+    >
+      {/* Header: Logo + Toggle — light blue */}
+      <div className="flex h-20 shrink-0 items-center justify-between bg-sky-100 px-5 dark:bg-sky-950/80">
         {!collapsed && (
           <div className="group flex cursor-pointer items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600 shadow-md shadow-primary-900/30 transition-transform duration-200 group-hover:scale-105">
@@ -154,7 +156,7 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
         {collapsed && (
           <button
             onClick={onToggle}
-            className="group flex w-full items-center justify-center rounded-lg py-3 text-gray-400 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-white"
+            className="group flex w-full items-center justify-center rounded-lg py-3 text-sky-700/80 transition-colors duration-200 hover:bg-sky-200/80 hover:text-sky-900 dark:text-sky-300/80 dark:hover:bg-sky-800/50 dark:hover:text-sky-100"
             title="Open sidebar"
           >
             <ChevronRight className="h-6 w-6 transition-transform group-hover:translate-x-0.5" />
@@ -164,7 +166,7 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
           <button
             type="button"
             onClick={onToggle}
-            className="rounded-lg p-1.5 text-gray-400 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-white"
+            className="rounded-lg p-1.5 text-sky-700/70 transition-colors duration-200 hover:bg-sky-200/80 hover:text-sky-900 dark:text-sky-300/80 dark:hover:bg-sky-800/50 dark:hover:text-sky-100"
             title="Collapse sidebar"
             aria-label="Collapse sidebar"
           >
@@ -173,17 +175,17 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
         )}
       </div>
 
-      {/* Navigation with section groups */}
-      <nav className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pt-1">
+      {/* Navigation with section groups — solid blue */}
+      <nav className="custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-blue-600 px-3 pt-1 pb-2 dark:bg-blue-800">
         {filteredSections.map((section, idx) => (
           <div key={section.section} className={idx > 0 ? 'mt-5' : ''}>
             {!collapsed && (
-              <p className="mb-1.5 px-3 text-[0.65rem] font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500">
+              <p className="mb-1.5 px-3 text-[0.65rem] font-bold uppercase tracking-[0.15em] text-blue-200/90">
                 {section.section}
               </p>
             )}
             {collapsed && idx > 0 && (
-              <div className="mx-auto my-2 h-px w-8 bg-gray-200 dark:bg-gray-700" />
+              <div className="mx-auto my-2 h-px w-8 bg-white/25" />
             )}
             <div className="space-y-0.5">
               {section.items.map(item => (
@@ -195,16 +197,18 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
                   className={({ isActive }) =>
                     `nav-sidebar-link group relative flex items-center gap-3 rounded-lg px-3 py-2 transition-colors duration-200
                     ${isActive
-                      ? 'bg-primary-50 font-semibold text-primary-700 dark:bg-primary-950/40 dark:text-primary-300'
-                      : 'font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'}`
+                      ? 'bg-white/20 font-semibold text-white shadow-sm'
+                      : 'font-medium text-blue-100 hover:bg-white/10 hover:text-white'}`
                   }
                 >
                   {({ isActive }) => (
                     <>
                       {isActive && (
-                        <div className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-primary-600" />
+                        <div className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-white" />
                       )}
-                      <item.icon className={`h-[1.125rem] w-[1.125rem] flex-shrink-0 ${collapsed ? 'mx-auto' : ''} ${isActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 dark:text-gray-500'}`} />
+                      <item.icon
+                        className={`h-[1.125rem] w-[1.125rem] flex-shrink-0 ${collapsed ? 'mx-auto' : ''} ${isActive ? 'text-white' : 'text-blue-200'}`}
+                      />
                       {!collapsed && <span>{item.label}</span>}
                     </>
                   )}
@@ -215,12 +219,14 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
         ))}
       </nav>
 
-      {/* User card at bottom */}
-      <div className="mt-auto shrink-0 border-t border-gray-200 p-3 dark:border-gray-700" ref={menuRef}>
+      {/* User card at bottom — light blue (match header) */}
+      <div className="mt-auto shrink-0 border-t border-sky-200/80 bg-sky-100 p-3 dark:border-slate-600 dark:bg-sky-950/80" ref={menuRef}>
         <div className="relative">
           {/* Dropdown menu (opens upward) */}
           {userMenuOpen && user && (
-            <div className={`absolute bottom-full mb-2 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800 ${collapsed ? 'left-1/2 -translate-x-1/2 w-48' : 'left-0 right-0'}`}>
+            <div
+              className={`absolute bottom-full mb-2 overflow-hidden rounded-xl border border-sky-200/90 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-800 ${collapsed ? 'left-1/2 -translate-x-1/2 w-48' : 'left-0 right-0'}`}
+            >
               <div className="p-1.5">
                 <button
                   onClick={() => {
@@ -241,7 +247,7 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
             <button
               type="button"
               onClick={() => setUserMenuOpen(prev => !prev)}
-              className="flex w-full items-center gap-3 rounded-xl bg-gray-100 px-3 py-2.5 transition-colors duration-150 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700"
+              className="flex w-full items-center gap-3 rounded-xl border border-sky-200/60 bg-white/80 px-3 py-2.5 transition-colors duration-150 hover:bg-white dark:border-slate-600 dark:bg-slate-800/90 dark:hover:bg-slate-800"
             >
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
                 {getUserInitials(user.name)}
@@ -259,7 +265,7 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
             <button
               type="button"
               onClick={() => setUserMenuOpen(prev => !prev)}
-              className="flex w-full flex-col items-center gap-2 rounded-lg py-1 transition-colors duration-150 hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="flex w-full flex-col items-center gap-2 rounded-lg py-1 transition-colors duration-150 hover:bg-sky-200/60 dark:hover:bg-sky-800/40"
               title={`${user.name} — Click to log out`}
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
@@ -270,12 +276,12 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
         </div>
 
         {!collapsed && (
-          <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">
+          <p className="mt-2 text-center text-xs text-sky-700/70 dark:text-sky-400/80">
             v{__APP_VERSION__}
           </p>
         )}
         {collapsed && (
-          <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">v{__APP_VERSION__}</p>
+          <p className="mt-2 text-center text-xs text-sky-700/70 dark:text-sky-400/80">v{__APP_VERSION__}</p>
         )}
       </div>
     </aside>

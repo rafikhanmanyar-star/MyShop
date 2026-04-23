@@ -73,7 +73,7 @@ const POSHeader: React.FC = () => {
             : null;
 
     return (
-        <div className="bg-white dark:bg-slate-900 border-b border-slate-200/90 dark:border-slate-700 z-30 sticky top-0 flex-shrink-0 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+        <div className="bg-gray-200 dark:bg-slate-800 border-b border-slate-300/90 dark:border-slate-600 z-30 sticky top-0 flex-shrink-0 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
             <div className="py-2.5 md:py-3 flex flex-wrap items-center justify-between gap-3 md:gap-4 min-w-0">
                 {/* Left: Branding & Status */}
                 <div className="flex items-center gap-4 md:gap-6 min-w-0 flex-1">

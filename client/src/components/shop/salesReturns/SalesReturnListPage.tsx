@@ -76,36 +76,85 @@ function initials(name: string): string {
   return (p[0][0] + p[1][0]).toUpperCase();
 }
 
-type RowStatus = { label: string; dotClass: string };
+type RefundStatusFilter = 'all' | 'cash' | 'wallet' | 'review' | 'pending';
+
+type RowStatus = { label: string; dotClass: string; filter: RefundStatusFilter };
 
 function syntheticStatus(r: { refundMethod?: string }): RowStatus {
   const m = String(r.refundMethod || '').toUpperCase();
-  if (m === 'BANK') return { label: 'In review', dotClass: 'bg-amber-500' };
-  if (m === 'ADJUSTMENT') return { label: 'Pending', dotClass: 'bg-slate-400' };
-  return { label: 'Refunded', dotClass: 'bg-emerald-500' };
+  if (m === 'BANK') return { label: 'In review', dotClass: 'bg-amber-500', filter: 'review' };
+  if (m === 'ADJUSTMENT') return { label: 'Pending', dotClass: 'bg-slate-400', filter: 'pending' };
+  if (m === 'WALLET') return { label: 'Wallet', dotClass: 'bg-sky-500', filter: 'wallet' };
+  return { label: 'Cash', dotClass: 'bg-emerald-500', filter: 'cash' };
 }
 
 const REASON_PALETTE = {
-  full: 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200',
-  partial: 'bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-200',
-  note: 'bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
+  damaged: 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200',
+  wrong: 'bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-200',
+  quality: 'bg-orange-100 text-orange-900 dark:bg-orange-950/40 dark:text-orange-200',
+  changed: 'bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-200',
+  full: 'bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
+  partial: 'bg-slate-100 text-slate-600 dark:bg-slate-800/80 dark:text-slate-300',
 };
 
-function reasonBadge(r: { returnType?: string; notes?: string | null }) {
+type ReasonDonutKey = 'Damaged' | 'Wrong item' | 'Quality' | 'Changed mind' | 'Other';
+
+function reasonBadge(r: { returnType?: string; notes?: string | null }): {
+  label: string;
+  className: string;
+  donutKey: ReasonDonutKey;
+} {
   const n = (r.notes || '').trim().toLowerCase();
   if (n.includes('damage') || n.includes('defect')) {
-    return { label: 'Damaged', className: REASON_PALETTE.full };
+    return { label: 'DAMAGED', className: REASON_PALETTE.damaged, donutKey: 'Damaged' };
   }
   if (n.includes('wrong')) {
-    return { label: 'Wrong item', className: REASON_PALETTE.partial };
+    return { label: 'WRONG ITEM', className: REASON_PALETTE.wrong, donutKey: 'Wrong item' };
+  }
+  if (n.includes('quality')) {
+    return { label: 'QUALITY', className: REASON_PALETTE.quality, donutKey: 'Quality' };
+  }
+  if (n.includes('changed mind') || (n.includes('change') && n.includes('mind'))) {
+    return { label: 'CHANGED MIND', className: REASON_PALETTE.changed, donutKey: 'Changed mind' };
   }
   if (String(r.returnType).toUpperCase() === 'FULL') {
-    return { label: 'Full return', className: REASON_PALETTE.note };
+    return { label: 'FULL RETURN', className: REASON_PALETTE.full, donutKey: 'Other' };
   }
-  return { label: 'Partial', className: REASON_PALETTE.partial };
+  return { label: 'PARTIAL', className: REASON_PALETTE.partial, donutKey: 'Other' };
 }
 
-const DONUT_COLORS = ['#1e3a8a', '#3b82f6', '#f97316', '#93c5fd'];
+function formatReturnTableDate(iso: string | undefined | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function displayReturnNo(num: unknown): string {
+  const s = String(num ?? '').trim();
+  if (!s) return '—';
+  return s.startsWith('#') ? s : `#${s}`;
+}
+
+function returnTypePill(r: { returnType?: string }) {
+  const isFull = String(r.returnType || '').toUpperCase() === 'FULL';
+  return {
+    label: isFull ? 'FULL' : 'PARTIAL',
+    className: isFull
+      ? 'bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-200'
+      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+  };
+}
+
+const REASON_DONUT_ORDER: ReasonDonutKey[] = ['Damaged', 'Wrong item', 'Quality', 'Changed mind', 'Other'];
+
+const DONUT_COLOR: Record<ReasonDonutKey, string> = {
+  Damaged: '#1e3a8a',
+  'Wrong item': '#3b82f6',
+  Quality: '#f97316',
+  'Changed mind': '#94a3b8',
+  Other: '#bfdbfe',
+};
 
 export default function SalesReturnListPage() {
   const navigate = useNavigate();
@@ -120,7 +169,7 @@ export default function SalesReturnListPage() {
 
   const [productType, setProductType] = useState<'all' | 'pos' | 'mobile'>('all');
   const [reasonFilter, setReasonFilter] = useState<'all' | 'FULL' | 'PARTIAL'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'refunded' | 'review' | 'pending'>('all');
+  const [statusFilter, setStatusFilter] = useState<RefundStatusFilter>('all');
   const [trendMode, setTrendMode] = useState<'weekly' | 'monthly'>('weekly');
   const [page, setPage] = useState(1);
   const pageSize = 10;
@@ -173,9 +222,7 @@ export default function SalesReturnListPage() {
       if (productType === 'mobile' && String(r.source) !== 'mobile') return false;
       if (reasonFilter !== 'all' && String(r.returnType).toUpperCase() !== reasonFilter) return false;
       const st = syntheticStatus(r);
-      if (statusFilter === 'refunded' && st.label !== 'Refunded') return false;
-      if (statusFilter === 'review' && st.label !== 'In review') return false;
-      if (statusFilter === 'pending' && st.label !== 'Pending') return false;
+      if (statusFilter !== 'all' && st.filter !== statusFilter) return false;
       return true;
     });
   }, [rows, inRange, productType, reasonFilter, statusFilter]);
@@ -289,27 +336,23 @@ export default function SalesReturnListPage() {
   }, [filteredRows, trendMode, rangeBounds]);
 
   const donutData = useMemo(() => {
-    const buckets: Record<string, number> = {
-      Cash: 0,
-      Bank: 0,
-      Wallet: 0,
-      'Store credit': 0,
+    const counts: Record<ReasonDonutKey, number> = {
+      Damaged: 0,
+      'Wrong item': 0,
+      Quality: 0,
+      'Changed mind': 0,
+      Other: 0,
     };
     let totalItems = 0;
     for (const r of filteredRows) {
       totalItems += 1;
-      const m = String(r.refundMethod || '').toUpperCase();
-      if (m === 'CASH') buckets.Cash += 1;
-      else if (m === 'BANK') buckets.Bank += 1;
-      else if (m === 'WALLET') buckets.Wallet += 1;
-      else buckets['Store credit'] += 1;
+      counts[reasonBadge(r).donutKey] += 1;
     }
-    const entries = Object.entries(buckets).filter(([, v]) => v > 0);
-    if (entries.length === 0) {
-      return { chart: [{ name: 'No data', value: 1 }], totalItems: 0, percents: [] as { name: string; pct: number }[] };
+    const chart = REASON_DONUT_ORDER.filter((k) => counts[k] > 0).map((name) => ({ name, value: counts[name] }));
+    if (chart.length === 0) {
+      return { chart: [] as { name: ReasonDonutKey; value: number }[], totalItems: 0, percents: [] as { name: ReasonDonutKey; pct: number }[] };
     }
-    const chart = entries.map(([name, value]) => ({ name, value }));
-    const percents = entries.map(([name, value]) => ({
+    const percents = chart.map(({ name, value }) => ({
       name,
       pct: Math.round((value / totalItems) * 100),
     }));
@@ -333,7 +376,7 @@ export default function SalesReturnListPage() {
     const adj = filteredRows.filter((r) => String(r.refundMethod).toUpperCase() === 'ADJUSTMENT').length;
     const adjPct = filteredRows.length ? Math.round((adj / filteredRows.length) * 100) : 0;
 
-    const damageLike = filteredRows.filter((r) => reasonBadge(r).label === 'Damaged').length;
+    const damageLike = filteredRows.filter((r) => reasonBadge(r).label === 'DAMAGED').length;
     const dmgPct = filteredRows.length ? Math.round((damageLike / filteredRows.length) * 100) : 0;
 
     return { topReturner, adjPct, dmgPct };
@@ -352,8 +395,16 @@ export default function SalesReturnListPage() {
     return `${a.toLocaleDateString(undefined, o)} - ${b.toLocaleDateString(undefined, o)}`;
   }, [rangeStart, rangeEnd]);
 
+  const totalValueCaption = useMemo(() => {
+    const now = new Date();
+    if (rangeStart === toYmd(startOfMonth(now)) && rangeEnd === toYmd(endOfMonth(now))) {
+      return 'This month';
+    }
+    return 'Selected range';
+  }, [rangeStart, rangeEnd]);
+
   return (
-    <div className="flex w-full min-w-0 flex-col gap-6 pb-8">
+    <div className="flex w-full min-w-0 flex-col gap-6 pb-8 rounded-2xl border border-border/80 bg-muted/20 dark:bg-slate-900/20 px-4 py-6 sm:px-6 sm:py-8">
       {/* KPI row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <div className="rounded-xl border border-border bg-card shadow-[var(--shadow-card-val)] pl-1 border-l-4 border-l-primary-600 overflow-hidden">
@@ -386,13 +437,13 @@ export default function SalesReturnListPage() {
             <div className="text-2xl font-bold text-foreground tabular-nums mt-1">
               {loading ? '—' : `${CURRENCY} ${formatMoney(kpis.retVal)}`}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Selected range</p>
+            <p className="text-xs text-muted-foreground mt-1">{totalValueCaption}</p>
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card shadow-[var(--shadow-card-val)] pl-1 border-l-4 border-l-primary-600 overflow-hidden">
+        <div className="rounded-xl border border-border bg-card shadow-[var(--shadow-card-val)] pl-1 border-l-4 border-l-slate-300 dark:border-l-slate-600 overflow-hidden">
           <div className="p-4 pl-5">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Refund vs store credit</div>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Refund vs exchange</div>
             <div className="mt-3 h-2.5 w-full rounded-full bg-primary-100 dark:bg-primary-950/40 overflow-hidden flex">
               <div
                 className="h-full bg-primary-900 transition-all"
@@ -407,7 +458,7 @@ export default function SalesReturnListPage() {
             </div>
             <div className="flex justify-between text-xs font-semibold mt-2 text-foreground">
               <span>{kpis.refundPct}% refund</span>
-              <span className="text-muted-foreground">{kpis.exchangePct}% credit</span>
+              <span className="text-muted-foreground">{kpis.exchangePct}% exchange / credit</span>
             </div>
           </div>
         </div>
@@ -439,7 +490,7 @@ export default function SalesReturnListPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-card-val)]">
           <div className="flex items-center justify-between gap-3 mb-4">
-            <h2 className="text-base font-bold text-foreground">Returns trend</h2>
+            <h2 className="text-base font-bold text-foreground">Returns Trend</h2>
             <div className="flex rounded-lg bg-muted p-0.5 text-xs font-semibold">
               <button
                 type="button"
@@ -493,7 +544,7 @@ export default function SalesReturnListPage() {
         </div>
 
         <div className="rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-card-val)]">
-          <h2 className="text-base font-bold text-foreground mb-4">Return methods</h2>
+          <h2 className="text-base font-bold text-foreground mb-4">Return Reasons</h2>
           <div className="h-56 w-full flex flex-col items-center">
             {loading ? (
               <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Loading…</div>
@@ -513,8 +564,8 @@ export default function SalesReturnListPage() {
                         paddingAngle={2}
                         strokeWidth={0}
                       >
-                        {donutData.chart.map((_, i) => (
-                          <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                        {donutData.chart.map((entry, i) => (
+                          <Cell key={`${entry.name}-${i}`} fill={DONUT_COLOR[entry.name]} />
                         ))}
                       </Pie>
                       <Tooltip
@@ -527,18 +578,20 @@ export default function SalesReturnListPage() {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="pointer-events-none absolute inset-0 flex items-center justify-center pt-2">
-                    <div className="text-center">
-                      <div className="text-xl font-bold text-foreground tabular-nums">{donutData.totalItems}</div>
-                      <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Total returns</div>
+                    <div className="text-center px-2">
+                      <div className="text-xl font-bold text-foreground tabular-nums leading-tight">{donutData.totalItems}</div>
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground mt-0.5">
+                        Total returns
+                      </div>
                     </div>
                   </div>
                 </div>
                 <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
-                  {donutData.percents.map((p, i) => (
+                  {donutData.percents.map((p) => (
                     <div key={p.name} className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                       <span
                         className="w-2 h-2 rounded-full shrink-0"
-                        style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }}
+                        style={{ background: DONUT_COLOR[p.name] }}
                       />
                       {p.name}: {p.pct}%
                     </div>
@@ -606,11 +659,12 @@ export default function SalesReturnListPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Select
               hideIcon
-              className="!py-2 !rounded-full !text-xs font-medium min-w-[8.5rem]"
+              className="!py-2 !rounded-full !text-xs font-medium min-w-[9rem]"
               value={productType}
               onChange={(e) => setProductType(e.target.value as typeof productType)}
+              aria-label="Product type"
             >
-              <option value="all">All channels</option>
+              <option value="all">Product type · All</option>
               <option value="pos">POS</option>
               <option value="mobile">Mobile</option>
             </Select>
@@ -619,19 +673,22 @@ export default function SalesReturnListPage() {
               className="!py-2 !rounded-full !text-xs font-medium min-w-[7.5rem]"
               value={reasonFilter}
               onChange={(e) => setReasonFilter(e.target.value as typeof reasonFilter)}
+              aria-label="Return reason"
             >
-              <option value="all">Reason</option>
+              <option value="all">Reason · All</option>
               <option value="FULL">Full return</option>
               <option value="PARTIAL">Partial</option>
             </Select>
             <Select
               hideIcon
-              className="!py-2 !rounded-full !text-xs font-medium min-w-[7.5rem]"
+              className="!py-2 !rounded-full !text-xs font-medium min-w-[8rem]"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              onChange={(e) => setStatusFilter(e.target.value as RefundStatusFilter)}
+              aria-label="Refund status"
             >
-              <option value="all">Status</option>
-              <option value="refunded">Refunded</option>
+              <option value="all">Status · All</option>
+              <option value="cash">Cash</option>
+              <option value="wallet">Wallet</option>
               <option value="review">In review</option>
               <option value="pending">Pending</option>
             </Select>
@@ -652,7 +709,7 @@ export default function SalesReturnListPage() {
               onClick={() => navigate('/sales-returns/new')}
             >
               <Plus className="w-4 h-4" />
-              New return
+              + New Return
             </Button>
           </div>
         </div>
@@ -661,27 +718,32 @@ export default function SalesReturnListPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 dark:bg-slate-800/60 text-left">
-                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">ID</th>
+                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Return no.
+                </th>
                 <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Date</th>
                 <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Customer</th>
-                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Product</th>
-                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground text-right">Qty</th>
-                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground text-right">Amount</th>
                 <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Reason</th>
-                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Status</th>
-                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground w-28">Actions</th>
+                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground text-right">
+                  Amount
+                </th>
+                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Type</th>
+                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Refund</th>
+                <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-muted-foreground w-16 text-center">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-16 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : pageRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-16 text-center text-muted-foreground">
                     No returns in this range.
                   </td>
                 </tr>
@@ -689,6 +751,7 @@ export default function SalesReturnListPage() {
                 pageRows.map((r, idx) => {
                   const st = syntheticStatus(r);
                   const rb = reasonBadge(r);
+                  const tp = returnTypePill(r);
                   const zebra = idx % 2 === 0 ? 'bg-[var(--table-zebra)]' : '';
                   return (
                     <tr
@@ -696,12 +759,15 @@ export default function SalesReturnListPage() {
                       className={`border-b border-border/70 hover:bg-[var(--table-row-hover)] transition-colors ${zebra}`}
                     >
                       <td className="px-4 py-3">
-                        <Link to={`/sales-returns/${r.id}`} className="font-semibold text-primary-600 hover:underline">
-                          {r.returnNumber}
+                        <Link
+                          to={`/sales-returns/${r.id}`}
+                          className="font-semibold text-primary-600 hover:text-primary-700 hover:underline"
+                        >
+                          {displayReturnNo(r.returnNumber)}
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                        {r.returnDate ? new Date(r.returnDate).toLocaleDateString() : '—'}
+                        {formatReturnTableDate(r.returnDate ?? r.return_date)}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 min-w-0">
@@ -711,31 +777,40 @@ export default function SalesReturnListPage() {
                           <span className="truncate font-medium text-foreground">{r.customerName || 'Walk-in'}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground max-w-[10rem] truncate" title={r.originalSaleNumber}>
-                        {r.originalSaleNumber || '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">—</td>
-                      <td className="px-4 py-3 text-right font-mono font-medium tabular-nums">
-                        {CURRENCY} {formatMoneyFull(parseAmount(r.totalReturnAmount))}
-                      </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${rb.className}`}>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${rb.className}`}
+                        >
                           {rb.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className={`h-2 w-2 rounded-full shrink-0 ${st.dotClass}`} />
-                          <span className="text-foreground">{st.label}</span>
-                        </div>
+                      <td className="px-4 py-3 text-right font-mono font-medium tabular-nums text-foreground">
+                        {CURRENCY} {formatMoneyFull(parseAmount(r.totalReturnAmount))}
                       </td>
                       <td className="px-4 py-3">
-                        <Link to={`/sales-returns/${r.id}`}>
-                          <Button variant="ghost" size="sm" className="gap-1 !min-h-0 h-8">
-                            <Eye className="w-4 h-4" />
-                            View
-                          </Button>
-                        </Link>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${tp.className}`}
+                        >
+                          {tp.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`h-2 w-2 rounded-full shrink-0 ${st.dotClass}`} />
+                          <span className="text-foreground text-sm">{st.label}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground"
+                          aria-label={`View return ${displayReturnNo(r.returnNumber)}`}
+                          onClick={() => navigate(`/sales-returns/${r.id}`)}
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
                       </td>
                     </tr>
                   );

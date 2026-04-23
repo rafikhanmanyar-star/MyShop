@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { KeyRound, RefreshCw, BadgeCheck } from 'lucide-react';
+import { KeyRound, RefreshCw, BadgeCheck, Filter, Download, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLoyalty } from '../../../context/LoyaltyContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
@@ -10,7 +10,95 @@ import { LoyaltyMember, LoyaltyTier } from '../../../types/loyalty';
 import { khataApi, shopApi } from '../../../services/shopApi';
 import { mobileOrdersApi } from '../../../services/mobileOrdersApi';
 
-const MemberDirectory: React.FC = () => {
+const PAGE_SIZE = 25;
+/** Matches `LoyaltyContext` redemption cash value (10 pts ≈ 1 PKR). */
+const PKR_PER_POINT = 0.1;
+
+type StatusFilter = 'All' | 'Active' | 'Inactive' | 'Lapsed';
+type SortKey = 'ltv_desc' | 'ltv_asc' | 'points_desc' | 'name_asc' | 'visits_desc';
+
+function formatRelativeLastVisit(ts: number | undefined): string {
+    if (ts == null || !Number.isFinite(ts)) return 'No visit data';
+    const diffMs = Date.now() - ts;
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return days === 1 ? '1 day ago' : `${days} days ago`;
+    if (days < 30) return `${days} days ago`;
+    return new Date(ts).toLocaleDateString();
+}
+
+function formatCompactPoints(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+    if (n >= 10_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+    return n.toLocaleString();
+}
+
+function periodJoinGrowth(members: LoyaltyMember[], days: number): { label: string; raw: number } {
+    const now = Date.now();
+    const span = days * 24 * 60 * 60 * 1000;
+    let recent = 0;
+    let prior = 0;
+    for (const m of members) {
+        const j = new Date(m.joinDate).getTime();
+        if (Number.isNaN(j)) continue;
+        if (now - j <= span) recent++;
+        else if (now - j > span && now - j <= span * 2) prior++;
+    }
+    if (prior === 0) return { label: recent > 0 ? '+100%' : '+0%', raw: recent > 0 ? 100 : 0 };
+    const pct = ((recent - prior) / prior) * 100;
+    const rounded = Math.abs(pct) >= 10 ? pct.toFixed(0) : pct.toFixed(1);
+    return { label: `${pct >= 0 ? '+' : ''}${rounded}%`, raw: pct };
+}
+
+function tierJoinGrowth(members: LoyaltyMember[], tier: LoyaltyTier): string {
+    const now = Date.now();
+    const d30 = 30 * 24 * 60 * 60 * 1000;
+    const d60 = 60 * 24 * 60 * 60 * 1000;
+    let recent = 0;
+    let prior = 0;
+    for (const m of members) {
+        if (m.tier !== tier) continue;
+        const j = new Date(m.joinDate).getTime();
+        if (Number.isNaN(j)) continue;
+        if (now - j <= d30) recent++;
+        else if (now - j > d30 && now - j <= d60) prior++;
+    }
+    if (prior === 0) return recent > 0 ? '+100%' : '+0%';
+    const pct = ((recent - prior) / prior) * 100;
+    return `${pct >= 0 ? '+' : ''}${Math.abs(pct) >= 10 ? pct.toFixed(0) : pct.toFixed(1)}%`;
+}
+
+function escapeCsvCell(s: string): string {
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+}
+
+function quarterGrowthLabel(members: LoyaltyMember[]): string {
+    const now = Date.now();
+    const q = 90 * 24 * 60 * 60 * 1000;
+    let cur = 0;
+    let prev = 0;
+    for (const m of members) {
+        const j = new Date(m.joinDate).getTime();
+        if (Number.isNaN(j)) continue;
+        if (now - j <= q) cur++;
+        else if (now - j > q && now - j <= 2 * q) prev++;
+    }
+    if (prev === 0) return cur > 0 ? `+${Math.min(99, cur * 5)}%` : '+0%';
+    const pct = Math.round(((cur - prev) / prev) * 100);
+    return `${pct >= 0 ? '+' : ''}${pct}%`;
+}
+
+export interface MemberDirectoryProps {
+    onEnrollClick?: () => void;
+}
+
+function MemberDirectory({ onEnrollClick }: MemberDirectoryProps) {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const deepLinkKey = useRef<string | null>(null);
@@ -18,6 +106,11 @@ const MemberDirectory: React.FC = () => {
     const [posSales, setPosSales] = useState<any[] | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeTierFilter, setActiveTierFilter] = useState<LoyaltyTier | 'All'>('All');
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('Active');
+    const [sortKey, setSortKey] = useState<SortKey>('ltv_desc');
+    const [page, setPage] = useState(1);
+    const [filterBarOpen, setFilterBarOpen] = useState(false);
+    const [dataUpdatedAt, setDataUpdatedAt] = useState(() => Date.now());
     const [selectedMember, setSelectedMember] = useState<LoyaltyMember | null>(null);
     const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
     const [khataSummary, setKhataSummary] = useState<{ totalDebit: number; totalCredit: number; balance: number } | null | undefined>(undefined);
@@ -32,6 +125,10 @@ const MemberDirectory: React.FC = () => {
         setNewPw('');
         setConfirmPw('');
     };
+
+    useEffect(() => {
+        setDataUpdatedAt(Date.now());
+    }, [members]);
 
     useEffect(() => {
         let cancelled = false;
@@ -91,6 +188,23 @@ const MemberDirectory: React.FC = () => {
 
     const showKhataSummary = selectedMember?.customerId && khataSummary != null;
 
+    const lastVisitByMember = useMemo(() => {
+        const map = new Map<string, number>();
+        if (!posSales) return map;
+        const statusOk = (st: string | undefined) =>
+            !st || st === 'Completed' || st === 'Delivered';
+        for (const s of posSales) {
+            if (!statusOk(s.status)) continue;
+            const id = s.loyaltyMemberId;
+            if (!id) continue;
+            const t = new Date(s.createdAt).getTime();
+            if (Number.isNaN(t)) continue;
+            const prev = map.get(id);
+            if (prev === undefined || t > prev) map.set(id, t);
+        }
+        return map;
+    }, [posSales]);
+
     const salesForMember = useMemo(() => {
         if (!selectedMember?.id || !posSales) return [];
         const statusOk = (st: string | undefined) =>
@@ -103,7 +217,7 @@ const MemberDirectory: React.FC = () => {
     const tierProgress = (m: LoyaltyMember) => {
         const sorted = [...tiers].sort((a, b) => a.threshold - b.threshold);
         const next = sorted.find(t => t.threshold > m.totalSpend);
-        if (!next) return { next: null as typeof sorted[0] | null, remaining: 0, pct: 100 };
+        if (!next) return { next: null as (typeof sorted)[0] | null, remaining: 0, pct: 100 };
         const prevThreshold = sorted.filter(t => t.threshold <= m.totalSpend).pop()?.threshold ?? 0;
         const span = next.threshold - prevThreshold;
         const pct = span > 0 ? Math.min(100, ((m.totalSpend - prevThreshold) / span) * 100) : 0;
@@ -115,19 +229,52 @@ const MemberDirectory: React.FC = () => {
             const q = searchQuery.toLowerCase();
             const nameMatch = (m.customerName || '').toLowerCase().includes(q);
             const cardMatch = (m.cardNumber || '').toLowerCase().includes(q);
+            const idMatch = (m.id || '').toLowerCase().includes(q);
             const searchDigits = searchQuery.replace(/\D/g, '');
             const memberDigits = (m.phone || '').replace(/\D/g, '');
             const phoneMatch = searchDigits.length >= 3
                 ? memberDigits.includes(searchDigits) || memberDigits.endsWith(searchDigits)
                 : (m.phone || '').includes(searchQuery);
 
-            const matchesSearch = nameMatch || cardMatch || phoneMatch;
-
+            const matchesSearch = nameMatch || cardMatch || phoneMatch || idMatch;
             const matchesTier = activeTierFilter === 'All' || m.tier === activeTierFilter;
+            const matchesStatus = statusFilter === 'All' || m.status === statusFilter;
 
-            return matchesSearch && matchesTier;
+            return matchesSearch && matchesTier && matchesStatus;
         });
-    }, [members, searchQuery, activeTierFilter]);
+    }, [members, searchQuery, activeTierFilter, statusFilter]);
+
+    const sortedMembers = useMemo(() => {
+        const list = [...filteredMembers];
+        const cmp = (a: LoyaltyMember, b: LoyaltyMember) => {
+            switch (sortKey) {
+                case 'ltv_desc': return b.totalSpend - a.totalSpend;
+                case 'ltv_asc': return a.totalSpend - b.totalSpend;
+                case 'points_desc': return b.pointsBalance - a.pointsBalance;
+                case 'name_asc':
+                    return (a.customerName || '').localeCompare(b.customerName || '', undefined, { sensitivity: 'base' });
+                case 'visits_desc': return b.visitCount - a.visitCount;
+                default: return 0;
+            }
+        };
+        list.sort(cmp);
+        return list;
+    }, [filteredMembers, sortKey]);
+
+    const totalPages = Math.max(1, Math.ceil(sortedMembers.length / PAGE_SIZE));
+    const currentPage = Math.min(page, totalPages);
+    const paginatedMembers = useMemo(() => {
+        const start = (currentPage - 1) * PAGE_SIZE;
+        return sortedMembers.slice(start, start + PAGE_SIZE);
+    }, [sortedMembers, currentPage]);
+
+    useEffect(() => {
+        setPage(1);
+    }, [searchQuery, activeTierFilter, statusFilter, sortKey]);
+
+    useEffect(() => {
+        if (page > totalPages) setPage(totalPages);
+    }, [page, totalPages]);
 
     const tierStats = useMemo(() => {
         const stats = {
@@ -142,176 +289,432 @@ const MemberDirectory: React.FC = () => {
         return stats;
     }, [members]);
 
+    const rosterGrowth = useMemo(() => periodJoinGrowth(members, 30), [members]);
+    const silverGrowth = useMemo(() => tierJoinGrowth(members, 'Silver'), [members]);
+    const goldGrowth = useMemo(() => tierJoinGrowth(members, 'Gold'), [members]);
+    const platinumGrowth = useMemo(() => tierJoinGrowth(members, 'Platinum'), [members]);
+    const footerQuarter = useMemo(() => quarterGrowthLabel(members), [members]);
+
+    const pctOf = (n: number, total: number) =>
+        total <= 0 ? 0 : Math.round((n / total) * 100);
+
+    const selectClass =
+        'rounded-xl border-0 bg-white/95 dark:bg-slate-800/95 text-slate-800 dark:text-slate-200 text-xs font-semibold ' +
+        'pl-3 pr-8 py-2.5 shadow-sm ring-1 ring-slate-200/80 dark:ring-slate-600 focus:ring-2 focus:ring-violet-400/40 outline-none cursor-pointer ' +
+        'min-w-0 max-w-full';
+
     const handleViewDetails = (member: LoyaltyMember) => {
         setSelectedMember(member);
         setIsDetailModalOpen(true);
     };
 
-    const handleDelete = async (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (window.confirm('Are you sure you want to remove this member from the loyalty program?')) {
-            await deleteMember(id);
+    const handleExportCsv = () => {
+        const headers = ['Name', 'Member ID', 'Phone', 'Tier', 'Visits', 'Lifetime Points', 'Points Balance', 'LTV (PKR)', 'Status'];
+        const lines = [headers.join(',')];
+        for (const m of sortedMembers) {
+            const row = [
+                m.customerName || '',
+                m.cardNumber || m.id,
+                m.phone || '',
+                m.tier,
+                String(m.visitCount),
+                String(m.lifetimePoints),
+                String(m.pointsBalance),
+                String(m.totalSpend),
+                m.status
+            ].map(escapeCsvCell);
+            lines.push(row.join(','));
         }
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `member-directory-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
+    const minsAgo = Math.max(0, Math.floor((Date.now() - dataUpdatedAt) / 60000));
+    const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '';
+
     return (
-        <div className="space-y-6 animate-fade-in flex flex-col h-full">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {[
-                    { label: 'Total Roster', count: tierStats.Total, tier: 'All', color: 'bg-slate-900 dark:bg-slate-200' },
-                    { label: 'Silver Tier', count: tierStats.Silver, tier: 'Silver', color: 'bg-slate-400 dark:bg-slate-500' },
-                    { label: 'Gold Tier', count: tierStats.Gold, tier: 'Gold', color: 'bg-amber-400 dark:bg-amber-500' },
-                    { label: 'Platinum Tier', count: tierStats.Platinum, tier: 'Platinum', color: 'bg-rose-500 dark:bg-rose-400' }
-                ].map(stat => (
+        <div className="space-y-6 animate-fade-in flex flex-col h-full min-h-0">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Member Directory</h2>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-xl">
+                        Manage and monitor your premium membership tiers and loyalty data.
+                    </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                     <button
-                        key={stat.label}
-                        onClick={() => setActiveTierFilter(stat.tier as any)}
-                        className={`p-4 rounded-2xl transition-all shadow-sm flex flex-col items-start gap-1 border-2 ${activeTierFilter === stat.tier ? 'border-rose-500 dark:border-rose-400 ring-2 ring-rose-100 dark:ring-rose-900/50 shadow-lg scale-[1.02]' : 'border-transparent bg-card dark:bg-slate-900/90 hover:border-border dark:hover:border-slate-600'}`}
+                        type="button"
+                        onClick={handleExportCsv}
+                        className="inline-flex items-center gap-2 rounded-xl bg-sky-100 dark:bg-sky-900/40 text-sky-800 dark:text-sky-200 px-4 py-2.5 text-sm font-semibold shadow-sm ring-1 ring-sky-200/80 dark:ring-sky-700/60 hover:bg-sky-200/60 dark:hover:bg-sky-800/50 transition-colors"
                     >
-                        <div className={`w-2 h-2 rounded-full ${stat.color} mb-1`}></div>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{stat.label}</p>
-                        <p className="text-xl font-semibold text-foreground">{stat.count}</p>
+                        <Download className="h-4 w-4" aria-hidden />
+                        Export
                     </button>
-                ))}
+                    {onEnrollClick ? (
+                        <button
+                            type="button"
+                            onClick={onEnrollClick}
+                            className="inline-flex items-center gap-2 rounded-xl bg-violet-700 hover:bg-violet-800 text-white px-4 py-2.5 text-sm font-semibold shadow-md shadow-violet-900/20 transition-colors"
+                        >
+                            <Plus className="h-4 w-4" aria-hidden />
+                            Enroll Member
+                        </button>
+                    ) : null}
+                </div>
             </div>
 
-            {/* Filter & Search Toolbar */}
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-card dark:bg-slate-900/90 p-4 rounded-2xl shadow-sm border border-border dark:border-slate-600">
-                <div className="relative group flex-1 max-w-md">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-muted-foreground group-focus-within:text-rose-500 dark:group-focus-within:text-rose-400 transition-colors">
-                        {ICONS.search}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <button
+                    type="button"
+                    onClick={() => setActiveTierFilter('All')}
+                    className={`text-left p-5 rounded-2xl border transition-all shadow-sm bg-white dark:bg-slate-900/80 ring-1 ${
+                        activeTierFilter === 'All'
+                            ? 'ring-2 ring-sky-400/50 border-sky-200 dark:border-sky-700'
+                            : 'border-slate-200/80 dark:border-slate-600 hover:border-sky-200'
+                    }`}
+                >
+                    <p className="text-[0.65rem] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Total roster</p>
+                    <div className="mt-1 h-1 w-full rounded-full bg-sky-500" />
+                    <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-3 tabular-nums">
+                        {tierStats.Total.toLocaleString()}
+                    </p>
+                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">{rosterGrowth.label} vs prior 30d</p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setActiveTierFilter('Silver')}
+                    className={`text-left p-5 rounded-2xl border transition-all shadow-sm bg-white dark:bg-slate-900/80 ${
+                        activeTierFilter === 'Silver'
+                            ? 'ring-2 ring-slate-400/50 border-slate-300 dark:border-slate-500'
+                            : 'border-slate-200/80 dark:border-slate-600'
+                    }`}
+                >
+                    <p className="text-[0.65rem] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Silver tiers</p>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-3 tabular-nums">
+                        {tierStats.Silver.toLocaleString()}
+                    </p>
+                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">{silverGrowth} new momentum</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {pctOf(tierStats.Silver, Math.max(1, tierStats.Total))}% of total population
+                    </p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setActiveTierFilter('Gold')}
+                    className={`text-left p-5 rounded-2xl border transition-all shadow-sm bg-white dark:bg-slate-900/80 ${
+                        activeTierFilter === 'Gold'
+                            ? 'ring-2 ring-amber-400/50 border-amber-200 dark:border-amber-800'
+                            : 'border-slate-200/80 dark:border-slate-600'
+                    }`}
+                >
+                    <p className="text-[0.65rem] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Gold tiers</p>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-3 tabular-nums">
+                        {tierStats.Gold.toLocaleString()}
+                    </p>
+                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">{goldGrowth} new momentum</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {pctOf(tierStats.Gold, Math.max(1, tierStats.Total))}% of total population
+                    </p>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setActiveTierFilter('Platinum')}
+                    className={`text-left p-5 rounded-2xl border transition-all shadow-sm ${
+                        activeTierFilter === 'Platinum'
+                            ? 'bg-violet-700 text-white border-violet-600 ring-2 ring-violet-300/50'
+                            : 'bg-violet-700/90 hover:bg-violet-700 text-white border-violet-600'
+                    }`}
+                >
+                    <p className="text-[0.65rem] font-bold uppercase tracking-widest text-violet-100/90">Platinum tiers</p>
+                    <p className="text-2xl font-bold mt-3 tabular-nums">{tierStats.Platinum.toLocaleString()}</p>
+                    <p className="text-xs font-semibold text-emerald-200/90 mt-1">{platinumGrowth} new momentum</p>
+                    <p className="text-xs text-violet-100/80 mt-0.5">
+                        High value segment · Top {Math.max(1, Math.min(50, Math.round(100 * (tierStats.Platinum / Math.max(1, tierStats.Total)))))}%
+                    </p>
+                </button>
+            </div>
+
+            <div className="rounded-2xl bg-sky-100/80 dark:bg-slate-800/50 p-4 ring-1 ring-sky-200/60 dark:ring-slate-600/60">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    <div className="relative flex-1 min-w-0">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            {ICONS.search}
+                        </div>
+                        <input
+                            type="search"
+                            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-slate-900/90 text-sm text-slate-800 dark:text-slate-100 shadow-sm ring-1 ring-slate-200/80 dark:ring-slate-600 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400/50"
+                            placeholder="Search by name, ID or phone..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                        />
                     </div>
-                    <input
-                        type="text"
-                        className="block w-full pl-11 pr-4 py-3 bg-muted/80 dark:bg-slate-800/80 border border-border dark:border-slate-600 rounded-xl leading-5 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 dark:focus:border-rose-400 transition-all text-xs font-medium placeholder-slate-400 dark:placeholder-slate-500 text-foreground"
-                        placeholder="Search by Name, Card ID, or Phone..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <button className="px-4 py-3 bg-card dark:bg-slate-800 border border-border dark:border-slate-600 rounded-xl text-xs font-semibold uppercase tracking-widest text-muted-foreground hover:bg-muted/50 dark:hover:bg-slate-700 transition-all flex items-center gap-2">
-                        {ICONS.download} Export
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setFilterBarOpen(o => !o)}
+                            className="inline-flex items-center gap-2 rounded-xl bg-white dark:bg-slate-900/90 px-3 py-2.5 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300 shadow-sm ring-1 ring-slate-200/80 dark:ring-slate-600 lg:hidden"
+                        >
+                            <Filter className="h-4 w-4" />
+                            Filters
+                        </button>
+                        <div
+                            className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center w-full lg:w-auto ${
+                                filterBarOpen ? 'flex' : 'hidden lg:flex'
+                            }`}
+                        >
+                            <label className="sr-only" htmlFor="md-tier">Tier</label>
+                            <select
+                                id="md-tier"
+                                value={activeTierFilter}
+                                onChange={e => setActiveTierFilter(e.target.value as LoyaltyTier | 'All')}
+                                className={selectClass}
+                            >
+                                <option value="All">Tier: All</option>
+                                <option value="Silver">Tier: Silver</option>
+                                <option value="Gold">Tier: Gold</option>
+                                <option value="Platinum">Tier: Platinum</option>
+                            </select>
+                            <label className="sr-only" htmlFor="md-status">Status</label>
+                            <select
+                                id="md-status"
+                                value={statusFilter}
+                                onChange={e => setStatusFilter(e.target.value as StatusFilter)}
+                                className={selectClass}
+                            >
+                                <option value="All">Status: All</option>
+                                <option value="Active">Status: Active</option>
+                                <option value="Inactive">Status: Inactive</option>
+                                <option value="Lapsed">Status: Lapsed</option>
+                            </select>
+                            <label className="sr-only" htmlFor="md-sort">Sort</label>
+                            <select
+                                id="md-sort"
+                                value={sortKey}
+                                onChange={e => setSortKey(e.target.value as SortKey)}
+                                className={selectClass}
+                            >
+                                <option value="ltv_desc">Sort: LTV high</option>
+                                <option value="ltv_asc">Sort: LTV low</option>
+                                <option value="points_desc">Sort: Points balance</option>
+                                <option value="name_asc">Sort: Name A–Z</option>
+                                <option value="visits_desc">Sort: Visits</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <Card className="border-none shadow-sm overflow-hidden flex-1 flex flex-col bg-card">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="bg-muted/80/80 backdrop-blur-sm sticky top-0 z-10 text-xs font-semibold uppercase text-muted-foreground">
-                            <tr>
-                                <th className="px-8 py-5">Card / Member</th>
-                                <th className="px-6 py-5">Tier Segment</th>
-                                <th className="px-6 py-5 text-center">Visits</th>
-                                <th className="px-6 py-5 text-right">Lifetime pts earned</th>
-                                <th className="px-6 py-5 text-right">Points balance</th>
-                                <th className="px-6 py-5 text-right">LTV (Lifetime)</th>
-                                <th className="px-6 py-5">Status</th>
-                                <th className="px-8 py-5"></th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50 dark:divide-slate-700/80">
-                            {filteredMembers.length > 0 ? filteredMembers.map(m => (
-                                <tr
-                                    key={m.id}
-                                    onClick={() => handleViewDetails(m)}
-                                    className="hover:bg-rose-50/20 dark:hover:bg-rose-950/30 transition-all group cursor-pointer"
-                                >
-                                    <td className="px-8 py-5 whitespace-nowrap">
-                                        <div className="flex items-center gap-4">
-                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-semibold text-sm transition-all group-hover:scale-110 shadow-sm ${m.tier === 'Platinum' ? 'bg-slate-900 text-rose-500 dark:bg-slate-950 dark:text-rose-400' :
-                                                m.tier === 'Gold' ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300' :
-                                                    'bg-muted text-muted-foreground dark:bg-slate-800'
-                                                }`}>
-                                                {m.customerName.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <div className="font-bold text-foreground text-sm group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors flex items-center gap-1.5 min-w-0">
-                                                    {m.mobileCustomerVerified && (
-                                                        <BadgeCheck className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Verified mobile customer" />
-                                                    )}
-                                                    <span className="truncate">{m.customerName}</span>
-                                                </div>
-                                                <div className="text-xs text-muted-foreground font-mono italic tracking-tighter">ID: {m.cardNumber}</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-5">
-                                        <div className="flex flex-col">
-                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold uppercase tracking-wider inline-block w-fit shadow-sm ${m.tier === 'Platinum' ? 'bg-rose-600 text-white dark:bg-rose-700' :
-                                                m.tier === 'Gold' ? 'bg-amber-400 text-amber-900 dark:bg-amber-600 dark:text-amber-950' :
-                                                    'bg-slate-200 text-muted-foreground dark:bg-slate-700 dark:text-slate-300'
-                                                }`}>
-                                                {m.tier} Member
-                                            </span>
-                                            <span className="text-xs text-muted-foreground italic mt-1 font-medium">Joined {new Date(m.joinDate).toLocaleDateString()}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-5 text-center font-semibold text-muted-foreground font-mono text-sm">
-                                        {m.visitCount}
-                                    </td>
-                                    <td className="px-6 py-5 text-right font-mono">
-                                        <div className="text-sm font-semibold text-foreground tracking-tighter">{m.lifetimePoints.toLocaleString()}</div>
-                                        <div className="text-xs text-muted-foreground font-medium mt-0.5">Total earned</div>
-                                    </td>
-                                    <td className="px-6 py-5 text-right">
-                                        <div className="text-sm font-semibold text-foreground font-mono tracking-tighter">{m.pointsBalance.toLocaleString()}</div>
-                                        <div className="text-xs text-rose-500 dark:text-rose-400 font-bold uppercase tracking-widest mt-0.5 animate-pulse">Available</div>
-                                    </td>
-                                    <td className="px-6 py-5 text-right font-mono">
-                                        <div className="text-sm font-semibold text-foreground tracking-tighter">{CURRENCY} {m.totalSpend.toLocaleString()}</div>
-                                        <div className="text-xs text-muted-foreground uppercase font-medium">Gross Value</div>
-                                    </td>
-                                    <td className="px-6 py-5">
-                                        <div className="flex items-center gap-1.5 focus:ring-2">
-                                            <div className={`w-2 h-2 rounded-full ${m.status === 'Active' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] dark:shadow-emerald-500/30' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
-                                            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">{m.status}</span>
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-5 text-right">
-                                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button
-                                                onClick={(e) => handleDelete(m.id, e)}
-                                                className="p-2 text-slate-300 dark:text-slate-600 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-all"
-                                            >
-                                                {ICONS.trash}
-                                            </button>
-                                            <div className="p-2 text-rose-600">
-                                                {ICONS.chevronRight}
-                                            </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            )) : (
+            <div className="relative flex-1 min-h-0">
+                <Card padding="none" className="relative border border-slate-200/80 dark:border-slate-600 shadow-md overflow-hidden flex flex-col bg-white dark:bg-slate-900/90 flex-1">
+                    <div className="overflow-x-auto min-h-0">
+                        <table className="w-full text-left min-w-[900px]">
+                            <thead className="bg-slate-50/95 dark:bg-slate-800/90 sticky top-0 z-10 text-[0.65rem] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                                 <tr>
-                                    <td colSpan={8} className="px-8 py-20 text-center">
-                                        <div className="flex flex-col items-center justify-center gap-3">
-                                            <div className="p-6 bg-muted/80 dark:bg-slate-800 rounded-3xl text-slate-200 dark:text-slate-500">
-                                                {React.cloneElement(ICONS.users as React.ReactElement<any>, { width: 48, height: 48 })}
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-foreground font-semibold tracking-tight text-lg">No Members Found</p>
-                                                <p className="text-muted-foreground text-xs font-medium">Try adjusting your filters or search terms.</p>
-                                            </div>
-                                            <button
-                                                onClick={() => { setSearchQuery(''); setActiveTierFilter('All'); }}
-                                                className="mt-4 px-6 py-2 bg-slate-900 dark:bg-slate-700 text-white rounded-xl text-xs font-semibold uppercase tracking-widest hover:bg-slate-800 dark:hover:bg-slate-600"
-                                            >
-                                                Reset Filters
-                                            </button>
-                                        </div>
-                                    </td>
+                                    <th className="px-6 py-4">Member identity</th>
+                                    <th className="px-4 py-4">Tier segment</th>
+                                    <th className="px-4 py-4">Visits</th>
+                                    <th className="px-4 py-4 text-right">Lifetime pts earned</th>
+                                    <th className="px-4 py-4 text-right">Points balance</th>
+                                    <th className="px-4 py-4 text-right">LTV (lifetime)</th>
+                                    <th className="px-6 py-4">Status</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/80">
+                                {paginatedMembers.length > 0 ? paginatedMembers.map(m => {
+                                    const lastTs = lastVisitByMember.get(m.id);
+                                    const pkrEq = m.pointsBalance * PKR_PER_POINT;
+                                    return (
+                                        <tr
+                                            key={m.id}
+                                            onClick={() => handleViewDetails(m)}
+                                            className="hover:bg-sky-50/50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer"
+                                        >
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 shadow ${
+                                                            m.tier === 'Platinum'
+                                                                ? 'bg-violet-700 text-white'
+                                                                : m.tier === 'Gold'
+                                                                    ? 'bg-sky-200 text-sky-900 dark:bg-sky-800 dark:text-sky-100'
+                                                                    : 'bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-200'
+                                                        }`}
+                                                    >
+                                                        {(m.customerName || '?').charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center gap-1.5 min-w-0">
+                                                            {m.mobileCustomerVerified && (
+                                                                <BadgeCheck className="w-3.5 h-3.5 shrink-0 text-emerald-600" aria-label="Verified" />
+                                                            )}
+                                                            <span className="truncate">{m.customerName}</span>
+                                                        </div>
+                                                        <div className="text-xs text-slate-500 font-mono">ID: {m.cardNumber || m.id}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                <span
+                                                    className={`inline-block rounded-full px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-wider ${
+                                                        m.tier === 'Platinum'
+                                                            ? 'bg-violet-600 text-white'
+                                                            : m.tier === 'Gold'
+                                                                ? 'bg-sky-200 text-sky-900 dark:bg-sky-800 dark:text-sky-100'
+                                                                : 'bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-200'
+                                                    }`}
+                                                >
+                                                    {m.tier}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                <div className="text-sm font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                                                    {m.visitCount} Visits
+                                                </div>
+                                                <div className="text-xs text-slate-500">
+                                                    Last: {formatRelativeLastVisit(lastTs)}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-4 text-right font-mono text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                                {formatCompactPoints(m.lifetimePoints)}
+                                            </td>
+                                            <td className="px-4 py-4 text-right">
+                                                <div className="text-sm font-semibold font-mono text-slate-800 dark:text-slate-200">
+                                                    {m.pointsBalance.toLocaleString()} pts
+                                                </div>
+                                                <div className="text-xs text-slate-500">
+                                                    ≈ Rs {pkrEq.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-4 text-right text-sm font-semibold tabular-nums text-slate-800 dark:text-slate-200">
+                                                Rs {m.totalSpend.toLocaleString()}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span
+                                                        className={`h-2 w-2 rounded-full ${
+                                                            m.status === 'Active' ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-500'
+                                                        }`}
+                                                    />
+                                                    <span className="text-[0.65rem] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                                                        {m.status}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                }) : (
+                                    <tr>
+                                        <td colSpan={7} className="px-8 py-20 text-center">
+                                            <div className="flex flex-col items-center justify-center gap-3">
+                                                <div className="p-6 bg-slate-100 dark:bg-slate-800 rounded-3xl text-slate-400">
+                                                    {React.cloneElement(ICONS.users as React.ReactElement<any>, { width: 48, height: 48 })}
+                                                </div>
+                                                <p className="text-slate-800 dark:text-slate-200 font-semibold text-lg">No members found</p>
+                                                <p className="text-slate-500 text-sm">Try adjusting your filters or search terms.</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSearchQuery('');
+                                                        setActiveTierFilter('All');
+                                                        setStatusFilter('All');
+                                                    }}
+                                                    className="mt-2 px-6 py-2 bg-violet-700 text-white rounded-xl text-sm font-semibold hover:bg-violet-800"
+                                                >
+                                                    Reset filters
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
 
-            {/* Member Details Modal */}
+                    {sortedMembers.length > 0 && (
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-700/80 bg-slate-50/50 dark:bg-slate-800/30">
+                            <p className="text-sm text-slate-600 dark:text-slate-400">
+                                Showing {(currentPage - 1) * PAGE_SIZE + 1} to{' '}
+                                {Math.min(currentPage * PAGE_SIZE, sortedMembers.length)} of {sortedMembers.length} members
+                            </p>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage <= 1}
+                                    className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30"
+                                    aria-label="Previous page"
+                                >
+                                    <ChevronLeft className="h-5 w-5" />
+                                </button>
+                                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                    .filter(n => n === 1 || n === totalPages || Math.abs(n - currentPage) <= 1)
+                                    .map((n, i, arr) => {
+                                        const prev = arr[i - 1];
+                                        const showGap = i > 0 && n - prev > 1;
+                                        return (
+                                            <React.Fragment key={n}>
+                                                {showGap ? <span className="px-1 text-slate-400">…</span> : null}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setPage(n)}
+                                                    className={`min-w-[2.25rem] h-9 rounded-full text-sm font-semibold transition-colors ${
+                                                        n === currentPage
+                                                            ? 'bg-sky-700 text-white'
+                                                            : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700'
+                                                    }`}
+                                                >
+                                                    {n}
+                                                </button>
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                <button
+                                    type="button"
+                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage >= totalPages}
+                                    className="p-2 rounded-full text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 disabled:opacity-30"
+                                    aria-label="Next page"
+                                >
+                                    <ChevronRight className="h-5 w-5" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {onEnrollClick ? (
+                        <button
+                            type="button"
+                            onClick={e => {
+                                e.stopPropagation();
+                                onEnrollClick();
+                            }}
+                            className="absolute bottom-6 right-6 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg shadow-sky-900/25 hover:bg-sky-700 md:bottom-8 md:right-8"
+                            aria-label="Enroll member"
+                        >
+                            <Plus className="h-6 w-6" strokeWidth={2.5} />
+                        </button>
+                    ) : null}
+                </Card>
+            </div>
+
+            <footer className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    <span>Data refresh: Updated {minsAgo === 0 ? 'just now' : `${minsAgo} min${minsAgo === 1 ? '' : 's'} ago`}</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Growth: {footerQuarter} vs last quarter (enrollments)</span>
+                </div>
+                <div className="text-right font-mono text-[0.65rem] tracking-wide text-slate-400">
+                    {appVersion ? `MY_SHOP v${appVersion} · LOYALTY MODULE` : 'MY_SHOP · LOYALTY MODULE'}
+                </div>
+            </footer>
+
             <Modal
                 isOpen={isDetailModalOpen}
                 onClose={closeDetailModal}
@@ -321,7 +724,6 @@ const MemberDirectory: React.FC = () => {
                 {selectedMember && (
                     <div className="space-y-8 pb-4">
                         <div className="flex flex-col md:flex-row gap-8 items-start">
-                            {/* Left Side: Basic Info Card */}
                             <div className="w-full md:w-1/3 space-y-4">
                                 <div className="p-8 bg-muted/80 dark:bg-slate-800/80 rounded-[32px] border border-border dark:border-slate-600 flex flex-col items-center text-center">
                                     <div className={`w-28 h-28 rounded-[40px] flex items-center justify-center font-semibold text-4xl mb-6 shadow-xl ${selectedMember.tier === 'Platinum' ? 'bg-slate-900 text-rose-600 dark:bg-slate-950 dark:text-rose-400' :
@@ -413,19 +815,32 @@ const MemberDirectory: React.FC = () => {
                                 </button>
 
                                 <button
+                                    type="button"
                                     className="w-full py-4 bg-muted dark:bg-slate-800 text-muted-foreground rounded-2xl font-semibold text-xs uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/50 dark:hover:text-rose-400 transition-all border border-transparent dark:border-slate-600 hover:border-rose-100 dark:hover:border-rose-800"
                                     onClick={() => {
                                         if (window.confirm('Deactivate this member?')) {
-                                            updateMember(selectedMember.id, { status: selectedMember.status === 'Active' ? 'Inactive' : 'Active' });
+                                            void updateMember(selectedMember.id, { status: selectedMember.status === 'Active' ? 'Inactive' : 'Active' });
                                             closeDetailModal();
                                         }
                                     }}
                                 >
                                     {selectedMember.status === 'Active' ? 'Deactivate Membership' : 'Reactivate Membership'}
                                 </button>
+
+                                <button
+                                    type="button"
+                                    className="w-full py-3 text-xs font-semibold uppercase tracking-widest text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-2xl bg-card hover:bg-red-50/80 dark:hover:bg-red-950/20 transition-all"
+                                    onClick={() => {
+                                        if (window.confirm('Remove this member from the loyalty program? This cannot be undone.')) {
+                                            void deleteMember(selectedMember.id);
+                                            closeDetailModal();
+                                        }
+                                    }}
+                                >
+                                    Remove from program
+                                </button>
                             </div>
 
-                            {/* Right Side: Performance stats and history */}
                             <div className="flex-1 space-y-8">
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                     <div className="p-6 bg-card dark:bg-slate-900/90 border border-border dark:border-slate-600 rounded-3xl shadow-sm">
@@ -569,7 +984,6 @@ const MemberDirectory: React.FC = () => {
                 )}
             </Modal>
 
-            {/* Must use the same Modal portal as Member Profile — a non-portaled overlay stays under #root and below z-[9999], so it never appeared. */}
             <Modal
                 isOpen={pwResetOpen && !!selectedMember}
                 onClose={() => {
@@ -666,6 +1080,6 @@ const MemberDirectory: React.FC = () => {
             </Modal>
         </div>
     );
-};
+}
 
 export default MemberDirectory;

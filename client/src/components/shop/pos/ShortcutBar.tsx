@@ -40,7 +40,7 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
     ];
 
     return (
-        <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-gray-800/80 bg-gray-900 px-3 py-3 shadow-[0_-4px_24px_rgba(0,0,0,0.2)] dark:bg-gray-950 md:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-y-2 border-t border-slate-300/80 bg-gray-200 px-3 py-3 shadow-[0_-1px_0_rgba(0,0,0,0.06)] dark:border-slate-600 dark:bg-slate-800 md:px-6">
             <div className="flex min-w-0 flex-wrap items-center gap-0.5 md:gap-1">
                 {shortcuts.map((s) => (
                     <button
@@ -50,21 +50,27 @@ const ShortcutBar: React.FC<ShortcutBarProps> = ({ isFullScreen, onToggleFullScr
                             e.preventDefault();
                             s.action();
                         }}
-                        className="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-2 text-gray-300 transition-colors hover:bg-white/10 md:gap-2 md:px-3 touch-manipulation"
+                        className="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-2 text-slate-700 transition-colors hover:bg-slate-300/70 dark:text-slate-200 dark:hover:bg-slate-600/80 md:gap-2 md:px-3 touch-manipulation"
                     >
-                        <span className="hidden flex-shrink-0 opacity-90 sm:block">
+                        <span className="hidden flex-shrink-0 text-slate-600 opacity-90 dark:text-slate-400 sm:block">
                             {React.cloneElement(s.icon as React.ReactElement, { size: 16 })}
                         </span>
-                        <span className="truncate text-xs font-semibold uppercase tracking-wide text-white/95">{s.label}</span>
-                        <span className="font-mono text-xs font-bold tabular-nums text-gray-500">{s.key}</span>
+                        <span className="truncate text-xs font-semibold uppercase tracking-wide text-slate-800 dark:text-slate-100">
+                            {s.label}
+                        </span>
+                        <span className="font-mono text-xs font-bold tabular-nums text-slate-500 dark:text-slate-400">
+                            {s.key}
+                        </span>
                     </button>
                 ))}
             </div>
 
             <div className="ml-auto flex flex-shrink-0 items-center gap-3 md:gap-5">
-                <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 sm:flex">
-                    <div className={`h-2 w-2 rounded-full ${currentShift ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                    <span className={`max-w-[120px] truncate text-xs font-semibold tracking-wide ${currentShift ? 'text-emerald-300' : 'text-amber-300'}`}>
+                <div className="hidden items-center gap-2 rounded-full border border-slate-400/50 bg-white/50 px-3 py-1.5 dark:border-slate-500/60 dark:bg-slate-700/60 sm:flex">
+                    <div className={`h-2 w-2 rounded-full ${currentShift ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span
+                        className={`max-w-[120px] truncate text-xs font-semibold tracking-wide ${currentShift ? 'text-emerald-800 dark:text-emerald-300' : 'text-amber-800 dark:text-amber-300'}`}
+                    >
                         {terminalName}
                     </span>
                 </div>
