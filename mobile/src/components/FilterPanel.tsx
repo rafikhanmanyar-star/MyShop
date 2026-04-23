@@ -390,38 +390,6 @@ export default function FilterPanel({
                                 }
                             />
                         </div>
-                        <div className="filter-toggle-row">
-                            <span>Low price</span>
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-checked={localFilters.filterLowPrice ? 'true' : 'false'}
-                                aria-label="Low price"
-                                title="Low price"
-                                className={`filter-switch ${localFilters.filterLowPrice ? 'on' : ''}`}
-                                onClick={() =>
-                                    setLocalFilters((prev: Record<string, unknown>) => ({
-                                        ...prev,
-                                        filterLowPrice: !prev.filterLowPrice,
-                                        lowPriceMax: !prev.filterLowPrice
-                                            ? prev.lowPriceMax || '500'
-                                            : prev.lowPriceMax,
-                                    }))
-                                }
-                            />
-                        </div>
-                        {localFilters.filterLowPrice && (
-                            <div className="price-input-wrap price-input-wrap--spaced">
-                                <span>Max Rs.</span>
-                                <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    placeholder="500"
-                                    value={(localFilters.lowPriceMax as string) || ''}
-                                    onChange={(e) => setLocalFilters({ ...localFilters, lowPriceMax: e.target.value })}
-                                />
-                            </div>
-                        )}
                     </div>
                 </div>
 

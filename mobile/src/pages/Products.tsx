@@ -8,6 +8,7 @@ import VirtualizedProductGrid from '../components/VirtualizedProductGrid';
 import CategoryRailIcon from '../components/CategoryRailIcon';
 import { useOnline } from '../hooks/useOnline';
 import { getProducts as getCachedProducts, getCategories as getCachedCategories, getBrands as getCachedBrands } from '../services/offlineCache';
+import { filterCategoriesWithListedProducts, countListedProductsByCategoryId } from '../utils/catalogCategories';
 
 const LIST_LIMIT = 12;
 const DEFAULT_LOW_PRICE_MAX = '500';
@@ -36,6 +37,7 @@ export default function Products() {
 
     const showUnavailable = searchParams.get('showUnavailable') === 'true';
     const browse = searchParams.get('browse');
+    const sortFromUrl = searchParams.get('sortBy');
 
     const filters = {
         categoryIds: searchParams.getAll('categoryIds[]').length > 0
@@ -54,15 +56,32 @@ export default function Products() {
         filterInStock: searchParams.get('filterInStock') === 'true',
         filterPopular: searchParams.get('filterPopular') === 'true',
         filterLowPrice: searchParams.get('filterLowPrice') === 'true',
-        filterDeals: searchParams.get('filterDeals') === 'true' || searchParams.get('onSale') === 'true',
         lowPriceMax: searchParams.get('lowPriceMax') || DEFAULT_LOW_PRICE_MAX,
+        filterDeals: searchParams.get('filterDeals') === 'true' || searchParams.get('onSale') === 'true',
     };
 
+    /** Explicit `sortBy` in the URL (e.g. low→high) wins over browse rail presets. */
     const effectiveSortBy = useMemo(() => {
+        if (sortFromUrl) return sortFromUrl;
         if (browse === 'popular') return 'popularity';
         if (browse === 'new') return 'newest';
-        return filters.sortBy;
-    }, [browse, filters.sortBy]);
+        return 'newest';
+    }, [sortFromUrl, browse]);
+
+    // Legacy: "Low price" used to be a max-price filter; migrate old links to price sort.
+    useEffect(() => {
+        if (searchParams.get('filterLowPrice') !== 'true') return;
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('filterLowPrice');
+                next.delete('lowPriceMax');
+                if (!next.get('sortBy')) next.set('sortBy', 'price_low_high');
+                return next;
+            },
+            { replace: true }
+        );
+    }, [searchParams, setSearchParams]);
 
     const loadProducts = useCallback(
         async (reset = false) => {
@@ -180,6 +199,21 @@ export default function Products() {
         [categories]
     );
 
+    const categoryCountsOffline = useMemo(
+        () => (online ? null : countListedProductsByCategoryId(products)),
+        [online, products]
+    );
+
+    const mainCategoriesForRail = useMemo(
+        () => filterCategoriesWithListedProducts(mainCategories, categoryCountsOffline),
+        [mainCategories, categoryCountsOffline]
+    );
+
+    const categoriesForUi = useMemo(
+        () => filterCategoriesWithListedProducts(categories, categoryCountsOffline),
+        [categories, categoryCountsOffline]
+    );
+
     useEffect(() => {
         if (!shopSlug) return;
         setCursor(null);
@@ -210,6 +244,37 @@ export default function Products() {
         // Intentionally omit loadProducts: it depends on cursor; including it would refetch after every page.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [online, shopSlug, JSON.stringify(filters), effectiveSortBy, browse, showUnavailable]);
+
+    const selectedCategoryIdFromUrl = useMemo(() => {
+        if (searchParams.getAll('categoryIds[]').length > 0) {
+            return searchParams.getAll('categoryIds[]')[0] || null;
+        }
+        return searchParams.get('category') || null;
+    }, [searchParams]);
+
+    /** Drop category from URL if it has no listable products (e.g. deep link to an empty category). */
+    useEffect(() => {
+        if (!shopSlug) return;
+        const id = selectedCategoryIdFromUrl;
+        if (!id) return;
+        const cat = categories.find((c: any) => c.id === id);
+        if (!cat) return;
+        let isEmpty = false;
+        if (cat.product_count != null && String(cat.product_count) !== '') {
+            isEmpty = Number(cat.product_count) <= 0;
+        } else if (!online) {
+            isEmpty = (categoryCountsOffline?.get(String(id)) ?? 0) <= 0;
+        } else {
+            return;
+        }
+        if (isEmpty) {
+            setSearchParams((prev) => {
+                prev.delete('category');
+                prev.delete('categoryIds[]');
+                return prev;
+            });
+        }
+    }, [shopSlug, categories, selectedCategoryIdFromUrl, online, categoryCountsOffline, setSearchParams]);
 
     const displayedProducts = useMemo(() => {
         if (online) return products;
@@ -268,10 +333,6 @@ export default function Products() {
             list = list.filter(
                 (p: any) => (p.popularity_score ?? 0) > 0 || (p.total_sales ?? 0) > 0
             );
-        }
-        if (filters.filterLowPrice) {
-            const cap = parseFloat(filters.lowPriceMax) || 500;
-            list = list.filter((p: any) => Number(p.price) <= cap);
         }
         const sortBy = effectiveSortBy || 'newest';
         if (sortBy === 'price_low_high') list.sort((a: any, b: any) => Number(a.price) - Number(b.price));
@@ -489,7 +550,6 @@ export default function Products() {
         if (filters.filterDeals) n += 1;
         if (filters.filterInStock) n += 1;
         if (filters.filterPopular) n += 1;
-        if (filters.filterLowPrice) n += 1;
         if (filters.availability) n += 1;
         const sortIsDefault = filters.sortBy === 'newest' || !searchParams.get('sortBy');
         if (!sortIsDefault && !browse) n += 1;
@@ -587,15 +647,17 @@ export default function Products() {
                     </button>
                     <button
                         type="button"
-                        className={`filter-chip-btn ${filters.filterLowPrice ? 'active' : ''}`}
+                        className={`filter-chip-btn ${sortFromUrl === 'price_low_high' ? 'active' : ''}`}
                         onClick={() => {
                             setSearchParams((prev) => {
-                                if (prev.get('filterLowPrice') === 'true') {
-                                    prev.delete('filterLowPrice');
+                                if (prev.get('sortBy') === 'price_low_high') {
+                                    prev.delete('sortBy');
                                 } else {
-                                    prev.set('filterLowPrice', 'true');
-                                    if (!prev.get('lowPriceMax')) prev.set('lowPriceMax', DEFAULT_LOW_PRICE_MAX);
+                                    prev.set('sortBy', 'price_low_high');
+                                    prev.delete('browse');
                                 }
+                                prev.delete('filterLowPrice');
+                                prev.delete('lowPriceMax');
                                 return prev;
                             });
                         }}
@@ -645,7 +707,7 @@ export default function Products() {
                         </span>
                         <span>New Arrivals</span>
                     </button>
-                    {mainCategories.map((c: any) => (
+                    {mainCategoriesForRail.map((c: any) => (
                         <button
                             key={c.id}
                             type="button"
@@ -770,20 +832,6 @@ export default function Products() {
                             </button>
                         </div>
                     )}
-                    {filters.filterLowPrice && (
-                        <div className="filter-chip">
-                            Low price (≤ Rs.{filters.lowPriceMax || DEFAULT_LOW_PRICE_MAX})
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    removeFilter('filterLowPrice');
-                                    removeFilter('lowPriceMax');
-                                }}
-                            >
-                                ×
-                            </button>
-                        </div>
-                    )}
                     {filters.filterDeals && (
                         <div className="filter-chip">
                             Deals
@@ -886,7 +934,7 @@ export default function Products() {
             <FilterPanel
                 isOpen={isFilterOpen}
                 onClose={() => setIsFilterOpen(false)}
-                categories={categories}
+                categories={categoriesForUi}
                 brands={brands}
                 filters={filterPanelFilters}
                 onApply={applyFilters}

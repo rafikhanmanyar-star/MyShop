@@ -111,7 +111,7 @@ export default function Header() {
                         </Link>
                         <div className="header-shop-details">
                             <span className="header-shop-name">{state.shop?.company_name || state.shop?.name || 'oBo stores'}</span>
-                            {(state.shop?.address || state.branding?.address) && (
+                            {(state.shop?.address || state.branding?.address) && !canInstall && (
                                 <span className="header-shop-address">{state.shop?.address || state.branding?.address}</span>
                             )}
                             {state.shop?.phone && (

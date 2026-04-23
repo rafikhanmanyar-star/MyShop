@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { publicApi, getProductImagePath } from '../api';
 import ProductListCard, { type ProductListProduct } from '../components/ProductListCard';
 import CategoryRailIcon from '../components/CategoryRailIcon';
+import { filterCategoriesWithListedProducts } from '../utils/catalogCategories';
 
 export default function Home() {
     const { shopSlug } = useParams();
@@ -20,6 +21,11 @@ export default function Home() {
     const mainCategories = useMemo(
         () => categories.filter((c: any) => !c.parent_id),
         [categories]
+    );
+
+    const mainCategoriesWithProducts = useMemo(
+        () => filterCategoriesWithListedProducts(mainCategories, null),
+        [mainCategories]
     );
 
     useEffect(() => {
@@ -256,7 +262,7 @@ export default function Home() {
                         </span>
                         <span>New Arrivals</span>
                     </Link>
-                    {mainCategories.map((c: any) => (
+                    {mainCategoriesWithProducts.map((c: any) => (
                         <Link
                             key={c.id}
                             to={`/${shopSlug}/products?category=${c.id}`}

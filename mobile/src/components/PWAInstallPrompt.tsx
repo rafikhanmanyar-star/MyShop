@@ -41,8 +41,7 @@ const PWAInstallPrompt: React.FC = () => {
 
         if (touchApple) {
             setIsIOS(true);
-            const delayMs = restricted ? 1200 : 3000;
-            setTimeout(() => setShowPrompt(true), delayMs);
+            // No auto bottom banner on iOS; users can use the header Install control for the guide.
         }
 
         // Listen for beforeinstallprompt (Android/Chrome)
@@ -221,53 +220,6 @@ const PWAInstallPrompt: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-                    </div>
-                )}
-
-                {/* iOS Banner */}
-                {!showIOSGuide && (
-                    <div style={{
-                        position: 'fixed', bottom: 'calc(72px + env(safe-area-inset-bottom))',
-                        left: 12, right: 12, background: 'white',
-                        borderRadius: 16, padding: '14px 16px',
-                        boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                        zIndex: 9999, animation: 'slideUp 0.35s ease-out',
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        border: '1px solid rgba(79,70,229,0.1)',
-                    }}>
-                        <div style={{
-                            width: 44, height: 44, borderRadius: 12,
-                            background: 'linear-gradient(135deg, #4F46E5, #7C3AED)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 22, flexShrink: 0,
-                        }}>🛒</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>Install oBo stores</p>
-                            <p style={{ fontSize: 11, color: '#94A3B8' }}>
-                                {inAppBrowser ? 'Open in Safari, then add to Home Screen' : 'Add to home screen for quick access'}
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => setShowIOSGuide(true)}
-                            style={{
-                                padding: '8px 16px', borderRadius: 10,
-                                background: '#4F46E5', color: 'white',
-                                fontSize: 13, fontWeight: 600, border: 'none',
-                                cursor: 'pointer', whiteSpace: 'nowrap',
-                            }}
-                        >
-                            {inAppBrowser ? 'How to' : 'Install'}
-                        </button>
-                        <button
-                            onClick={handleDismiss}
-                            style={{
-                                width: 28, height: 28, borderRadius: '50%',
-                                background: '#F1F5F9', border: 'none',
-                                fontSize: 14, display: 'flex', alignItems: 'center',
-                                justifyContent: 'center', color: '#94A3B8',
-                                cursor: 'pointer', flexShrink: 0,
-                            }}
-                        >✕</button>
                     </div>
                 )}
             </>

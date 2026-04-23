@@ -27,6 +27,41 @@ function isExpiringWithinDays(item: InventoryItem, days: number): boolean {
     return d >= today && d <= until;
 }
 
+type StockMasterSortKey = 'name' | 'barcode' | 'onHand' | 'available' | 'inTransit' | 'valueRetail';
+
+function retailStockValue(item: InventoryItem): number {
+    return (Number(item.onHand) || 0) * (Number(item.retailPrice) || 0);
+}
+
+function compareStockMasterRows(a: InventoryItem, b: InventoryItem, key: StockMasterSortKey, dir: 'asc' | 'desc'): number {
+    const mult = dir === 'asc' ? 1 : -1;
+    switch (key) {
+        case 'name': {
+            const c = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+            if (c !== 0) return mult * c;
+            return mult * a.sku.localeCompare(b.sku, undefined, { sensitivity: 'base' });
+        }
+        case 'barcode': {
+            const as = a.barcode?.trim() ?? '';
+            const bs = b.barcode?.trim() ?? '';
+            if (!as && !bs) return 0;
+            if (!as) return 1;
+            if (!bs) return -1;
+            return mult * as.localeCompare(bs, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        case 'onHand':
+            return mult * ((Number(a.onHand) || 0) - (Number(b.onHand) || 0));
+        case 'available':
+            return mult * ((Number(a.available) || 0) - (Number(b.available) || 0));
+        case 'inTransit':
+            return mult * ((Number(a.inTransit) || 0) - (Number(b.inTransit) || 0));
+        case 'valueRetail':
+            return mult * (retailStockValue(a) - retailStockValue(b));
+        default:
+            return 0;
+    }
+}
+
 const StockMaster: React.FC = () => {
     const { items, warehouses, updateStock, requestTransfer, deleteItem } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
@@ -206,6 +241,39 @@ const StockMaster: React.FC = () => {
         });
     }, [items, debouncedSearch, selectedCategoryId, categories, stockFilter]);
 
+    const [sortKey, setSortKey] = useState<StockMasterSortKey | null>(null);
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+    const sortedItems = useMemo(() => {
+        if (!sortKey) return filteredItems;
+        const next = [...filteredItems];
+        next.sort((a, b) => compareStockMasterRows(a, b, sortKey, sortDir));
+        return next;
+    }, [filteredItems, sortKey, sortDir]);
+
+    const toggleSort = useCallback((key: StockMasterSortKey) => {
+        if (sortKey === key) {
+            setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortKey(key);
+            setSortDir('asc');
+        }
+    }, [sortKey]);
+
+    const sortGlyph = useCallback(
+        (key: StockMasterSortKey) => {
+            const active = sortKey === key;
+            const Icon = (active ? (sortDir === 'asc' ? ICONS.arrowUp : ICONS.arrowDown) : ICONS.arrowUpDown) as React.ReactElement;
+            return React.cloneElement(Icon, {
+                width: 14,
+                height: 14,
+                className: `shrink-0 ${active ? 'text-indigo-600 dark:text-indigo-400' : 'text-muted-foreground opacity-60'}`,
+                'aria-hidden': true,
+            });
+        },
+        [sortKey, sortDir]
+    );
+
     const listScrollRef = useRef<HTMLDivElement>(null);
     const [listDims, setListDims] = useState({ w: 800, h: 400 });
 
@@ -222,7 +290,7 @@ const StockMaster: React.FC = () => {
 
     const renderRow = useCallback(
         ({ index, style }: ListChildComponentProps) => {
-            const item = filteredItems[index];
+            const item = sortedItems[index];
             if (!item) return null;
             const sel = selectedItem?.id === item.id;
             return (
@@ -283,13 +351,13 @@ const StockMaster: React.FC = () => {
                     </div>
                     <div className="w-[88px] shrink-0 px-4 py-2 flex items-center text-sm font-bold text-muted-foreground font-mono">{item.inTransit}</div>
                     <div className="w-[120px] shrink-0 px-4 py-2 flex items-center text-sm font-semibold text-foreground font-mono">
-                        {(item.onHand * item.retailPrice).toLocaleString()}
+                        {retailStockValue(item).toLocaleString()}
                     </div>
                     <div className="w-12 shrink-0 flex items-center justify-end pr-4">{ICONS.chevronRight}</div>
                 </div>
             );
         },
-        [filteredItems, selectedItem?.id]
+        [sortedItems, selectedItem?.id]
     );
 
     return (
@@ -356,22 +424,106 @@ const StockMaster: React.FC = () => {
                 <Card className="border-none shadow-sm flex-1 min-h-0 flex flex-col overflow-hidden">
                     <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                         <div className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground flex shrink-0 border-b border-border">
-                            <div className="flex-1 min-w-0 px-6 py-3">Item Details</div>
-                            <div className="w-[140px] shrink-0 px-4 py-3">Barcode</div>
-                            <div className="w-[88px] shrink-0 px-4 py-3">On Hand</div>
-                            <div className="w-[120px] shrink-0 px-4 py-3">Available</div>
-                            <div className="w-[88px] shrink-0 px-4 py-3">In Transit</div>
-                            <div className="w-[120px] shrink-0 px-4 py-3">Value (Retail)</div>
+                            <div className="flex-1 min-w-0 px-6 py-2">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleSort('name')}
+                                    className="flex items-center gap-1.5 text-left font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    aria-label={
+                                        sortKey === 'name'
+                                            ? `Sort by name, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
+                                            : 'Sort by name'
+                                    }
+                                >
+                                    Item Details
+                                    {sortGlyph('name')}
+                                </button>
+                            </div>
+                            <div className="w-[140px] shrink-0 px-4 py-2 flex items-center">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleSort('barcode')}
+                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    aria-label={
+                                        sortKey === 'barcode'
+                                            ? `Sort by barcode, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
+                                            : 'Sort by barcode'
+                                    }
+                                >
+                                    Barcode
+                                    {sortGlyph('barcode')}
+                                </button>
+                            </div>
+                            <div className="w-[88px] shrink-0 px-4 py-2 flex items-center">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleSort('onHand')}
+                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    aria-label={
+                                        sortKey === 'onHand'
+                                            ? `Sort by on hand quantity, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
+                                            : 'Sort by on hand quantity'
+                                    }
+                                >
+                                    On Hand
+                                    {sortGlyph('onHand')}
+                                </button>
+                            </div>
+                            <div className="w-[120px] shrink-0 px-4 py-2 flex items-center">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleSort('available')}
+                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    aria-label={
+                                        sortKey === 'available'
+                                            ? `Sort by available quantity, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
+                                            : 'Sort by available quantity'
+                                    }
+                                >
+                                    Available
+                                    {sortGlyph('available')}
+                                </button>
+                            </div>
+                            <div className="w-[88px] shrink-0 px-4 py-2 flex items-center">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleSort('inTransit')}
+                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    aria-label={
+                                        sortKey === 'inTransit'
+                                            ? `Sort by in transit quantity, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
+                                            : 'Sort by in transit quantity'
+                                    }
+                                >
+                                    In Transit
+                                    {sortGlyph('inTransit')}
+                                </button>
+                            </div>
+                            <div className="w-[120px] shrink-0 px-4 py-2 flex items-center">
+                                <button
+                                    type="button"
+                                    onClick={() => toggleSort('valueRetail')}
+                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    aria-label={
+                                        sortKey === 'valueRetail'
+                                            ? `Sort by retail stock value, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
+                                            : 'Sort by retail stock value'
+                                    }
+                                >
+                                    Value (Retail)
+                                    {sortGlyph('valueRetail')}
+                                </button>
+                            </div>
                             <div className="w-12 shrink-0" />
                         </div>
                         <div ref={listScrollRef} className="flex-1 min-h-0 overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
-                            {filteredItems.length === 0 ? (
+                            {sortedItems.length === 0 ? (
                                 <div className="px-6 py-12 text-center text-muted-foreground text-sm italic">No matching SKUs.</div>
                             ) : (
                                 <FixedSizeList
                                     height={listDims.h}
                                     width={listDims.w}
-                                    itemCount={filteredItems.length}
+                                    itemCount={sortedItems.length}
                                     itemSize={ROW_H}
                                     overscanCount={LIST_OVERSCAN}
                                 >

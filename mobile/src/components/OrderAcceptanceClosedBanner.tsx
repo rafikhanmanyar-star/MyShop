@@ -46,10 +46,15 @@ export default function OrderAcceptanceClosedBanner() {
         >
             <span className="order-closed-banner__icon" aria-hidden>⏰</span>
             <div className="order-closed-banner__text">
-                <strong>{label}</strong> is closed for online orders right now.
+                <p className="order-closed-banner__lead">
+                    <strong>{label}</strong> is closed.
+                </p>
+                <p className="order-closed-banner__message">
+                    You can place your order; it will be delivered after the shop opens.
+                </p>
                 {range ? (
                     <span className="order-closed-banner__sub">
-                        {' '}Ordering hours: {range} (your local time).
+                        Ordering hours: {range} (your local time).
                     </span>
                 ) : null}
             </div>

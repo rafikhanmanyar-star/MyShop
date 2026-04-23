@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { publicApi, customerApi, getProductImagePath } from '../api';
+import { filterCategoriesWithListedProducts } from '../utils/catalogCategories';
 import CachedImage from '../components/CachedImage';
 import { useApp } from '../context/AppContext';
 
@@ -71,7 +72,12 @@ export default function BudgetCreation() {
             navigate(`/${shopSlug}/login`);
             return;
         }
-        publicApi.getCategories(shopSlug!).then(setCategories).catch(() => {});
+        publicApi
+            .getCategories(shopSlug!)
+            .then((raw) =>
+                setCategories(Array.isArray(raw) ? raw : (raw as any)?.categories ?? []),
+            )
+            .catch(() => {});
         loadExistingBudget();
     }, [state.isLoggedIn, shopSlug]);
 
@@ -139,6 +145,18 @@ export default function BudgetCreation() {
             setPreviousBudgets(budgets.filter((b: any) => !(b.month === month && b.year === year)));
         } catch {}
     };
+
+    const budgetCategoriesForPills = useMemo(
+        () => filterCategoriesWithListedProducts(categories, null),
+        [categories],
+    );
+
+    useEffect(() => {
+        if (!activeCategory) return;
+        if (!budgetCategoriesForPills.some((c: any) => c.id === activeCategory)) {
+            setActiveCategory('');
+        }
+    }, [activeCategory, budgetCategoriesForPills]);
 
     const handleCloneSelect = async (budgetId: string) => {
         setSelectedCloneId(budgetId);
@@ -444,10 +462,10 @@ export default function BudgetCreation() {
                 <input type="search" placeholder="Search products to add..." value={search} onChange={e => setSearch(e.target.value)} />
             </div>
 
-            {categories.length > 0 && (
+            {budgetCategoriesForPills.length > 0 && (
                 <div className="category-pills" style={{ marginBottom: 16 }}>
                     <button className={`category-pill ${!activeCategory ? 'active' : ''}`} onClick={() => setActiveCategory('')}>All</button>
-                    {categories.map((c: any) => (
+                    {budgetCategoriesForPills.map((c: any) => (
                         <button key={c.id} className={`category-pill ${activeCategory === c.id ? 'active' : ''}`}
                             onClick={() => setActiveCategory(c.id)}>{c.name}</button>
                     ))}

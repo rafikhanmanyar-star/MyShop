@@ -875,9 +875,14 @@ img {
 .cart-item .item-name {
   font-size: 14px;
   font-weight: 600;
-  white-space: nowrap;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .cart-item .item-price {
@@ -1219,6 +1224,16 @@ img {
 .order-closed-banner__text {
   flex: 1;
   min-width: 0;
+}
+
+.order-closed-banner__lead,
+.order-closed-banner__message {
+  margin: 0;
+}
+
+.order-closed-banner__message {
+  margin-top: 6px;
+  line-height: 1.45;
 }
 
 .order-closed-banner__sub {

@@ -501,15 +501,26 @@ export class MobileOrderService {
     }
 
     async getCategoriesForMobile(tenantId: string) {
+        const stockExpr = mobileProductSellableStockSql();
         const categories = await this.db.query(
-            `SELECT id, name, parent_id, mobile_icon_url
-       FROM categories
-       WHERE tenant_id = $1 AND type = 'product' AND deleted_at IS NULL
-       ORDER BY name ASC`,
+            `SELECT c.id, c.name, c.parent_id, c.mobile_icon_url,
+        (
+          SELECT COUNT(*)::int
+          FROM shop_products p
+          WHERE p.tenant_id = $1
+            AND p.category_id = c.id
+            AND p.is_active = TRUE
+            AND p.mobile_visible = TRUE
+            AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+            AND ((${stockExpr}) > 0 OR COALESCE(p.is_pre_order, FALSE) = TRUE)
+        ) AS product_count
+       FROM categories c
+       WHERE c.tenant_id = $1 AND c.type = 'product' AND c.deleted_at IS NULL
+       ORDER BY c.name ASC`,
             [tenantId]
         );
 
-        // Return flat but with parent_id so mobile can structure them
+        // Return flat but with parent_id so mobile can structure them; product_count = sellable/published items (same rules as default mobile catalog)
         return categories;
     }
 
