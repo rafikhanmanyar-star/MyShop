@@ -212,7 +212,7 @@ export default function AppHeader({ className = '' }: { className?: string }) {
         <div className="flex min-w-0 flex-1 flex-col gap-3 lg:max-w-4xl xl:max-w-none">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-end xl:gap-4">
             <nav
-              className="flex min-h-[2.5rem] min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-lg border border-[#E5E7EB] bg-gray-100/80 px-1 py-1 dark:border-slate-600 dark:bg-slate-900/60"
+              className="flex min-h-[2.5rem] min-w-0 flex-1 items-stretch gap-0 overflow-x-auto border-b border-[#E5E7EB] dark:border-slate-600"
               aria-label="Inventory sections"
             >
               {tabs.map((tab) => {
@@ -222,10 +222,10 @@ export default function AppHeader({ className = '' }: { className?: string }) {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-xs font-semibold transition-colors sm:text-sm ${
+                    className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors sm:text-sm ${
                       isActive
-                        ? 'bg-white text-[#0047AB] shadow-sm dark:bg-slate-800 dark:text-[#5b8cff]'
-                        : 'text-gray-600 hover:bg-white/70 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-slate-800/80 dark:hover:text-gray-200'
+                        ? '-mb-px border-[#0047AB] text-[#0047AB] dark:border-[#5b8cff] dark:text-[#5b8cff]'
+                        : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
                     }`}
                   >
                     {React.cloneElement(tab.icon as React.ReactElement<{ width?: number; height?: number }>, {

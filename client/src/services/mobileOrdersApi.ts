@@ -36,6 +36,11 @@ export interface MobileOrder {
     customer_name: string;
     /** True when POS staff marked the loyalty member (mobile app customer) as verified. */
     customer_mobile_verified?: boolean;
+    customer_email?: string | null;
+    /** Total mobile orders placed by this customer (including current). */
+    customer_order_count?: number;
+    /** Loyalty tier from linked member (e.g. Silver, Gold). */
+    customer_loyalty_tier?: string | null;
     pos_synced: boolean;
     created_at: string;
     updated_at: string;

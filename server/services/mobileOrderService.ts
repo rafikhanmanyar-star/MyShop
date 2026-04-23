@@ -950,7 +950,23 @@ export class MobileOrderService {
                  WHERE mc2.id = o.customer_id AND mc2.tenant_id = o.tenant_id
                  LIMIT 1),
                 FALSE
-              ) AS customer_mobile_verified
+              ) AS customer_mobile_verified,
+              mc.email AS customer_email,
+              (SELECT COUNT(*)::int FROM mobile_orders mo_c
+               WHERE mo_c.customer_id = o.customer_id AND mo_c.tenant_id = o.tenant_id) AS customer_order_count,
+              COALESCE(
+                (SELECT lm.tier FROM shop_loyalty_members lm
+                 WHERE lm.id = o.loyalty_member_id AND lm.tenant_id = o.tenant_id LIMIT 1),
+                (SELECT lm.tier
+                 FROM mobile_customers mc2
+                 INNER JOIN contacts c ON c.tenant_id = mc2.tenant_id
+                   AND regexp_replace(COALESCE(mc2.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+                   AND length(regexp_replace(COALESCE(mc2.phone, ''), '[^0-9]', '', 'g')) > 0
+                 INNER JOIN shop_loyalty_members lm ON lm.customer_id = c.id AND lm.tenant_id = c.tenant_id
+                 WHERE mc2.id = o.customer_id AND mc2.tenant_id = o.tenant_id
+                 LIMIT 1),
+                NULL
+              ) AS customer_loyalty_tier
        FROM mobile_orders o
        LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $2
        LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id
@@ -1460,7 +1476,23 @@ export class MobileOrderService {
            WHERE mc2.id = o.customer_id AND mc2.tenant_id = o.tenant_id
            LIMIT 1),
           FALSE
-        ) AS customer_mobile_verified
+        ) AS customer_mobile_verified,
+        mc.email AS customer_email,
+        (SELECT COUNT(*)::int FROM mobile_orders mo_c
+         WHERE mo_c.customer_id = o.customer_id AND mo_c.tenant_id = o.tenant_id) AS customer_order_count,
+        COALESCE(
+          (SELECT lm.tier FROM shop_loyalty_members lm
+           WHERE lm.id = o.loyalty_member_id AND lm.tenant_id = o.tenant_id LIMIT 1),
+          (SELECT lm.tier
+           FROM mobile_customers mc2
+           INNER JOIN contacts c ON c.tenant_id = mc2.tenant_id
+             AND regexp_replace(COALESCE(mc2.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+             AND length(regexp_replace(COALESCE(mc2.phone, ''), '[^0-9]', '', 'g')) > 0
+           INNER JOIN shop_loyalty_members lm ON lm.customer_id = c.id AND lm.tenant_id = c.tenant_id
+           WHERE mc2.id = o.customer_id AND mc2.tenant_id = o.tenant_id
+           LIMIT 1),
+          NULL
+        ) AS customer_loyalty_tier
       FROM mobile_orders o
       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $1
       LEFT JOIN delivery_orders d ON d.order_id = o.id AND d.tenant_id = o.tenant_id

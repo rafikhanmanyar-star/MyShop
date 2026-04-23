@@ -1,6 +1,19 @@
 
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { FixedSizeList, ListChildComponentProps } from 'react-window';
+import {
+    ArrowLeftRight,
+    ChevronLeft,
+    ChevronRight,
+    Copy,
+    History,
+    Pencil,
+    SlidersHorizontal,
+    Trash2,
+    Warehouse,
+    X,
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useInventory } from '../../../context/InventoryContext';
 import { CURRENCY, ICONS } from '../../../constants';
 import Card from '../../ui/Card';
@@ -12,9 +25,11 @@ import { shopApi } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import type { InventoryItem, StockMovement } from '../../../types/inventory';
 import AddOrEditSkuModal from '../pos/AddOrEditSkuModal';
+import { showAppToast } from '../../../utils/appToast';
 
-const ROW_H = 72;
+const ROW_H = 84;
 const LIST_OVERSCAN = 10;
+const PAGE_SIZE = 15;
 
 function isExpiringWithinDays(item: InventoryItem, days: number): boolean {
     if (!item.nearestExpiry) return false;
@@ -31,6 +46,15 @@ type StockMasterSortKey = 'name' | 'barcode' | 'onHand' | 'available' | 'inTrans
 
 function retailStockValue(item: InventoryItem): number {
     return (Number(item.onHand) || 0) * (Number(item.retailPrice) || 0);
+}
+
+/** Match reference: green healthy, orange low, red out — uses `available` vs reorder. */
+function availableQtyClass(item: InventoryItem): string {
+    const av = Number(item.available) || 0;
+    if (av <= 0) return 'text-[#D32F2F] dark:text-[#ff6b6b]';
+    const rp = Number(item.reorderPoint) || 0;
+    if (rp > 0 && av <= rp) return 'text-[#F57C00] dark:text-[#ffb74d]';
+    return 'text-emerald-600 dark:text-emerald-400';
 }
 
 function compareStockMasterRows(a: InventoryItem, b: InventoryItem, key: StockMasterSortKey, dir: 'asc' | 'desc'): number {
@@ -63,6 +87,7 @@ function compareStockMasterRows(a: InventoryItem, b: InventoryItem, key: StockMa
 }
 
 const StockMaster: React.FC = () => {
+    const navigate = useNavigate();
     const { items, warehouses, updateStock, requestTransfer, deleteItem } = useInventory();
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -140,6 +165,18 @@ const StockMaster: React.FC = () => {
         if (next) setSelectedItem(next);
     }, [items, selectedItem?.id]);
     const [deleting, setDeleting] = useState(false);
+
+    const copySkuField = useCallback((label: string, value: string) => {
+        const v = value.trim();
+        if (!v) {
+            showAppToast('Nothing to copy.', 'error');
+            return;
+        }
+        void navigator.clipboard.writeText(v).then(
+            () => showAppToast(`${label} copied.`, 'success'),
+            () => showAppToast('Could not copy to clipboard.', 'error')
+        );
+    }, []);
 
     const handleDeleteSku = async () => {
         if (!selectedItem || selectedItem.id.startsWith('pending-')) return;
@@ -243,6 +280,7 @@ const StockMaster: React.FC = () => {
 
     const [sortKey, setSortKey] = useState<StockMasterSortKey | null>(null);
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+    const [page, setPage] = useState(1);
 
     const sortedItems = useMemo(() => {
         if (!sortKey) return filteredItems;
@@ -250,6 +288,30 @@ const StockMaster: React.FC = () => {
         next.sort((a, b) => compareStockMasterRows(a, b, sortKey, sortDir));
         return next;
     }, [filteredItems, sortKey, sortDir]);
+
+    const totalCount = sortedItems.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+    const effectivePage = Math.min(page, totalPages);
+
+    useEffect(() => {
+        setPage(1);
+    }, [debouncedSearch, selectedCategoryId, stockFilter]);
+
+    useEffect(() => {
+        setPage((p) => Math.min(p, totalPages));
+    }, [totalPages]);
+
+    const paginatedItems = useMemo(() => {
+        const start = (effectivePage - 1) * PAGE_SIZE;
+        return sortedItems.slice(start, start + PAGE_SIZE);
+    }, [sortedItems, effectivePage]);
+
+    const rangeLabel = useMemo(() => {
+        if (totalCount === 0) return 'Showing 0 of 0 items';
+        const from = (effectivePage - 1) * PAGE_SIZE + 1;
+        const to = Math.min(effectivePage * PAGE_SIZE, totalCount);
+        return `Showing ${from.toLocaleString()}-${to.toLocaleString()} of ${totalCount.toLocaleString()} items`;
+    }, [totalCount, effectivePage]);
 
     const toggleSort = useCallback((key: StockMasterSortKey) => {
         if (sortKey === key) {
@@ -267,7 +329,7 @@ const StockMaster: React.FC = () => {
             return React.cloneElement(Icon, {
                 width: 14,
                 height: 14,
-                className: `shrink-0 ${active ? 'text-indigo-600 dark:text-indigo-400' : 'text-muted-foreground opacity-60'}`,
+                className: `shrink-0 ${active ? 'text-[#0047AB] dark:text-[#5b8cff]' : 'text-gray-400 opacity-70 dark:text-gray-500'}`,
                 'aria-hidden': true,
             });
         },
@@ -290,111 +352,120 @@ const StockMaster: React.FC = () => {
 
     const renderRow = useCallback(
         ({ index, style }: ListChildComponentProps) => {
-            const item = sortedItems[index];
+            const item = paginatedItems[index];
             if (!item) return null;
             const sel = selectedItem?.id === item.id;
             return (
                 <div
                     style={style}
-                    className={`flex items-stretch border-b border-border cursor-pointer transition-colors ${
+                    className={`flex items-stretch cursor-pointer border-b border-[#E5E7EB] transition-colors dark:border-slate-700 ${
                         sel
-                            ? 'bg-indigo-50 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-950/40 dark:ring-indigo-500/40'
-                            : 'hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30'
+                            ? 'bg-[#0047AB]/8 ring-1 ring-inset ring-[#0047AB]/20 dark:bg-[#0047AB]/15 dark:ring-[#5b8cff]/30'
+                            : 'bg-white hover:bg-gray-50/90 dark:bg-slate-900/30 dark:hover:bg-slate-800/50'
                     }`}
                     onClick={() => setSelectedItem(item)}
                 >
-                    <div className="flex-1 min-w-0 px-6 py-2 flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center overflow-hidden border border-border shrink-0">
+                    <div className="flex min-w-0 flex-1 items-center gap-3 px-6 py-3">
+                        <div className="h-11 w-11 shrink-0 overflow-hidden rounded-md border border-[#E5E7EB] bg-gray-50 dark:border-slate-600 dark:bg-slate-800">
                             {item.imageUrl ? (
-                                <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
                             ) : (
-                                React.cloneElement(ICONS.image as React.ReactElement, { size: 20, className: 'text-slate-300 dark:text-slate-500' })
-                            )}
-                        </div>
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                                <span className="font-bold text-foreground text-sm truncate">{item.name}</span>
-                                {item.salesDeactivated && (
-                                    <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-100">
-                                        Sales off
-                                    </span>
-                                )}
-                            </div>
-                            <div className="text-xs text-muted-foreground font-mono italic truncate">SKU: {item.sku}</div>
-                            {item.nearestExpiry && isExpiringWithinDays(item, 30) && (
-                                <div className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 mt-0.5">
-                                    Expires {item.nearestExpiry}
+                                <div className="flex h-full w-full items-center justify-center text-gray-300 dark:text-gray-600 [&>svg]:h-5 [&>svg]:w-5">
+                                    {ICONS.package}
                                 </div>
                             )}
                         </div>
-                    </div>
-                    <div className="w-[140px] shrink-0 px-4 py-2 flex items-center whitespace-nowrap">
-                        {item.barcode ? (
-                            <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg w-fit border border-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60">
-                                <span className="text-xs font-mono font-bold">{item.barcode}</span>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <span className="truncate text-sm font-bold text-gray-900 dark:text-gray-100" title={item.name}>
+                                    {item.name}
+                                </span>
+                                {item.salesDeactivated ? (
+                                    <span className="shrink-0 rounded border border-[#E5E7EB] bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-600 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-300">
+                                        Sales off
+                                    </span>
+                                ) : null}
                             </div>
+                            <div className="truncate font-mono text-xs text-gray-500 dark:text-gray-400" title={item.sku}>
+                                SKU: {item.sku}
+                            </div>
+                            {stockFilter === 'expiring' && item.nearestExpiry && isExpiringWithinDays(item, 30) ? (
+                                <div className="mt-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">Expires {item.nearestExpiry}</div>
+                            ) : null}
+                        </div>
+                    </div>
+                    <div className="flex w-[140px] shrink-0 items-center px-4 py-3">
+                        {item.barcode?.trim() ? (
+                            <span className="truncate font-mono text-sm font-medium text-gray-800 dark:text-gray-200" title={item.barcode}>
+                                {item.barcode}
+                            </span>
                         ) : (
-                            <span className="text-slate-300 dark:text-slate-500 text-xs italic">No Barcode</span>
+                            <span className="text-xs italic text-gray-400 dark:text-gray-500">—</span>
                         )}
                     </div>
-                    <div className="w-[88px] shrink-0 px-4 py-2 flex items-center text-sm font-semibold font-mono text-foreground">{item.onHand}</div>
-                    <div className="w-[120px] shrink-0 px-4 py-2 flex items-center">
-                        <span
-                            className={`px-2 py-0.5 rounded text-xs font-bold ${
-                                item.available > 10
-                                    ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                    : 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'
-                            }`}
-                        >
-                            {item.available} {item.unit}
-                        </span>
+                    <div className="flex w-[88px] shrink-0 items-center px-4 py-3 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                        {(Number(item.onHand) || 0).toLocaleString()}
                     </div>
-                    <div className="w-[88px] shrink-0 px-4 py-2 flex items-center text-sm font-bold text-muted-foreground font-mono">{item.inTransit}</div>
-                    <div className="w-[120px] shrink-0 px-4 py-2 flex items-center text-sm font-semibold text-foreground font-mono">
-                        {retailStockValue(item).toLocaleString()}
+                    <div
+                        className={`flex w-[120px] shrink-0 items-center px-4 py-3 text-sm font-bold tabular-nums ${availableQtyClass(item)}`}
+                    >
+                        {(Number(item.available) || 0).toLocaleString()}
                     </div>
-                    <div className="w-12 shrink-0 flex items-center justify-end pr-4">{ICONS.chevronRight}</div>
+                    <div className="flex w-[88px] shrink-0 items-center px-4 py-3 text-sm font-semibold tabular-nums text-gray-600 dark:text-gray-300">
+                        {(Number(item.inTransit) || 0).toLocaleString()}
+                    </div>
+                    <div className="flex w-[128px] shrink-0 items-center px-4 py-3 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                        {CURRENCY} {retailStockValue(item).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
+                    <div className="flex w-12 shrink-0 items-center justify-end pr-5 text-gray-400 dark:text-gray-500 [&>svg]:h-[18px] [&>svg]:w-[18px]">
+                        {ICONS.chevronRight}
+                    </div>
                 </div>
             );
         },
-        [sortedItems, selectedItem?.id]
+        [paginatedItems, selectedItem?.id, stockFilter]
     );
 
     return (
-        <div className="flex gap-6 h-full max-h-full min-h-0 overflow-hidden relative">
-            {/* Left: Item List - shrinks when detail panel is open */}
-            <div className={`flex-1 min-w-0 flex flex-col gap-6 transition-[flex] duration-200 flex-shrink min-h-0`}>
-                <div className="flex flex-wrap items-center gap-4 flex-shrink-0">
-                    <div className="relative group flex-1 min-w-[200px] max-w-md">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
-                            {ICONS.search}
+        <div className="relative flex h-full max-h-full min-h-0 gap-6 overflow-hidden">
+            {/* Left: filters + table — shrinks when detail panel is open */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-shrink flex-col gap-4 transition-[flex] duration-200">
+                <div className="flex flex-shrink-0 flex-col gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <div className="relative min-w-0 flex-1">
+                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400 dark:text-gray-500 [&>svg]:h-[18px] [&>svg]:w-[18px]">
+                                {ICONS.search}
+                            </div>
+                            <input
+                                type="text"
+                                className="block w-full rounded-lg border border-[#E5E7EB] bg-white py-3 pl-10 pr-3 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-[#0047AB] focus:outline-none focus:ring-2 focus:ring-[#0047AB]/25 dark:border-slate-600 dark:bg-slate-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+                                placeholder="Search SKU, Name or Barcode..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                aria-label="Search inventory"
+                            />
                         </div>
-                        <input
-                            type="text"
-                            className="block w-full pl-10 pr-3 py-3 border border-border rounded-xl leading-5 bg-card text-foreground placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm dark:border-slate-600"
-                            placeholder="Search SKU, Name or Barcode..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+                        <div className="flex shrink-0 items-center gap-2 sm:pl-1">
+                            <label htmlFor="stock-master-category" className="whitespace-nowrap text-sm font-medium text-gray-600 dark:text-gray-400">
+                                Category:
+                            </label>
+                            <select
+                                id="stock-master-category"
+                                value={selectedCategoryId}
+                                onChange={(e) => setSelectedCategoryId(e.target.value)}
+                                className="min-w-[180px] rounded-lg border border-[#E5E7EB] bg-white py-2.5 pl-3 pr-8 text-sm font-medium text-gray-900 shadow-sm focus:border-[#0047AB] focus:outline-none focus:ring-2 focus:ring-[#0047AB]/25 dark:border-slate-600 dark:bg-slate-900 dark:text-gray-100"
+                            >
+                                <option value="">All categories</option>
+                                <option value="General">General</option>
+                                {categories.map((c: any) => (
+                                    <option key={c.id} value={c.id}>
+                                        {c.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                        <label htmlFor="stock-master-category" className="text-sm font-bold text-muted-foreground whitespace-nowrap">
-                            Category:
-                        </label>
-                        <select
-                            id="stock-master-category"
-                            value={selectedCategoryId}
-                            onChange={(e) => setSelectedCategoryId(e.target.value)}
-                            className="block rounded-xl border border-border bg-card py-3 pl-4 pr-10 text-sm font-medium text-foreground shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 min-w-[180px] dark:border-slate-600"
-                        >
-                            <option value="">All categories</option>
-                            <option value="General">General</option>
-                            {categories.map((c: any) => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="flex flex-wrap gap-2 flex-shrink-0">
+                    <div className="flex flex-wrap gap-2">
                         {(
                             [
                                 { id: 'all' as const, label: 'All' },
@@ -409,10 +480,10 @@ const StockMaster: React.FC = () => {
                                 key={f.id}
                                 type="button"
                                 onClick={() => setStockFilter(f.id)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                                className={`rounded-full border px-3.5 py-1.5 text-xs font-bold transition-colors ${
                                     stockFilter === f.id
-                                        ? 'bg-indigo-600 text-white border-indigo-600'
-                                        : 'bg-card text-muted-foreground border-border hover:border-indigo-300'
+                                        ? 'border-[#0047AB] bg-[#0047AB] text-white dark:border-[#5b8cff] dark:bg-[#5b8cff]'
+                                        : 'border-[#E5E7EB] bg-white text-gray-700 hover:border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-gray-200 dark:hover:border-slate-500'
                                 }`}
                             >
                                 {f.label}
@@ -421,14 +492,14 @@ const StockMaster: React.FC = () => {
                     </div>
                 </div>
 
-                <Card className="border-none shadow-sm flex-1 min-h-0 flex flex-col overflow-hidden">
-                    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                        <div className="bg-muted/80 text-xs font-semibold uppercase text-muted-foreground flex shrink-0 border-b border-border">
-                            <div className="flex-1 min-w-0 px-6 py-2">
+                <Card className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#E5E7EB] bg-white p-0 shadow-sm dark:border-slate-700 dark:bg-slate-900/40">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <div className="flex shrink-0 border-b border-[#E5E7EB] bg-gray-50/90 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-slate-700 dark:bg-slate-800/80 dark:text-gray-400">
+                            <div className="min-w-0 flex-1 px-6 py-3.5">
                                 <button
                                     type="button"
                                     onClick={() => toggleSort('name')}
-                                    className="flex items-center gap-1.5 text-left font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    className="flex items-center gap-1.5 rounded-md py-0.5 text-left font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0047AB]/40 dark:text-gray-400 dark:hover:text-gray-200"
                                     aria-label={
                                         sortKey === 'name'
                                             ? `Sort by name, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
@@ -439,11 +510,11 @@ const StockMaster: React.FC = () => {
                                     {sortGlyph('name')}
                                 </button>
                             </div>
-                            <div className="w-[140px] shrink-0 px-4 py-2 flex items-center">
+                            <div className="flex w-[140px] shrink-0 items-center px-4 py-3.5">
                                 <button
                                     type="button"
                                     onClick={() => toggleSort('barcode')}
-                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    className="flex items-center gap-1.5 rounded-md py-0.5 font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0047AB]/40 dark:text-gray-400 dark:hover:text-gray-200"
                                     aria-label={
                                         sortKey === 'barcode'
                                             ? `Sort by barcode, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
@@ -454,11 +525,11 @@ const StockMaster: React.FC = () => {
                                     {sortGlyph('barcode')}
                                 </button>
                             </div>
-                            <div className="w-[88px] shrink-0 px-4 py-2 flex items-center">
+                            <div className="flex w-[88px] shrink-0 items-center px-4 py-3.5">
                                 <button
                                     type="button"
                                     onClick={() => toggleSort('onHand')}
-                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    className="flex items-center gap-1.5 rounded-md py-0.5 font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0047AB]/40 dark:text-gray-400 dark:hover:text-gray-200"
                                     aria-label={
                                         sortKey === 'onHand'
                                             ? `Sort by on hand quantity, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
@@ -469,11 +540,11 @@ const StockMaster: React.FC = () => {
                                     {sortGlyph('onHand')}
                                 </button>
                             </div>
-                            <div className="w-[120px] shrink-0 px-4 py-2 flex items-center">
+                            <div className="flex w-[120px] shrink-0 items-center px-4 py-3.5">
                                 <button
                                     type="button"
                                     onClick={() => toggleSort('available')}
-                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    className="flex items-center gap-1.5 rounded-md py-0.5 font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0047AB]/40 dark:text-gray-400 dark:hover:text-gray-200"
                                     aria-label={
                                         sortKey === 'available'
                                             ? `Sort by available quantity, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
@@ -484,11 +555,11 @@ const StockMaster: React.FC = () => {
                                     {sortGlyph('available')}
                                 </button>
                             </div>
-                            <div className="w-[88px] shrink-0 px-4 py-2 flex items-center">
+                            <div className="flex w-[88px] shrink-0 items-center px-4 py-3.5">
                                 <button
                                     type="button"
                                     onClick={() => toggleSort('inTransit')}
-                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    className="flex items-center gap-1.5 rounded-md py-0.5 font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0047AB]/40 dark:text-gray-400 dark:hover:text-gray-200"
                                     aria-label={
                                         sortKey === 'inTransit'
                                             ? `Sort by in transit quantity, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
@@ -499,11 +570,11 @@ const StockMaster: React.FC = () => {
                                     {sortGlyph('inTransit')}
                                 </button>
                             </div>
-                            <div className="w-[120px] shrink-0 px-4 py-2 flex items-center">
+                            <div className="flex w-[128px] shrink-0 items-center px-4 py-3.5">
                                 <button
                                     type="button"
                                     onClick={() => toggleSort('valueRetail')}
-                                    className="flex items-center gap-1.5 font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-md py-1 -my-1"
+                                    className="flex items-center gap-1.5 rounded-md py-0.5 font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0047AB]/40 dark:text-gray-400 dark:hover:text-gray-200"
                                     aria-label={
                                         sortKey === 'valueRetail'
                                             ? `Sort by retail stock value, ${sortDir === 'asc' ? 'ascending' : 'descending'}, click to reverse`
@@ -514,16 +585,20 @@ const StockMaster: React.FC = () => {
                                     {sortGlyph('valueRetail')}
                                 </button>
                             </div>
-                            <div className="w-12 shrink-0" />
+                            <div className="w-12 shrink-0" aria-hidden />
                         </div>
-                        <div ref={listScrollRef} className="flex-1 min-h-0 overflow-x-auto custom-scrollbar" style={{ scrollbarGutter: 'stable' }}>
+                        <div
+                            ref={listScrollRef}
+                            className="custom-scrollbar min-h-0 flex-1 overflow-x-auto overflow-y-hidden bg-white dark:bg-slate-900/20"
+                            style={{ scrollbarGutter: 'stable' }}
+                        >
                             {sortedItems.length === 0 ? (
-                                <div className="px-6 py-12 text-center text-muted-foreground text-sm italic">No matching SKUs.</div>
+                                <div className="px-6 py-14 text-center text-sm italic text-gray-500 dark:text-gray-400">No matching SKUs.</div>
                             ) : (
                                 <FixedSizeList
                                     height={listDims.h}
                                     width={listDims.w}
-                                    itemCount={sortedItems.length}
+                                    itemCount={paginatedItems.length}
                                     itemSize={ROW_H}
                                     overscanCount={LIST_OVERSCAN}
                                 >
@@ -531,133 +606,239 @@ const StockMaster: React.FC = () => {
                                 </FixedSizeList>
                             )}
                         </div>
+                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#E5E7EB] bg-white px-5 py-3.5 dark:border-slate-700 dark:bg-slate-900/30">
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{rangeLabel}</p>
+                            <div className="flex items-center gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setPage(Math.max(1, effectivePage - 1))}
+                                    disabled={effectivePage <= 1}
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700"
+                                    aria-label="Previous page"
+                                >
+                                    <ChevronLeft className="h-4 w-4" strokeWidth={2} aria-hidden />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPage(Math.min(totalPages, effectivePage + 1))}
+                                    disabled={effectivePage >= totalPages}
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[#E5E7EB] bg-white text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700"
+                                    aria-label="Next page"
+                                >
+                                    <ChevronRight className="h-4 w-4" strokeWidth={2} aria-hidden />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </Card>
             </div>
 
-            {/* Right: Item Drill-down Side Panel - fixed width, no overlap */}
+            {/* Right: SKU detail drawer (reference: hero + id cards + financial + warehouses + actions) */}
             {selectedItem && (
-                <div className="flex-shrink-0 w-[420px] min-w-[360px] min-h-0 flex flex-col animate-slide-in-right">
-                    <Card className="h-full min-h-0 border-none shadow-xl flex flex-col p-8 gap-8 overflow-y-auto bg-card border-l border-indigo-100 dark:border-slate-700 rounded-none rounded-l-3xl">
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-start gap-3">
-                                <div className="min-w-0">
-                                    <h2 className="text-xl font-semibold text-foreground">{selectedItem.name}</h2>
-                                    <p className="text-xs font-semibold uppercase text-indigo-500 dark:text-indigo-400 tracking-widest mt-1">SKU ID: {selectedItem.sku}</p>
-                                    {selectedItem.barcode && (
-                                        <p className="text-xs font-semibold uppercase text-emerald-600 dark:text-emerald-400 tracking-widest mt-0.5">📊 BARCODE: {selectedItem.barcode}</p>
-                                    )}
-                                </div>
+                <div className="animate-slide-in-right flex h-full min-h-0 w-[420px] min-w-[360px] max-w-[440px] shrink-0 flex-col shadow-[-12px_0_40px_-12px_rgba(15,23,42,0.12)] dark:shadow-[-12px_0_40px_-12px_rgba(0,0,0,0.45)]">
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-l-2xl border border-[#E5E7EB] border-r-0 bg-white dark:border-slate-700 dark:bg-slate-900">
+                        <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
+                            {/* Hero image + title */}
+                            <div className="relative aspect-[5/4] min-h-[200px] w-full overflow-hidden bg-gray-100 dark:bg-slate-800">
+                                {selectedItem.imageUrl ? (
+                                    <img src={selectedItem.imageUrl} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-gray-300 dark:text-gray-600 [&>svg]:h-16 [&>svg]:w-16">
+                                        {ICONS.package}
+                                    </div>
+                                )}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" aria-hidden />
                                 <button
                                     type="button"
                                     onClick={() => setSelectedItem(null)}
-                                    className="p-2 hover:bg-muted rounded-full transition-colors text-muted-foreground shrink-0"
+                                    className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-gray-700 shadow-md ring-1 ring-black/5 transition-colors hover:bg-white dark:bg-slate-800/95 dark:text-gray-100 dark:ring-white/10"
+                                    aria-label="Close panel"
                                 >
-                                    {ICONS.x}
+                                    <X className="h-5 w-5" strokeWidth={2} />
                                 </button>
+                                <div className="absolute bottom-0 left-0 right-0 p-4 pt-12">
+                                    <span
+                                        className={`mb-2 inline-block rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white ${
+                                            selectedItem.salesDeactivated
+                                                ? 'bg-slate-600'
+                                                : selectedItem.onHand <= 0
+                                                  ? 'bg-[#D32F2F]'
+                                                  : 'bg-[#0047AB]'
+                                        }`}
+                                    >
+                                        {selectedItem.salesDeactivated
+                                            ? 'SALES OFF'
+                                            : selectedItem.onHand <= 0
+                                              ? 'OUT OF STOCK'
+                                              : 'ACTIVE STOCK'}
+                                    </span>
+                                    <h2 className="text-xl font-bold leading-tight text-white drop-shadow-sm sm:text-2xl">{selectedItem.name}</h2>
+                                </div>
                             </div>
-                            {selectedItem.salesDeactivated && (
-                                <div className="rounded-xl border-2 border-amber-400 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:bg-amber-950/30 dark:border-amber-600 dark:text-amber-100">
-                                    <p className="font-semibold">Hidden from POS &amp; mobile checkout</p>
-                                    <p className="text-xs mt-1 opacity-90 leading-snug">
-                                        This SKU is still in inventory. Open <strong>Edit SKU (full form)</strong> below and turn on &quot;Available for
-                                        sale&quot;, or use the <strong>Sales off</strong> filter in the list to find similar products.
+
+                            <div className="space-y-5 px-5 pb-6 pt-5">
+                                {selectedItem.salesDeactivated ? (
+                                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/35 dark:text-amber-100">
+                                        <p className="font-semibold">Hidden from POS and mobile checkout</p>
+                                        <p className="mt-1 text-xs leading-snug opacity-90">
+                                            Use <strong>Edit SKU (full form)</strong> to turn on &quot;Available for sale&quot;, or filter by{' '}
+                                            <strong>Sales off</strong> in the list.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsSkuEditorOpen(true)}
+                                            className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-700"
+                                        >
+                                            Reactivate for sales
+                                        </button>
+                                    </div>
+                                ) : null}
+
+                                {/* SKU ID + Barcode */}
+                                <div className="space-y-2">
+                                    <div className="flex items-start justify-between gap-3 rounded-xl bg-[#F3F4F6] px-3.5 py-3 dark:bg-slate-800/90">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">SKU ID</p>
+                                            <p className="mt-1 break-all font-semibold text-gray-900 dark:text-gray-100">{selectedItem.sku}</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => copySkuField('SKU ID', selectedItem.sku)}
+                                            className="shrink-0 rounded-lg p-2 text-gray-500 transition-colors hover:bg-white hover:text-[#0047AB] dark:text-gray-400 dark:hover:bg-slate-700 dark:hover:text-[#5b8cff]"
+                                            aria-label="Copy SKU ID"
+                                        >
+                                            <Copy className="h-4 w-4" strokeWidth={2} />
+                                        </button>
+                                    </div>
+                                    <div className="flex items-start justify-between gap-3 rounded-xl bg-[#F3F4F6] px-3.5 py-3 dark:bg-slate-800/90">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">Barcode</p>
+                                            <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">
+                                                {selectedItem.barcode?.trim() ? selectedItem.barcode : '—'}
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => copySkuField('Barcode', selectedItem.barcode ?? '')}
+                                            disabled={!selectedItem.barcode?.trim()}
+                                            className="shrink-0 rounded-lg p-2 text-gray-500 transition-colors hover:bg-white hover:text-[#0047AB] disabled:pointer-events-none disabled:opacity-35 dark:text-gray-400 dark:hover:bg-slate-700 dark:hover:text-[#5b8cff]"
+                                            aria-label="Copy barcode"
+                                        >
+                                            <Copy className="h-4 w-4" strokeWidth={2} />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Financial snapshot */}
+                                <div>
+                                    <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                                        Financial snapshot
                                     </p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="rounded-xl bg-sky-100/90 px-3 py-3 shadow-sm dark:bg-sky-950/50 dark:ring-1 dark:ring-sky-800/40">
+                                            <p className="text-[10px] font-bold uppercase tracking-wide text-sky-900/80 dark:text-sky-200/80">
+                                                Retail price
+                                            </p>
+                                            <p className="mt-1.5 text-lg font-bold tabular-nums text-sky-950 dark:text-sky-50">
+                                                {CURRENCY} {Number(selectedItem.retailPrice ?? 0).toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div className="rounded-xl bg-[#F3F4F6] px-3 py-3 shadow-sm dark:bg-slate-800/90 dark:ring-1 dark:ring-slate-700">
+                                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-600 dark:text-gray-400">Unit cost</p>
+                                            <p className="mt-1.5 text-lg font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                                                {CURRENCY} {Number(selectedItem.costPrice ?? 0).toLocaleString()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Warehouse distribution */}
+                                <div>
+                                    <div className="mb-3 flex items-center justify-between gap-2">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                                            Warehouse distribution
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => navigate('/multi-store')}
+                                            className="text-xs font-semibold text-[#0047AB] hover:underline dark:text-[#5b8cff]"
+                                        >
+                                            Manage sites
+                                        </button>
+                                    </div>
+                                    <ul className="space-y-2">
+                                        {warehouses.map((wh) => (
+                                            <li
+                                                key={wh.id}
+                                                className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/50"
+                                            >
+                                                <div className="flex min-w-0 items-center gap-2.5">
+                                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6] text-gray-600 dark:bg-slate-700 dark:text-gray-300">
+                                                        <Warehouse className="h-4 w-4" strokeWidth={2} aria-hidden />
+                                                    </span>
+                                                    <span className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{wh.name}</span>
+                                                </div>
+                                                <span className="shrink-0 text-base font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                                                    {selectedItem.warehouseStock[wh.id] ?? 0}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="space-y-3 border-t border-[#E5E7EB] pt-5 dark:border-slate-700">
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsTransferModalOpen(true)}
+                                            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#0a1628] py-3.5 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-[#132337] dark:bg-[#0f172a] dark:hover:bg-[#1e293b]"
+                                        >
+                                            <ArrowLeftRight className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                                            Transfer
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAdjustModalOpen(true)}
+                                            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F3F4F6] py-3.5 text-xs font-bold uppercase tracking-wide text-gray-800 shadow-sm transition-colors hover:bg-gray-200 dark:border-slate-600 dark:bg-slate-800 dark:text-gray-100 dark:hover:bg-slate-700"
+                                        >
+                                            <SlidersHorizontal className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                                            Adjust
+                                        </button>
+                                    </div>
                                     <button
                                         type="button"
                                         onClick={() => setIsSkuEditorOpen(true)}
-                                        className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-emerald-700"
+                                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-white py-3.5 text-xs font-bold uppercase tracking-wide text-gray-800 shadow-sm transition-colors hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-900 dark:text-gray-100 dark:hover:bg-slate-800"
                                     >
-                                        Reactivate for sales
+                                        <Pencil className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                                        Edit SKU (full form)
                                     </button>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Product Image Preview */}
-                        <div className="w-full aspect-video rounded-3xl bg-muted/80 border border-border overflow-hidden flex items-center justify-center text-slate-200 dark:text-slate-600 shadow-inner">
-                            {selectedItem.imageUrl ? (
-                                <img src={selectedItem.imageUrl} alt={selectedItem.name} className="w-full h-full object-cover" />
-                            ) : (
-                                React.cloneElement(ICONS.image as React.ReactElement, { size: 64 })
-                            )}
-                        </div>
-
-                        {/* Stock Distribution Matrix */}
-                        <div className="space-y-4">
-                            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Inventory Distribution</h3>
-                            <div className="grid grid-cols-1 gap-3">
-                                {warehouses.map(wh => (
-                                    <div key={wh.id} className="flex items-center justify-between p-4 bg-muted/80 rounded-2xl border border-border group hover:border-indigo-200 dark:hover:border-indigo-500/40 transition-all">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-xl bg-card flex items-center justify-center text-muted-foreground shadow-sm border border-border group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                                                {ICONS.building}
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-bold text-foreground">{wh.name}</p>
-                                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-tight">{wh.code}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-xl font-semibold text-foreground font-mono">
-                                            {selectedItem.warehouseStock[wh.id] || 0}
-                                        </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsHistoryModalOpen(true)}
+                                            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-white py-3.5 text-xs font-bold uppercase tracking-wide text-gray-800 shadow-sm transition-colors hover:bg-gray-50 dark:border-slate-600 dark:bg-slate-900 dark:text-gray-100 dark:hover:bg-slate-800"
+                                        >
+                                            <History className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                                            View history
+                                        </button>
+                                        {!selectedItem.id.startsWith('pending-') ? (
+                                            <button
+                                                type="button"
+                                                onClick={handleDeleteSku}
+                                                disabled={deleting}
+                                                className="flex h-[46px] w-12 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 shadow-sm transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-400 dark:hover:bg-red-950/60"
+                                                aria-label="Delete SKU"
+                                            >
+                                                <Trash2 className="h-4 w-4" strokeWidth={2} />
+                                            </button>
+                                        ) : null}
                                     </div>
-                                ))}
+                                </div>
                             </div>
                         </div>
-
-                        {/* Financial Metrics */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="p-4 rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-indigo-900/40">
-                                <p className="text-xs font-bold uppercase opacity-80">Retail Price</p>
-                                <p className="text-xl font-semibold font-mono mt-1">{CURRENCY} {selectedItem.retailPrice}</p>
-                            </div>
-                            <div className="p-4 rounded-2xl bg-slate-900 text-white shadow-lg shadow-slate-100 dark:bg-slate-800 dark:shadow-black/40">
-                                <p className="text-xs font-bold uppercase opacity-80">Cost Price</p>
-                                <p className="text-xl font-semibold font-mono mt-1">{CURRENCY} {selectedItem.costPrice}</p>
-                            </div>
-                        </div>
-
-                        {/* Inventory Controls */}
-                        <div className="space-y-4 mt-auto">
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setIsTransferModalOpen(true)}
-                                    className="flex-1 py-4 bg-card border-2 border-border text-foreground rounded-2xl font-semibold text-xs hover:border-indigo-600 hover:text-indigo-600 dark:hover:border-indigo-400 dark:hover:text-indigo-400 transition-all uppercase tracking-widest shadow-sm"
-                                >
-                                    Transfer
-                                </button>
-                                <button
-                                    onClick={() => setIsAdjustModalOpen(true)}
-                                    className="flex-1 py-4 bg-card border-2 border-border text-foreground rounded-2xl font-semibold text-xs hover:border-indigo-600 hover:text-indigo-600 dark:hover:border-indigo-400 dark:hover:text-indigo-400 transition-all uppercase tracking-widest shadow-sm"
-                                >
-                                    Adjust
-                                </button>
-                            </div>
-                            <button
-                                onClick={() => setIsSkuEditorOpen(true)}
-                                className="w-full py-4 bg-indigo-50 text-indigo-600 rounded-2xl font-semibold text-xs hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/60 dark:border-indigo-800/50 transition-all uppercase tracking-widest shadow-sm border border-indigo-100 dark:border-indigo-800/50 mb-3"
-                            >
-                                Edit SKU (full form)
-                            </button>
-                            <button
-                                onClick={() => setIsHistoryModalOpen(true)}
-                                className="w-full py-4 bg-muted/80 text-muted-foreground rounded-2xl font-semibold text-xs uppercase tracking-[0.2em] border border-dashed border-border hover:bg-muted transition-all"
-                            >
-                                View Full Card History
-                            </button>
-                            {!selectedItem.id.startsWith('pending-') && (
-                                <button
-                                    type="button"
-                                    onClick={handleDeleteSku}
-                                    disabled={deleting}
-                                    className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-semibold text-xs uppercase tracking-widest border border-red-200 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800/60 dark:hover:bg-red-950/60 transition-all disabled:opacity-50"
-                                >
-                                    {deleting ? 'Deleting...' : 'Delete SKU'}
-                                </button>
-                            )}
-                        </div>
-                    </Card>
+                    </div>
                 </div>
             )}
 

@@ -284,6 +284,7 @@ export class SalesReturnService {
       `SELECT r.id, r.return_number AS "returnNumber", r.original_sale_id AS "originalSaleId",
               r.original_mobile_order_id AS "originalMobileOrderId",
               COALESCE(s.sale_number, mo.order_number) AS "originalSaleNumber",
+              CASE WHEN r.original_mobile_order_id IS NOT NULL THEN 'mobile' ELSE 'pos' END AS "source",
               r.customer_id AS "customerId", r.mobile_customer_id AS "mobileCustomerId",
               COALESCE(c.name, mc.name) AS "customerName",
               r.return_date AS "returnDate", r.return_type AS "returnType",
