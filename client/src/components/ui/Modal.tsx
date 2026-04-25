@@ -185,7 +185,7 @@ const Modal: React.FC<ModalProps> = ({
       >
         {!hideHeader && (
           <div className="flex justify-between items-center p-3 sm:p-4 border-b border-border flex-shrink-0 bg-card">
-            <div id="modal-title" className="text-base sm:text-lg font-bold text-foreground truncate pr-2 sm:pr-4 flex-grow">{title}</div>
+            <div id="modal-title" className="text-base sm:text-lg font-bold text-foreground min-w-0 pr-2 sm:pr-4 flex-grow [overflow:visible]">{title}</div>
             {!hideClose && (
               <button
                 onClick={onClose}

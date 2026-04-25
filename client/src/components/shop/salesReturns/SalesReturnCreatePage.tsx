@@ -191,6 +191,40 @@ export default function SalesReturnCreatePage() {
     setReturnType('FULL');
   };
 
+  /** Block advancing to review if any return qty exceeds purchased or still-returnable amount. */
+  const validateLineQuantitiesBeforeReview = useCallback((): boolean => {
+    if (!eligibility?.items?.length) return false;
+    setError(null);
+    let anyPositive = false;
+    for (const row of eligibility.items) {
+      const k = lineKey(row);
+      const st = lineState[k];
+      const q = parseFloat(st?.qty || '0') || 0;
+      if (q <= 0) continue;
+      anyPositive = true;
+      const sold = Number(row.soldQty) || 0;
+      const avail = Number(row.availableToReturn) || 0;
+      const name = row.productName || 'this product';
+      if (q > sold + 1e-9) {
+        setError(
+          `The return quantity for "${name}" cannot be greater than the quantity purchased (${sold}).`
+        );
+        return false;
+      }
+      if (q > avail + 1e-6) {
+        setError(
+          `The return quantity for "${name}" cannot exceed what is still available to return (${avail}).`
+        );
+        return false;
+      }
+    }
+    if (!anyPositive) {
+      setError('Enter at least one line with return quantity');
+      return false;
+    }
+    return true;
+  }, [eligibility, lineState]);
+
   const submit = async () => {
     if (!eligibility?.sale?.id) return;
     if (eligibility.blocked) {
@@ -566,7 +600,10 @@ export default function SalesReturnCreatePage() {
               <Button
                 type="button"
                 disabled={blocked || loading}
-                onClick={() => setConfirmOpen(true)}
+                onClick={() => {
+                  if (!validateLineQuantitiesBeforeReview()) return;
+                  setConfirmOpen(true);
+                }}
                 className="rounded-full gap-2 bg-primary-900 hover:bg-primary-950 dark:bg-primary-700 dark:hover:bg-primary-600 shadow-md px-8"
               >
                 Review & submit

@@ -342,8 +342,8 @@ const SalesHistoryModal: React.FC = () => {
             disableScroll
             className="sm:max-w-[min(1200px,98vw)]"
         >
-            <div className="flex min-h-0 max-h-[min(720px,calc(100vh-4rem))] flex-col gap-3 -mx-1 -mt-1 sm:-m-2">
-                <p className="shrink-0 text-[11px] text-muted-foreground">
+            <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden overscroll-contain px-2 pb-2 pt-3 sm:px-3 sm:pb-3 sm:pt-3">
+                <p className="shrink-0 text-[11px] leading-normal text-muted-foreground break-words">
                     Showing records from the last <span className="font-semibold text-foreground">{archiveHintDays}</span>{' '}
                     day{archiveHintDays === 1 ? '' : 's'}. Change this under Settings → POS Preferences → Sales archive.
                 </p>
@@ -619,31 +619,37 @@ const SalesHistoryModal: React.FC = () => {
                 </div>
 
                 {selectedSale && (
-                    <div className="shrink-0 flex flex-col gap-2 rounded-xl border border-dashed border-primary-200/80 bg-primary-50/40 p-3 dark:border-primary-800 dark:bg-primary-950/20">
+                    <div className="flex min-h-0 min-w-0 flex-col gap-2 rounded-xl border border-dashed border-primary-200/80 bg-primary-50/40 p-3 dark:border-primary-800 dark:bg-primary-950/20">
                         <div className="flex flex-wrap items-end justify-between gap-2">
-                            <div>
+                            <div className="min-w-0">
                                 <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-400/90">Transaction slip</p>
-                                <h3 className="font-mono text-sm font-semibold text-foreground">{selectedSale.saleNumber}</h3>
+                                <h3 className="font-mono text-sm font-semibold text-foreground break-all">{selectedSale.saleNumber}</h3>
                             </div>
-                            <span className="rounded border border-emerald-200/80 bg-emerald-100 px-2 py-0.5 font-mono text-[10px] text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/15 dark:text-emerald-200">
+                            <span className="shrink-0 rounded border border-emerald-200/80 bg-emerald-100 px-2 py-0.5 font-mono text-[10px] text-emerald-800 dark:border-emerald-500/25 dark:bg-emerald-500/15 dark:text-emerald-200">
                                 AUTH {authCodeFromSaleKey(selectedSale.saleNumber, selectedSale.id)}
                             </span>
                         </div>
-                        <div className={`max-h-36 ${scrollNoBar} overflow-y-auto`}>
-                            <table className="w-full text-left text-[10px] border-collapse sm:text-xs">
-                                <thead>
-                                    <tr className="text-[9px] uppercase tracking-wider text-muted-foreground border-b border-border">
-                                        <th className="font-semibold py-0.5 pr-2">Item</th>
-                                        <th className="w-7 py-0.5 text-center font-semibold">Qty</th>
-                                        <th className="w-16 py-0.5 text-right font-semibold">Amt</th>
+                        <div className="min-h-0 max-h-[min(50vh,22rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-md border border-border/60 bg-background/50 pr-1 [scrollbar-gutter:stable] dark:bg-slate-900/30">
+                            <table className="w-full min-w-0 table-fixed text-left text-[10px] border-collapse sm:text-xs">
+                                <thead className="sticky top-0 z-10 border-b border-border bg-muted/90 backdrop-blur-sm dark:bg-slate-800/90">
+                                    <tr className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                                        <th className="w-[58%] py-1.5 pl-1 pr-2 text-left font-semibold">Item</th>
+                                        <th className="w-[10%] py-1.5 text-center font-semibold">Qty</th>
+                                        <th className="w-[32%] py-1.5 pl-1 pr-1 text-right font-semibold">Amt</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {selectedSale.items.map((item, idx) => (
-                                        <tr key={idx} className="border-b border-border/60 last:border-0">
-                                            <td className="line-clamp-2 max-w-0 py-0.5 pr-1">{item.name}</td>
-                                            <td className="py-0.5 text-center tabular-nums">{item.quantity}</td>
-                                            <td className="py-0.5 text-right font-mono tabular-nums">{item.subtotal.toLocaleString()}</td>
+                                        <tr key={idx} className="border-b border-border/50 last:border-0">
+                                            <td className="break-words py-1.5 pl-1 pr-2 align-top text-foreground">
+                                                {item.name}
+                                            </td>
+                                            <td className="px-0.5 py-1.5 text-center tabular-nums text-muted-foreground align-top">
+                                                {item.quantity}
+                                            </td>
+                                            <td className="py-1.5 pl-1 pr-1 text-right font-mono text-[11px] tabular-nums text-foreground align-top">
+                                                {item.subtotal.toLocaleString()}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
