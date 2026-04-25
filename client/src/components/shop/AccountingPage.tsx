@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AccountingProvider, useAccounting } from '../../context/AccountingContext';
 import AccountingDashboard from './accounting/AccountingDashboard';
 import GeneralLedger from './accounting/GeneralLedger';
@@ -9,9 +10,21 @@ import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
 
+const ACCT_TAB_IDS = ['dashboard', 'ledger', 'statements'] as const;
+type AcctTabId = (typeof ACCT_TAB_IDS)[number];
+
 const AccountingContent: React.FC = () => {
     const { accounts, postJournalEntry } = useAccounting();
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'coa' | 'ledger' | 'statements'>('dashboard');
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState<AcctTabId>(() => {
+        try {
+            const p = new URLSearchParams(window.location.search).get('tab');
+            if (p === 'ledger' || p === 'statements') return p;
+        } catch {
+            /* empty */
+        }
+        return 'dashboard';
+    });
     const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
 
     const [journalData, setJournalData] = useState({
@@ -88,6 +101,29 @@ const AccountingContent: React.FC = () => {
         }
     };
 
+    const setTab = (t: AcctTabId) => {
+        setActiveTab(t);
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                if (t === 'dashboard') next.delete('tab');
+                else next.set('tab', t);
+                if (t !== 'dashboard') next.delete('revenue');
+                return next;
+            },
+            { replace: true }
+        );
+    };
+
+    useEffect(() => {
+        const p = searchParams.get('tab');
+        if (p === 'ledger' || p === 'statements') {
+            setActiveTab(p);
+        } else {
+            setActiveTab('dashboard');
+        }
+    }, [searchParams]);
+
     const tabs = [
         { id: 'dashboard', label: 'Finance Dashboard', icon: ICONS.barChart },
         { id: 'ledger', label: 'General Ledger', icon: ICONS.clipboard },
@@ -117,7 +153,7 @@ const AccountingContent: React.FC = () => {
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id as any)}
+                            onClick={() => setTab(tab.id as AcctTabId)}
                             className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
                                 ? 'text-indigo-600 dark:text-indigo-400'
                                 : 'text-muted-foreground dark:text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'

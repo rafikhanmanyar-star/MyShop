@@ -39,6 +39,8 @@ export interface InventoryItem {
     /** Product description shown in the mobile app when user opens the product. */
     description?: string;
     warehouseStock: Record<string, number>; // warehouseId -> quantity
+    /** Per-branch qty that is sellable today (non-expired batches), when the server provides it */
+    warehouseSellable?: Record<string, number>;
     /** Units sellable today (non-expired batches); falls back to available when absent */
     sellableOnHand?: number;
     /** Earliest future expiry across batches (YYYY-MM-DD), when tracked */

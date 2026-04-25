@@ -4,7 +4,8 @@ import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 import { deductInventoryFefo, getSellableQuantityForWarehouse } from './inventoryBatchService.js';
 import { aggregateQuantitiesFromOfferLines, prepareOfferBundlesForOrder } from './mobileOfferCheckout.js';
-import { resolveBranchWarehouseForPlaceOrder } from './mobileOrderBranchRouting.js';
+import { getWarehouseIdForMobileOrder, resolveBranchWarehouseForPlaceOrder } from './mobileOrderBranchRouting.js';
+import { invalidateInventorySkuListCache } from './shopService.js';
 import { tryAutoAssignRiderForMobileOrder, manuallyAssignRiderForMobileOrder } from './deliveryAssignment.js';
 import { haversineDistanceKm } from '../utils/haversine.js';
 import { getDrivingDurationSeconds } from './googleDirectionsEtaService.js';
@@ -1059,7 +1060,7 @@ export class MobileOrderService {
         }
 
         const orders = await this.db.query(
-            'SELECT id, status, customer_id, payment_method FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
+            'SELECT id, status, customer_id, payment_method, COALESCE(inventory_deducted, FALSE) AS inventory_deducted FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
             [orderId, tenantId]
         );
         if (orders.length === 0) throw new Error('Order not found');
@@ -1154,17 +1155,24 @@ export class MobileOrderService {
                 [generateId('mosh'), tenantId, orderId, currentStatus, newStatus, changedBy, changedByType, note || null]
             );
 
-            // Inventory adjustments
-            if (newStatus === 'Confirmed') {
-                // Move from reserved → sold (deduct on_hand, release reserved)
-                await this.adjustInventoryForOrder(client, tenantId, orderId, 'confirm');
+            // Inventory: reservation stays from mobile place order until Delivered (deduct + release) or Cancelled (release only).
+            if (newStatus === 'Delivered') {
+                if (!orders[0].inventory_deducted) {
+                    await this.adjustInventoryForOrder(client, tenantId, orderId, 'deliver');
+                }
             } else if (newStatus === 'Cancelled') {
-                // Release reservation
                 await this.adjustInventoryForOrder(client, tenantId, orderId, 'cancel');
             }
 
             return { success: true, orderId, from: currentStatus, to: newStatus };
         });
+        if (newStatus === 'Delivered' || newStatus === 'Cancelled') {
+            try {
+                invalidateInventorySkuListCache(tenantId);
+            } catch {
+                /* ignore */
+            }
+        }
         if (newStatus === 'Delivered') {
             try {
                 const { getShopService } = await import('./shopService.js');
@@ -1238,23 +1246,19 @@ export class MobileOrderService {
         return { riders, stats };
     }
 
-    private async adjustInventoryForOrder(client: any, tenantId: string, orderId: string, action: 'confirm' | 'cancel') {
+    private async adjustInventoryForOrder(client: any, tenantId: string, orderId: string, action: 'deliver' | 'cancel') {
         const items = await client.query(
             'SELECT product_id, quantity FROM mobile_order_items WHERE order_id = $1 AND tenant_id = $2',
             [orderId, tenantId]
         );
 
-        const whRes = await client.query(
-            'SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1',
-            [tenantId]
-        );
-        if (whRes.length === 0) return;
-        const warehouseId = whRes[0].id;
+        const warehouseId = await getWarehouseIdForMobileOrder(client, tenantId, orderId);
+        if (!warehouseId) return;
 
         for (const item of items) {
             const qty = parseFloat(item.quantity);
 
-            if (action === 'confirm') {
+            if (action === 'deliver') {
                 const fefo = await deductInventoryFefo(
                     client,
                     tenantId,
@@ -1263,12 +1267,12 @@ export class MobileOrderService {
                     qty,
                     orderId
                 );
-                const unitCostAtConfirm = await fetchUnitCostForProduct(client, tenantId, item.product_id);
+                const unitCostAtDeliver = await fetchUnitCostForProduct(client, tenantId, item.product_id);
                 let unitCost =
                     fefo.weightedUnitCost != null && fefo.weightedUnitCost > 0
                         ? fefo.weightedUnitCost
-                        : unitCostAtConfirm > 0
-                          ? unitCostAtConfirm
+                        : unitCostAtDeliver > 0
+                          ? unitCostAtDeliver
                           : null;
                 const totalCost = unitCost != null ? unitCost * qty : null;
                 await client.query(
@@ -1280,11 +1284,10 @@ export class MobileOrderService {
                 );
                 await client.query(
                     `INSERT INTO shop_inventory_movements (id, tenant_id, product_id, warehouse_id, type, quantity, reference_id, reason, unit_cost, total_cost)
-           VALUES ($1, $2, $3, $4, 'MobileSale', $5, $6, 'Mobile order confirmed', $7, $8)`,
+           VALUES ($1, $2, $3, $4, 'MobileSale', $5, $6, 'Mobile order delivered', $7, $8)`,
                     [generateId('im'), tenantId, item.product_id, warehouseId, -qty, orderId, unitCost, totalCost]
                 );
             } else if (action === 'cancel') {
-                // Release reserved
                 await client.query(
                     `UPDATE shop_inventory
            SET quantity_reserved = GREATEST(quantity_reserved - $1, 0),
@@ -1298,6 +1301,13 @@ export class MobileOrderService {
                     [generateId('im'), tenantId, item.product_id, warehouseId, qty, orderId]
                 );
             }
+        }
+
+        if (action === 'deliver') {
+            await client.query(
+                `UPDATE mobile_orders SET inventory_deducted = TRUE, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+                [orderId, tenantId]
+            );
         }
     }
 

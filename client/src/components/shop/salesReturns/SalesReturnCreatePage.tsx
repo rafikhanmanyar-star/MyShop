@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { shopApi } from '../../../services/shopApi';
 import { CURRENCY } from '../../../constants';
 import Button from '../../ui/Button';
@@ -56,6 +56,8 @@ function SectionCard({
 
 export default function SalesReturnCreatePage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const lastPrefillInvoice = useRef<string | null>(null);
   const [invoiceInput, setInvoiceInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [eligibility, setEligibility] = useState<any>(null);
@@ -78,63 +80,78 @@ export default function SalesReturnCreatePage() {
     }
   }, []);
 
-  const loadEligibility = async () => {
-    const inv = invoiceInput.trim();
-    if (!inv) {
-      setError('Enter an invoice / sale number');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    setReturnSource(null);
-    try {
-      let el: any = null;
-      try {
-        const sale = await shopApi.getSaleByInvoiceNumber(inv);
-        if (sale?.id) {
-          el = await shopApi.getSaleReturnEligibility(sale.id);
-          setReturnSource('pos');
-        }
-      } catch {
-        // Not a POS invoice — try mobile order number
-      }
-      if (!el) {
-        try {
-          el = await shopApi.getMobileOrderReturnEligibility(inv);
-          if (el?.source === 'mobile') setReturnSource('mobile');
-        } catch {
-          el = null;
-        }
-      }
-      if (!el) {
-        setEligibility(null);
-        setError('No POS sale or mobile order found for this number');
+  const loadEligibility = useCallback(
+    async (invoiceOverride?: string) => {
+      const inv = (invoiceOverride ?? invoiceInput).trim();
+      if (!inv) {
+        setError('Enter an invoice / sale number');
         return;
       }
-      setEligibility(el);
-      const next: LineState = {};
-      for (const row of el?.items || []) {
-        const k = lineKey(row);
-        if (!k) continue;
-        next[k] = {
-          qty: '0',
-          restock: true,
-          reason: '',
-          reasonIsCustom: false,
-        };
+      setLoading(true);
+      setError(null);
+      setReturnSource(null);
+      try {
+        let el: any = null;
+        try {
+          const sale = await shopApi.getSaleByInvoiceNumber(inv);
+          if (sale?.id) {
+            el = await shopApi.getSaleReturnEligibility(sale.id);
+            setReturnSource('pos');
+          }
+        } catch {
+          // Not a POS invoice — try mobile order number
+        }
+        if (!el) {
+          try {
+            el = await shopApi.getMobileOrderReturnEligibility(inv);
+            if (el?.source === 'mobile') setReturnSource('mobile');
+          } catch {
+            el = null;
+          }
+        }
+        if (!el) {
+          setEligibility(null);
+          setError('No POS sale or mobile order found for this number');
+          return;
+        }
+        setEligibility(el);
+        const next: LineState = {};
+        for (const row of el?.items || []) {
+          const k = lineKey(row);
+          if (!k) continue;
+          next[k] = {
+            qty: '0',
+            restock: true,
+            reason: '',
+            reasonIsCustom: false,
+          };
+        }
+        setLineState(next);
+      } catch (e: any) {
+        setEligibility(null);
+        setError(e?.error || e?.message || 'Failed to load sale');
+      } finally {
+        setLoading(false);
       }
-      setLineState(next);
-    } catch (e: any) {
-      setEligibility(null);
-      setError(e?.error || e?.message || 'Failed to load sale');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [invoiceInput]
+  );
 
-  React.useEffect(() => {
+  useEffect(() => {
     loadBanks();
   }, [loadBanks]);
+
+  useEffect(() => {
+    const inv = (location.state as { prefillInvoice?: string } | null | undefined)?.prefillInvoice?.trim();
+    if (!inv) {
+      lastPrefillInvoice.current = null;
+      return;
+    }
+    if (lastPrefillInvoice.current === inv) return;
+    lastPrefillInvoice.current = inv;
+    setInvoiceInput(inv);
+    void loadEligibility(inv);
+  }, [location.state, loadEligibility]);
 
   const totalReturn = useMemo(() => {
     if (!eligibility?.items?.length) return 0;

@@ -1,11 +1,13 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 export default function FloatingCartBar() {
     const { shopSlug } = useParams();
+    const { pathname } = useLocation();
     const { cartTotal, cartCount } = useApp();
+    const isCartPage = !!shopSlug && pathname === `/${shopSlug}/cart`;
 
-    if (!shopSlug || cartCount <= 0) return null;
+    if (!shopSlug || cartCount <= 0 || isCartPage) return null;
 
     return (
         <Link

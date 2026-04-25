@@ -18,6 +18,10 @@ export interface POSProduct {
     isWeightBased?: boolean;
     unit: string;
     stockLevel: number;
+    /** On-hand qty at the selected branch (can exceed stockLevel if batches are expired). */
+    onHandAtBranch?: number;
+    /** Branch has inventory on hand but nothing left to sell (e.g. only expired batches). */
+    onlyExpiredStock?: boolean;
     reorderPoint?: number;
     popularityScore?: number;
     /** Hidden from POS grid when true (manual deactivate for sales). */
@@ -135,6 +139,8 @@ export interface POSSale {
     totalPaid: number;
     changeDue: number;
     paymentMethod: string;
+    /** Server status (e.g. Completed) — used in archive filters */
+    status?: string;
     paymentDetails: POSPayment[];
     items: {
         productId: string;

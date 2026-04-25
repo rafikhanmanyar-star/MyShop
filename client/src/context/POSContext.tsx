@@ -345,6 +345,15 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ? (variant.stockLevel ?? 0)
             : (product.stockLevel ?? 0);
 
+        if (product.onlyExpiredStock) {
+            showAppToast(
+                'Only expired batches are left for this product at this branch. It cannot be sold until stock is replaced or adjusted.',
+                'info',
+                6000
+            );
+            return;
+        }
+
         if (availableStock <= 0) {
             alert('This product is out of stock. You cannot add it to the cart.');
             return;

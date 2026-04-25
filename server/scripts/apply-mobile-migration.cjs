@@ -142,6 +142,17 @@ db.exec(`CREATE TABLE IF NOT EXISTS mobile_orders (
 )`);
 console.log('✅ mobile_orders table ready');
 
+addColumn('mobile_orders', 'inventory_deducted', 'INTEGER NOT NULL DEFAULT 0');
+try {
+    db.exec(`UPDATE mobile_orders
+      SET inventory_deducted = 1
+      WHERE status IN ('Confirmed', 'Packed', 'OutForDelivery', 'Delivered')
+        AND COALESCE(inventory_deducted, 0) = 0`);
+    console.log('✅ mobile_orders inventory_deducted backfill (if any)');
+} catch (e) {
+    console.error('⏭️  mobile_orders inventory_deducted backfill:', e.message);
+}
+
 // 5. Mobile order items
 db.exec(`CREATE TABLE IF NOT EXISTS mobile_order_items (
     id TEXT PRIMARY KEY,

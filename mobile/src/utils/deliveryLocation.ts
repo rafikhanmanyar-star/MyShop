@@ -17,6 +17,28 @@ export function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lo
     return EARTH_RADIUS_KM * c;
 }
 
+/** Urban delivery bike speed band (km/h) for ETA range display. */
+const BIKE_SPEED_FAST_KMH = 30;
+const BIKE_SPEED_SLOW_KMH = 20;
+/** Order processing, packing, and handoff (minutes) added to travel time. */
+const ORDER_PREP_MINUTES = 15;
+
+/**
+ * Estimated delivery window: travel time at 30–20 km/h plus fixed prep, in whole minutes.
+ * Returns [min, max] inclusive; equal when distance is 0 (prep only).
+ */
+export function estimatedDeliveryRangeMinutes(distanceKm: number): { min: number; max: number } {
+    const d = Math.max(0, Number(distanceKm) || 0);
+    if (d <= 0) {
+        return { min: ORDER_PREP_MINUTES, max: ORDER_PREP_MINUTES };
+    }
+    const travelMin = (d / BIKE_SPEED_FAST_KMH) * 60;
+    const travelMax = (d / BIKE_SPEED_SLOW_KMH) * 60;
+    const lo = Math.ceil(travelMin + ORDER_PREP_MINUTES);
+    const hi = Math.ceil(travelMax + ORDER_PREP_MINUTES);
+    return { min: Math.min(lo, hi), max: Math.max(lo, hi) };
+}
+
 export interface GeoPosition {
     latitude: number;
     longitude: number;

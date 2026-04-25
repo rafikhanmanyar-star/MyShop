@@ -105,12 +105,28 @@ export async function deductInventoryFefo(
     throw new Error('Deduction quantity must be positive');
   }
 
+  // Lock row so sellable does not change mid-sale; enforce on_hand/batches minus mobile (etc.) reservation.
+  const lockInv = await client.query(
+    `SELECT 1 FROM shop_inventory
+     WHERE tenant_id = $1 AND product_id = $2 AND warehouse_id = $3
+     FOR UPDATE`,
+    [tenantId, productId, warehouseId]
+  );
+  if (lockInv.length === 0) {
+    throw new Error('Insufficient stock');
+  }
+
+  const sellable = await getSellableQuantityForWarehouse(client, tenantId, productId, warehouseId);
+  if (sellable < quantity) {
+    const rounded = Math.max(0, Math.round(sellable * 100) / 100);
+    throw new Error(`Insufficient stock. Available: ${rounded}, requested: ${quantity}`);
+  }
+
   const hasBatches = await hasBatchRows(client, tenantId, productId, warehouseId);
   if (!hasBatches) {
     const inv = await client.query(
       `SELECT quantity_on_hand FROM shop_inventory
-       WHERE tenant_id = $1 AND product_id = $2 AND warehouse_id = $3
-       FOR UPDATE`,
+       WHERE tenant_id = $1 AND product_id = $2 AND warehouse_id = $3`,
       [tenantId, productId, warehouseId]
     );
     if (inv.length === 0) {
@@ -126,15 +142,6 @@ export async function deductInventoryFefo(
       [quantity, tenantId, productId, warehouseId]
     );
     return { weightedUnitCost: null, lines: [] };
-  }
-
-  const sellable = await getSellableBatchSum(client, tenantId, productId, warehouseId);
-  if (sellable < quantity) {
-    const onlyExpired = await hasOnlyExpiredRemaining(client, tenantId, productId, warehouseId);
-    if (onlyExpired || sellable <= 0) {
-      throw new Error('Expired product cannot be sold');
-    }
-    throw new Error(`Insufficient stock. Sellable: ${sellable}, requested: ${quantity}`);
   }
 
   const rows = await client.query(

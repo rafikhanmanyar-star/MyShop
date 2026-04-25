@@ -17,6 +17,27 @@ async function warehouseIdForBranch(client: any, tenantId: string, branchId: str
     return whRes.length > 0 ? whRes[0].id : null;
 }
 
+/** Fulfillment store for a mobile order (branch id often equals shop_warehouses.id). */
+export async function getWarehouseIdForMobileOrder(
+    client: any,
+    tenantId: string,
+    orderId: string
+): Promise<string | null> {
+    const rows = await client.query(
+        `SELECT COALESCE(assigned_branch_id, branch_id) AS bid
+     FROM mobile_orders
+     WHERE id = $1 AND tenant_id = $2`,
+        [orderId, tenantId]
+    );
+    if (rows.length === 0) return null;
+    const bid = rows[0].bid;
+    if (!bid) return null;
+    const wh = await warehouseIdForBranch(client, tenantId, String(bid));
+    if (wh) return wh;
+    const whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
+    return whRes.length > 0 ? whRes[0].id : null;
+}
+
 async function canFulfillAtWarehouse(
     client: any,
     tenantId: string,

@@ -988,7 +988,12 @@ export class ShopService {
             jsonb_object_agg(ie.warehouse_id::text, ie.quantity_on_hand)
               FILTER (WHERE ie.warehouse_id IS NOT NULL),
             '{}'::jsonb
-          ) AS warehouse_stock
+          ) AS warehouse_stock,
+          COALESCE(
+            jsonb_object_agg(ie.warehouse_id::text, ie.sellable_on_hand)
+              FILTER (WHERE ie.warehouse_id IS NOT NULL),
+            '{}'::jsonb
+          ) AS warehouse_sellable
         FROM i_enriched ie
         GROUP BY ie.product_id
       ),
@@ -1018,7 +1023,8 @@ export class ShopService {
           COALESCE(ia.on_hand, 0)::numeric AS on_hand,
           COALESCE(ia.available, 0)::numeric AS available,
           COALESCE(ia.reserved_total, 0)::numeric AS reserved_total,
-          COALESCE(ia.warehouse_stock, '{}'::jsonb) AS warehouse_stock
+          COALESCE(ia.warehouse_stock, '{}'::jsonb) AS warehouse_stock,
+          COALESCE(ia.warehouse_sellable, '{}'::jsonb) AS warehouse_sellable
         FROM shop_products p
         LEFT JOIN inv_agg ia ON ia.product_id = p.id
         WHERE p.tenant_id = $1 AND p.is_active = TRUE
@@ -1509,8 +1515,22 @@ export class ShopService {
     await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
   }
 
-  async getSales(tenantId: string) {
-    return this.db.query(`
+  async getSales(tenantId: string, options?: { days?: number | null }) {
+    const d = options?.days;
+    const hasWindow = d != null && Number.isFinite(d) && d > 0;
+    const since = hasWindow
+      ? (() => {
+          const t = new Date();
+          const daysN = Math.min(3650, Math.max(1, Math.floor(Number(d))));
+          t.setDate(t.getDate() - daysN);
+          return t;
+        })()
+      : null;
+    const posDateClause = hasWindow && since ? 'AND s.created_at >= $2' : '';
+    const mobileDateClause = hasWindow && since ? 'AND o.created_at >= $2' : '';
+    const params: unknown[] = hasWindow && since ? [tenantId, since] : [tenantId];
+    return this.db.query(
+      `
       SELECT 
         s.id, s.tenant_id as "tenantId", s.branch_id as "branchId", s.terminal_id as "terminalId", 
         s.user_id as "userId", s.customer_id as "customerId", s.loyalty_member_id as "loyaltyMemberId", 
@@ -1543,7 +1563,7 @@ export class ShopService {
       LEFT JOIN shop_branches b ON s.branch_id = b.id AND b.tenant_id = $1
       LEFT JOIN users u ON s.user_id = u.id AND u.tenant_id = $1
       LEFT JOIN cashier_shifts cs ON s.shift_id = cs.id AND cs.tenant_id = $1
-      WHERE s.tenant_id = $1
+      WHERE s.tenant_id = $1 ${posDateClause}
       
       UNION ALL
       
@@ -1576,9 +1596,11 @@ export class ShopService {
       FROM mobile_orders o
       LEFT JOIN mobile_customers mc ON o.customer_id = mc.id AND mc.tenant_id = $1
       LEFT JOIN shop_branches b ON o.branch_id = b.id AND b.tenant_id = $1
-      WHERE o.tenant_id = $1 AND o.status = 'Delivered'
+      WHERE o.tenant_id = $1 AND o.status = 'Delivered' ${mobileDateClause}
       ORDER BY "createdAt" DESC
-    `, [tenantId]);
+    `,
+      params
+    );
   }
 
   // --- Loyalty Methods ---
@@ -2332,14 +2354,21 @@ export class ShopService {
   }
 
   async updatePosSettings(tenantId: string, data: any) {
+    const archiveDays = (() => {
+      if (data.archive_history_days === undefined) return 30;
+      const n = parseInt(String(data.archive_history_days), 10);
+      if (!Number.isFinite(n)) return 30;
+      return Math.min(3650, Math.max(1, n));
+    })();
     const res = await this.db.query(
-      `INSERT INTO pos_settings (tenant_id, auto_print_receipt, default_printer_name, receipt_copies, auto_logout_minutes, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
+      `INSERT INTO pos_settings (tenant_id, auto_print_receipt, default_printer_name, receipt_copies, auto_logout_minutes, archive_history_days, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
        ON CONFLICT (tenant_id) DO UPDATE SET
          auto_print_receipt = EXCLUDED.auto_print_receipt,
          default_printer_name = EXCLUDED.default_printer_name,
          receipt_copies = EXCLUDED.receipt_copies,
          auto_logout_minutes = EXCLUDED.auto_logout_minutes,
+         archive_history_days = EXCLUDED.archive_history_days,
          updated_at = NOW()
        RETURNING *`,
       [
@@ -2347,7 +2376,8 @@ export class ShopService {
         data.auto_print_receipt !== undefined ? data.auto_print_receipt : true,
         data.default_printer_name || null,
         data.receipt_copies !== undefined ? data.receipt_copies : 1,
-        data.auto_logout_minutes !== undefined ? parseInt(data.auto_logout_minutes, 10) || 0 : 0
+        data.auto_logout_minutes !== undefined ? parseInt(data.auto_logout_minutes, 10) || 0 : 0,
+        archiveDays
       ]
     );
     return res[0];

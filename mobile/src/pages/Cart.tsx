@@ -1,11 +1,23 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { customerApi } from '../api';
 import CachedImage from '../components/CachedImage';
+import { useOnline } from '../hooks/useOnline';
+import { haversineDistanceKm, estimatedDeliveryRangeMinutes } from '../utils/deliveryLocation';
+
+function parseProfileCoord(v: unknown): number | null {
+    if (v == null) return null;
+    const n = parseFloat(String(v));
+    return Number.isFinite(n) ? n : null;
+}
 
 export default function Cart() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
     const { state, dispatch, cartTotal, cartTax, cartCount } = useApp();
+    const online = useOnline();
+    const [etaLine, setEtaLine] = useState<string | null>(null);
 
     const formatPrice = (p: number | string | null | undefined) => {
         if (p === null || p === undefined) return 'Rs. 0';
@@ -44,6 +56,59 @@ export default function Cart() {
         navigate(`/${shopSlug}/offers/${offerId}`);
     };
 
+    const shopFallbackMins = state.settings?.estimated_delivery_minutes;
+
+    useEffect(() => {
+        const area = state.shop?.delivery_area;
+        const setFromFallback = () => {
+            if (shopFallbackMins != null && shopFallbackMins > 0) {
+                setEtaLine(`~${shopFallbackMins} min`);
+            } else {
+                setEtaLine(null);
+            }
+        };
+        if (!area) {
+            setFromFallback();
+            return;
+        }
+        if (!state.isLoggedIn || !online) {
+            setFromFallback();
+            return;
+        }
+        let cancelled = false;
+        customerApi
+            .getProfile()
+            .then(
+                (profile: { lat?: unknown; lng?: unknown }) => {
+                    if (cancelled) return;
+                    const lat = parseProfileCoord(profile.lat);
+                    const lng = parseProfileCoord(profile.lng);
+                    if (lat == null || lng == null) {
+                        setFromFallback();
+                        return;
+                    }
+                    const km = haversineDistanceKm(lat, lng, area.branch_latitude, area.branch_longitude);
+                    const { min, max } = estimatedDeliveryRangeMinutes(km);
+                    if (min === max) {
+                        setEtaLine(`~${min} min`);
+                    } else {
+                        setEtaLine(`${min}–${max} min`);
+                    }
+                }
+            )
+            .catch(() => {
+                if (!cancelled) setFromFallback();
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [
+        state.shop?.delivery_area,
+        state.isLoggedIn,
+        online,
+        shopFallbackMins,
+    ]);
+
     const isEmpty = state.cart.length === 0 && state.offerBundles.length === 0;
 
     if (isEmpty) {
@@ -63,14 +128,55 @@ export default function Cart() {
 
     return (
         <div className="page slide-up">
-            <div className="page-header">
-                <h1>Cart ({cartCount})</h1>
-            </div>
-
             <div style={{
                 background: 'white', borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--border-light)', padding: '4px 16px', marginBottom: 16,
+                border: '1px solid var(--border-light)', padding: '0', marginBottom: 16, overflow: 'hidden',
             }}>
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        gap: 10,
+                        padding: '12px 16px 8px',
+                        borderBottom: '1px solid var(--border-light)',
+                    }}
+                >
+                    <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3, margin: 0, lineHeight: 1.2 }}>
+                        Cart ({cartCount})
+                    </h1>
+                    {etaLine && (
+                        <div
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                flexShrink: 0,
+                                maxWidth: '55%',
+                                textAlign: 'right',
+                            }}
+                            title="Based on your saved address and bike travel, plus 15 min for packing"
+                        >
+                            <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                aria-hidden
+                                style={{ color: 'var(--text-muted)', flexShrink: 0 }}
+                            >
+                                <circle cx="12" cy="12" r="9" />
+                                <path d="M12 7v5l3 2" />
+                            </svg>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text, #1a1a1a)' }}>
+                                Est. {etaLine}
+                            </span>
+                        </div>
+                    )}
+                </div>
+                <div style={{ padding: '4px 16px' }}>
                 {state.offerBundles.map(o => {
                     const line = (o.merchandisePerBundle + o.taxPerBundle) * o.quantity;
                     return (
@@ -172,6 +278,7 @@ export default function Cart() {
                         </div>
                     </div>
                 ))}
+                </div>
             </div>
 
             <div style={{

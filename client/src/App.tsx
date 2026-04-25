@@ -138,25 +138,25 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-sky-200/80 shadow-sm transition-all duration-300 ease-in-out dark:border-slate-600 ${collapsed ? 'w-20' : 'w-72'}`}
+      className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-white/10 bg-[#0056b3] shadow-sm transition-all duration-300 ease-in-out ${collapsed ? 'w-20' : 'w-72'}`}
     >
-      {/* Header: Logo + Toggle — light blue */}
-      <div className="flex h-20 shrink-0 items-center justify-between bg-sky-100 px-5 dark:bg-sky-950/80">
+      {/* Header: Logo + Toggle — same brand blue as POS category chips */}
+      <div className="flex h-20 shrink-0 items-center justify-between border-b border-white/10 bg-[#0056b3] px-5">
         {!collapsed && (
           <div className="group flex cursor-pointer items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-600 shadow-md shadow-primary-900/30 transition-transform duration-200 group-hover:scale-105">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 shadow-md transition-transform duration-200 group-hover:scale-105">
               <Store className="h-[1.125rem] w-[1.125rem] text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-lg font-extrabold leading-none tracking-tight text-gray-900 dark:text-white">MyShop</span>
-              <span className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">The Digital Atelier</span>
+              <span className="text-lg font-extrabold leading-none tracking-tight text-white">MyShop</span>
+              <span className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-blue-200/80">The Digital Atelier</span>
             </div>
           </div>
         )}
         {collapsed && (
           <button
             onClick={onToggle}
-            className="group flex w-full items-center justify-center rounded-lg py-3 text-sky-700/80 transition-colors duration-200 hover:bg-sky-200/80 hover:text-sky-900 dark:text-sky-300/80 dark:hover:bg-sky-800/50 dark:hover:text-sky-100"
+            className="group flex w-full items-center justify-center rounded-lg py-3 text-blue-100 transition-colors duration-200 hover:bg-white/10 hover:text-white"
             title="Open sidebar"
           >
             <ChevronRight className="h-6 w-6 transition-transform group-hover:translate-x-0.5" />
@@ -166,7 +166,7 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
           <button
             type="button"
             onClick={onToggle}
-            className="rounded-lg p-1.5 text-sky-700/70 transition-colors duration-200 hover:bg-sky-200/80 hover:text-sky-900 dark:text-sky-300/80 dark:hover:bg-sky-800/50 dark:hover:text-sky-100"
+            className="rounded-lg p-1.5 text-blue-200 transition-colors duration-200 hover:bg-white/10 hover:text-white"
             title="Collapse sidebar"
             aria-label="Collapse sidebar"
           >
@@ -175,8 +175,8 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
         )}
       </div>
 
-      {/* Navigation with section groups — solid blue */}
-      <nav className="custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-blue-600 px-3 pt-1 pb-2 dark:bg-blue-800">
+      {/* Navigation with section groups */}
+      <nav className="custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-[#0056b3] px-3 pt-1 pb-2">
         {filteredSections.map((section, idx) => (
           <div key={section.section} className={idx > 0 ? 'mt-5' : ''}>
             {!collapsed && (
@@ -219,8 +219,8 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
         ))}
       </nav>
 
-      {/* User card at bottom — light blue (match header) */}
-      <div className="mt-auto shrink-0 border-t border-sky-200/80 bg-sky-100 p-3 dark:border-slate-600 dark:bg-sky-950/80" ref={menuRef}>
+      {/* User card at bottom */}
+      <div className="mt-auto shrink-0 border-t border-white/10 bg-[#0056b3] p-3" ref={menuRef}>
         <div className="relative">
           {/* Dropdown menu (opens upward) */}
           {userMenuOpen && user && (
@@ -247,18 +247,18 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
             <button
               type="button"
               onClick={() => setUserMenuOpen(prev => !prev)}
-              className="flex w-full items-center gap-3 rounded-xl border border-sky-200/60 bg-white/80 px-3 py-2.5 transition-colors duration-150 hover:bg-white dark:border-slate-600 dark:bg-slate-800/90 dark:hover:bg-slate-800"
+              className="flex w-full items-center gap-3 rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 transition-colors duration-150 hover:bg-white/15"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-bold text-white ring-1 ring-white/20">
                 {getUserInitials(user.name)}
               </div>
               <div className="flex-1 min-w-0 text-left">
-                <p className="text-sm font-semibold text-gray-900 truncate dark:text-white">{user.name}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user.role.replace(/_/g, ' ')}</p>
+                <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                <p className="text-xs text-blue-200/90 capitalize">{user.role.replace(/_/g, ' ')}</p>
               </div>
               {userMenuOpen
-                ? <ChevronUp className="h-4 w-4 shrink-0 text-gray-400" />
-                : <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+                ? <ChevronUp className="h-4 w-4 shrink-0 text-blue-200" />
+                : <ChevronDown className="h-4 w-4 shrink-0 text-blue-200" />
               }
             </button>
           ) : collapsed && user ? (
@@ -276,12 +276,12 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
         </div>
 
         {!collapsed && (
-          <p className="mt-2 text-center text-xs text-sky-700/70 dark:text-sky-400/80">
+          <p className="mt-2 text-center text-xs text-blue-200/70">
             v{__APP_VERSION__}
           </p>
         )}
         {collapsed && (
-          <p className="mt-2 text-center text-xs text-sky-700/70 dark:text-sky-400/80">v{__APP_VERSION__}</p>
+          <p className="mt-2 text-center text-xs text-blue-200/70">v{__APP_VERSION__}</p>
         )}
       </div>
     </aside>

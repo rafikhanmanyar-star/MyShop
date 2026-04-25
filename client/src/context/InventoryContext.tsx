@@ -151,6 +151,22 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
             }
         }
     }
+    let wsSell: Record<string, number> = {};
+    if (r.warehouse_sellable != null) {
+        let rawS: unknown = r.warehouse_sellable;
+        if (typeof r.warehouse_sellable === 'string') {
+            try {
+                rawS = JSON.parse(r.warehouse_sellable);
+            } catch {
+                rawS = {};
+            }
+        }
+        if (rawS && typeof rawS === 'object' && !Array.isArray(rawS)) {
+            for (const k of Object.keys(rawS as object)) {
+                wsSell[k] = Number((rawS as Record<string, unknown>)[k]) || 0;
+            }
+        }
+    }
     const onHand = Number(r.on_hand) || 0;
     const available = Number(r.available) || 0;
     const reserved = Number(r.reserved_total) || 0;
@@ -197,6 +213,7 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
         imageUrl: getFullImageUrl(r.image_url) || undefined,
         description: r.mobile_description || undefined,
         warehouseStock: ws,
+        warehouseSellable: Object.keys(wsSell).length ? wsSell : undefined,
         nearestExpiry: nearestExpiry ?? undefined,
         salesDeactivated: Boolean(r.sales_deactivated),
     };
@@ -206,11 +223,17 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
 function mergeLegacyProductsInventory(products: any[], inventory: any[]): InventoryItem[] {
     const stockMap: Record<
         string,
-        { total: number; reserved: number; sellable: number; byWh: Record<string, number> }
+        {
+            total: number;
+            reserved: number;
+            sellable: number;
+            byWh: Record<string, number>;
+            byWhSellable: Record<string, number>;
+        }
     > = {};
     inventory.forEach((inv: any) => {
         if (!stockMap[inv.product_id]) {
-            stockMap[inv.product_id] = { total: 0, reserved: 0, sellable: 0, byWh: {} };
+            stockMap[inv.product_id] = { total: 0, reserved: 0, sellable: 0, byWh: {}, byWhSellable: {} };
         }
         const qty = parseFloat(inv.quantity_on_hand || '0');
         const reserved = parseFloat(inv.quantity_reserved || '0');
@@ -220,6 +243,7 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         stockMap[inv.product_id].reserved += reserved;
         stockMap[inv.product_id].sellable += Math.max(0, availRow);
         stockMap[inv.product_id].byWh[inv.warehouse_id] = qty;
+        stockMap[inv.product_id].byWhSellable[inv.warehouse_id] = Math.max(0, availRow);
     });
     return products.map((p: any) => {
         const w = p.weight;
@@ -260,6 +284,7 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         imageUrl: getFullImageUrl(p.image_url) || undefined,
         description: p.mobile_description || p.description || undefined,
         warehouseStock: stockMap[p.id]?.byWh || {},
+        warehouseSellable: stockMap[p.id]?.byWhSellable || undefined,
         salesDeactivated: Boolean(p.sales_deactivated),
     };
     });

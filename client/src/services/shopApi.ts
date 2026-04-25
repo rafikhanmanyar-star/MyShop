@@ -154,7 +154,11 @@ export const shopApi = {
     return apiClient.get<any[]>(`/shop/inventory/movements${qs ? `?${qs}` : ''}`);
   },
 
-  getSales: () => apiClient.get<any[]>('/shop/sales'),
+  getSales: (opts?: { days?: number | null }) => {
+    const d = opts?.days;
+    const q = d != null && Number.isFinite(d) && d > 0 ? `?days=${encodeURIComponent(String(Math.floor(d)))}` : '';
+    return apiClient.get<any[]>(`/shop/sales${q}`);
+  },
   createSale: (data: any) => apiClient.post('/shop/sales', data),
 
   getLoyaltyMembers: () => apiClient.get<any[]>('/shop/loyalty/members'),

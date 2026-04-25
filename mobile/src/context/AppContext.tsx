@@ -122,6 +122,47 @@ const AUTH_KEY = 'mobile_token';
 const CUSTOMER_KEY = 'mobile_customer';
 const LAST_SHOP_SLUG_KEY = 'myshop_last_shop_slug';
 const LOYALTY_SESSION_KEY = 'myshop_loyalty_session';
+const CART_DRAFT_PREFIX = 'myshop_cart_draft:';
+
+function cartDraftKey(shopSlug: string) {
+    return `${CART_DRAFT_PREFIX}${shopSlug}`;
+}
+
+function readCartDraft(shopSlug: string | null): { cart: CartItem[]; offerBundles: OfferCartItem[] } | null {
+    if (!shopSlug) return null;
+    try {
+        const raw = localStorage.getItem(cartDraftKey(shopSlug));
+        if (!raw) return null;
+        const o = JSON.parse(raw) as Record<string, unknown>;
+        const cart = Array.isArray(o.cart) ? (o.cart as CartItem[]) : [];
+        const offerBundles = Array.isArray(o.offerBundles) ? (o.offerBundles as OfferCartItem[]) : [];
+        return { cart, offerBundles };
+    } catch {
+        return null;
+    }
+}
+
+function writeCartDraft(shopSlug: string | null, cart: CartItem[], offerBundles: OfferCartItem[]) {
+    if (!shopSlug) return;
+    if (cart.length === 0 && offerBundles.length === 0) return;
+    try {
+        localStorage.setItem(
+            cartDraftKey(shopSlug),
+            JSON.stringify({ cart, offerBundles, savedAt: Date.now() })
+        );
+    } catch {
+        /* ignore */
+    }
+}
+
+function clearCartDraft(shopSlug: string | null) {
+    if (!shopSlug) return;
+    try {
+        localStorage.removeItem(cartDraftKey(shopSlug));
+    } catch {
+        /* ignore */
+    }
+}
 
 export interface LoyaltyState {
     totalPoints: number | null;
@@ -218,6 +259,23 @@ function saveOfferCart(items: OfferCartItem[]) {
     localStorage.setItem(OFFER_CART_KEY, JSON.stringify(items));
 }
 
+/** When logged out, the active cart must be empty; stash any persisted cart as a per-shop draft. */
+function getInitialCartForSession(isLoggedIn: boolean): { cart: CartItem[]; offerBundles: OfferCartItem[] } {
+    const flatCart = loadCart();
+    const flatOffers = loadOfferCart();
+    if (isLoggedIn) {
+        return { cart: flatCart, offerBundles: flatOffers };
+    }
+    if (flatCart.length === 0 && flatOffers.length === 0) {
+        return { cart: [], offerBundles: [] };
+    }
+    const slug = localStorage.getItem(LAST_SHOP_SLUG_KEY) || 'unknown';
+    writeCartDraft(slug, flatCart, flatOffers);
+    saveCart([]);
+    saveOfferCart([]);
+    return { cart: [], offerBundles: [] };
+}
+
 function loadAuth(): { isLoggedIn: boolean; customerId: string | null; phone: string | null; name: string | null } {
     const token = localStorage.getItem(AUTH_KEY);
     const customer = localStorage.getItem(CUSTOMER_KEY);
@@ -232,6 +290,7 @@ function loadAuth(): { isLoggedIn: boolean; customerId: string | null; phone: st
 
 const initialAuth = loadAuth();
 const initialLoyalty = readLoyaltySession(initialAuth.customerId) ?? emptyLoyalty;
+const initialCarts = getInitialCartForSession(initialAuth.isLoggedIn);
 
 const initialState: AppState = {
     shopSlug: null,
@@ -239,8 +298,8 @@ const initialState: AppState = {
     branchId: null,
     settings: null,
     branding: null,
-    cart: loadCart(),
-    offerBundles: loadOfferCart(),
+    cart: initialCarts.cart,
+    offerBundles: initialCarts.offerBundles,
     isLoggedIn: initialAuth.isLoggedIn,
     customerId: initialAuth.customerId,
     customerPhone: initialAuth.phone,
@@ -354,39 +413,59 @@ function reducer(state: AppState, action: Action): AppState {
             return { ...state, offerBundles: newOffers };
         }
 
-        case 'LOGIN':
+        case 'LOGIN': {
             localStorage.setItem(AUTH_KEY, action.token);
             localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ id: action.customerId, phone: action.phone, name: action.name }));
-            {
-                const cached = readLoyaltySession(action.customerId);
-                const fromApi =
-                    action.loyaltyTotalPoints != null
-                        ? {
-                              totalPoints: toFiniteNumber(action.loyaltyTotalPoints, 0),
-                              pointsValue: toFiniteNumber(action.loyaltyPointsValue, 0),
-                              lastUpdated: action.loyaltyLastUpdated ?? null,
-                              redemptionRatio:
-                                  action.loyaltyRedemptionRatio != null
-                                      ? toFiniteNumber(action.loyaltyRedemptionRatio, 0.01)
-                                      : null,
-                              fetchFailed: false,
-                          }
-                        : null;
-                const loyalty = fromApi ?? cached ?? emptyLoyalty;
-                if (fromApi) {
-                    writeLoyaltySession(action.customerId, loyalty);
-                }
-                return {
-                    ...state,
-                    isLoggedIn: true,
-                    customerId: action.customerId,
-                    customerPhone: action.phone,
-                    customerName: action.name,
-                    loyalty,
-                };
+            const cached = readLoyaltySession(action.customerId);
+            const fromApi =
+                action.loyaltyTotalPoints != null
+                    ? {
+                          totalPoints: toFiniteNumber(action.loyaltyTotalPoints, 0),
+                          pointsValue: toFiniteNumber(action.loyaltyPointsValue, 0),
+                          lastUpdated: action.loyaltyLastUpdated ?? null,
+                          redemptionRatio:
+                              action.loyaltyRedemptionRatio != null
+                                  ? toFiniteNumber(action.loyaltyRedemptionRatio, 0.01)
+                                  : null,
+                          fetchFailed: false,
+                      }
+                    : null;
+            const loyalty = fromApi ?? cached ?? emptyLoyalty;
+            if (fromApi) {
+                writeLoyaltySession(action.customerId, loyalty);
             }
+            let nextCart = state.cart;
+            let nextOffers = state.offerBundles;
+            const hasCurrentSessionCart = state.cart.length > 0 || state.offerBundles.length > 0;
+            const draft = state.shopSlug ? readCartDraft(state.shopSlug) : null;
+            const hasDraft = !!(draft && (draft.cart.length > 0 || draft.offerBundles.length > 0));
+            if (state.shopSlug && hasDraft) {
+                if (!hasCurrentSessionCart) {
+                    nextCart = draft!.cart;
+                    nextOffers = draft!.offerBundles;
+                    saveCart(nextCart);
+                    saveOfferCart(nextOffers);
+                }
+                clearCartDraft(state.shopSlug);
+            }
+            return {
+                ...state,
+                isLoggedIn: true,
+                customerId: action.customerId,
+                customerPhone: action.phone,
+                customerName: action.name,
+                loyalty,
+                cart: nextCart,
+                offerBundles: nextOffers,
+            };
+        }
 
-        case 'LOGOUT':
+        case 'LOGOUT': {
+            if (state.shopSlug && (state.cart.length > 0 || state.offerBundles.length > 0)) {
+                writeCartDraft(state.shopSlug, state.cart, state.offerBundles);
+            }
+            saveCart([]);
+            saveOfferCart([]);
             localStorage.removeItem(AUTH_KEY);
             localStorage.removeItem(CUSTOMER_KEY);
             try {
@@ -401,7 +480,10 @@ function reducer(state: AppState, action: Action): AppState {
                 customerPhone: null,
                 customerName: null,
                 loyalty: emptyLoyalty,
+                cart: [],
+                offerBundles: [],
             };
+        }
 
         case 'UPDATE_CUSTOMER_PROFILE': {
             const customer = localStorage.getItem(CUSTOMER_KEY);

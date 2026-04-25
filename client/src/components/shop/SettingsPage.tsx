@@ -19,6 +19,7 @@ import {
     MessageSquare,
     HelpCircle,
     Camera,
+    Archive,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ICONS } from '../../constants';
@@ -711,7 +712,8 @@ const SettingsContent: React.FC = () => {
         auto_print_receipt: true,
         default_printer_name: '',
         receipt_copies: 1,
-        auto_logout_minutes: 0
+        auto_logout_minutes: 0,
+        archive_history_days: 30,
     });
     const [posSettingsLoading, setPosSettingsLoading] = useState(false);
     const [receiptSettings, setReceiptSettings] = useState<any>({
@@ -844,6 +846,10 @@ const SettingsContent: React.FC = () => {
                     ...prev,
                     ...data,
                     auto_logout_minutes: data.auto_logout_minutes ?? prev.auto_logout_minutes,
+                    archive_history_days:
+                        data.archive_history_days != null
+                            ? Math.min(3650, Math.max(1, parseInt(String(data.archive_history_days), 10) || 30))
+                            : prev.archive_history_days ?? 30,
                 }));
             }
         } catch (e: any) {
@@ -938,6 +944,10 @@ const SettingsContent: React.FC = () => {
                     ...prev,
                     ...p,
                     auto_logout_minutes: p.auto_logout_minutes ?? prev.auto_logout_minutes,
+                    archive_history_days:
+                        p.archive_history_days != null
+                            ? Math.min(3650, Math.max(1, parseInt(String(p.archive_history_days), 10) || 30))
+                            : prev.archive_history_days ?? 30,
                 }));
             }
             alert('POS preferences saved.');
@@ -1433,6 +1443,36 @@ const SettingsContent: React.FC = () => {
                                                     }}
                                                 />
                                             )}
+                                        </div>
+                                    )}
+                                </PosPrefCard>
+
+                                <PosPrefCard title="Sales archive (POS)" icon={<Archive className="h-5 w-5" />}>
+                                    {posSettingsLoading ? (
+                                        <p className="text-sm text-muted-foreground">Loading…</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <p className="text-xs text-muted-foreground">
+                                                How many days of POS / mobile sales to load in <strong className="text-foreground">Sales Archive</strong>{' '}
+                                                (History) and for quick search. Older sales are not listed here; use accounting or reports for full history.
+                                            </p>
+                                            <Input
+                                                label="Days of records"
+                                                type="number"
+                                                min={1}
+                                                max={3650}
+                                                compact
+                                                value={String(posSettings.archive_history_days ?? 30)}
+                                                onChange={(e) => {
+                                                    const n = parseInt(e.target.value, 10);
+                                                    setPosSettings({
+                                                        ...posSettings,
+                                                        archive_history_days: Number.isFinite(n)
+                                                            ? Math.min(3650, Math.max(1, n))
+                                                            : 30,
+                                                    });
+                                                }}
+                                            />
                                         </div>
                                     )}
                                 </PosPrefCard>

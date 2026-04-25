@@ -535,7 +535,11 @@ router.patch('/inventory/batches/:batchId/expiry', async (req: any, res) => {
 // --- Sales (Admin/Cashier) ---
 router.get('/sales', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
-    const sales = await getShopService().getSales(req.tenantId);
+    const raw = req.query?.days;
+    const days = raw != null && raw !== '' ? parseInt(String(raw), 10) : null;
+    const sales = await getShopService().getSales(req.tenantId, {
+      days: days != null && Number.isFinite(days) && days > 0 ? days : null,
+    });
     res.json(sales);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
