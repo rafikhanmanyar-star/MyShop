@@ -1,6 +1,13 @@
-import { useState, useEffect, useRef, useCallback, useMemo, type TouchEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useId, type TouchEvent } from 'react';
+import { filterCategoriesWithListedProducts } from '../utils/catalogCategories';
 
-type CategoryRow = { id: string; name?: string; parent_id?: string | null; parentId?: string | null };
+type CategoryRow = {
+    id: string;
+    name?: string;
+    parent_id?: string | null;
+    parentId?: string | null;
+    product_count?: number | null;
+};
 
 function parentIdOf(c: CategoryRow): string | null {
     const p = c.parent_id ?? c.parentId;
@@ -31,6 +38,7 @@ function normalizeCategoryFilters(
         ...f,
         categoryIds: main ? [main] : [],
         subcategoryIds: subs[0] ? [subs[0]] : [],
+        brandIds: Array.isArray(f.brandIds) ? f.brandIds : [],
     };
 }
 
@@ -41,6 +49,91 @@ const FILTER_SORT_PILLS: { value: string; label: string }[] = [
     { value: 'price_low_high', label: 'Price: Low to High' },
     { value: 'price_high_low', label: 'Price: High to Low' },
 ];
+
+type ComboOption = { value: string; label: string };
+
+function formatCategoryLabel(name: string | undefined, maxLen = 36): string {
+    const t = (name || '').replace(/\s+/g, ' ').trim() || '—';
+    return t.length > maxLen ? `${t.slice(0, maxLen - 1)}…` : t;
+}
+
+function FilterCombobox({
+    value,
+    onChange,
+    disabled,
+    options,
+    className = '',
+    'aria-label': ariaLabel,
+}: {
+    value: string;
+    onChange: (next: string) => void;
+    disabled: boolean;
+    options: ComboOption[];
+    className?: string;
+    'aria-label'?: string;
+}) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef<HTMLDivElement>(null);
+    const listId = useId();
+
+    useEffect(() => {
+        if (!open) return;
+        const onDoc = (e: MouseEvent) => {
+            if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', onDoc, true);
+        return () => document.removeEventListener('mousedown', onDoc, true);
+    }, [open]);
+
+    const selected = options.find((o) => o.value === value) ?? options[0];
+    const displayLabel = selected?.label || String(options[0]?.label || '');
+
+    return (
+        <div className={`filter-combobox ${className} ${open ? 'filter-combobox--open' : ''}`} ref={wrapRef}>
+            <button
+                type="button"
+                className="filter-combobox__trigger"
+                disabled={disabled}
+                aria-haspopup="listbox"
+                aria-expanded={open ? 'true' : 'false'}
+                aria-controls={listId}
+                aria-label={ariaLabel}
+                onClick={() => !disabled && setOpen((o) => !o)}
+            >
+                <span className="filter-combobox__value" title={displayLabel}>
+                    {formatCategoryLabel(displayLabel, 64)}
+                </span>
+                <span className="filter-combobox__chev" aria-hidden>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="m6 9 6 6 6-6" />
+                    </svg>
+                </span>
+            </button>
+            {open && !disabled && (
+                <ul id={listId} className="filter-combobox__list" role="listbox">
+                    {options.map((opt) => (
+                        <li key={opt.value === '' ? '_empty' : opt.value} role="presentation" className="filter-combobox__li">
+                            <button
+                                type="button"
+                                className={
+                                    'filter-combobox__option' + (value === opt.value ? ' is-selected' : '')
+                                }
+                                role="option"
+                                aria-selected={value === opt.value ? 'true' : 'false'}
+                                onClick={() => {
+                                    onChange(opt.value);
+                                    setOpen(false);
+                                }}
+                            >
+                                {formatCategoryLabel(opt.label, 120)}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
 
 interface FilterPanelProps {
     isOpen: boolean;
@@ -125,22 +218,44 @@ export default function FilterPanel({
         onClose();
     };
 
-    const mainCategories = useMemo(
-        () =>
-            [...categories.filter((c) => !parentIdOf(c))].sort((a, b) =>
-                (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }),
-            ),
-        [categories],
-    );
+    const mainCategories = useMemo(() => {
+        const top = categories.filter((c) => !parentIdOf(c));
+        return [
+            ...filterCategoriesWithListedProducts(top as (CategoryRow & { product_count?: number | null })[]),
+        ].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+    }, [categories]);
 
     const selectedMainCategoryId = (localFilters.categoryIds as string[] | undefined)?.[0] || '';
 
+    /** All child categories for the selected main (unfiltered by product count — sub rows often count 0 in API). */
     const subcategoriesForMain = useMemo(() => {
         if (!selectedMainCategoryId) return [];
-        return [...categories.filter((c) => parentIdOf(c) === selectedMainCategoryId)].sort((a, b) =>
-            (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }),
-        );
+        const mid = String(selectedMainCategoryId);
+        return categories
+            .filter((c) => {
+                const p = parentIdOf(c);
+                return p != null && String(p) === mid;
+            })
+            .sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
     }, [categories, selectedMainCategoryId]);
+
+    const mainComboOptions: ComboOption[] = useMemo(
+        () => [
+            { value: '', label: 'All Categories' },
+            ...mainCategories.map((c) => ({ value: c.id, label: c.name || '—' })),
+        ],
+        [mainCategories],
+    );
+
+    const subComboOptions: ComboOption[] = useMemo(() => {
+        if (!selectedMainCategoryId) {
+            return [{ value: '', label: 'Select a category first' }];
+        }
+        return [
+            { value: '', label: 'All Sub-categories' },
+            ...subcategoriesForMain.map((c) => ({ value: c.id, label: c.name || '—' })),
+        ];
+    }, [selectedMainCategoryId, subcategoriesForMain]);
 
     const selectedSubcategoryId = (localFilters.subcategoryIds as string[] | undefined)?.[0] || '';
 
@@ -244,29 +359,20 @@ export default function FilterPanel({
                             </span>
                             <h3>Categories</h3>
                         </div>
-                        <label className="visually-hidden" htmlFor="filter-main-category">
-                            Main category
-                        </label>
-                        <select
-                            id="filter-main-category"
-                            className="filter-select filter-select--soft"
+                        <FilterCombobox
+                            className="filter-combobox--soft"
+                            aria-label="Main category"
                             value={selectedMainCategoryId}
-                            onChange={(e) => {
-                                const id = e.target.value;
+                            options={mainComboOptions}
+                            disabled={false}
+                            onChange={(id) => {
                                 setLocalFilters((prev: Record<string, unknown>) => ({
                                     ...prev,
                                     categoryIds: id ? [id] : [],
                                     subcategoryIds: [],
                                 }));
                             }}
-                        >
-                            <option value="">All Categories</option>
-                            {mainCategories.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                    {c.name}
-                                </option>
-                            ))}
-                        </select>
+                        />
                     </div>
 
                     <div className="filter-section">
@@ -279,31 +385,20 @@ export default function FilterPanel({
                             </span>
                             <h3>Sub-categories</h3>
                         </div>
-                        <label className="visually-hidden" htmlFor="filter-subcategory">
-                            Subcategory
-                        </label>
-                        <select
-                            id="filter-subcategory"
-                            className="filter-select filter-select--soft"
-                            disabled={!selectedMainCategoryId}
+                        <FilterCombobox
+                            key={selectedMainCategoryId || '_none'}
+                            className="filter-combobox--soft"
+                            aria-label="Subcategory"
                             value={selectedMainCategoryId ? subSelectValue : ''}
-                            onChange={(e) => {
-                                const id = e.target.value;
+                            options={subComboOptions}
+                            disabled={!selectedMainCategoryId}
+                            onChange={(id) => {
                                 setLocalFilters((prev: Record<string, unknown>) => ({
                                     ...prev,
                                     subcategoryIds: id ? [id] : [],
                                 }));
                             }}
-                        >
-                            <option value="">
-                                {selectedMainCategoryId ? 'All Sub-categories' : 'Select a category first'}
-                            </option>
-                            {subcategoriesForMain.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                    {c.name}
-                                </option>
-                            ))}
-                        </select>
+                        />
                     </div>
 
                     <div className="filter-section">

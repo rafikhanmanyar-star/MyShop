@@ -108,6 +108,7 @@ function mapServerProductToItem(p: any): InventoryItem {
         barcode: p.barcode || undefined,
         name: p.name,
         brand: p.brand || undefined,
+        brandId: p.brand_id ? String(p.brand_id) : undefined,
         category: p.category_id || 'General',
         subcategoryId: p.subcategory_id || undefined,
         unit: p.unit || 'pcs',
@@ -191,6 +192,7 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
         barcode: r.barcode || undefined,
         name: r.name,
         brand: r.brand || undefined,
+        brandId: r.brand_id ? String(r.brand_id) : undefined,
         category: r.category_id || 'General',
         subcategoryId: r.subcategory_id || undefined,
         unit: r.unit || 'pcs',
@@ -260,6 +262,7 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         barcode: p.barcode || undefined,
         name: p.name,
         brand: p.brand || undefined,
+        brandId: p.brand_id ? String(p.brand_id) : undefined,
         category: p.category_id || 'General',
         subcategoryId: p.subcategory_id || undefined,
         unit: p.unit || 'pcs',
@@ -616,6 +619,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             reorder_point: item.reorderPoint,
             description: item.description || null,
             brand: item.brand ?? null,
+            brand_id: item.brandId ?? null,
             weight: item.weight ?? null,
             weight_unit: item.weightUnit ?? null,
             size: item.size ?? null,
@@ -742,7 +746,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;
             if (updates.description !== undefined) payload.mobile_description = updates.description;
             if (updates.salesDeactivated !== undefined) payload.sales_deactivated = updates.salesDeactivated;
-            if (updates.brand !== undefined) payload.brand = updates.brand;
+            if (updates.brand !== undefined) payload.brand = updates.brand || null;
+            if (updates.brandId !== undefined) payload.brand_id = updates.brandId || null;
             if (updates.weight !== undefined) payload.weight = updates.weight;
             if (updates.weightUnit !== undefined) payload.weight_unit = updates.weightUnit;
             if (updates.size !== undefined) payload.size = updates.size;

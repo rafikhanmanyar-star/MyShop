@@ -199,7 +199,20 @@ export class MobileOrderService {
         }
 
         if (opts.brandIds && opts.brandIds.length > 0) {
-            where += ` AND p.brand_id = ANY($${paramIdx})`;
+            // Match brand_id (normal) or legacy rows with only free-text `brand` matching shop_brands name
+            where += ` AND (
+                p.brand_id = ANY($${paramIdx})
+                OR (
+                    p.brand_id IS NULL
+                    AND NULLIF(TRIM(p.brand), '') IS NOT NULL
+                    AND EXISTS (
+                        SELECT 1 FROM shop_brands b_filter
+                        WHERE b_filter.tenant_id = $1
+                          AND b_filter.id = ANY($${paramIdx})
+                          AND LOWER(TRIM(b_filter.name)) = LOWER(TRIM(p.brand))
+                    )
+                )
+            )`;
             params.push(opts.brandIds);
             paramIdx++;
         }
@@ -794,7 +807,7 @@ export class MobileOrderService {
                       : 'COD';
 
             const settingsRes = await client.query(
-                'SELECT delivery_fee, free_delivery_above, minimum_order_amount FROM mobile_ordering_settings WHERE tenant_id = $1',
+                'SELECT delivery_fee, free_delivery_above, minimum_order_amount, rider_assignment_mode FROM mobile_ordering_settings WHERE tenant_id = $1',
                 [tenantId]
             );
             let deliveryFee = 0;

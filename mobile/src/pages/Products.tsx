@@ -210,11 +210,6 @@ export default function Products() {
         [mainCategories, categoryCountsOffline]
     );
 
-    const categoriesForUi = useMemo(
-        () => filterCategoriesWithListedProducts(categories, categoryCountsOffline),
-        [categories, categoryCountsOffline]
-    );
-
     useEffect(() => {
         if (!shopSlug) return;
         setCursor(null);
@@ -308,8 +303,16 @@ export default function Products() {
             list = list.filter((p: any) => p.subcategory_id && s.has(String(p.subcategory_id)));
         }
         if (filters.brandIds?.length) {
-            const s = new Set(filters.brandIds);
-            list = list.filter((p: any) => p.brand_id && s.has(String(p.brand_id)));
+            const idSet = new Set(filters.brandIds.map(String));
+            list = list.filter((p: any) => {
+                if (p.brand_id && idSet.has(String(p.brand_id))) return true;
+                const label = (p.brand || p.brand_name || '').toString().trim();
+                if (!label) return false;
+                const low = label.toLowerCase();
+                return brands.some(
+                    (b: any) => idSet.has(String(b.id)) && b.name && b.name.toLowerCase().trim() === low
+                );
+            });
         }
         if (filters.minPrice) {
             const min = parseFloat(filters.minPrice);
@@ -355,7 +358,7 @@ export default function Products() {
             });
         }
         return list;
-    }, [online, products, searchTerm, filters, effectiveSortBy, showUnavailable]);
+    }, [online, products, searchTerm, filters, effectiveSortBy, showUnavailable, brands]);
 
     useEffect(() => {
         if (!hasMore || loadingMore || loading) return;
@@ -935,7 +938,7 @@ export default function Products() {
             <FilterPanel
                 isOpen={isFilterOpen}
                 onClose={() => setIsFilterOpen(false)}
-                categories={categoriesForUi}
+                categories={categories}
                 brands={brands}
                 filters={filterPanelFilters}
                 onApply={applyFilters}

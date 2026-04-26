@@ -246,6 +246,43 @@ router.delete('/categories/:id', async (req: any, res) => {
   }
 });
 
+// --- Shop brands (POS + mobile filter) ---
+router.get('/brands', async (req: any, res) => {
+  try {
+    const rows = await getShopService().getShopBrands(req.tenantId);
+    res.json(rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/brands', async (req: any, res) => {
+  try {
+    const id = await getShopService().createShopBrand(req.tenantId, req.body);
+    res.status(201).json({ id, message: 'Brand created' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/brands/:id', async (req: any, res) => {
+  try {
+    await getShopService().updateShopBrand(req.tenantId, req.params.id, req.body);
+    res.json({ success: true, message: 'Brand updated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/brands/:id', async (req: any, res) => {
+  try {
+    await getShopService().deleteShopBrand(req.tenantId, req.params.id);
+    res.json({ success: true, message: 'Brand deleted' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- Products ---
 router.get('/products', async (req: any, res) => {
   try {

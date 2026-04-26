@@ -7,11 +7,12 @@ import StockMaster from './inventory/StockMaster';
 import StockMovements from './inventory/StockMovements';
 import StockAdjustments from './inventory/StockAdjustments';
 import InventoryCategories from './inventory/InventoryCategories';
+import InventoryBrands from './inventory/InventoryBrands';
 import IncompleteProductsTab from './inventory/IncompleteProductsTab';
 import { ICONS } from '../../constants';
 import AddOrEditSkuModal from './pos/AddOrEditSkuModal';
 const INVENTORY_TABS: readonly InventoryTabId[] = [
-    'dashboard', 'stock', 'movements', 'adjustments', 'categories', 'incomplete',
+    'dashboard', 'stock', 'movements', 'adjustments', 'categories', 'brands', 'incomplete',
 ];
 
 const InventoryContent: React.FC = () => {
@@ -53,6 +54,7 @@ const InventoryContent: React.FC = () => {
                 { id: 'movements' as const, label: 'Movements', icon: ICONS.trendingUp },
                 { id: 'adjustments' as const, label: 'Adjustments', icon: ICONS.settings },
                 { id: 'categories' as const, label: 'Categories', icon: ICONS.folder },
+                { id: 'brands' as const, label: 'Brands', icon: ICONS.layers },
                 { id: 'incomplete' as const, label: 'Incomplete SKUs', icon: ICONS.alertTriangle },
             ] as const,
         []
@@ -83,7 +85,7 @@ const InventoryContent: React.FC = () => {
         <div className="flex h-full min-h-0 min-w-0 w-full flex-1 flex-col bg-gray-50 dark:bg-slate-950">
             {/* Content area: flex so Stock Master / Dashboard / Movements can fill and scroll internally; other tabs can scroll here */}
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${['stock', 'dashboard', 'movements', 'categories', 'incomplete'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+                <div className={`flex-1 min-h-0 min-w-0 flex flex-col ${['stock', 'dashboard', 'movements', 'categories', 'brands', 'incomplete'].includes(activeTab) ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                     {activeTab === 'dashboard' && <div className="flex-1 min-h-0 flex flex-col"><InventoryDashboard /></div>}
                     {activeTab === 'stock' && <div className="flex-1 min-h-0 flex flex-col"><StockMaster /></div>}
                     {activeTab === 'movements' && <div className="flex-1 min-h-0 flex flex-col"><StockMovements /></div>}
@@ -91,6 +93,11 @@ const InventoryContent: React.FC = () => {
                     {activeTab === 'categories' && (
                         <div className="flex-1 min-h-0 flex flex-col min-w-0">
                             <InventoryCategories />
+                        </div>
+                    )}
+                    {activeTab === 'brands' && (
+                        <div className="flex-1 min-h-0 flex flex-col min-w-0">
+                            <InventoryBrands />
                         </div>
                     )}
                     {activeTab === 'incomplete' && (

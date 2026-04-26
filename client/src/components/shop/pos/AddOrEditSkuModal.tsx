@@ -5,7 +5,7 @@ import Modal from '../../ui/Modal';
 import Input from '../../ui/Input';
 import Button from '../../ui/Button';
 import { ICONS, CURRENCY } from '../../../constants';
-import { shopApi, ShopProductCategory } from '../../../services/shopApi';
+import { shopApi, type ShopBrand, type ShopProductCategory } from '../../../services/shopApi';
 import { getShopCategoriesOfflineFirst } from '../../../services/categoriesOfflineCache';
 import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 
@@ -49,6 +49,7 @@ const defaultForm = {
     imageUrl: '',
     salesDeactivated: false,
     brand: '',
+    brandId: '',
     weight: '',
     weightUnit: 'g',
     size: '',
@@ -136,11 +137,14 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
     const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
     const [formData, setFormData] = useState(defaultForm);
     const [shopCategories, setShopCategories] = useState<ShopProductCategory[]>([]);
+    const [shopBrands, setShopBrands] = useState<ShopBrand[]>([]);
+    const [brandCreating, setBrandCreating] = useState(false);
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const categoryFormInitForItemId = React.useRef<string | null>(null);
+    const brandFormInitForItemId = React.useRef<string | null>(null);
 
     const loadCategories = useCallback(async () => {
         try {
@@ -151,15 +155,26 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         }
     }, []);
 
+    const loadBrands = useCallback(async () => {
+        try {
+            const list = await shopApi.getShopBrands();
+            setShopBrands(Array.isArray(list) ? list : []);
+        } catch {
+            setShopBrands([]);
+        }
+    }, []);
+
     const initialEditingItemRef = React.useRef<InventoryItem | null>(null);
     initialEditingItemRef.current = initialEditingItem ?? null;
 
     React.useEffect(() => {
         if (!isOpen) return;
         loadCategories();
+        loadBrands();
 
         const editItem = initialEditingItemRef.current;
         if (editItem) {
+            brandFormInitForItemId.current = null;
             setMode('edit');
             setExistingSearch('');
             setEditingItem(editItem);
@@ -168,6 +183,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
             return;
         }
 
+        brandFormInitForItemId.current = null;
         const skuOrBarcode = (initialSkuOrBarcode || '').trim();
         const startInAddMode = openInAddMode;
         setMode(startInAddMode ? 'add' : 'choice');
@@ -192,7 +208,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         });
         setSelectedImage(null);
         setImagePreview(null);
-    }, [isOpen, initialSkuOrBarcode, openInAddMode, loadCategories]);
+    }, [isOpen, initialSkuOrBarcode, openInAddMode, loadCategories, loadBrands]);
 
     React.useEffect(() => {
         if (editingItem) {
@@ -213,6 +229,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 imageUrl: editingItem.imageUrl || '',
                 salesDeactivated: editingItem.salesDeactivated === true,
                 brand: editingItem.brand || '',
+                brandId: editingItem.brandId || '',
                 weight:
                     editingItem.weight != null && Number.isFinite(editingItem.weight)
                         ? String(editingItem.weight)
@@ -236,6 +253,81 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         setFormData((prev) => ({ ...prev, ...derived }));
         categoryFormInitForItemId.current = editingItem.id;
     }, [editingItem, shopCategories]);
+
+    /** Resolve brand list id when editing legacy rows (name only) or confirm label. */
+    React.useEffect(() => {
+        if (!editingItem || shopBrands.length === 0) return;
+        if (brandFormInitForItemId.current === editingItem.id) return;
+        setFormData((prev) => {
+            if (editingItem.brandId) {
+                const b = shopBrands.find((x) => x.id === editingItem.brandId);
+                if (b) {
+                    brandFormInitForItemId.current = editingItem.id;
+                    return { ...prev, brandId: b.id, brand: b.name };
+                }
+            }
+            const name = (editingItem.brand || '').trim();
+            if (name) {
+                const m = shopBrands.find((x) => x.name.toLowerCase() === name.toLowerCase());
+                if (m) {
+                    brandFormInitForItemId.current = editingItem.id;
+                    return { ...prev, brandId: m.id, brand: m.name };
+                }
+            }
+            brandFormInitForItemId.current = editingItem.id;
+            return prev;
+        });
+    }, [editingItem, shopBrands]);
+
+    const brandSuggestions = useMemo(() => {
+        const q = formData.brand.trim().toLowerCase();
+        const list = [...shopBrands].sort((a, b) => a.name.localeCompare(b.name));
+        if (!q) return list.slice(0, 20);
+        return list.filter((b) => b.name.toLowerCase().includes(q)).slice(0, 25);
+    }, [formData.brand, shopBrands]);
+
+    const brandExactMatch = useMemo(
+        () =>
+            shopBrands.find(
+                (b) => b.name.toLowerCase().trim() === formData.brand.trim().toLowerCase()
+            ),
+        [formData.brand, shopBrands]
+    );
+
+    const onBrandFieldChange = (value: string) => {
+        setFormData((prev) => {
+            const next = { ...prev, brand: value };
+            if (prev.brandId) {
+                const sel = shopBrands.find((x) => x.id === prev.brandId);
+                if (!sel || sel.name !== value) next.brandId = '';
+            }
+            return next;
+        });
+    };
+
+    const selectBrand = (b: ShopBrand) => {
+        setFormData((prev) => ({ ...prev, brand: b.name, brandId: b.id }));
+    };
+
+    const createBrandFromQuery = async () => {
+        const name = formData.brand.trim();
+        if (!name || brandExactMatch) return;
+        setBrandCreating(true);
+        try {
+            const res = await shopApi.createShopBrand({ name });
+            const id = res.id;
+            if (!id) return;
+            setShopBrands((prev) => {
+                const next = [...prev.filter((x) => x.id !== id), { id, name }];
+                return next.sort((a, b) => a.name.localeCompare(b.name));
+            });
+            setFormData((prev) => ({ ...prev, brandId: id, brand: name }));
+        } catch (e: any) {
+            alert(e?.message || 'Could not create brand');
+        } finally {
+            setBrandCreating(false);
+        }
+    };
 
     const fuse = useMemo(
         () =>
@@ -451,6 +543,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 imageUrl: editingItem.imageUrl || '',
                 salesDeactivated: editingItem.salesDeactivated === true,
                 brand: editingItem.brand || '',
+                brandId: editingItem.brandId || '',
                 weight:
                     editingItem.weight != null && Number.isFinite(editingItem.weight)
                         ? String(editingItem.weight)
@@ -514,6 +607,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                     imageUrl,
                     warehouseStock: {},
                     brand: formData.brand.trim() || undefined,
+                    brandId: formData.brandId || undefined,
                     weight: wSave,
                     weightUnit: wSave != null ? formData.weightUnit.trim() || null : null,
                     size: formData.size.trim() || undefined,
@@ -560,7 +654,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 unit: formData.unit,
                 imageUrl,
                 salesDeactivated: formData.salesDeactivated,
-                brand: formData.brand.trim() || undefined,
+                brand: formData.brand.trim(),
+                brandId: formData.brandId,
                 weight: wSave,
                 weightUnit: wSave != null ? formData.weightUnit.trim() || null : null,
                 size: formData.size.trim() || undefined,
@@ -585,6 +680,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 imageUrl,
                 salesDeactivated: formData.salesDeactivated,
                 brand: formData.brand.trim() || undefined,
+                brandId: formData.brandId || undefined,
                 weight: wSave,
                 weightUnit: wSave != null ? formData.weightUnit.trim() || null : null,
                 size: formData.size.trim() || undefined,
@@ -1228,14 +1324,62 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                             Advanced details
                                         </summary>
                                         <div className="mt-2 space-y-2">
-                                            <Input
-                                                label="Brand"
-                                                compact
-                                                placeholder="e.g. Nestlé"
-                                                value={formData.brand}
-                                                onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                                                className="rounded-md border-slate-200 bg-white"
-                                            />
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                                    Brand
+                                                </label>
+                                                <p className="text-[9px] text-slate-500">
+                                                    Search your catalog, pick a row, or add a new brand for this store.
+                                                </p>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        autoComplete="off"
+                                                        placeholder="Search or type brand name…"
+                                                        value={formData.brand}
+                                                        onChange={(e) => onBrandFieldChange(e.target.value)}
+                                                        className="w-full rounded-md border border-slate-200 bg-white py-1.5 px-2 text-xs text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500/25"
+                                                    />
+                                                    {formData.brandId ? (
+                                                        <span className="mt-0.5 block text-[9px] font-medium text-violet-600">
+                                                            Linked to brand list
+                                                        </span>
+                                                    ) : null}
+                                                    {formData.brand.trim() && !brandExactMatch && !formData.brandId ? (
+                                                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                disabled={brandCreating}
+                                                                onClick={createBrandFromQuery}
+                                                                className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-800 hover:bg-violet-100 disabled:opacity-50"
+                                                            >
+                                                                {brandCreating
+                                                                    ? 'Adding…'
+                                                                    : `Add “${formData.brand.trim()}” as new brand`}
+                                                            </button>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                                {brandSuggestions.length > 0 ? (
+                                                    <div className="max-h-32 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-sm">
+                                                        {brandSuggestions.map((b) => (
+                                                            <button
+                                                                key={b.id}
+                                                                type="button"
+                                                                onClick={() => selectBrand(b)}
+                                                                className={
+                                                                    'flex w-full items-center border-b border-slate-100 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-slate-50' +
+                                                                    (formData.brandId === b.id
+                                                                        ? ' bg-violet-50 font-semibold text-violet-800'
+                                                                        : ' text-slate-800')
+                                                                }
+                                                            >
+                                                                {b.name}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
+                                            </div>
                                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                                 <div className="space-y-1">
                                                     <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500" htmlFor="pos-sku-weight">

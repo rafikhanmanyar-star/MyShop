@@ -35,6 +35,16 @@ export interface ShopProductCategory {
   created_at?: string;
 }
 
+/** Tenant catalog brand (Inventory → Brands); linked on SKU + mobile filter */
+export interface ShopBrand {
+  id: string;
+  name: string;
+  logo_url?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ShopBankAccount {
   id: string;
   name: string;
@@ -104,6 +114,12 @@ export const shopApi = {
   updateShopCategory: (id: string, data: { name: string; parentId?: string | null; mobileIconUrl?: string | null }) =>
     apiClient.put(`/shop/categories/${id}`, data),
   deleteShopCategory: (id: string) => apiClient.delete(`/shop/categories/${id}`),
+
+  getShopBrands: () => apiClient.get<ShopBrand[]>('/shop/brands'),
+  createShopBrand: (data: { name: string }) =>
+    apiClient.post<{ id: string; message?: string }>('/shop/brands', data),
+  updateShopBrand: (id: string, data: { name: string }) => apiClient.put(`/shop/brands/${id}`, data),
+  deleteShopBrand: (id: string) => apiClient.delete(`/shop/brands/${id}`),
 
   getProducts: () => apiClient.get<ShopProduct[]>('/shop/products'),
   getPopularProducts: (limit = 10) => apiClient.get<ShopProduct[]>(`/shop/popular-products?limit=${limit}`),

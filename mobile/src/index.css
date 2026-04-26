@@ -2359,6 +2359,113 @@ img {
   cursor: not-allowed;
 }
 
+/* Custom scrollable category combobox (long lists, compact rows) */
+.filter-combobox {
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.filter-combobox--open {
+  z-index: 30;
+}
+
+.filter-combobox--soft .filter-combobox__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 12px 14px;
+  border: none;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.filter-combobox--soft .filter-combobox__trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.filter-combobox__value {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-combobox__chev {
+  flex-shrink: 0;
+  color: var(--primary);
+  display: flex;
+}
+
+.filter-combobox--open .filter-combobox__chev svg {
+  transform: rotate(180deg);
+}
+
+.filter-combobox__list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: min(48vh, 280px);
+  margin: 0;
+  padding: 6px 4px;
+  list-style: none;
+  z-index: 50;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #fff;
+  border: 1px solid rgba(79, 70, 229, 0.15);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.12);
+}
+
+.filter-combobox__li {
+  margin: 0;
+  padding: 0;
+}
+
+.filter-combobox__option {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 5px 8px 5px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+  cursor: pointer;
+  min-height: 0;
+}
+
+.filter-combobox__option:hover,
+.filter-combobox__option:focus-visible {
+  background: #eef2ff;
+  outline: none;
+}
+
+.filter-combobox__option.is-selected {
+  background: rgba(79, 70, 229, 0.12);
+  color: var(--primary);
+  font-weight: 700;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

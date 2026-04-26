@@ -14,6 +14,8 @@ export interface InventoryItem {
     name: string;
     /** Free-text brand (mobile / PDP); optional */
     brand?: string;
+    /** shop_brands id when set from Inventory → Brands or SKU form */
+    brandId?: string;
     /** Primary category id from catalog, or the literal `General` when uncategorized */
     category: string;
     /** Subcategory id when the product is filed under a child category */

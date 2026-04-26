@@ -24,6 +24,40 @@ function trimTextField(val: unknown): string | null {
   return s || null;
 }
 
+/**
+ * Resolves the free-text Brand field to shop_brands.id (for mobile / POS filter wiring).
+ * Creates a shop_brands row on first use if none matches by case-insensitive name.
+ */
+export async function resolveOrCreateShopBrandId(
+  client: { query: (sql: string, params?: unknown[]) => Promise<any[]> },
+  tenantId: string,
+  brandText: string | null | undefined
+): Promise<string | null> {
+  const b = trimTextField(brandText);
+  if (!b) return null;
+  const found = await client.query(
+    `SELECT id FROM shop_brands WHERE tenant_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2::text)) LIMIT 1`,
+    [tenantId, b]
+  );
+  if (found.length > 0) return found[0].id;
+  try {
+    const ins = await client.query(
+      `INSERT INTO shop_brands (tenant_id, name) VALUES ($1, $2) RETURNING id`,
+      [tenantId, b]
+    );
+    return ins[0]?.id ?? null;
+  } catch (e: any) {
+    if (e.code === '23505') {
+      const again = await client.query(
+        `SELECT id FROM shop_brands WHERE tenant_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2::text)) LIMIT 1`,
+        [tenantId, b]
+      );
+      return again[0]?.id ?? null;
+    }
+    throw e;
+  }
+}
+
 /** Parses weight; empty clears. Throws if non-numeric when a value is provided. */
 function parseProductWeight(val: unknown): number | null {
   if (val === null || val === undefined || val === '') return null;
@@ -551,26 +585,42 @@ export class ShopService {
         const createdBy = data.created_by || data.createdBy || null;
         const weight = parseProductWeight(data.weight);
         const weightUnit = trimTextField(data.weight_unit ?? data.weightUnit);
-        const brand = trimTextField(data.brand);
         const size = trimTextField(data.size);
         const color = trimTextField(data.color);
         const material = trimTextField(data.material);
         const originCountry = trimTextField(data.origin_country ?? data.originCountry);
         const attributesObj = normalizeProductAttributesInput(data.attributes);
 
+        let brand = trimTextField(data.brand);
+        let brandIdResolved: string | null = null;
+        const extBid = data.brand_id ?? data.brandId;
+        if (extBid != null && String(extBid).trim() !== '') {
+          const bRows = await client.query(
+            `SELECT id, name FROM shop_brands WHERE id = $1 AND tenant_id = $2`,
+            [String(extBid).trim(), tenantId]
+          );
+          if (bRows.length === 0) {
+            throw new Error('Invalid brand. Choose a brand from the list or clear the brand field.');
+          }
+          brandIdResolved = bRows[0].id;
+          if (!brand) brand = bRows[0].name;
+        } else {
+          brandIdResolved = await resolveOrCreateShopBrandId(client, tenantId, brand);
+        }
+
         const res = await client.query(`
           INSERT INTO shop_products (
             tenant_id, name, sku, barcode, category_id, subcategory_id, unit,
             cost_price, retail_price, tax_rate, reorder_point, image_url, is_active, mobile_description, created_by,
-            brand, weight, weight_unit, size, color, material, origin_country, attributes
+            brand, brand_id, weight, weight_unit, size, color, material, origin_country, attributes
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-            $16, $17, $18, $19, $20, $21, $22, $23::jsonb) RETURNING *
+            $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb) RETURNING *
         `, [
           tenantId, name, sku, data.barcode || null,
           categoryId, subcategoryId, data.unit || 'pcs', data.cost_price || 0, data.retail_price || 0,
           data.tax_rate || 0, data.reorder_point || 10, normalizeImageUrl(data.image_url), true, mobileDesc,
           createdBy,
-          brand, weight, weightUnit, size, color, material, originCountry, JSON.stringify(attributesObj),
+          brand, brandIdResolved, weight, weightUnit, size, color, material, originCountry, JSON.stringify(attributesObj),
         ]);
         if (!res.length) {
           throw new Error('Database write failed — no product row returned after insert.');
@@ -621,7 +671,7 @@ export class ShopService {
         const prevRows = await client.query(
           `SELECT name, sku, barcode, category_id, subcategory_id, unit, cost_price, retail_price, tax_rate,
                   reorder_point, image_url, is_active, mobile_description, sales_deactivated,
-                  brand, weight, weight_unit, size, color, material, origin_country, attributes
+                  brand, brand_id, weight, weight_unit, size, color, material, origin_country, attributes
            FROM shop_products WHERE id = $1 AND tenant_id = $2`,
           [productId, tenantId]
         );
@@ -704,8 +754,6 @@ export class ShopService {
           data.weight_unit !== undefined || data.weightUnit !== undefined
             ? trimTextField(data.weight_unit ?? data.weightUnit)
             : prev.weight_unit;
-        const nextBrand =
-          data.brand !== undefined ? trimTextField(data.brand) : prev.brand;
         const nextSize = data.size !== undefined ? trimTextField(data.size) : prev.size;
         const nextColor = data.color !== undefined ? trimTextField(data.color) : prev.color;
         const nextMaterial =
@@ -714,6 +762,28 @@ export class ShopService {
           data.origin_country !== undefined || data.originCountry !== undefined
             ? trimTextField(data.origin_country ?? data.originCountry)
             : prev.origin_country;
+
+        let nextBrand = data.brand !== undefined ? trimTextField(data.brand) : prev.brand;
+        let nextBrandId: string | null;
+        if (data.brand_id !== undefined || data.brandId !== undefined) {
+          const raw = data.brand_id !== undefined ? data.brand_id : data.brandId;
+          if (raw === null || raw === '') {
+            nextBrandId = null;
+            if (data.brand === undefined) nextBrand = null;
+          } else {
+            const bRows = await client.query(
+              `SELECT id, name FROM shop_brands WHERE id = $1 AND tenant_id = $2`,
+              [String(raw).trim(), tenantId]
+            );
+            if (bRows.length === 0) throw new Error('Invalid brand for this store.');
+            nextBrandId = bRows[0].id;
+            if (data.brand === undefined) nextBrand = bRows[0].name;
+          }
+        } else if (data.brand !== undefined) {
+          nextBrandId = await resolveOrCreateShopBrandId(client, tenantId, nextBrand);
+        } else {
+          nextBrandId = prev.brand_id ?? null;
+        }
 
         let nextAttributesJson: string;
         if (data.attributes !== undefined) {
@@ -731,8 +801,8 @@ export class ShopService {
               image_url = $11, is_active = $12, updated_at = NOW(),
               mobile_description = COALESCE($15, mobile_description),
               sales_deactivated = COALESCE($16::boolean, sales_deactivated),
-              brand = $17, weight = $18, weight_unit = $19, size = $20, color = $21, material = $22,
-              origin_country = $23, attributes = $24::jsonb
+              brand = $17, brand_id = $18, weight = $19, weight_unit = $20, size = $21, color = $22, material = $23,
+              origin_country = $24, attributes = $25::jsonb
           WHERE id = $13 AND tenant_id = $14
           RETURNING *
         `, [
@@ -753,6 +823,7 @@ export class ShopService {
           mobileDesc === undefined ? null : mobileDesc,
           salesDeactivatedParam,
           nextBrand,
+          nextBrandId,
           nextWeight,
           nextWeightUnit,
           nextSize,
@@ -1013,6 +1084,7 @@ export class ShopService {
           p.mobile_description,
           COALESCE(p.sales_deactivated, FALSE) AS sales_deactivated,
           p.brand,
+          p.brand_id,
           p.weight,
           p.weight_unit,
           p.size,
@@ -2089,6 +2161,63 @@ export class ShopService {
        WHERE id = $1 AND tenant_id = $2 AND type = 'product'`,
       [categoryId, tenantId]
     );
+  }
+
+  // --- Shop brands (for POS SKU + mobile filter) ---
+  async getShopBrands(tenantId: string) {
+    return this.db.query(
+      `SELECT id, name, logo_url, is_active, created_at, updated_at
+       FROM shop_brands
+       WHERE tenant_id = $1 AND is_active = TRUE
+       ORDER BY LOWER(name)`,
+      [tenantId]
+    );
+  }
+
+  async createShopBrand(tenantId: string, data: { name: string }) {
+    const name = trimTextField(data.name);
+    if (!name) throw new Error('Brand name is required.');
+    const existing = await this.db.query(
+      `SELECT id FROM shop_brands WHERE tenant_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2::text))`,
+      [tenantId, name]
+    );
+    if (existing.length > 0) {
+      return existing[0].id as string;
+    }
+    const ins = await this.db.query(
+      `INSERT INTO shop_brands (tenant_id, name) VALUES ($1, $2) RETURNING id`,
+      [tenantId, name]
+    );
+    return (ins[0] as { id: string }).id;
+  }
+
+  async updateShopBrand(tenantId: string, brandId: string, data: { name: string }) {
+    const name = trimTextField(data.name);
+    if (!name) throw new Error('Brand name is required.');
+    const clash = await this.db.query(
+      `SELECT id FROM shop_brands
+       WHERE tenant_id = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2::text)) AND id <> $3`,
+      [tenantId, name, brandId]
+    );
+    if (clash.length > 0) throw new Error('Another brand with this name already exists.');
+    await this.db.query(
+      `UPDATE shop_brands SET name = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`,
+      [name, brandId, tenantId]
+    );
+    // Keep product brand text in sync for display
+    await this.db.query(
+      `UPDATE shop_products SET brand = $1, updated_at = NOW()
+       WHERE tenant_id = $2 AND brand_id = $3`,
+      [name, tenantId, brandId]
+    );
+  }
+
+  async deleteShopBrand(tenantId: string, brandId: string) {
+    const res = await this.db.query(
+      `DELETE FROM shop_brands WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+      [brandId, tenantId]
+    );
+    if (res.length === 0) throw new Error('Brand not found.');
   }
 
   // --- Bank Accounts (Chart of Accounts for POS) ---

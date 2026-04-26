@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 
-export type InventoryTabId = 'dashboard' | 'stock' | 'movements' | 'adjustments' | 'categories' | 'incomplete';
+export type InventoryTabId =
+    | 'dashboard'
+    | 'stock'
+    | 'movements'
+    | 'adjustments'
+    | 'categories'
+    | 'brands'
+    | 'incomplete';
 
 export type InventoryPageHeaderPayload = {
     activeTab: InventoryTabId;

@@ -20,6 +20,7 @@ export interface PendingProductPayload {
   reorder_point: number;
   description?: string | null;
   brand?: string | null;
+  brand_id?: string | null;
   weight?: number | null;
   weight_unit?: string | null;
   size?: string | null;
