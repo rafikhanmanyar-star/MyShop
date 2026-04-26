@@ -351,10 +351,10 @@ router.get('/:shopSlug/offers/:id', publicTenantMiddleware(db), async (req: any,
     }
 });
 
-// Product recommendations (same category, in-stock, best sellers) — register before /products/:id
+// Product recommendations (related sellable products) — register before /products/:id
 router.get('/:shopSlug/products/:id/recommendations', publicTenantMiddleware(db), async (req: any, res) => {
     try {
-        const items = await getMobileOrderService().getProductRecommendationsForMobile(req.tenantId, req.params.id, 3);
+        const items = await getMobileOrderService().getProductRecommendationsForMobile(req.tenantId, req.params.id, 6);
         res.json({ items });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

@@ -26,6 +26,40 @@ function safeNum(v: any): number {
     return Number.isFinite(n) ? n : 0;
 }
 
+const RECOMMENDATION_STOP_WORDS = new Set([
+    'and',
+    'are',
+    'for',
+    'from',
+    'the',
+    'this',
+    'that',
+    'with',
+    'your',
+    'pack',
+    'pcs',
+    'piece',
+    'pieces',
+    'gram',
+    'grams',
+    'kg',
+    'liter',
+    'litre',
+    'ml',
+]);
+
+function getRecommendationKeywords(...parts: Array<string | null | undefined>): string[] {
+    const text = parts.filter(Boolean).join(' ').toLowerCase();
+    const seen = new Set<string>();
+    const words = text.match(/[a-z0-9]+/g) ?? [];
+    for (const word of words) {
+        if (word.length < 3 || RECOMMENDATION_STOP_WORDS.has(word)) continue;
+        seen.add(word);
+        if (seen.size >= 8) break;
+    }
+    return Array.from(seen);
+}
+
 function parseAttributesJson(val: any): Record<string, unknown> | null {
     if (val == null) return null;
     if (typeof val === 'object' && !Array.isArray(val)) {
@@ -411,79 +445,129 @@ export class MobileOrderService {
     }
 
     /**
-     * Recommendations: same category (and same subcategory when set), in-stock only, exclude current product.
-     * Pulls a small pool biased toward popular items, then shuffles so suggestions vary on each request.
-     * If too few matches in the subcategory, fills from the rest of the category.
+     * Recommendations: rank same-category products first, then fill with related cross-category
+     * products using brand/unit/name/category keyword matches, and finally popular sellable items.
      */
-    async getProductRecommendationsForMobile(tenantId: string, productId: string, limit = 3) {
+    async getProductRecommendationsForMobile(tenantId: string, productId: string, limit = 6) {
         const stockSubquery = mobileProductSellableStockSql();
         const meta = await this.db.query(
-            `SELECT category_id, subcategory_id FROM shop_products
-       WHERE tenant_id = $1 AND id = $2 AND is_active = TRUE AND mobile_visible = TRUE AND COALESCE(sales_deactivated, FALSE) = FALSE`,
+            `SELECT p.category_id, p.subcategory_id, p.brand_id, p.name, p.mobile_description, p.unit,
+                    COALESCE(p.mobile_price, p.retail_price) as price,
+                    c.name as category_name,
+                    COALESCE(NULLIF(p.brand, ''), b.name) as brand_name
+       FROM shop_products p
+       LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
+       LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
+       WHERE p.tenant_id = $1
+         AND p.id = $2
+         AND p.is_active = TRUE
+         AND p.mobile_visible = TRUE
+         AND COALESCE(p.sales_deactivated, FALSE) = FALSE`,
             [tenantId, productId]
         );
         if (meta.length === 0) return [];
 
         const categoryId = meta[0]?.category_id ?? null;
         const subcategoryId = meta[0]?.subcategory_id ?? null;
-        const safeLimit = Math.min(Math.max(limit, 1), 10);
-        const poolSize = Math.min(30, Math.max(safeLimit * 8, 12));
+        const brandId = meta[0]?.brand_id ?? null;
+        const unit = meta[0]?.unit ?? null;
+        const currentPrice = safeNum(meta[0]?.price);
+        const keywords = getRecommendationKeywords(
+            meta[0]?.name,
+            meta[0]?.mobile_description,
+            meta[0]?.category_name,
+            meta[0]?.brand_name,
+            unit
+        );
+        const safeLimit = Math.min(Math.max(limit, 6), 12);
+        const poolSize = Math.min(60, Math.max(safeLimit * 8, 24));
 
-        const fetchPool = async (subOnly: boolean): Promise<any[]> => {
-            const params: any[] = [tenantId, productId];
-            let pIdx = 3;
-            let catFilter = '';
-            if (categoryId) {
-                catFilter = ` AND p.category_id = $${pIdx}`;
-                params.push(categoryId);
-                pIdx++;
-            }
-            let subFilter = '';
-            if (subOnly && subcategoryId) {
-                subFilter = ` AND p.subcategory_id = $${pIdx}`;
-                params.push(subcategoryId);
-                pIdx++;
-            }
-            params.push(poolSize);
-            const limitParam = pIdx;
+        const relatedQuery = `
+      WITH scored AS (
+        SELECT p.id, p.name, p.sku, p.category_id, p.subcategory_id, p.brand_id,
+               p.unit, p.retail_price, p.tax_rate, p.image_url,
+               p.mobile_price, p.mobile_description, p.is_on_sale, p.is_pre_order, p.discount_percentage,
+               p.rating_avg, p.rating_count, p.total_sales, p.popularity_score,
+               c.name as category_name,
+               COALESCE(NULLIF(p.brand, ''), b.name) as brand_name,
+               ${stockSubquery} as available_stock,
+               (
+                 CASE WHEN $3::text IS NOT NULL AND p.subcategory_id::text = $3 THEN 100 ELSE 0 END +
+                 CASE WHEN $4::text IS NOT NULL AND p.category_id::text = $4 THEN 75 ELSE 0 END +
+                 CASE WHEN $5::text IS NOT NULL AND p.brand_id::text = $5 THEN 35 ELSE 0 END +
+                 CASE WHEN $6::text IS NOT NULL AND LOWER(COALESCE(p.unit, '')) = LOWER($6) THEN 10 ELSE 0 END +
+                 LEAST((
+                   SELECT COUNT(*)::int
+                   FROM unnest($8::text[]) kw
+                   WHERE p.name ILIKE '%' || kw || '%'
+                      OR COALESCE(p.mobile_description, '') ILIKE '%' || kw || '%'
+                      OR COALESCE(c.name, '') ILIKE '%' || kw || '%'
+                      OR COALESCE(p.brand, b.name, '') ILIKE '%' || kw || '%'
+                 ) * 12, 48) +
+                 CASE
+                   WHEN $7::numeric > 0 THEN GREATEST(0, 12 - LEAST(12, ABS(COALESCE(p.mobile_price, p.retail_price) - $7::numeric) / $7::numeric * 12))
+                   ELSE 0
+                 END +
+                 LEAST(COALESCE(p.total_sales, 0), 20) * 0.25 +
+                 LEAST(COALESCE(p.popularity_score, 0), 20) * 0.25
+               ) as relevance_score
+        FROM shop_products p
+        LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
+        LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
+        WHERE p.tenant_id = $1
+          AND p.is_active = TRUE
+          AND p.mobile_visible = TRUE
+          AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+          AND COALESCE(p.mobile_price, p.retail_price) > 0
+          AND p.id::text != $2
+          AND (${stockSubquery} > 0 OR COALESCE(p.is_pre_order, FALSE) = TRUE)
+      )
+      SELECT *
+      FROM scored
+      WHERE relevance_score > 0
+      ORDER BY relevance_score DESC, COALESCE(total_sales, 0) DESC, COALESCE(rating_avg, 0) DESC, RANDOM()
+      LIMIT $9
+    `;
 
-            const query = `
-      SELECT p.id, p.name, p.sku, p.category_id, p.unit, p.retail_price, p.tax_rate, p.image_url,
+        let rows = await this.db.query(relatedQuery, [
+            tenantId,
+            productId,
+            subcategoryId ? String(subcategoryId) : null,
+            categoryId ? String(categoryId) : null,
+            brandId ? String(brandId) : null,
+            unit,
+            currentPrice,
+            keywords,
+            poolSize,
+        ]);
+
+        if (rows.length < safeLimit) {
+            const seenIds = [productId, ...rows.map((r: any) => String(r.id))];
+            const fallbackRows = await this.db.query(
+                `
+      SELECT p.id, p.name, p.sku, p.category_id, p.subcategory_id, p.brand_id,
+             p.unit, p.retail_price, p.tax_rate, p.image_url,
              p.mobile_price, p.mobile_description, p.is_on_sale, p.is_pre_order, p.discount_percentage,
              p.rating_avg, p.rating_count,
              c.name as category_name,
+             COALESCE(NULLIF(p.brand, ''), b.name) as brand_name,
              ${stockSubquery} as available_stock
       FROM shop_products p
       LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
+      LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
       WHERE p.tenant_id = $1
-        AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+        AND p.is_active = TRUE
+        AND p.mobile_visible = TRUE
+        AND COALESCE(p.sales_deactivated, FALSE) = FALSE
         AND COALESCE(p.mobile_price, p.retail_price) > 0
-        AND p.id != $2
-        ${catFilter}
-        ${subFilter}
-        AND (${stockSubquery} > 0)
-      ORDER BY COALESCE(p.total_sales, 0) DESC, COALESCE(p.popularity_score, 0) DESC, RANDOM()
-      LIMIT $${limitParam}
-    `;
-
-            return this.db.query(query, params);
-        };
-
-        let rows = await fetchPool(true);
-        if (rows.length < safeLimit && subcategoryId) {
-            const wider = await fetchPool(false);
-            const seen = new Set(rows.map((r: any) => r.id));
-            for (const r of wider) {
-                if (!seen.has(r.id)) {
-                    rows.push(r);
-                    seen.add(r.id);
-                }
-            }
-        }
-
-        for (let i = rows.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [rows[i], rows[j]] = [rows[j], rows[i]];
+        AND NOT (p.id::text = ANY($2::text[]))
+        AND (${stockSubquery} > 0 OR COALESCE(p.is_pre_order, FALSE) = TRUE)
+      ORDER BY COALESCE(p.total_sales, 0) DESC, COALESCE(p.popularity_score, 0) DESC, COALESCE(p.rating_avg, 0) DESC, RANDOM()
+      LIMIT $3
+    `,
+                [tenantId, seenIds, safeLimit - rows.length]
+            );
+            rows = rows.concat(fallbackRows);
         }
 
         rows = rows.slice(0, safeLimit);

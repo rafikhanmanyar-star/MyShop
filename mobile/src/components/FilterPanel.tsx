@@ -1,22 +1,30 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type TouchEvent } from 'react';
 
+type CategoryRow = { id: string; name?: string; parent_id?: string | null; parentId?: string | null };
+
+function parentIdOf(c: CategoryRow): string | null {
+    const p = c.parent_id ?? c.parentId;
+    return p == null || p === '' ? null : String(p);
+}
+
 function normalizeCategoryFilters(
     f: Record<string, unknown>,
-    allCategories: { id: string; parent_id?: string | null }[],
+    allCategories: CategoryRow[],
 ): Record<string, unknown> {
-    const mains = new Set(allCategories.filter((c) => !c.parent_id).map((c) => c.id));
+    const mains = new Set(allCategories.filter((c) => !parentIdOf(c)).map((c) => c.id));
     const catIds = (f.categoryIds as string[]) || [];
     const subIds = (f.subcategoryIds as string[]) || [];
 
     let main = catIds.find((id) => mains.has(id)) || '';
     if (!main && subIds[0]) {
         const sub = allCategories.find((c) => c.id === subIds[0]);
-        if (sub?.parent_id && mains.has(sub.parent_id)) main = sub.parent_id;
+        const sp = sub ? parentIdOf(sub) : null;
+        if (sp && mains.has(sp)) main = sp;
     }
 
     const subs = subIds.filter((sid) => {
         const s = allCategories.find((c) => c.id === sid);
-        return Boolean(main && s?.parent_id === main);
+        return Boolean(main && s && parentIdOf(s) === main);
     });
 
     return {
@@ -26,23 +34,20 @@ function normalizeCategoryFilters(
     };
 }
 
-const SORT_OPTIONS: { value: string; label: string }[] = [
-    { value: 'price_low_high', label: 'Price: Low → High' },
-    { value: 'price_high_low', label: 'Price: High → Low' },
+/** Primary sort choices shown in the filter drawer (matches product browse reference). */
+const FILTER_SORT_PILLS: { value: string; label: string }[] = [
     { value: 'newest', label: 'Newest' },
     { value: 'popularity', label: 'Popular' },
-    { value: 'best_selling', label: 'Best selling' },
-    { value: 'top_rated', label: 'Highest rated' },
-    { value: 'a_z', label: 'Name A–Z' },
-    { value: 'z_a', label: 'Name Z–A' },
+    { value: 'price_low_high', label: 'Price: Low to High' },
+    { value: 'price_high_low', label: 'Price: High to Low' },
 ];
 
 interface FilterPanelProps {
     isOpen: boolean;
     onClose: () => void;
-    categories: any[];
-    brands: any[];
-    filters: any;
+    categories: CategoryRow[];
+    brands: { id: string; name: string }[];
+    filters: Record<string, unknown>;
     onApply: (newFilters: Record<string, unknown>) => void;
     onClear: () => void;
 }
@@ -96,34 +101,6 @@ export default function FilterPanel({
         });
     };
 
-    const setAvailabilityMode = (mode: 'any' | 'in_stock' | 'out_of_stock' | 'pre_order') => {
-        setLocalFilters((prev: Record<string, unknown>) => {
-            const next = { ...prev } as Record<string, unknown>;
-            if (mode === 'any') {
-                delete next.availability;
-                next.filterInStock = false;
-            } else if (mode === 'in_stock') {
-                next.filterInStock = true;
-                delete next.availability;
-            } else if (mode === 'out_of_stock') {
-                next.filterInStock = false;
-                next.availability = 'out_of_stock';
-            } else {
-                next.filterInStock = false;
-                next.availability = 'pre_order';
-            }
-            return next;
-        });
-    };
-
-    const availabilityMode = (): 'any' | 'in_stock' | 'out_of_stock' | 'pre_order' => {
-        const a = localFilters.availability as string | undefined;
-        if (a === 'out_of_stock') return 'out_of_stock';
-        if (a === 'pre_order') return 'pre_order';
-        if (localFilters.filterInStock) return 'in_stock';
-        return 'any';
-    };
-
     const onTouchStart = useCallback((e: TouchEvent) => {
         touchStartX.current = e.touches[0].clientX;
     }, []);
@@ -150,7 +127,7 @@ export default function FilterPanel({
 
     const mainCategories = useMemo(
         () =>
-            [...categories.filter((c) => !c.parent_id)].sort((a, b) =>
+            [...categories.filter((c) => !parentIdOf(c))].sort((a, b) =>
                 (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }),
             ),
         [categories],
@@ -160,7 +137,7 @@ export default function FilterPanel({
 
     const subcategoriesForMain = useMemo(() => {
         if (!selectedMainCategoryId) return [];
-        return [...categories.filter((c) => c.parent_id === selectedMainCategoryId)].sort((a, b) =>
+        return [...categories.filter((c) => parentIdOf(c) === selectedMainCategoryId)].sort((a, b) =>
             (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }),
         );
     }, [categories, selectedMainCategoryId]);
@@ -171,13 +148,15 @@ export default function FilterPanel({
 
     const filteredBrands = brands.filter((b) => b.name.toLowerCase().includes(brandSearch.toLowerCase()));
 
-    const mode = availabilityMode();
+    const subSelectValue = subcategoriesForMain.some((s) => s.id === selectedSubcategoryId)
+        ? selectedSubcategoryId
+        : '';
 
     return (
         <div className="filter-drawer-overlay" role="presentation" onClick={onClose}>
             <aside
                 ref={panelRef}
-                className="filter-drawer"
+                className="filter-drawer filter-drawer--reference"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="filter-drawer-title"
@@ -196,14 +175,21 @@ export default function FilterPanel({
 
                 <div className="filter-drawer-body">
                     <div className="filter-section">
-                        <h3>Sort by</h3>
-                        <div className="filter-sort-list" role="list">
-                            {SORT_OPTIONS.map((opt) => (
+                        <div className="filter-section-heading">
+                            <span className="filter-section-icon" aria-hidden>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M4 6h16M4 12h10M4 18h6" />
+                                </svg>
+                            </span>
+                            <h3>Sort by</h3>
+                        </div>
+                        <div className="filter-sort-pills" role="list">
+                            {FILTER_SORT_PILLS.map((opt) => (
                                 <button
                                     key={opt.value}
                                     type="button"
                                     role="listitem"
-                                    className={`filter-sort-option ${localFilters.sortBy === opt.value ? 'active' : ''}`}
+                                    className={`filter-sort-pill ${localFilters.sortBy === opt.value ? 'active' : ''}`}
                                     onClick={() => setLocalFilters({ ...localFilters, sortBy: opt.value })}
                                 >
                                     {opt.label}
@@ -213,40 +199,57 @@ export default function FilterPanel({
                     </div>
 
                     <div className="filter-section">
-                        <h3>Price range</h3>
-                        <div className="price-inputs">
-                            <div className="price-input-wrap">
-                                <span>Rs.</span>
-                                <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    placeholder="Min"
-                                    value={(localFilters.minPrice as string) || ''}
-                                    onChange={(e) => setLocalFilters({ ...localFilters, minPrice: e.target.value })}
-                                />
-                            </div>
-                            <div className="filter-drawer-dash">—</div>
-                            <div className="price-input-wrap">
-                                <span>Rs.</span>
-                                <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    placeholder="Max"
-                                    value={(localFilters.maxPrice as string) || ''}
-                                    onChange={(e) => setLocalFilters({ ...localFilters, maxPrice: e.target.value })}
-                                />
-                            </div>
+                        <div className="filter-section-heading">
+                            <span className="filter-section-icon" aria-hidden>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <rect x="2" y="6" width="20" height="12" rx="2" />
+                                    <path d="M6 10h.01M10 10h.01" />
+                                </svg>
+                            </span>
+                            <h3>Price range</h3>
+                        </div>
+                        <div className="price-inputs price-inputs--filter-drawer">
+                            <input
+                                type="number"
+                                inputMode="decimal"
+                                className="filter-price-input"
+                                placeholder="$ Min"
+                                aria-label="Minimum price"
+                                value={(localFilters.minPrice as string) || ''}
+                                onChange={(e) => setLocalFilters({ ...localFilters, minPrice: e.target.value })}
+                            />
+                            <span className="filter-drawer-dash" aria-hidden>
+                                —
+                            </span>
+                            <input
+                                type="number"
+                                inputMode="decimal"
+                                className="filter-price-input"
+                                placeholder="$ Max"
+                                aria-label="Maximum price"
+                                value={(localFilters.maxPrice as string) || ''}
+                                onChange={(e) => setLocalFilters({ ...localFilters, maxPrice: e.target.value })}
+                            />
                         </div>
                     </div>
 
                     <div className="filter-section">
-                        <h3>Categories</h3>
+                        <div className="filter-section-heading">
+                            <span className="filter-section-icon" aria-hidden>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+                                    <path d="M2 17 12 22l10-5" />
+                                    <path d="M2 12 12 17l10-5" />
+                                </svg>
+                            </span>
+                            <h3>Categories</h3>
+                        </div>
                         <label className="visually-hidden" htmlFor="filter-main-category">
                             Main category
                         </label>
                         <select
                             id="filter-main-category"
-                            className="filter-select"
+                            className="filter-select filter-select--soft"
                             value={selectedMainCategoryId}
                             onChange={(e) => {
                                 const id = e.target.value;
@@ -257,7 +260,7 @@ export default function FilterPanel({
                                 }));
                             }}
                         >
-                            <option value="">All categories</option>
+                            <option value="">All Categories</option>
                             {mainCategories.map((c) => (
                                 <option key={c.id} value={c.id}>
                                     {c.name}
@@ -266,47 +269,75 @@ export default function FilterPanel({
                         </select>
                     </div>
 
-                    {selectedMainCategoryId && subcategoriesForMain.length > 0 && (
-                        <div className="filter-section">
-                            <h3>Subcategories</h3>
-                            <label className="visually-hidden" htmlFor="filter-subcategory">
-                                Subcategory
-                            </label>
-                            <select
-                                id="filter-subcategory"
-                                className="filter-select"
-                                value={
-                                    subcategoriesForMain.some((s) => s.id === selectedSubcategoryId)
-                                        ? selectedSubcategoryId
-                                        : ''
-                                }
-                                onChange={(e) => {
-                                    const id = e.target.value;
-                                    setLocalFilters((prev: Record<string, unknown>) => ({
-                                        ...prev,
-                                        subcategoryIds: id ? [id] : [],
-                                    }));
-                                }}
-                            >
-                                <option value="">All subcategories</option>
-                                {subcategoriesForMain.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.name}
-                                    </option>
-                                ))}
-                            </select>
+                    <div className="filter-section">
+                        <div className="filter-section-heading">
+                            <span className="filter-section-icon" aria-hidden>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M4 4v6a2 2 0 0 0 2 2h4" />
+                                    <path d="M4 4h4M10 10v8" />
+                                </svg>
+                            </span>
+                            <h3>Sub-categories</h3>
                         </div>
-                    )}
+                        <label className="visually-hidden" htmlFor="filter-subcategory">
+                            Subcategory
+                        </label>
+                        <select
+                            id="filter-subcategory"
+                            className="filter-select filter-select--soft"
+                            disabled={!selectedMainCategoryId}
+                            value={selectedMainCategoryId ? subSelectValue : ''}
+                            onChange={(e) => {
+                                const id = e.target.value;
+                                setLocalFilters((prev: Record<string, unknown>) => ({
+                                    ...prev,
+                                    subcategoryIds: id ? [id] : [],
+                                }));
+                            }}
+                        >
+                            <option value="">
+                                {selectedMainCategoryId ? 'All Sub-categories' : 'Select a category first'}
+                            </option>
+                            {subcategoriesForMain.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                    {c.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
 
                     <div className="filter-section">
-                        <h3>Brands</h3>
-                        <input
-                            type="search"
-                            className="search-mini"
-                            placeholder="Search brands…"
-                            value={brandSearch}
-                            onChange={(e) => setBrandSearch(e.target.value)}
-                        />
+                        <div className="filter-section-heading">
+                            <span className="filter-section-icon filter-section-icon--badge" aria-hidden>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M20 6 9 17l-5-5" />
+                                </svg>
+                            </span>
+                            <h3>Brands</h3>
+                        </div>
+                        <div className="filter-brand-search-wrap">
+                            <svg
+                                className="filter-brand-search-icon"
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="18"
+                                height="18"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                aria-hidden
+                            >
+                                <circle cx="11" cy="11" r="8" />
+                                <path d="m21 21-4.3-4.3" />
+                            </svg>
+                            <input
+                                type="search"
+                                className="filter-brand-search"
+                                placeholder="Search brands…"
+                                value={brandSearch}
+                                onChange={(e) => setBrandSearch(e.target.value)}
+                            />
+                        </div>
                         <div className="filter-grid filter-grid--scroll">
                             {filteredBrands.map((b) => (
                                 <label
@@ -323,81 +354,13 @@ export default function FilterPanel({
                             ))}
                         </div>
                     </div>
-
-                    <div className="filter-section">
-                        <h3>Availability</h3>
-                        <div className="filter-toggle-row">
-                            <span>In stock</span>
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-checked={mode === 'in_stock' ? 'true' : 'false'}
-                                aria-label="In stock only"
-                                title="In stock only"
-                                className={`filter-switch ${mode === 'in_stock' ? 'on' : ''}`}
-                                onClick={() => setAvailabilityMode(mode === 'in_stock' ? 'any' : 'in_stock')}
-                            />
-                        </div>
-                        <div className="filter-toggle-row">
-                            <span>Out of stock</span>
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-checked={mode === 'out_of_stock' ? 'true' : 'false'}
-                                aria-label="Out of stock only"
-                                title="Out of stock only"
-                                className={`filter-switch ${mode === 'out_of_stock' ? 'on' : ''}`}
-                                onClick={() => setAvailabilityMode(mode === 'out_of_stock' ? 'any' : 'out_of_stock')}
-                            />
-                        </div>
-                        <div className="filter-toggle-row">
-                            <span>Pre-order</span>
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-checked={mode === 'pre_order' ? 'true' : 'false'}
-                                aria-label="Pre-order only"
-                                title="Pre-order only"
-                                className={`filter-switch ${mode === 'pre_order' ? 'on' : ''}`}
-                                onClick={() => setAvailabilityMode(mode === 'pre_order' ? 'any' : 'pre_order')}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="filter-section">
-                        <h3>Offers &amp; more</h3>
-                        <label
-                            className={`filter-checkbox filter-checkbox--full ${localFilters.onSale ? 'active' : ''}`}
-                        >
-                            <input
-                                type="checkbox"
-                                checked={localFilters.onSale === true}
-                                onChange={(e) => setLocalFilters({ ...localFilters, onSale: e.target.checked })}
-                            />
-                            On sale / deals
-                        </label>
-                        <div className="filter-toggle-row">
-                            <span>Popular picks</span>
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-checked={localFilters.filterPopular ? 'true' : 'false'}
-                                aria-label="Popular picks"
-                                title="Popular picks"
-                                className={`filter-switch ${localFilters.filterPopular ? 'on' : ''}`}
-                                onClick={() =>
-                                    setLocalFilters({ ...localFilters, filterPopular: !localFilters.filterPopular })
-                                }
-                            />
-                        </div>
-                    </div>
                 </div>
 
-                <div className="filter-drawer-footer">
-                    <button type="button" className="btn btn-outline btn-full" onClick={handleReset}>
+                <div className="filter-drawer-footer filter-drawer-footer--reference">
+                    <button type="button" className="btn btn-filter-reset" onClick={handleReset}>
                         Reset
                     </button>
-                    <button type="button" className="btn btn-primary btn-full" onClick={handleApply}>
+                    <button type="button" className="btn btn-filter-apply" onClick={handleApply}>
                         Apply filters
                     </button>
                 </div>
