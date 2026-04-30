@@ -94,6 +94,14 @@ export interface TenantBranding {
 }
 
 export const shopApi = {
+  getSyncBootstrap: () => apiClient.get<unknown>('/shop/sync/bootstrap'),
+  getSyncChanges: (since?: string) =>
+    apiClient.get<unknown>(
+      since
+        ? `/shop/sync/changes?since=${encodeURIComponent(since)}`
+        : '/shop/sync/changes'
+    ),
+
   getBranches: () => apiClient.get<ShopBranch[]>('/shop/branches'),
   createBranch: (data: any) => apiClient.post('/shop/branches', data),
   updateBranch: (id: string, data: any) => apiClient.put(`/shop/branches/${id}`, data),

@@ -23,6 +23,17 @@ import { apiClient } from '../services/apiClient';
 import { getFullImageUrl } from '../config/apiUrl';
 import { isApiConnectivityFailure, userMessageForApiError } from '../utils/apiConnectivity';
 import { showAppToast } from '../utils/appToast';
+import {
+    enqueueSyncJob,
+    generateLocalId,
+    applyLocalStockDeduction,
+    getMirrorBranches,
+    getMirrorTerminals,
+    getMirrorPosSettings,
+    getMirrorReceiptSettings,
+} from '../offline/localDb';
+import { isBrowserOnline } from '../offline/syncEngine';
+import type { InventoryItem } from '../types/inventory';
 
 
 
@@ -117,7 +128,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const { user: authUser } = useAuth();
     const { currentShift } = useShifts();
-    const { refreshItems: refreshInventory } = useInventory();
+    const { refreshItems: refreshInventory, items: inventoryItems } = useInventory();
     const currentUserId = authUser?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('user_id') : null) ?? null;
 
     useEffect(() => {
@@ -211,6 +222,24 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             } catch (error) {
                 console.error('Failed to fetch POS configuration:', error);
                 if (isApiConnectivityFailure(error)) {
+                    try {
+                        const [b, t, ps, rs] = await Promise.all([
+                            getMirrorBranches(),
+                            getMirrorTerminals(),
+                            getMirrorPosSettings(),
+                            getMirrorReceiptSettings(),
+                        ]);
+                        if (b.length > 0) setBranches(b);
+                        if (t.length > 0) setTerminals(t);
+                        if (ps) setPosSettings(ps);
+                        if (rs) setReceiptSettings(rs);
+                        if (b.length > 0 && !selectedBranchId) {
+                            setSelectedBranchId((b[0] as any).id ?? null);
+                            apiClient.setBranchId((b[0] as any).id ?? null);
+                        }
+                    } catch {
+                        /* ignore */
+                    }
                     showAppToast(
                         userMessageForApiError(error, 'Cannot load POS configuration (branches, terminals, settings).'),
                         'error',
@@ -584,7 +613,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return;
             }
 
-            const saleNumber = `SALE-${Date.now()}`;
+            let saleNumber = `SALE-${Date.now()}`;
+            const offlineSaleToken = generateLocalId('sn');
             const saleData = {
                 branchId: selectedBranchId ?? undefined,
                 terminalId: selectedTerminalId ?? undefined,
@@ -613,53 +643,146 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 createdAt: new Date().toISOString()
             };
 
-            const saleResponse = await shopApi.createSale(saleData) as any;
-            const saleId = saleResponse?.id ?? saleResponse;
-            const barcode_value = saleResponse?.barcode_value ?? `SALE|${saleNumber}`;
-
-            const completedSale = {
-                ...saleData,
-                saleNumber,
-                id: saleId,
-                barcode_value,
-                barcodeValue: barcode_value,
-                reprintCount: 0,
-                reprint_count: 0,
+            const resolveSaleWarehouseId = (branchId: string | null, productId: string, invItems: InventoryItem[]): string | null => {
+                if (branchId) return branchId;
+                const inv = invItems.find((i) => i.id === productId);
+                if (inv?.warehouseStock && Object.keys(inv.warehouseStock).length > 0) {
+                    return Object.keys(inv.warehouseStock)[0];
+                }
+                if (inv?.warehouseSellable && Object.keys(inv.warehouseSellable).length > 0) {
+                    return Object.keys(inv.warehouseSellable)[0];
+                }
+                return null;
             };
-            setLastCompletedSale(completedSale);
 
-            clearCart();
-            // Clear payment data for the next sale (auto-clears if not recalled, but helps to clear now)
-            setPayments([]);
+            const showSaleToast = (text: string, ok: boolean) => {
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-4 right-4 px-4 py-3 rounded-xl shadow-xl z-[10000] text-sm font-medium animate-slide-up';
+                toast.classList.add(ok ? 'bg-emerald-600' : 'bg-slate-800', 'text-white');
+                toast.innerText = text;
+                document.body.appendChild(toast);
+                setTimeout(() => {
+                    toast.remove();
+                    setLastCompletedSale(null);
+                }, 3500);
+            };
 
-            // Refresh inventory so POS product grid shows updated stock
-            refreshInventory().catch(() => { });
-            window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_created', saleId: saleId } }));
+            try {
+                const saleResponse = await shopApi.createSale(saleData) as any;
+                const saleId = saleResponse?.id ?? saleResponse;
+                const barcode_value = saleResponse?.barcode_value ?? `SALE|${saleNumber}`;
 
-            // Auto-print: await and show toast so user knows if receipt printed
-            const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
-            let printSucceeded = false;
-            if (shouldAutoPrint) {
-                printSucceeded = await printReceipt(completedSale).catch(() => false);
+                const completedSale = {
+                    ...saleData,
+                    saleNumber,
+                    id: saleId,
+                    barcode_value,
+                    barcodeValue: barcode_value,
+                    reprintCount: 0,
+                    reprint_count: 0,
+                };
+                setLastCompletedSale(completedSale);
+
+                clearCart();
+                setPayments([]);
+
+                refreshInventory().catch(() => { });
+                window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_created', saleId: saleId } }));
+
+                const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
+                let printSucceeded = false;
+                if (shouldAutoPrint) {
+                    printSucceeded = await printReceipt(completedSale).catch(() => false);
+                }
+                showSaleToast(
+                    printSucceeded
+                        ? 'Sale completed. Receipt printed.'
+                        : shouldAutoPrint
+                          ? 'Sale completed. Receipt could not be printed—use Reprint if needed.'
+                          : 'Sale completed.',
+                    printSucceeded
+                );
+
+                return completedSale;
+            } catch (error: any) {
+                const canQueueOffline = !isBrowserOnline() || isApiConnectivityFailure(error);
+                if (!canQueueOffline) {
+                    console.error('Failed to complete sale:', error);
+                    let message = userMessageForApiError(error, 'Unknown error');
+                    if (typeof message === 'string' && (message.includes('<!DOCTYPE') || message.includes('<html'))) {
+                        message =
+                            'Server returned an unexpected response. The API may be restarting—check your connection and try again.';
+                    }
+                    alert('Error completing sale: ' + message);
+                    throw error;
+                }
+
+                saleNumber = `SALE-OFF-${offlineSaleToken}`;
+                const offlineSaleData = {
+                    ...saleData,
+                    saleNumber,
+                };
+
+                for (const line of cart) {
+                    const whId = resolveSaleWarehouseId(selectedBranchId, line.productId, inventoryItems);
+                    if (!whId) {
+                        alert('Select a branch or go online — cannot determine warehouse for offline stock.');
+                        throw error;
+                    }
+                    const inv = inventoryItems.find((i) => i.id === line.productId);
+                    const whStock = inv?.warehouseStock?.[whId];
+                    const sellable = inv?.warehouseSellable?.[whId];
+                    const available = Math.max(
+                        0,
+                        Number(sellable != null ? sellable : whStock != null ? whStock : inv?.available ?? inv?.onHand ?? 0)
+                    );
+                    if (available < line.quantity) {
+                        alert(
+                            `Not enough stock for "${line.name}" while offline (${available} available). Connect or reduce quantity.`
+                        );
+                        throw error;
+                    }
+                    await applyLocalStockDeduction(line.productId, whId, -line.quantity);
+                }
+
+                await enqueueSyncJob({
+                    localId: generateLocalId('saleq'),
+                    entityType: 'sale',
+                    operation: 'CREATE',
+                    payloadJson: JSON.stringify(offlineSaleData),
+                    createdAt: new Date().toISOString(),
+                });
+
+                const completedSale = {
+                    ...offlineSaleData,
+                    id: `local-${offlineSaleToken}`,
+                    barcode_value: `SALE|${offlineSaleData.saleNumber}`,
+                    barcodeValue: `SALE|${offlineSaleData.saleNumber}`,
+                    reprintCount: 0,
+                    reprint_count: 0,
+                };
+                setLastCompletedSale(completedSale);
+                clearCart();
+                setPayments([]);
+                refreshInventory().catch(() => { });
+                window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_queued' } }));
+
+                const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
+                let printSucceeded = false;
+                if (shouldAutoPrint) {
+                    printSucceeded = await printReceipt(completedSale).catch(() => false);
+                }
+                showSaleToast(
+                    printSucceeded
+                        ? 'Sale saved offline. Receipt printed. Will sync when online.'
+                        : shouldAutoPrint
+                          ? 'Sale saved offline (will sync when online). Receipt could not be printed.'
+                          : 'Sale saved offline — will sync when online.',
+                    printSucceeded
+                );
+
+                return completedSale;
             }
-            const toast = document.createElement('div');
-            toast.className = 'fixed bottom-4 right-4 px-4 py-3 rounded-xl shadow-xl z-[10000] text-sm font-medium animate-slide-up';
-            if (printSucceeded) {
-                toast.classList.add('bg-emerald-600', 'text-white');
-                toast.innerText = 'Sale completed. Receipt printed.';
-            } else {
-                toast.classList.add('bg-slate-800', 'text-white');
-                toast.innerText = shouldAutoPrint
-                    ? 'Sale completed. Receipt could not be printed—use Reprint if needed.'
-                    : 'Sale completed.';
-            }
-            document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.remove();
-                setLastCompletedSale(null);
-            }, 3500);
-
-            return completedSale;
         } catch (error: any) {
             console.error('Failed to complete sale:', error);
             let message = userMessageForApiError(error, 'Unknown error');
@@ -667,10 +790,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 message =
                     'Server returned an unexpected response. The API may be restarting—check your connection and try again.';
             }
-            alert('Error completing sale: ' + message);
+            if (!String(message).includes('Not enough stock') && !String(message).includes('cannot determine warehouse')) {
+                alert('Error completing sale: ' + message);
+            }
             throw error;
         }
-    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId, currentShift?.id, posSettings, printReceipt]);
+    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId, currentShift?.id, posSettings, printReceipt, inventoryItems]);
 
     const applyGlobalDiscount = useCallback((percentage: number) => {
         setCart(prev => prev.map(item => {

@@ -4,7 +4,7 @@
  */
 
 export const POS_OFFLINE_DB_NAME = 'myshop_pos_offline';
-export const POS_OFFLINE_DB_VERSION = 2;
+export const POS_OFFLINE_DB_VERSION = 3;
 
 const STORES = [
   'categories',
@@ -16,6 +16,19 @@ const STORES = [
   'procurement',
   'pending_procurement',
   'pending_categories',
+  // Offline-first mirror + sync (v3)
+  'sync_meta',
+  'sync_skus',
+  'sync_contacts',
+  'sync_categories',
+  'sync_brands',
+  'sync_warehouses',
+  'sync_branches',
+  'sync_terminals',
+  'sync_loyalty_members',
+  'sync_singletons',
+  'sync_queue',
+  'sync_conflicts',
 ] as const;
 
 export function openPosOfflineDb(): Promise<IDBDatabase> {
@@ -30,7 +43,16 @@ export function openPosOfflineDb(): Promise<IDBDatabase> {
     req.onupgradeneeded = (e) => {
       const db = (e.target as IDBOpenDBRequest).result;
       for (const name of STORES) {
-        if (!db.objectStoreNames.contains(name)) {
+        if (db.objectStoreNames.contains(name)) continue;
+        if (name === 'sync_queue') {
+          db.createObjectStore(name, { keyPath: 'localId' });
+        } else if (name === 'sync_meta' || name === 'sync_singletons') {
+          db.createObjectStore(name, { keyPath: 'key' });
+        } else if (name === 'sync_conflicts') {
+          db.createObjectStore(name, { keyPath: 'id' });
+        } else if (name.startsWith('sync_')) {
+          db.createObjectStore(name, { keyPath: 'id' });
+        } else {
           db.createObjectStore(name);
         }
       }

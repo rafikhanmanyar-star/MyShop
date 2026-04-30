@@ -8,19 +8,23 @@ import { subscribeToOnline, processPendingProductQueue } from '../services/produ
 import { processPendingAccountingQueue } from '../services/accountingSyncService';
 import { processPendingProcurementQueue } from '../services/procurementSyncService';
 import { processPendingCategoryQueue } from '../services/categorySyncService';
+import { processQueue as processExpenseQueue } from '../services/expenseSyncService';
 import { getShopCategoriesOfflineFirst } from '../services/categoriesOfflineCache';
 import { refreshDashboardCache } from '../services/dashboardOfflineCache';
 import { getTenantId } from '../services/posOfflineDb';
 import { shopApi } from '../services/shopApi';
 import { setBranchesCache, setTerminalsCache } from '../services/branchesTerminalsCache';
+import { runBackgroundSync } from '../context/ConnectivityContext';
 
 export function SyncOnOnline() {
   useEffect(() => {
     const runSync = async () => {
+      await runBackgroundSync();
       await processPendingProductQueue();
       await processPendingCategoryQueue();
       await processPendingAccountingQueue();
       await processPendingProcurementQueue();
+      await processExpenseQueue();
       const tenantId = getTenantId();
       if (tenantId) {
         await getShopCategoriesOfflineFirst(); // fetches and caches when online

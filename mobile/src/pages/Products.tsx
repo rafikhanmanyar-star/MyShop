@@ -181,9 +181,15 @@ export default function Products() {
     useEffect(() => {
         if (!shopSlug) return;
         if (online) {
-            Promise.all([publicApi.getCategories(shopSlug), publicApi.getBrands(shopSlug)])
-                .then(([cats, bnds]) => {
+            publicApi
+                .getCategories(shopSlug)
+                .then((cats) => {
                     setCategories(Array.isArray(cats) ? cats : (cats as any)?.categories ?? []);
+                })
+                .catch(() => {});
+            publicApi
+                .getBrands(shopSlug)
+                .then((bnds) => {
                     setBrands(Array.isArray(bnds) ? bnds : (bnds as any)?.brands ?? []);
                 })
                 .catch(() => {});

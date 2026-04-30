@@ -48,6 +48,26 @@ const router = express.Router();
 
 console.log('✅ Shop router initialized');
 
+// --- Offline sync (bootstrap + incremental) ---
+router.get('/sync/bootstrap', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const payload = await getShopService().getSyncBootstrap(req.tenantId);
+    res.json(payload);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/sync/changes', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const since = typeof req.query?.since === 'string' ? req.query.since : undefined;
+    const payload = await getShopService().getSyncChanges(req.tenantId, since);
+    res.json(payload);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/public-test', (_req, res) => {
   res.json({ message: 'Shop routes are working' });
 });

@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { IDatabaseService } from '../services/databaseService.js';
-import { runWithTenantContext } from '../services/tenantContext.js';
+import { runWithTenantContextThroughResponse } from '../services/tenantContext.js';
 import { getMobileCustomerService } from '../services/mobileCustomerService.js';
 
 /** Bearer header, or GET `access_token` (for EventSource, which cannot set headers). */
@@ -44,9 +44,10 @@ export function publicTenantMiddleware(db: IDatabaseService) {
             req.branchId = shop.branchId || null;
             req.shop = { ...tenant, branchId: shop.branchId };
 
-            return await runWithTenantContext(
+            return await runWithTenantContextThroughResponse(
                 { tenantId: tenant.id },
-                async () => { next(); }
+                res,
+                next
             );
         } catch (error) {
             console.error('Public tenant middleware error:', error);
@@ -104,9 +105,10 @@ export function mobileAuthMiddleware(db: IDatabaseService) {
             req.customerId = decoded.customerId;
             req.customerPhone = decoded.phone;
 
-            return await runWithTenantContext(
+            return await runWithTenantContextThroughResponse(
                 { tenantId: decoded.tenantId },
-                async () => { next(); }
+                res,
+                next
             );
         } catch (error) {
             console.error('Mobile auth middleware error:', error);

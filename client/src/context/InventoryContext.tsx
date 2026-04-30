@@ -21,6 +21,7 @@ import {
 import { subscribeToOnline } from '../services/productSyncService';
 import { showAppToast } from '../utils/appToast';
 import type { ProductApiResult } from '../services/shopApi';
+import { getAllLocalSkus, getMirrorWarehouses } from '../offline/localDb';
 
 interface InventoryContextType {
     items: InventoryItem[];
@@ -323,7 +324,49 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (!isAuthenticated) return; // Don't fetch until user is logged in
 
         const fetchData = async () => {
+            const mapWarehouseRows = (warehousesList: any[]): Warehouse[] =>
+                warehousesList.map((w: any) => ({
+                    id: w.id,
+                    name: w.name,
+                    code: w.code,
+                    location: w.location || 'Main',
+                }));
+
+            const mergePending = async (mappedItems: InventoryItem[]) => {
+                const pending = await getAllPendingProducts();
+                const pendingAsItems: InventoryItem[] = pending.map((p) => ({
+                    id: `pending-${p.localId}`,
+                    sku: p.payload.sku,
+                    barcode: p.payload.barcode ?? undefined,
+                    name: p.payload.name,
+                    category: p.payload.category_id || 'General',
+                    subcategoryId: p.payload.subcategory_id || undefined,
+                    unit: p.payload.unit || 'pcs',
+                    onHand: 0,
+                    available: 0,
+                    reserved: 0,
+                    inTransit: 0,
+                    damaged: 0,
+                    costPrice: p.payload.cost_price ?? 0,
+                    retailPrice: p.payload.retail_price ?? 0,
+                    reorderPoint: p.payload.reorder_point ?? 10,
+                    imageUrl: undefined,
+                    description: p.payload.description ?? undefined,
+                    warehouseStock: {},
+                }));
+                return [...mappedItems, ...pendingAsItems];
+            };
+
             try {
+                const localRows = await getAllLocalSkus();
+                const localWhRows = await getMirrorWarehouses();
+                if (localRows.length > 0) {
+                    const whLocal = mapWarehouseRows(localWhRows);
+                    if (whLocal.length > 0) setWarehouses(whLocal);
+                    const mappedLocal = localRows.map((r) => mapSkuRowToInventoryItem(r));
+                    setItems(await mergePending(mappedLocal));
+                }
+
                 const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
                 console.log('🔄 [InventoryContext] Fetching warehouses + inventory SKUs (single request)...');
                 const [warehousesList, skuPack] = await Promise.all([
@@ -369,33 +412,22 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     }
                 }
 
-                const pending = await getAllPendingProducts();
-                const pendingAsItems: InventoryItem[] = pending.map((p) => ({
-                    id: `pending-${p.localId}`,
-                    sku: p.payload.sku,
-                    barcode: p.payload.barcode ?? undefined,
-                    name: p.payload.name,
-                    category: p.payload.category_id || 'General',
-                    subcategoryId: p.payload.subcategory_id || undefined,
-                    unit: p.payload.unit || 'pcs',
-                    onHand: 0,
-                    available: 0,
-                    reserved: 0,
-                    inTransit: 0,
-                    damaged: 0,
-                    costPrice: p.payload.cost_price ?? 0,
-                    retailPrice: p.payload.retail_price ?? 0,
-                    reorderPoint: p.payload.reorder_point ?? 10,
-                    imageUrl: undefined,
-                    description: p.payload.description ?? undefined,
-                    warehouseStock: {},
-                }));
-                setItems([...mappedItems, ...pendingAsItems]);
+                setItems(await mergePending(mappedItems));
 
             } catch (error: any) {
                 console.error('Failed to fetch inventory data:', error);
                 if (isRetryableServerOrNetworkError(error)) {
                     try {
+                        const localRows = await getAllLocalSkus();
+                        if (localRows.length > 0) {
+                            const mappedLocal = localRows.map((r) => mapSkuRowToInventoryItem(r));
+                            const localWhRows = await getMirrorWarehouses();
+                            if (localWhRows.length > 0) {
+                                setWarehouses(mapWarehouseRows(localWhRows));
+                            }
+                            setItems(await mergePending(mappedLocal));
+                            return;
+                        }
                         const pending = await getAllPendingProducts();
                         const pendingAsItems: InventoryItem[] = pending.map((p) => ({
                             id: `pending-${p.localId}`,
@@ -418,7 +450,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                         }));
                         setItems(pendingAsItems);
                     } catch (e) {
-                        console.error('Failed to load pending products:', e);
+                        console.error('Failed to load offline inventory:', e);
                     }
                 }
             }
@@ -505,6 +537,32 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             console.error('Failed to refresh products:', error);
             if (isRetryableServerOrNetworkError(error)) {
                 try {
+                    const localRows = await getAllLocalSkus();
+                    if (localRows.length > 0) {
+                        const mappedLocal = localRows.map((r) => mapSkuRowToInventoryItem(r));
+                        const pending = await getAllPendingProducts();
+                        const pendingAsItems: InventoryItem[] = pending.map((p) => ({
+                            id: `pending-${p.localId}`,
+                            sku: p.payload.sku,
+                            barcode: p.payload.barcode ?? undefined,
+                            name: p.payload.name,
+                            category: p.payload.category_id || 'General',
+                            subcategoryId: p.payload.subcategory_id || undefined,
+                            unit: p.payload.unit || 'pcs',
+                            onHand: 0,
+                            available: 0,
+                            reserved: 0,
+                            inTransit: 0,
+                            damaged: 0,
+                            costPrice: p.payload.cost_price ?? 0,
+                            retailPrice: p.payload.retail_price ?? 0,
+                            reorderPoint: p.payload.reorder_point ?? 10,
+                            imageUrl: undefined,
+                            warehouseStock: {},
+                        }));
+                        setItems([...mappedLocal, ...pendingAsItems]);
+                        return;
+                    }
                     const pending = await getAllPendingProducts();
                     const pendingAsItems: InventoryItem[] = pending.map((p) => ({
                         id: `pending-${p.localId}`,

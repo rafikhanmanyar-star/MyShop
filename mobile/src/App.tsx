@@ -49,16 +49,25 @@ function SyncOnOnline() {
 
   useEffect(() => {
     const runSync = async () => {
-      const [orderResult, productResult] = await Promise.all([
-        processOrderQueue(),
-        processPendingProductQueue(),
-      ]);
-      if (orderResult.succeeded > 0) {
-        void refreshLoyalty({ force: true });
-        showToast(orderResult.succeeded === 1 ? 'Order sent!' : `${orderResult.succeeded} orders sent!`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('myshop:mobile-sync:start'));
       }
-      if (productResult.succeeded > 0) {
-        showToast(productResult.succeeded === 1 ? 'Product synced!' : `${productResult.succeeded} products synced!`);
+      try {
+        const [orderResult, productResult] = await Promise.all([
+          processOrderQueue(),
+          processPendingProductQueue(),
+        ]);
+        if (orderResult.succeeded > 0) {
+          void refreshLoyalty({ force: true });
+          showToast(orderResult.succeeded === 1 ? 'Order sent!' : `${orderResult.succeeded} orders sent!`);
+        }
+        if (productResult.succeeded > 0) {
+          showToast(productResult.succeeded === 1 ? 'Product synced!' : `${productResult.succeeded} products synced!`);
+        }
+      } finally {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('myshop:mobile-sync:done'));
+        }
       }
     };
     const unsub = subscribeToOnline(() => {

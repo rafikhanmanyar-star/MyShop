@@ -962,18 +962,24 @@ export class ShopService {
       /** all | low | out | in | near_expiry */
       stockFilter?: string;
       skipCache?: boolean;
+      /** When set, only rows whose product or related inventory row changed after this ISO timestamp (for incremental sync). */
+      updatedSince?: string;
     } = {}
   ) {
     const t0 = Date.now();
     const page = Math.max(1, options.page ?? 1);
-    const limit = Math.min(5000, Math.max(1, options.limit ?? 50));
+    const limit = Math.min(10000, Math.max(1, options.limit ?? 50));
     const offset = (page - 1) * limit;
     const searchRaw = (options.search ?? '').trim();
     const stockFilter = (options.stockFilter ?? 'all').toLowerCase();
     const skipCache = options.skipCache === true;
+    const updatedSince =
+      options.updatedSince && !Number.isNaN(Date.parse(options.updatedSince))
+        ? options.updatedSince
+        : '';
 
-    const cacheKey = `${tenantId}:${page}:${limit}:${searchRaw}:${stockFilter}`;
-    if (!skipCache) {
+    const cacheKey = `${tenantId}:${page}:${limit}:${searchRaw}:${stockFilter}:${updatedSince || '—'}`;
+    if (!skipCache && !updatedSince) {
       const hit = inventorySkuListCache.get(cacheKey);
       if (hit && hit.expiresAt > Date.now()) {
         return { ...(hit.payload as object), _cache: 'hit' as const, serverMs: Date.now() - t0 };
@@ -1001,6 +1007,19 @@ export class ShopService {
       stockClause = `AND nearest_expiry IS NOT NULL
         AND nearest_expiry >= CURRENT_DATE
         AND nearest_expiry <= CURRENT_DATE + INTERVAL '30 days'`;
+    }
+
+    let updatedSinceClause = '';
+    if (updatedSince) {
+      params.push(updatedSince);
+      updatedSinceClause = `AND (
+          p.updated_at > $${p}
+          OR EXISTS (
+            SELECT 1 FROM shop_inventory si
+            WHERE si.tenant_id = p.tenant_id AND si.product_id = p.id AND si.updated_at > $${p}
+          )
+        )`;
+      p++;
     }
 
     const sql = `
@@ -1100,6 +1119,7 @@ export class ShopService {
         FROM shop_products p
         LEFT JOIN inv_agg ia ON ia.product_id = p.id
         WHERE p.tenant_id = $1 AND p.is_active = TRUE
+          ${updatedSinceClause}
           ${searchClause}
       ),
       filtered AS (
@@ -1137,7 +1157,7 @@ export class ShopService {
       serverMs,
     };
 
-    if (!skipCache) {
+    if (!skipCache && !updatedSince) {
       touchInventorySkuCacheSize();
       inventorySkuListCache.set(cacheKey, { expiresAt: Date.now() + INV_SKU_CACHE_TTL_MS, payload });
     }
@@ -1319,6 +1339,16 @@ export class ShopService {
         [tenantId, saleData.customerId]
       );
       if (lm.length > 0) resolvedLoyaltyMemberId = lm[0].id as string;
+    }
+
+    const existingSale = await this.db.query<{ id: string; barcode_value: string | null }>(
+      `SELECT id, barcode_value FROM shop_sales WHERE tenant_id = $1 AND sale_number = $2 LIMIT 1`,
+      [tenantId, saleData.saleNumber]
+    );
+    if (existingSale.length > 0) {
+      const row = existingSale[0];
+      const bc = row.barcode_value || `SALE|${tenantId}|${saleData.saleNumber}`;
+      return { id: row.id, barcode_value: bc, duplicate: true as const };
     }
 
     const result = await this.db.transaction(async (client) => {
@@ -2776,6 +2806,117 @@ export class ShopService {
       return { ok: false as const, reason: 'no_lock' as const };
     }
     return { ok: true as const, expiresAt: expiresAt.toISOString() };
+  }
+
+  /**
+   * Full snapshot for offline-first clients (POS / mobile) after login or when rebuilding local DB.
+   */
+  async getSyncBootstrap(tenantId: string) {
+    const serverTime = new Date().toISOString();
+    const [
+      warehouses,
+      branches,
+      terminals,
+      categories,
+      brands,
+      contacts,
+      policies,
+      posSettings,
+      receiptSettings,
+      loyaltyMembers,
+    ] = await Promise.all([
+      this.getWarehouses(tenantId),
+      this.getBranches(tenantId),
+      this.getTerminals(tenantId),
+      this.getShopCategories(tenantId),
+      this.getShopBrands(tenantId),
+      this.db.query(
+        `SELECT * FROM contacts WHERE tenant_id = $1 ORDER BY updated_at DESC LIMIT 5000`,
+        [tenantId]
+      ),
+      this.db.query(`SELECT * FROM shop_policies WHERE tenant_id = $1 LIMIT 1`, [tenantId]),
+      this.getPosSettings(tenantId),
+      this.getReceiptSettings(tenantId),
+      this.getLoyaltyMembers(tenantId),
+    ]);
+
+    const skuPack = await this.listInventorySkus(tenantId, {
+      page: 1,
+      limit: 10000,
+      skipCache: true,
+    });
+
+    return {
+      serverTime,
+      warehouses,
+      branches,
+      terminals,
+      categories,
+      brands,
+      contacts,
+      shop_policies: policies[0] ?? null,
+      pos_settings: posSettings,
+      receipt_settings: receiptSettings,
+      loyalty_members: loyaltyMembers,
+      skus: skuPack,
+    };
+  }
+
+  /** Incremental sync: changed rows since `since` ISO timestamp plus joined SKU rows for touched products/inventory. */
+  async getSyncChanges(tenantId: string, sinceRaw: string | undefined) {
+    const since =
+      sinceRaw && !Number.isNaN(Date.parse(sinceRaw))
+        ? sinceRaw
+        : new Date(0).toISOString();
+    const serverTime = new Date().toISOString();
+
+    const [
+      products,
+      inventory,
+      categories,
+      brands,
+      contacts,
+      warehouses,
+      branches,
+      terminals,
+      policies,
+      posSettingsRows,
+    ] = await Promise.all([
+      this.db.query(`SELECT * FROM shop_products WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      this.db.query(`SELECT * FROM shop_inventory WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      this.db.query(`SELECT * FROM categories WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      this.db.query(`SELECT * FROM shop_brands WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      this.db.query(`SELECT * FROM contacts WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      this.db.query(`SELECT * FROM shop_warehouses WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      this.db.query(`SELECT * FROM shop_branches WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      this.db.query(`SELECT * FROM shop_terminals WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      this.db.query(`SELECT * FROM shop_policies WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      this.db.query(`SELECT * FROM pos_settings WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+    ]);
+
+    const skuDelta = await this.listInventorySkus(tenantId, {
+      page: 1,
+      limit: 10000,
+      skipCache: true,
+      updatedSince: since,
+    });
+
+    return {
+      sinceRequested: sinceRaw ?? null,
+      sinceEffective: since,
+      serverTime,
+      products,
+      inventory,
+      categories,
+      brands,
+      contacts,
+      warehouses,
+      branches,
+      terminals,
+      shop_policies: policies,
+      pos_settings: posSettingsRows,
+      skus_delta: skuDelta,
+    };
   }
 
   async releaseSettingsEditLock(tenantId: string, userId: string) {

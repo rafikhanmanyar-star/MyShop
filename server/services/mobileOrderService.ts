@@ -630,7 +630,7 @@ export class MobileOrderService {
         return this.db.query(
             `SELECT id, name, logo_url
            FROM shop_brands
-           WHERE tenant_id = $1 AND is_active = TRUE
+           WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE
            ORDER BY name ASC`,
             [tenantId]
         );

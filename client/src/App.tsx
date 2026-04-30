@@ -13,6 +13,7 @@ import {
   BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
+import { ConnectivityProvider } from './context/ConnectivityContext';
 import { MobileOrdersProvider } from './context/MobileOrdersContext';
 import { SyncOnOnline } from './components/SyncOnOnline';
 import OfflineBanner from './components/OfflineBanner';
@@ -314,6 +315,7 @@ function AppLayout() {
 
   return (
     <BranchProvider>
+      <ConnectivityProvider>
       <AppProvider>
         <ShiftsProvider>
           <MobileOrdersProvider>
@@ -387,6 +389,7 @@ function AppLayout() {
           </MobileOrdersProvider>
         </ShiftsProvider>
       </AppProvider>
+      </ConnectivityProvider>
     </BranchProvider>
   );
 }

@@ -261,7 +261,11 @@ export default function FilterPanel({
 
     if (!isOpen) return null;
 
-    const filteredBrands = brands.filter((b) => b.name.toLowerCase().includes(brandSearch.toLowerCase()));
+    const filteredBrands = brands.filter((b) =>
+        (b.name ?? '')
+            .toLowerCase()
+            .includes(brandSearch.toLowerCase())
+    );
 
     const subSelectValue = subcategoriesForMain.some((s) => s.id === selectedSubcategoryId)
         ? selectedSubcategoryId

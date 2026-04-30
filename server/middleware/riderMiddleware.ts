@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { IDatabaseService } from '../services/databaseService.js';
-import { runWithTenantContext } from '../services/tenantContext.js';
+import { runWithTenantContextThroughResponse } from '../services/tenantContext.js';
 
 /** Bearer header, or GET `access_token` (Stage 11 SSE / EventSource). */
 function getRiderJwtToken(req: any): string | undefined {
@@ -56,9 +56,11 @@ export function riderAuthMiddleware(db: IDatabaseService) {
             req.riderId = decoded.riderId;
             req.riderPhone = decoded.phone;
 
-            return await runWithTenantContext({ tenantId: decoded.tenantId }, async () => {
-                next();
-            });
+            return await runWithTenantContextThroughResponse(
+                { tenantId: decoded.tenantId },
+                res,
+                next
+            );
         } catch (error) {
             console.error('Rider auth middleware error:', error);
             res.status(401).json({ error: 'Authentication failed' });

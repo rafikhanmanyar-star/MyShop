@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { IDatabaseService } from '../services/databaseService.js';
-import { runWithTenantContext } from '../services/tenantContext.js';
+import { runWithTenantContextThroughResponse } from '../services/tenantContext.js';
 
 export interface TenantRequest extends Record<string, any> {
   tenantId?: string;
@@ -119,9 +119,10 @@ export function tenantMiddleware(db: IDatabaseService) {
         req.branchId = null;
       }
 
-      return await runWithTenantContext(
+      return await runWithTenantContextThroughResponse(
         { tenantId: req.tenantId!, userId: req.userId },
-        async () => { next(); }
+        res,
+        next
       );
     } catch (error) {
       console.error('Tenant middleware error:', error);
