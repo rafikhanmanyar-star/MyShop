@@ -262,7 +262,8 @@ router.delete('/categories/:id', async (req: any, res) => {
     await getShopService().deleteShopCategory(req.tenantId, req.params.id);
     res.json({ success: true, message: 'Category deleted' });
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    const status = error.statusCode || 500;
+    res.status(status).json({ error: error.message });
   }
 });
 

@@ -140,8 +140,28 @@ export async function processUnifiedOutbox(): Promise<{
   return { processed: pending.length, succeeded, failed };
 }
 
+/**
+ * Full round: push queued sales/mutations first so PostgreSQL updates immediately,
+ * then pull catalog delta (can be slow; callers may run this in the background).
+ */
 export async function runFullOfflineSyncRound(): Promise<void> {
   if (!isBrowserOnline()) return;
-  await runPullRestoreOrDelta().catch(() => {});
   await processUnifiedOutbox().catch(() => {});
+  await runPullRestoreOrDelta().catch(() => {});
+}
+
+function dispatchCatalogSyncFinished(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('myshop:sync:catalog-done'));
+  }
+}
+
+/** Like runPullRestoreOrDelta but notifies listeners when finished (for refreshing “last sync” UI). */
+export async function runPullRestoreOrDeltaInBackground(): Promise<void> {
+  if (!isBrowserOnline()) return;
+  try {
+    await runPullRestoreOrDelta();
+  } finally {
+    dispatchCatalogSyncFinished();
+  }
 }

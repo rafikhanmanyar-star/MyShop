@@ -668,7 +668,20 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
 
             try {
-                const saleResponse = await shopApi.createSale(saleData) as any;
+                let saleResponse: any;
+                try {
+                    saleResponse = await shopApi.createSale(saleData) as any;
+                } catch (firstErr: any) {
+                    const shouldRetry =
+                        isBrowserOnline() &&
+                        isApiConnectivityFailure(firstErr);
+                    if (shouldRetry) {
+                        await new Promise((r) => setTimeout(r, 800));
+                        saleResponse = await shopApi.createSale(saleData) as any;
+                    } else {
+                        throw firstErr;
+                    }
+                }
                 const saleId = saleResponse?.id ?? saleResponse;
                 const barcode_value = saleResponse?.barcode_value ?? `SALE|${saleNumber}`;
 

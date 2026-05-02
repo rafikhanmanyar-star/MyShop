@@ -385,6 +385,16 @@ router.get('/riders-overview', checkRole(['admin', 'pos_cashier', 'accountant'])
     }
 });
 
+/** Reserved inventory snapshot for mobile pipeline (POS report). */
+router.get('/reserved-stock-report', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+    try {
+        const data = await getMobileOrderService().getReservedStockReport(req.tenantId);
+        res.json(data);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.post('/:id/assign-rider', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
     try {
         const riderId = req.body?.riderId as string | undefined;

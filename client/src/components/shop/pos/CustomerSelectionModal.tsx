@@ -7,6 +7,8 @@ import { ContactsApiRepository } from '../../../services/api/repositories/contac
 import { useLoyalty } from '../../../context/LoyaltyContext';
 import { POSCustomer } from '../../../types/pos';
 import { Contact, ContactType } from '../../../types';
+import type { LoyaltyMember } from '../../../types/loyalty';
+import type { ApiError } from '../../../services/apiClient';
 import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 import { showAppToast } from '../../../utils/appToast';
 import { parsePakistanMobile, phoneDigitsMatch, PHONE_HELPER_TEXT } from '../../../utils/pakistanMobile';
@@ -19,7 +21,7 @@ interface CustomerSelectionModalProps {
 
 const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen, onClose }) => {
     const { setCustomer } = usePOS();
-    const { members } = useLoyalty();
+    const { members, addMember } = useLoyalty();
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(false);
@@ -60,8 +62,10 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
         };
     }, [isOpen, searchQuery]);
 
-    const handleSelect = (contact: Contact) => {
-        const loyaltyMember = members.find(m => m.customerId === contact.id || phoneDigitsMatch(m.phone, contact.contactNo));
+    const handleSelect = (contact: Contact, options?: { loyaltyMember?: LoyaltyMember }) => {
+        const loyaltyMember =
+            options?.loyaltyMember ??
+            members.find(m => m.customerId === contact.id || phoneDigitsMatch(m.phone, contact.contactNo));
 
         const posCustomer: POSCustomer = {
             id: contact.id,
@@ -89,16 +93,17 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
             return;
         }
 
-        let normalizedContactNo: string | undefined;
         const rawPhone = registerForm.contactNo.trim();
-        if (rawPhone) {
-            const parsed = parsePakistanMobile(rawPhone);
-            if (!parsed.ok) {
-                setRegisterError(parsed.message);
-                return;
-            }
-            normalizedContactNo = parsed.digits;
+        if (!rawPhone) {
+            setRegisterError('Phone is required so the customer can be enrolled in loyalty.');
+            return;
         }
+        const parsedPhone = parsePakistanMobile(rawPhone);
+        if (!parsedPhone.ok) {
+            setRegisterError(parsedPhone.message);
+            return;
+        }
+        const normalizedContactNo = parsedPhone.digits;
 
         setRegisterSubmitting(true);
         try {
@@ -111,8 +116,32 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
             };
             const created = await contactsApi.createContact(newContact);
             const contactToUse = created && typeof created === 'object' && 'id' in created ? created as Contact : newContact;
+            let enrolled: LoyaltyMember;
+            try {
+                enrolled = await addMember({
+                    customerId: contactToUse.id,
+                    customerName: contactToUse.name,
+                    cardNumber: `LOY-${Date.now().toString().slice(-6)}`,
+                    email: undefined,
+                    phone: normalizedContactNo,
+                    tier: 'Silver',
+                    visitCount: 0,
+                    totalSpend: 0,
+                    status: 'Active'
+                });
+            } catch (loyaltyErr) {
+                console.error('Loyalty enrollment failed after contact was created:', loyaltyErr);
+                setContacts(prev => [...prev, contactToUse]);
+                const err = loyaltyErr as ApiError;
+                const msg =
+                    typeof err?.error === 'string'
+                        ? err.error
+                        : 'Loyalty enrollment failed. The customer was saved — enroll them from the Loyalty page.';
+                setRegisterError(msg);
+                return;
+            }
             setContacts(prev => [...prev, contactToUse]);
-            handleSelect(contactToUse);
+            handleSelect(contactToUse, { loyaltyMember: enrolled });
         } catch (err) {
             console.error('Failed to register new account:', err);
             setRegisterError(
@@ -178,7 +207,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Phone</label>
+                                <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Phone *</label>
                                 <input
                                     type="tel"
                                     inputMode="numeric"
@@ -195,7 +224,9 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                     className="w-full px-5 py-4 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-2xl focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none text-sm font-semibold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
                                     disabled={registerSubmitting}
                                 />
-                                <p className="mt-2 text-xs text-slate-400 dark:text-slate-500 leading-relaxed">{PHONE_HELPER_TEXT}</p>
+                                <p className="mt-2 text-xs text-slate-400 dark:text-slate-500 leading-relaxed">
+                                    Required for loyalty enrollment. {PHONE_HELPER_TEXT}
+                                </p>
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Company (optional)</label>
@@ -218,7 +249,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={registerSubmitting || !registerForm.name.trim()}
+                                    disabled={registerSubmitting || !registerForm.name.trim() || !registerForm.contactNo.trim()}
                                     className="flex-1 py-4 rounded-2xl bg-indigo-600 text-white font-semibold text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {registerSubmitting ? (

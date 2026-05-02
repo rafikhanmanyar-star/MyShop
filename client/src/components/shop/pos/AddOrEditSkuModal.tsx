@@ -101,6 +101,14 @@ function parseWeightForSave(weightStr: string): number | null {
     return n;
 }
 
+/** Parsed value for currency fields: empty or invalid becomes 0; negatives clamp to 0. */
+function parseNonNegativeNumber(raw: string): number {
+    if (raw === '' || raw === '-') return 0;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return n;
+}
+
 function deriveCategoryFormFromItem(
     item: InventoryItem,
     cats: ShopProductCategory[]
@@ -220,8 +228,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 description: editingItem.description || '',
                 category: editingItem.category || 'General',
                 subcategoryId: editingItem.subcategoryId || '',
-                retailPrice: editingItem.retailPrice ?? 0,
-                costPrice: editingItem.costPrice ?? 0,
+                retailPrice: Math.max(0, editingItem.retailPrice ?? 0),
+                costPrice: Math.max(0, editingItem.costPrice ?? 0),
                 retailPriceMode: 'fixed',
                 retailMarkupPercent: 0,
                 reorderPoint: editingItem.reorderPoint ?? 10,
@@ -534,8 +542,8 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                 description: editingItem.description || '',
                 category: editingItem.category || 'General',
                 subcategoryId: editingItem.subcategoryId || '',
-                retailPrice: editingItem.retailPrice ?? 0,
-                costPrice: editingItem.costPrice ?? 0,
+                retailPrice: Math.max(0, editingItem.retailPrice ?? 0),
+                costPrice: Math.max(0, editingItem.costPrice ?? 0),
                 retailPriceMode: 'fixed',
                 retailMarkupPercent: 0,
                 reorderPoint: editingItem.reorderPoint ?? 10,
@@ -1175,9 +1183,11 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                             label={`Cost (${CURRENCY})`}
                                                             compact
                                                             type="number"
+                                                            min={0}
+                                                            step="any"
                                                             value={formData.costPrice}
                                                             onChange={(e) => {
-                                                                const cost = Number(e.target.value);
+                                                                const cost = parseNonNegativeNumber(e.target.value);
                                                                 const next = { ...formData, costPrice: cost };
                                                                 if (formData.retailPriceMode === 'percentage') {
                                                                     next.retailPrice =
@@ -1188,13 +1198,67 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                             className="rounded-md border-slate-200 bg-white"
                                                         />
                                                     </div>
-                                                    <div className="min-w-0 space-y-1">
-                                                        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-                                                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                                                                Retail ({CURRENCY})
-                                                            </span>
+                                                    <div className="min-w-0 space-y-1.5">
+                                                        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                                            Retail ({CURRENCY})
+                                                        </span>
+                                                        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                                                            {formData.retailPriceMode === 'fixed' ? (
+                                                                <div className="min-w-0 flex-1">
+                                                                    <Input
+                                                                        compact
+                                                                        type="number"
+                                                                        min={0}
+                                                                        step="any"
+                                                                        placeholder="0"
+                                                                        value={formData.retailPrice}
+                                                                        onChange={(e) =>
+                                                                            setFormData({
+                                                                                ...formData,
+                                                                                retailPrice: parseNonNegativeNumber(e.target.value)
+                                                                            })
+                                                                        }
+                                                                        className="rounded-md border-slate-200 bg-white"
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div className="min-w-0 flex-1 grid grid-cols-2 gap-1.5">
+                                                                    <div>
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Input
+                                                                                compact
+                                                                                type="number"
+                                                                                min={0}
+                                                                                step="any"
+                                                                                placeholder="0"
+                                                                                value={formData.retailMarkupPercent}
+                                                                                onChange={(e) => {
+                                                                                    const pct = parseNonNegativeNumber(e.target.value);
+                                                                                    const cost = formData.costPrice;
+                                                                                    const retail =
+                                                                                        Math.round(cost * (1 + pct / 100) * 100) / 100;
+                                                                                    setFormData({
+                                                                                        ...formData,
+                                                                                        retailMarkupPercent: pct,
+                                                                                        retailPrice: retail
+                                                                                    });
+                                                                                }}
+                                                                                className="rounded-md border-slate-200 bg-white"
+                                                                            />
+                                                                            <span className="text-xs text-slate-500">%</span>
+                                                                        </div>
+                                                                        <p className="mt-0.5 text-[9px] text-slate-500">Markup on cost</p>
+                                                                    </div>
+                                                                    <div className="flex flex-col justify-end pb-0.5">
+                                                                        <p className="text-[9px] font-bold uppercase text-slate-500">Retail</p>
+                                                                        <p className="text-sm font-semibold text-slate-800">
+                                                                            {Number(formData.retailPrice).toFixed(2)}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                             <div
-                                                                className="inline-flex w-full shrink-0 rounded-md border border-slate-200 bg-slate-100 p-0.5 sm:w-auto sm:max-w-full"
+                                                                className="inline-flex w-full shrink-0 rounded-md border border-slate-200 bg-slate-100 p-0.5 sm:w-auto sm:self-center"
                                                                 role="group"
                                                                 aria-label="Retail price mode"
                                                             >
@@ -1232,49 +1296,6 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                                 </button>
                                                             </div>
                                                         </div>
-                                                        {formData.retailPriceMode === 'fixed' ? (
-                                                            <Input
-                                                                compact
-                                                                type="number"
-                                                                placeholder="0"
-                                                                value={formData.retailPrice}
-                                                                onChange={(e) => setFormData({ ...formData, retailPrice: Number(e.target.value) })}
-                                                                className="rounded-md border-slate-200 bg-white"
-                                                            />
-                                                        ) : (
-                                                            <div className="grid grid-cols-2 gap-1.5">
-                                                                <div>
-                                                                    <div className="flex items-center gap-1">
-                                                                        <Input
-                                                                            compact
-                                                                            type="number"
-                                                                            placeholder="0"
-                                                                            value={formData.retailMarkupPercent}
-                                                                            onChange={(e) => {
-                                                                                const pct = Number(e.target.value);
-                                                                                const cost = formData.costPrice;
-                                                                                const retail =
-                                                                                    Math.round(cost * (1 + pct / 100) * 100) / 100;
-                                                                                setFormData({
-                                                                                    ...formData,
-                                                                                    retailMarkupPercent: pct,
-                                                                                    retailPrice: retail
-                                                                                });
-                                                                            }}
-                                                                            className="rounded-md border-slate-200 bg-white"
-                                                                        />
-                                                                        <span className="text-xs text-slate-500">%</span>
-                                                                    </div>
-                                                                    <p className="mt-0.5 text-[9px] text-slate-500">Markup on cost</p>
-                                                                </div>
-                                                                <div className="flex flex-col justify-end pb-0.5">
-                                                                    <p className="text-[9px] font-bold uppercase text-slate-500">Retail</p>
-                                                                    <p className="text-sm font-semibold text-slate-800">
-                                                                        {Number(formData.retailPrice).toFixed(2)}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 </div>
                                                 <Input

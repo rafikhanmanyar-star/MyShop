@@ -29,6 +29,9 @@ export const POS_CATEGORY_TREE_MIN_W = MIN_TREE_W;
 export const POS_CATEGORY_TREE_MAX_W = MAX_TREE_W;
 export const POS_CATEGORY_TREE_DEFAULT_W = DEFAULT_TREE_W;
 
+/** Main catalog grid: 3 columns (POS reference layout). */
+export const POS_CATALOG_GRID_COLS = 3;
+
 function loadTreeWidth(): number {
     try {
         const v = localStorage.getItem(POS_CATEGORY_TREE_W_KEY);
@@ -126,22 +129,45 @@ function mapInventoryItemToPOS(item: InventoryItem): POSProduct {
     };
 }
 
-/** On-hand vs sellable at a branch (expired-only batches → sellable 0). */
+/** On-hand vs sellable at a branch. "Expired" only when shortfall is not fully explained by reservations. */
 function computeBranchStockForPos(
     inv: InventoryItem | undefined,
     selectedBranchId: string | null
-): { branchOnHand: number; branchSellable: number; onlyExpiredStock: boolean } {
+): {
+    branchOnHand: number;
+    branchSellable: number;
+    onlyExpiredStock: boolean;
+    /** No POS sellable units because everything at this branch is reserved (e.g. mobile). */
+    branchFullyReserved: boolean;
+} {
     if (!inv) {
-        return { branchOnHand: 0, branchSellable: 0, onlyExpiredStock: false };
+        return { branchOnHand: 0, branchSellable: 0, onlyExpiredStock: false, branchFullyReserved: false };
     }
     const whStock = inv.warehouseStock || {};
     const whSell = inv.warehouseSellable || {};
+    const whRes = inv.warehouseReserved || {};
     const hasWhSell = Object.keys(whSell).length > 0;
     const nWh = Object.keys(whStock).length;
 
     const branchOnHand = selectedBranchId
         ? Math.max(0, Number(whStock[selectedBranchId] ?? 0))
         : Math.max(0, Number(inv.onHand ?? 0));
+
+    /** Reserved qty attributed to this branch (mobile orders, etc.) */
+    let branchReserved = 0;
+    if (selectedBranchId != null && selectedBranchId !== '') {
+        if (Object.prototype.hasOwnProperty.call(whRes, selectedBranchId)) {
+            branchReserved = Math.max(0, Number(whRes[selectedBranchId]));
+        } else if (
+            Object.keys(whRes).length === 0 &&
+            Object.keys(whStock).length === 1 &&
+            Object.keys(whStock)[0] === selectedBranchId
+        ) {
+            branchReserved = Math.max(0, Number(inv.reserved ?? 0));
+        }
+    } else {
+        branchReserved = Math.max(0, Number(inv.reserved ?? 0));
+    }
 
     let branchSellable: number;
     if (!selectedBranchId) {
@@ -156,10 +182,18 @@ function computeBranchStockForPos(
         branchSellable = Math.max(0, Number(whStock[selectedBranchId] ?? 0));
     }
 
-    const onlyExpiredStock =
-        branchOnHand > 0 && branchSellable === 0 && (hasWhSell || nWh <= 1);
+    const eps = 1e-6;
+    /** All units at this branch/on aggregate are reserved → not an expiry labeling issue */
+    const branchFullyReserved =
+        branchOnHand > eps && branchSellable <= eps && branchReserved + eps >= branchOnHand;
 
-    return { branchOnHand, branchSellable, onlyExpiredStock };
+    const onlyExpiredStock =
+        branchOnHand > eps &&
+        branchSellable <= eps &&
+        !branchFullyReserved &&
+        (hasWhSell || nWh <= 1);
+
+    return { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved };
 }
 
 /** When catalog is API-backed but inventory row is missing, still open the SKU editor from grid data. */
@@ -181,7 +215,8 @@ function posProductToInventoryStub(p: POSProduct): InventoryItem {
         reorderPoint: p.reorderPoint ?? 10,
         imageUrl: p.imageUrl,
         description: undefined,
-        warehouseStock: {}
+        warehouseStock: {},
+        warehouseReserved: {},
     };
 }
 
@@ -258,150 +293,163 @@ type POSProductGridRowData = {
     onProductContextMenu: (e: React.MouseEvent, product: POSProduct) => void;
 };
 
-const POS_PRODUCT_GRID_PASTELS = ['bg-[#eef2ff]', 'bg-[#fef3c7]', 'bg-[#e0f2fe]', 'bg-[#fce7f3]'];
-
-/** Smaller type for long labels so we truncate less often. */
-function posProductCardNameClass(name: string, isDense: boolean): string {
-    const n = name.trim().length;
-    if (n >= 72) {
-        return isDense
-            ? 'text-[8px] leading-tight line-clamp-3 min-h-0'
-            : 'text-[9px] leading-tight line-clamp-3 min-h-0';
-    }
-    if (n >= 52) {
-        return isDense
-            ? 'text-[9px] leading-tight line-clamp-2 min-h-0'
-            : 'text-[10px] leading-snug line-clamp-2 min-h-0';
-    }
-    if (n >= 36) {
-        return isDense
-            ? 'text-[10px] leading-snug line-clamp-2 min-h-0'
-            : 'text-xs leading-snug line-clamp-2 min-h-0';
-    }
-    if (n >= 24) {
-        return isDense
-            ? 'text-[11px] leading-snug line-clamp-2 min-h-0'
-            : 'text-sm leading-tight line-clamp-2 min-h-0';
-    }
-    return isDense ? 'text-xs line-clamp-2 min-h-0 h-[1.75rem]' : 'text-sm line-clamp-2 min-h-0 h-[2.5rem]';
+/** POS catalog card typography — matches reference: ~15px title, 15px price, 12px stock. */
+function posProductCardTitleClass(isDense: boolean): string {
+    const size = isDense ? 'text-sm' : 'text-[15px]';
+    return `${size} font-semibold leading-snug line-clamp-2 min-w-0 flex-1 text-[#333333] dark:text-slate-100`;
 }
 
-function posProductCardPriceRowClasses(
-    priceText: string,
-    stockText: string,
-    isDense: boolean
-): { root: string; price: string; stock: string } {
-    const combined = priceText.length + stockText.length;
-    if (combined >= 40) {
+function posProductCardPriceClass(isDense: boolean): string {
+    const size = isDense ? 'text-sm' : 'text-[15px]';
+    return `${size} font-bold tabular-nums shrink-0 text-[#3b5998] dark:text-blue-400`;
+}
+
+function formatPosProductPrice(amount: number): string {
+    const n = amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `${CURRENCY} ${n}`;
+}
+
+function posProductCardStockLine(product: POSProduct): { text: string; className: string; title?: string } {
+    if (product.onlyExpiredStock && product.onHandAtBranch != null) {
         return {
-            root: 'mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5',
-            price: 'min-w-0 font-bold text-[#0056b3] dark:text-blue-400 text-[9px] sm:text-[10px]',
-            stock: 'shrink-0 text-[8px] sm:text-[9px] text-slate-500 dark:text-slate-400'
+            text: `On hand: ${product.onHandAtBranch} (exp.)`,
+            className: 'text-xs font-normal text-amber-700 dark:text-amber-400',
+            title: 'Only expired batches at this branch — not sellable'
         };
     }
-    if (combined >= 30) {
+    if (product.branchFullyReserved && product.onHandAtBranch != null) {
         return {
-            root: 'mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5',
-            price: 'min-w-0 font-bold text-[#0056b3] dark:text-blue-400 text-[10px] sm:text-xs',
-            stock: 'shrink-0 text-[9px] sm:text-xs text-slate-500 dark:text-slate-400'
+            text: `Sellable: ${product.stockLevel} · ${product.onHandAtBranch} reserved`,
+            className: 'text-xs font-normal text-[#777777] dark:text-slate-400',
+            title: 'Reserved for mobile — sellable quantity shown'
         };
     }
-    if (combined >= 22) {
+    const rp = product.reorderPoint || 10;
+    if (product.stockLevel <= 0) {
         return {
-            root: 'mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5',
-            price: `min-w-0 font-bold text-[#0056b3] dark:text-blue-400 ${isDense ? 'text-[11px]' : 'text-xs'}`,
-            stock: 'shrink-0 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400'
+            text: 'Restock pending',
+            className: 'text-xs font-normal text-slate-400 dark:text-slate-500'
+        };
+    }
+    if (product.stockLevel <= rp) {
+        return {
+            text: `Only ${product.stockLevel} unit${product.stockLevel === 1 ? '' : 's'} left`,
+            className: 'text-xs font-normal text-[#d9534f] dark:text-red-400'
         };
     }
     return {
-        root: 'mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5',
-        price: `min-w-0 font-bold text-[#0056b3] dark:text-blue-400 ${isDense ? 'text-xs' : 'text-sm'}`,
-        stock: 'shrink-0 text-xs text-slate-500 dark:text-slate-400'
+        text: `In Stock: ${product.stockLevel} units`,
+        className: 'text-xs font-normal text-[#777777] dark:text-slate-400'
     };
 }
 
 function POSProductGridRow({ index, style, data }: ListChildComponentProps<POSProductGridRowData>) {
     const { filteredProducts, columnCount, keyboardIndex, isDenseMode, addToCart, onProductContextMenu } = data;
     const rowItems: React.ReactNode[] = [];
-    const cellClass = columnCount === 2 ? 'flex-[0_0_50%] min-w-0 max-w-[50%]' : 'flex-[0_0_33.333%] min-w-0 max-w-[33.333%]';
+    const cellClass = 'flex-[0_0_33.333%] min-w-0 max-w-[33.333%]';
+    const reorder = (p: POSProduct) => p.reorderPoint || 10;
     for (let i = 0; i < columnCount; i++) {
         const itemIndex = index * columnCount + i;
         if (itemIndex < filteredProducts.length) {
             const product = filteredProducts[itemIndex];
             const isSelected = keyboardIndex === itemIndex;
-            const bgClass = POS_PRODUCT_GRID_PASTELS[itemIndex % POS_PRODUCT_GRID_PASTELS.length];
-            const stockText =
-                product.onlyExpiredStock && product.onHandAtBranch != null
-                    ? `On hand: ${product.onHandAtBranch} (exp.)`
-                    : `Stock: ${product.stockLevel}`;
-            const priceText = `${CURRENCY}${product.price.toLocaleString()}`;
-            const priceRow = posProductCardPriceRowClasses(priceText, stockText, isDenseMode);
-            const nameClass = `flex-shrink-0 font-semibold text-slate-900 dark:text-slate-200 leading-tight mt-2 min-h-0 ${posProductCardNameClass(
-                product.name,
-                isDenseMode
-            )}`;
+            const outOfStock = product.stockLevel <= 0;
+            const priceText = formatPosProductPrice(product.price);
+            const stockLine = posProductCardStockLine(product);
+            const showLowStockBadge =
+                !outOfStock &&
+                product.stockLevel <= reorder(product) &&
+                !product.onlyExpiredStock &&
+                !product.branchFullyReserved;
             rowItems.push(
                 <div
                     key={product.id}
-                    className={`p-2 ${cellClass}`}
+                    className={`${cellClass}`}
                     onContextMenu={(e) => onProductContextMenu(e, product)}
                 >
                     <button
                         type="button"
                         onClick={() => product.stockLevel > 0 && addToCart(product)}
-                        disabled={product.stockLevel <= 0}
-                        className={`group w-full h-full min-h-0 relative flex flex-col p-3 bg-white dark:bg-slate-800 border rounded-[10px] text-left transition-all overflow-hidden shadow-sm ${product.stockLevel <= 0 ? 'opacity-60 cursor-not-allowed border-slate-100 dark:border-slate-700' : 'hover:border-[#0056b3]/40 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99]'} ${isSelected ? 'border-[#0056b3] ring-2 ring-[#0056b3]/15' : 'border-slate-200/90 dark:border-slate-700'
-                            }`}
+                        disabled={outOfStock}
+                        className={`group w-full h-full min-h-0 relative flex flex-col p-0 bg-white dark:bg-slate-800 border rounded-[12px] text-left transition-all overflow-hidden shadow-md shadow-slate-900/5 dark:shadow-none ${
+                            outOfStock
+                                ? 'opacity-[0.72] grayscale cursor-not-allowed border-slate-200/80 dark:border-slate-700'
+                                : 'hover:border-[#3b5998]/35 hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.99] border-slate-200/90 dark:border-slate-700'
+                        } ${isSelected ? 'border-[#3b5998] ring-2 ring-[#3b5998]/18' : ''}`}
                     >
-                        <div className={`w-full flex-shrink-0 ${bgClass} dark:bg-slate-700/80 rounded-[8px] flex items-center justify-center border border-white/50 dark:border-slate-600 overflow-hidden relative ${isDenseMode ? 'aspect-video max-h-[72px]' : 'aspect-square'}`}>
+                        <div
+                            className={`w-full flex-shrink-0 bg-[#f0f2f1] dark:bg-slate-700/50 flex items-center justify-center overflow-hidden relative rounded-t-[12px] ${
+                                isDenseMode ? 'aspect-[4/3] max-h-[88px]' : 'aspect-square'
+                            }`}
+                        >
                             <CachedImage
                                 path={product.imageUrl}
                                 alt={product.name}
                                 fallbackLabel={product.name}
                                 fallbackClassName={
                                     isDenseMode
-                                        ? '!p-0.5 [&_span]:text-[8px] [&_span]:leading-tight [&_span]:line-clamp-3'
-                                        : ''
+                                        ? '!p-1 [&_span]:text-[10px] [&_span]:leading-tight [&_span]:line-clamp-2'
+                                        : '[&_span]:text-xs'
                                 }
-                                className="object-cover w-full h-full min-h-0 min-w-0 group-hover:scale-105 transition-transform duration-500"
+                                className={`object-cover w-full h-full min-h-0 min-w-0 transition-transform duration-500 ${
+                                    outOfStock ? '' : 'group-hover:scale-105'
+                                }`}
                             />
-                            {product.onlyExpiredStock ? (
+                            {outOfStock ? (
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none px-2">
+                                    <span className="rounded-md bg-[#4a4a4a] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+                                        OUT OF STOCK
+                                    </span>
+                                </div>
+                            ) : product.onlyExpiredStock ? (
                                 <div
                                     className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[6px] text-[10px] font-bold uppercase tracking-wider shadow-sm bg-amber-500 text-white dark:bg-amber-600"
                                     title="Only expired batches at this branch — not sellable"
                                 >
                                     Expired
                                 </div>
-                            ) : product.stockLevel <= (product.reorderPoint || 10) ? (
-                                <div className={`absolute top-2 right-2 px-1.5 py-0.5 rounded-[6px] text-xs font-bold uppercase tracking-wider shadow-sm ${product.stockLevel <= 0 ? 'bg-slate-800 text-white' : 'bg-[#fee2e2] text-[#991b1b] dark:bg-rose-950/80 dark:text-rose-200'}`}>
-                                    {product.stockLevel <= 0 ? 'Out' : `Low: ${product.stockLevel}`}
+                            ) : product.branchFullyReserved ? (
+                                <div
+                                    className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[6px] text-[10px] font-bold uppercase tracking-wider shadow-sm bg-violet-600 text-white dark:bg-violet-700"
+                                    title="Quantity reserved for mobile orders — POS sellable is reduced"
+                                >
+                                    Reserved
+                                </div>
+                            ) : showLowStockBadge ? (
+                                <div
+                                    className="absolute top-2 right-2 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-[#fce8e8] text-[#d9534f] dark:bg-rose-950/60 dark:text-rose-300"
+                                    title="Low stock at this branch"
+                                >
+                                    LOW STOCK
                                 </div>
                             ) : null}
                         </div>
 
-                        <div className={nameClass} title={product.name}>
-                            {product.name}
-                        </div>
-
-                        <div className={priceRow.root}>
-                            <span className={priceRow.price} title={priceText}>
-                                {priceText}
-                            </span>
-                            <span
-                                className={priceRow.stock}
-                                title={product.onlyExpiredStock ? 'Units on hand are expired' : undefined}
-                            >
-                                {stockText}
-                            </span>
+                        <div className="flex flex-col gap-1 px-[15px] pt-3 pb-[15px] min-w-0">
+                            <div className="flex flex-row items-start justify-between gap-2 min-w-0 w-full">
+                                <div className={posProductCardTitleClass(isDenseMode)} title={product.name}>
+                                    {product.name}
+                                </div>
+                                <span className={posProductCardPriceClass(isDenseMode)} title={priceText}>
+                                    {priceText}
+                                </span>
+                            </div>
+                            <p className={`${stockLine.className} text-left leading-snug`} title={stockLine.title}>
+                                {stockLine.text}
+                            </p>
                         </div>
                     </button>
                 </div>
             );
         } else {
-            rowItems.push(<div key={`empty-${i}`} className={`p-2 ${cellClass}`}></div>);
+            rowItems.push(<div key={`empty-${i}`} className={cellClass}></div>);
         }
     }
-    return <div style={style} className="flex px-3 min-h-0 overflow-hidden">{rowItems}</div>;
+    return (
+        <div style={style} className="flex px-3 gap-5 min-h-0 overflow-hidden">
+            {rowItems}
+        </div>
+    );
 }
 
 const ProductSearch: React.FC = () => {
@@ -694,7 +742,10 @@ const ProductSearch: React.FC = () => {
         if (!inventoryItems?.length) return products;
         return products.map((p) => {
             const inv = inventoryItems.find((i) => i.id === p.id);
-            const { branchOnHand, branchSellable, onlyExpiredStock } = computeBranchStockForPos(inv, selectedBranchId);
+            const { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved } = computeBranchStockForPos(
+                inv,
+                selectedBranchId
+            );
             const stockLevel = inv != null ? Math.floor(branchSellable) : Number(p.stockLevel) || 0;
             const merged =
                 inv != null
@@ -715,6 +766,7 @@ const ProductSearch: React.FC = () => {
                 stockLevel,
                 onHandAtBranch: inv != null ? branchOnHand : undefined,
                 onlyExpiredStock: Boolean(inv && onlyExpiredStock),
+                branchFullyReserved: Boolean(inv && branchFullyReserved),
                 reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
             };
         });
@@ -731,7 +783,10 @@ const ProductSearch: React.FC = () => {
         if (!popularProducts.length) return [];
         return popularProducts.map((p) => {
             const inv = inventoryItems?.find((i) => i.id === p.id);
-            const { branchOnHand, branchSellable, onlyExpiredStock } = computeBranchStockForPos(inv, selectedBranchId);
+            const { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved } = computeBranchStockForPos(
+                inv,
+                selectedBranchId
+            );
             const stockLevel = inv != null ? Math.floor(branchSellable) : Number(p.stockLevel) || 0;
             const merged =
                 inv != null
@@ -752,6 +807,7 @@ const ProductSearch: React.FC = () => {
                 stockLevel,
                 onHandAtBranch: inv != null ? branchOnHand : undefined,
                 onlyExpiredStock: Boolean(inv && onlyExpiredStock),
+                branchFullyReserved: Boolean(inv && branchFullyReserved),
                 reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
             };
         });
@@ -838,7 +894,7 @@ const ProductSearch: React.FC = () => {
                 e.preventDefault();
                 setKeyboardIndex(prev => {
                     const next = Math.min(prev + 1, filteredProducts.length - 1);
-                    const nextRow = Math.floor(next / columnCount);
+                    const nextRow = Math.floor(next / POS_CATALOG_GRID_COLS);
                     listRef.current?.scrollToItem(nextRow);
                     return next;
                 });
@@ -847,7 +903,7 @@ const ProductSearch: React.FC = () => {
                 setKeyboardIndex(prev => {
                     const next = Math.max(prev - 1, -1);
                     if (next >= 0) {
-                        const nextRow = Math.floor(next / columnCount);
+                        const nextRow = Math.floor(next / POS_CATALOG_GRID_COLS);
                         listRef.current?.scrollToItem(nextRow);
                     }
                     return next;
@@ -985,10 +1041,10 @@ const ProductSearch: React.FC = () => {
         };
     }, [productContextMenu]);
 
-    // Virtualized Grid Setup — dense by default; row height sized so content doesn't overlap
-    const columnCount = isDenseMode ? 3 : 2;
+    // Virtualized grid — 3 columns; row height fits image + title/price row + stock line
+    const columnCount = POS_CATALOG_GRID_COLS;
     const rowCount = Math.ceil(filteredProducts.length / columnCount);
-    const rowHeight = isDenseMode ? 156 : 200;
+    const rowHeight = isDenseMode ? 182 : 236;
 
     const productGridItemData = useMemo(
         (): POSProductGridRowData => ({
@@ -1003,7 +1059,7 @@ const ProductSearch: React.FC = () => {
     );
 
     return (
-        <div className="flex flex-row h-full min-h-0 bg-[#f8fafc] dark:bg-slate-900 relative overflow-hidden">
+        <div className="flex flex-row h-full min-h-0 bg-[#f4f7f6] dark:bg-slate-900 relative overflow-hidden">
             {categoryTreeVisible ? (
                 <aside
                     className="shrink-0 flex flex-col border-r border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-800/50 min-h-0"
@@ -1136,6 +1192,10 @@ const ProductSearch: React.FC = () => {
                                         <span className="absolute bottom-0 left-0 right-0 py-0.5 bg-amber-500/95 text-[6px] font-bold text-white text-center leading-none">
                                             Expired
                                         </span>
+                                    ) : p.branchFullyReserved ? (
+                                        <span className="absolute bottom-0 left-0 right-0 py-0.5 bg-violet-600/95 text-[6px] font-bold text-white text-center leading-none">
+                                            Reserved
+                                        </span>
                                     ) : null}
                                 </div>
                                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate w-full text-center">{p.name}</span>
@@ -1251,7 +1311,7 @@ const ProductSearch: React.FC = () => {
                 initialEditingItem={initialEditingItemForModal}
                 onItemReady={(item, action) => {
                     if (action === 'updated') return;
-                    const { branchOnHand, branchSellable, onlyExpiredStock } = computeBranchStockForPos(
+                    const { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved } = computeBranchStockForPos(
                         item,
                         selectedBranchId
                     );
@@ -1259,7 +1319,8 @@ const ProductSearch: React.FC = () => {
                         ...mapInventoryItemToPOS(item),
                         stockLevel: Math.floor(branchSellable),
                         onHandAtBranch: branchOnHand,
-                        onlyExpiredStock
+                        onlyExpiredStock,
+                        branchFullyReserved
                     };
                     addToCart(posProduct);
                     setLocalQuery('');

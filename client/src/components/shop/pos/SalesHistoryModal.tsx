@@ -619,8 +619,8 @@ const SalesHistoryModal: React.FC = () => {
                 </div>
 
                 {selectedSale && (
-                    <div className="flex min-h-0 min-w-0 flex-col gap-2 rounded-xl border border-dashed border-primary-200/80 bg-primary-50/40 p-3 dark:border-primary-800 dark:bg-primary-950/20">
-                        <div className="flex flex-wrap items-end justify-between gap-2">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 rounded-xl border border-dashed border-primary-200/80 bg-primary-50/40 p-3 dark:border-primary-800 dark:bg-primary-950/20">
+                        <div className="flex shrink-0 flex-wrap items-end justify-between gap-2">
                             <div className="min-w-0">
                                 <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-400/90">Transaction slip</p>
                                 <h3 className="font-mono text-sm font-semibold text-foreground break-all">{selectedSale.saleNumber}</h3>
@@ -629,7 +629,7 @@ const SalesHistoryModal: React.FC = () => {
                                 AUTH {authCodeFromSaleKey(selectedSale.saleNumber, selectedSale.id)}
                             </span>
                         </div>
-                        <div className="min-h-0 max-h-[min(50vh,22rem)] w-full min-w-0 overflow-y-auto overflow-x-hidden rounded-md border border-border/60 bg-background/50 pr-1 [scrollbar-gutter:stable] dark:bg-slate-900/30">
+                        <div className="min-h-[10rem] w-full min-w-0 flex-1 overflow-y-scroll overflow-x-hidden rounded-md border border-border/60 bg-background/50 pr-1 [scrollbar-gutter:stable] dark:bg-slate-900/30">
                             <table className="w-full min-w-0 table-fixed text-left text-[10px] border-collapse sm:text-xs">
                                 <thead className="sticky top-0 z-10 border-b border-border bg-muted/90 backdrop-blur-sm dark:bg-slate-800/90">
                                     <tr className="text-[9px] uppercase tracking-wider text-muted-foreground">
@@ -655,7 +655,7 @@ const SalesHistoryModal: React.FC = () => {
                                 </tbody>
                             </table>
                         </div>
-                        <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                             <p className="text-[11px] text-muted-foreground">
                                 Subtotal {selectedSale.subtotal.toLocaleString()} · Total <strong className="text-foreground">{CURRENCY} {selectedSale.grandTotal.toLocaleString()}</strong>
                             </p>

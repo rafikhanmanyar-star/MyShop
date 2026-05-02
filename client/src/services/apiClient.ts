@@ -129,9 +129,11 @@ class ApiClient {
       if (!response.ok) {
         const connectivity =
           response.status === 502 || response.status === 503 || response.status === 504;
+        const errText =
+          responseData.message || responseData.error || 'Request failed';
         throw {
-          error: responseData.error || 'Request failed',
-          message: responseData.message,
+          error: responseData.error || responseData.message || 'Request failed',
+          message: errText,
           status: response.status,
           lockedBy: responseData.lockedBy,
           connectivity,

@@ -18,7 +18,7 @@ interface LoyaltyContextType {
     tiers: LoyaltyTierConfig[];
     campaigns: LoyaltyCampaign[];
 
-    addMember: (member: Omit<LoyaltyMember, 'id' | 'joinDate' | 'pointsBalance' | 'lifetimePoints'>) => Promise<void>;
+    addMember: (member: Omit<LoyaltyMember, 'id' | 'joinDate' | 'pointsBalance' | 'lifetimePoints'>) => Promise<LoyaltyMember>;
     updateMember: (id: string, data: Partial<LoyaltyMember>) => Promise<void>;
     deleteMember: (id: string) => void;
     processLoyalty: (customerId: string, saleAmount: number, saleId: string, isRedemption?: boolean, redeemPoints?: number) => void;
@@ -87,20 +87,23 @@ export const LoyaltyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         fetchMembers();
     }, [isAuthenticated]);
 
-    const addMember = useCallback(async (memberData: any) => {
+    const addMember = useCallback(async (memberData: any): Promise<LoyaltyMember> => {
         try {
-            const apiPayload = {
+            const apiPayload: Record<string, unknown> = {
                 name: memberData.customerName,
                 phone: memberData.phone,
                 email: memberData.email,
                 cardNumber: memberData.cardNumber
             };
+            if (memberData.customerId) {
+                apiPayload.customerId = memberData.customerId;
+            }
 
-            const response = await shopApi.createLoyaltyMember(apiPayload) as any;
+            const response = await shopApi.createLoyaltyMember(apiPayload) as { id?: string };
 
             const newMember: LoyaltyMember = {
                 ...memberData,
-                id: response && response.id ? response.id : crypto.randomUUID(),
+                id: response?.id ? response.id : crypto.randomUUID(),
                 joinDate: new Date().toISOString(),
                 pointsBalance: 0,
                 lifetimePoints: 0,
@@ -111,6 +114,7 @@ export const LoyaltyProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 mobileCustomerVerified: memberData.mobileCustomerVerified ?? false
             };
             setMembers(prev => [...prev, newMember]);
+            return newMember;
         } catch (error) {
             console.error('Failed to create member:', error);
             throw error;

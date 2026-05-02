@@ -22,6 +22,8 @@ export interface POSProduct {
     onHandAtBranch?: number;
     /** Branch has inventory on hand but nothing left to sell (e.g. only expired batches). */
     onlyExpiredStock?: boolean;
+    /** Sellable is zero because remaining on-hand at branch is reserved (e.g. mobile orders). */
+    branchFullyReserved?: boolean;
     reorderPoint?: number;
     popularityScore?: number;
     /** Hidden from POS grid when true (manual deactivate for sales). */

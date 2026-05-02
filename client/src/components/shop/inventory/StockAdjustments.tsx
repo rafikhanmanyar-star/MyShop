@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useInventory } from '../../../context/InventoryContext';
 import { ICONS } from '../../../constants';
 import Card from '../../ui/Card';
@@ -7,7 +7,11 @@ import Modal from '../../ui/Modal';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import Textarea from '../../ui/Textarea';
-import { StockAdjustment } from '../../../types/inventory';
+import { InventoryItem } from '../../../types/inventory';
+
+function itemPickerLabel(item: InventoryItem) {
+    return `${item.sku} - ${item.name} (Current: ${item.onHand} ${item.unit})`;
+}
 
 const StockAdjustments: React.FC = () => {
     const { adjustments, approveAdjustment, warehouses, items, updateStock } = useInventory();
@@ -21,6 +25,54 @@ const StockAdjustments: React.FC = () => {
     const [reasonCode, setReasonCode] = useState('');
     const [notes, setNotes] = useState('');
 
+    const [itemPickerOpen, setItemPickerOpen] = useState(false);
+    const [itemQuery, setItemQuery] = useState('');
+    const [itemHighlight, setItemHighlight] = useState(0);
+    const itemPickerRef = useRef<HTMLDivElement>(null);
+
+    const normalizedQuery = itemQuery.trim().toLowerCase();
+    const filteredItems = useMemo(() => {
+        if (!normalizedQuery) return items;
+        return items.filter((item) => {
+            const sku = (item.sku || '').toLowerCase();
+            const name = (item.name || '').toLowerCase();
+            const barcode = (item.barcode || '').toLowerCase();
+            return (
+                sku.includes(normalizedQuery) ||
+                name.includes(normalizedQuery) ||
+                barcode.includes(normalizedQuery)
+            );
+        });
+    }, [items, normalizedQuery]);
+
+    const selectedInventoryItem = useMemo(
+        () => (selectedItemId ? items.find((i) => i.id === selectedItemId) : undefined),
+        [items, selectedItemId]
+    );
+
+    useEffect(() => {
+        setItemHighlight(0);
+    }, [normalizedQuery, itemPickerOpen]);
+
+    useEffect(() => {
+        if (!itemPickerOpen) return;
+        const onDocMouseDown = (e: MouseEvent) => {
+            const el = itemPickerRef.current;
+            if (el && !el.contains(e.target as Node)) {
+                setItemPickerOpen(false);
+                setItemQuery('');
+            }
+        };
+        document.addEventListener('mousedown', onDocMouseDown);
+        return () => document.removeEventListener('mousedown', onDocMouseDown);
+    }, [itemPickerOpen]);
+
+    const selectInventoryItem = useCallback((item: InventoryItem) => {
+        setSelectedItemId(item.id);
+        setItemPickerOpen(false);
+        setItemQuery('');
+    }, []);
+
     const handleOpenModal = () => {
         // Reset form
         setSelectedItemId('');
@@ -29,6 +81,8 @@ const StockAdjustments: React.FC = () => {
         setQuantity('');
         setReasonCode('');
         setNotes('');
+        setItemPickerOpen(false);
+        setItemQuery('');
         setIsModalOpen(true);
     };
 
@@ -157,32 +211,145 @@ const StockAdjustments: React.FC = () => {
             >
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Item Selection */}
-                        <div className="md:col-span-2">
-                            <label className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider">
+                        {/* Item Selection — searchable combobox */}
+                        <div className="md:col-span-2" ref={itemPickerRef}>
+                            <label
+                                htmlFor="stock-adjust-item"
+                                className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider"
+                            >
                                 Select Item *
                             </label>
-                            <select
-                                value={selectedItemId}
-                                onChange={(e) => setSelectedItemId(e.target.value)}
-                                className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-foreground dark:border-slate-600"
-                                required
-                            >
-                                <option value="">-- Select an item --</option>
-                                {items.map(item => (
-                                    <option key={item.id} value={item.id}>
-                                        {item.sku} - {item.name} (Current: {item.onHand} {item.unit})
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="relative">
+                                <input
+                                    id="stock-adjust-item"
+                                    type="text"
+                                    autoComplete="off"
+                                    role="combobox"
+                                    aria-expanded={itemPickerOpen ? 'true' : 'false'}
+                                    aria-controls={
+                                        itemPickerOpen && filteredItems.length > 0
+                                            ? 'stock-adjust-item-listbox'
+                                            : undefined
+                                    }
+                                    aria-activedescendant={
+                                        itemPickerOpen && filteredItems[itemHighlight]
+                                            ? `stock-adjust-item-opt-${filteredItems[itemHighlight].id}`
+                                            : undefined
+                                    }
+                                    placeholder="Search by name, SKU, or barcode…"
+                                    value={
+                                        itemPickerOpen
+                                            ? itemQuery
+                                            : selectedInventoryItem
+                                              ? itemPickerLabel(selectedInventoryItem)
+                                              : ''
+                                    }
+                                    onChange={(e) => {
+                                        setItemQuery(e.target.value);
+                                        setItemPickerOpen(true);
+                                        if (selectedItemId) setSelectedItemId('');
+                                    }}
+                                    onFocus={() => {
+                                        setItemPickerOpen(true);
+                                        setItemQuery('');
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (!itemPickerOpen && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+                                            setItemPickerOpen(true);
+                                            setItemQuery('');
+                                            e.preventDefault();
+                                            return;
+                                        }
+                                        if (!itemPickerOpen) return;
+                                        if (e.key === 'Escape') {
+                                            setItemPickerOpen(false);
+                                            setItemQuery('');
+                                            e.preventDefault();
+                                            return;
+                                        }
+                                        if (e.key === 'ArrowDown') {
+                                            e.preventDefault();
+                                            setItemHighlight((h) =>
+                                                filteredItems.length ? (h + 1) % filteredItems.length : 0
+                                            );
+                                            return;
+                                        }
+                                        if (e.key === 'ArrowUp') {
+                                            e.preventDefault();
+                                            setItemHighlight((h) =>
+                                                filteredItems.length
+                                                    ? (h - 1 + filteredItems.length) % filteredItems.length
+                                                    : 0
+                                            );
+                                            return;
+                                        }
+                                        if (e.key === 'Enter' && filteredItems[itemHighlight]) {
+                                            e.preventDefault();
+                                            selectInventoryItem(filteredItems[itemHighlight]);
+                                        }
+                                    }}
+                                    className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-foreground dark:border-slate-600"
+                                />
+                                <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground">
+                                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                        <path
+                                            fillRule="evenodd"
+                                            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.94a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z"
+                                            clipRule="evenodd"
+                                        />
+                                    </svg>
+                                </div>
+                                {itemPickerOpen &&
+                                    (filteredItems.length === 0 ? (
+                                        <div className="absolute z-50 mt-1 w-full rounded-xl border-2 border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-lg dark:border-slate-600">
+                                            No items match your search.
+                                        </div>
+                                    ) : (
+                                        <div
+                                            id="stock-adjust-item-listbox"
+                                            role="listbox"
+                                            className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl border-2 border-border bg-card py-1 shadow-lg dark:border-slate-600"
+                                        >
+                                            {filteredItems.map((item, idx) => (
+                                                <div
+                                                    key={item.id}
+                                                    id={`stock-adjust-item-opt-${item.id}`}
+                                                    role="option"
+                                                    aria-selected={selectedItemId === item.id}
+                                                    className={`cursor-pointer px-4 py-2.5 text-sm ${
+                                                        idx === itemHighlight
+                                                            ? 'bg-indigo-50 text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-100'
+                                                            : 'text-foreground hover:bg-muted/80'
+                                                    }`}
+                                                    onMouseEnter={() => setItemHighlight(idx)}
+                                                    onMouseDown={(ev) => {
+                                                        ev.preventDefault();
+                                                        selectInventoryItem(item);
+                                                    }}
+                                                >
+                                                    {itemPickerLabel(item)}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                            </div>
+                            {!selectedItemId && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    Type to filter products, then choose from the list.
+                                </p>
+                            )}
                         </div>
 
                         {/* Warehouse Selection */}
                         <div>
-                            <label className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider">
+                            <label
+                                htmlFor="stock-adjust-warehouse"
+                                className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider"
+                            >
                                 Warehouse *
                             </label>
                             <select
+                                id="stock-adjust-warehouse"
                                 value={selectedWarehouseId}
                                 onChange={(e) => setSelectedWarehouseId(e.target.value)}
                                 className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-foreground dark:border-slate-600"
@@ -198,10 +365,14 @@ const StockAdjustments: React.FC = () => {
 
                         {/* Adjustment Type */}
                         <div>
-                            <label className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider">
+                            <label
+                                htmlFor="stock-adjust-type"
+                                className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider"
+                            >
                                 Adjustment Type *
                             </label>
                             <select
+                                id="stock-adjust-type"
                                 value={adjustmentType}
                                 onChange={(e) => setAdjustmentType(e.target.value as 'Increase' | 'Decrease')}
                                 className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-foreground dark:border-slate-600"
@@ -231,10 +402,14 @@ const StockAdjustments: React.FC = () => {
 
                         {/* Reason Code */}
                         <div>
-                            <label className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider">
+                            <label
+                                htmlFor="stock-adjust-reason"
+                                className="block text-xs font-bold text-foreground mb-2 uppercase tracking-wider"
+                            >
                                 Reason Code *
                             </label>
                             <select
+                                id="stock-adjust-reason"
                                 value={reasonCode}
                                 onChange={(e) => setReasonCode(e.target.value)}
                                 className="w-full px-4 py-3 bg-card border-2 border-border rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-sm text-foreground dark:border-slate-600"

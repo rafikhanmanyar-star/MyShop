@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMobileOrders } from '../../context/MobileOrdersContext';
-import { mobileOrdersApi, MobileOrder, PosRidersOverview, MobileOnlineUser, MobileUsersStats } from '../../services/mobileOrdersApi';
+import { mobileOrdersApi, MobileOrder, PosRidersOverview, MobileOnlineUser, MobileUsersStats, MobileReservedStockReport } from '../../services/mobileOrdersApi';
 import { QRCodeSVG } from 'qrcode.react';
 import {
     Smartphone, RefreshCw, Package, Truck, Check, X, Clock,
@@ -10,7 +10,7 @@ import {
     Printer, Copy, CheckCircle, Store, Map,
     Banknote, Building2, Wallet, ExternalLink, Navigation, Users,
     ShoppingCart, Activity, UserCheck, Globe, CircleDot, BookOpen, BadgeCheck,
-    Mail, History,
+    Mail, History, Lock,
 } from 'lucide-react';
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
@@ -96,6 +96,7 @@ function isRiderAssignedDelivery(order: Pick<MobileOrder, 'payment_method' | 'ri
 const STATUS_FILTERS = ['All', 'Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered', 'Unpaid', 'Cancelled'];
 const LIVE_MAP_TAB = 'LiveMap';
 const MOBILE_USERS_TAB = 'MobileUsers';
+const RESERVED_STOCK_TAB = 'ReservedStock';
 
 /** Tab labels aligned with operations dashboard copy */
 const FILTER_TAB_LABEL: Record<string, string> = {
@@ -217,6 +218,9 @@ function MobileOrdersPageContent() {
     const [onlineUsers, setOnlineUsers] = useState<MobileOnlineUser[]>([]);
     const [onlineUsersStats, setOnlineUsersStats] = useState<MobileUsersStats | null>(null);
     const [onlineUsersLoading, setOnlineUsersLoading] = useState(false);
+    const [reservedStockReport, setReservedStockReport] = useState<MobileReservedStockReport | null>(null);
+    const [reservedStockLoading, setReservedStockLoading] = useState(false);
+    const [reservedStockError, setReservedStockError] = useState<string | null>(null);
 
     const loadRidersOverview = useCallback(async () => {
         setRidersOverviewLoading(true);
@@ -241,6 +245,20 @@ function MobileOrdersPageContent() {
             setOnlineUsersStats(null);
         } finally {
             setOnlineUsersLoading(false);
+        }
+    }, []);
+
+    const loadReservedStockReport = useCallback(async () => {
+        setReservedStockLoading(true);
+        setReservedStockError(null);
+        try {
+            const data = await mobileOrdersApi.getReservedStockReport();
+            setReservedStockReport(data);
+        } catch (err: any) {
+            setReservedStockReport(null);
+            setReservedStockError(err?.error || err?.message || 'Failed to load reserved stock report');
+        } finally {
+            setReservedStockLoading(false);
         }
     }, []);
 
@@ -276,6 +294,8 @@ function MobileOrdersPageContent() {
     useEffect(() => {
         if (statusFilter === MOBILE_USERS_TAB) {
             loadOnlineUsers();
+        } else if (statusFilter === RESERVED_STOCK_TAB) {
+            loadReservedStockReport();
         } else if (statusFilter === LIVE_MAP_TAB) {
             loadOrders(undefined);
         } else {
@@ -546,6 +566,7 @@ function MobileOrdersPageContent() {
     ).length;
     const isLiveMapView = statusFilter === LIVE_MAP_TAB;
     const isMobileUsersView = statusFilter === MOBILE_USERS_TAB;
+    const isReservedReportView = statusFilter === RESERVED_STOCK_TAB;
 
     return (
         <div className="flex w-full min-w-0 flex-col h-full min-h-0 flex-1 bg-slate-100 dark:bg-slate-900">
@@ -636,8 +657,26 @@ function MobileOrdersPageContent() {
                             </button>
                             <button
                                 type="button"
+                                onClick={() => setStatusFilter(RESERVED_STOCK_TAB)}
+                                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
+                                    statusFilter === RESERVED_STOCK_TAB
+                                        ? 'border-violet-600 bg-violet-600 text-white'
+                                        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                                }`}
+                            >
+                                <Lock className="w-3.5 h-3.5 shrink-0" />
+                                Reserved stock
+                                {reservedStockReport != null && reservedStockReport.summary.total_reserved_quantity > 0 && (
+                                    <span className="tabular-nums rounded-md bg-white/15 px-1.5 py-px text-[0.65rem]">
+                                        {reservedStockReport.summary.distinct_products_with_reservation}
+                                    </span>
+                                )}
+                            </button>
+                            <button
+                                type="button"
                                 onClick={() => {
                                     if (statusFilter === MOBILE_USERS_TAB) loadOnlineUsers();
+                                    else if (statusFilter === RESERVED_STOCK_TAB) loadReservedStockReport();
                                     else {
                                         loadOrders(
                                             statusFilter === LIVE_MAP_TAB || statusFilter === 'All' ? undefined : statusFilter
@@ -649,7 +688,7 @@ function MobileOrdersPageContent() {
                                 title="Refresh"
                             >
                                 <RefreshCw
-                                    className={`w-4 h-4 ${loading || ridersOverviewLoading || onlineUsersLoading ? 'animate-spin' : ''}`}
+                                    className={`w-4 h-4 ${loading || ridersOverviewLoading || onlineUsersLoading || reservedStockLoading ? 'animate-spin' : ''}`}
                                 />
                             </button>
                         </div>
@@ -807,6 +846,13 @@ function MobileOrdersPageContent() {
                         stats={onlineUsersStats}
                         loading={onlineUsersLoading}
                         onRefresh={loadOnlineUsers}
+                    />
+                ) : isReservedReportView ? (
+                    <ReservedStockReportPanel
+                        data={reservedStockReport}
+                        loading={reservedStockLoading}
+                        error={reservedStockError}
+                        onRefresh={loadReservedStockReport}
                     />
                 ) : (
                 <div
@@ -1184,6 +1230,183 @@ function MobileOrdersPageContent() {
                 </div>
             )}
             </div>
+        </div>
+    );
+}
+
+// ─── Reserved stock report (mobile pipeline inventory holds) ──────────────────
+function ReservedStockReportPanel({
+    data,
+    loading,
+    error,
+    onRefresh,
+}: {
+    data: MobileReservedStockReport | null;
+    loading: boolean;
+    error: string | null;
+    onRefresh: () => void;
+}) {
+    const fmtQty = (n: number) => {
+        if (!Number.isFinite(n)) return '0';
+        const x = Math.round(n * 10000) / 10000;
+        return Number.isInteger(x) ? String(x) : x.toLocaleString(undefined, { maximumFractionDigits: 4 });
+    };
+
+    return (
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-3 shrink-0">
+                <div>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight flex items-center gap-2">
+                        <Lock className="w-5 h-5 text-violet-600 dark:text-violet-400 shrink-0" />
+                        Reserved stock report
+                    </h2>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1 max-w-2xl">
+                        Units held for open mobile orders (not yet delivered or cancelled). POS sellable quantity excludes these
+                        reservations.
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
+                        “POS sellable hint” is on-hand minus reserved on this inventory row; expiry batches may further limit sellable
+                        stock.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => onRefresh()}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                </button>
+            </div>
+
+            {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200 shrink-0">
+                    {error}
+                </div>
+            )}
+
+            {loading && !data ? (
+                <div className="flex flex-1 items-center justify-center min-h-[16rem] rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-600 dark:border-violet-400" />
+                </div>
+            ) : data ? (
+                <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0">
+                        <div className="rounded-xl border border-violet-200/80 bg-violet-50/90 dark:border-violet-900 dark:bg-violet-950/40 p-4">
+                            <p className="text-[0.65rem] font-bold uppercase tracking-wide text-violet-700 dark:text-violet-300">
+                                Total reserved units
+                            </p>
+                            <p className="text-2xl font-bold text-violet-900 dark:text-violet-100 tabular-nums mt-1">
+                                {fmtQty(data.summary.total_reserved_quantity)}
+                            </p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 p-4">
+                            <p className="text-[0.65rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                SKUs (products)
+                            </p>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tabular-nums mt-1">
+                                {data.summary.distinct_products_with_reservation}
+                            </p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 p-4">
+                            <p className="text-[0.65rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Inventory rows
+                            </p>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tabular-nums mt-1">
+                                {data.summary.inventory_rows_with_reservation}
+                            </p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 p-4">
+                            <p className="text-[0.65rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Warehouses / stores
+                            </p>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tabular-nums mt-1">
+                                {data.summary.warehouses_with_reservation}
+                            </p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 p-4 col-span-2 sm:col-span-1 lg:col-span-1">
+                            <p className="text-[0.65rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Open mobile orders
+                            </p>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 tabular-nums mt-1">
+                                {data.summary.open_mobile_orders}
+                            </p>
+                        </div>
+                    </div>
+
+                    {data.open_orders_by_status.length > 0 && (
+                        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950 px-4 py-3 shrink-0">
+                            <p className="text-[0.65rem] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">
+                                Open orders by status
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {data.open_orders_by_status.map((row) => {
+                                    const cfg = STATUS_CONFIG[row.status];
+                                    const label = FILTER_TAB_LABEL[row.status] || cfg?.label || row.status;
+                                    return (
+                                        <span
+                                            key={row.status}
+                                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                                                cfg?.bg || 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700'
+                                            } ${cfg?.color || 'text-slate-700 dark:text-slate-300'}`}
+                                        >
+                                            {label}
+                                            <span className="tabular-nums font-bold">{row.order_count}</span>
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950 custom-scrollbar [scrollbar-gutter:stable]">
+                        {data.lines.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center text-slate-500 dark:text-slate-400">
+                                <Package className="w-14 h-14 opacity-25" />
+                                <p className="font-semibold text-slate-700 dark:text-slate-300">No reserved quantity right now</p>
+                                <p className="text-sm max-w-sm">
+                                    When customers place mobile orders, quantities appear here until the order is delivered or cancelled.
+                                </p>
+                            </div>
+                        ) : (
+                            <table className="w-full text-sm min-w-[720px]">
+                                <thead className="sticky top-0 z-[1] bg-slate-50 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-700">
+                                    <tr>
+                                        <th className="text-left px-3 py-2.5 font-bold text-slate-600 dark:text-slate-300">Product</th>
+                                        <th className="text-left px-3 py-2.5 font-bold text-slate-600 dark:text-slate-300">SKU</th>
+                                        <th className="text-left px-3 py-2.5 font-bold text-slate-600 dark:text-slate-300">Location</th>
+                                        <th className="text-right px-3 py-2.5 font-bold text-slate-600 dark:text-slate-300">On hand</th>
+                                        <th className="text-right px-3 py-2.5 font-bold text-violet-700 dark:text-violet-300">Reserved</th>
+                                        <th className="text-right px-3 py-2.5 font-bold text-slate-600 dark:text-slate-300">
+                                            POS sellable hint
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.lines.map((line) => (
+                                        <tr
+                                            key={`${line.product_id}-${line.warehouse_id}`}
+                                            className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/80 dark:hover:bg-slate-900/50"
+                                        >
+                                            <td className="px-3 py-2.5 font-medium text-slate-900 dark:text-slate-100">{line.product_name}</td>
+                                            <td className="px-3 py-2.5 font-mono text-xs text-slate-600 dark:text-slate-400">{line.sku}</td>
+                                            <td className="px-3 py-2.5 text-slate-700 dark:text-slate-300">{line.warehouse_name}</td>
+                                            <td className="px-3 py-2.5 text-right tabular-nums">{fmtQty(line.quantity_on_hand)}</td>
+                                            <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-violet-700 dark:text-violet-300">
+                                                {fmtQty(line.quantity_reserved)}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right tabular-nums text-slate-600 dark:text-slate-400">
+                                                {fmtQty(line.available_hint)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </>
+            ) : null}
         </div>
     );
 }

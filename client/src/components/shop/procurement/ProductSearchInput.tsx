@@ -9,6 +9,8 @@ export type ProductOption = {
   cost_price?: number;
   costPrice?: number;
   average_cost?: number;
+  retail_price?: number;
+  retailPrice?: number;
 };
 
 export interface ProductSearchInputProps {

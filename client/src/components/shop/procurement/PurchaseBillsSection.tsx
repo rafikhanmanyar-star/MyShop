@@ -57,6 +57,20 @@ function isoDateFromPurchaseApi(value: unknown): string {
   return '';
 }
 
+/** Push line cost/retail to shop_products (last line wins if the same SKU appears twice). */
+async function flushSkuPricesToProducts(items: LineItem[]): Promise<void> {
+  const seen = new Map<string, { unitCost: number; retailPrice: number }>();
+  for (const i of items) {
+    seen.set(i.productId, { unitCost: i.unitCost, retailPrice: i.retailPrice });
+  }
+  for (const [productId, prices] of seen) {
+    await shopApi.updateProduct(productId, {
+      cost_price: prices.unitCost,
+      retail_price: prices.retailPrice,
+    });
+  }
+}
+
 function normalizeList<T>(raw: unknown): T[] {
   if (Array.isArray(raw)) return raw;
   if (raw && typeof raw === 'object' && 'data' in raw && Array.isArray((raw as { data: T[] }).data)) return (raw as { data: T[] }).data;
@@ -273,6 +287,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           cost_price: item.costPrice,
           costPrice: item.costPrice,
           average_cost: prev?.average_cost,
+          retail_price: item.retailPrice,
+          retailPrice: item.retailPrice,
         });
       }
       return Array.from(byId.values());
@@ -390,6 +406,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     const refreshItemsRef = useRef(inventory?.refreshItems);
     refreshItemsRef.current = inventory?.refreshItems;
 
+    const commitSkuPrices = useCallback(async (productId: string, unitCost: number, retailPrice: number) => {
+      if (unitCost < 0 || retailPrice < 0) return;
+      try {
+        await shopApi.updateProduct(productId, { cost_price: unitCost, retail_price: retailPrice });
+        refreshItemsRef.current?.();
+      } catch (err: unknown) {
+        showProcurementToast(procurementHttpErr(err as any, 'Could not update product prices'), 'error');
+      }
+    }, []);
+
     useEffect(() => {
       if (showForm) {
         loadBillsAndFormData();
@@ -414,6 +440,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               cost_price: parseFloat(String(p.cost_price ?? 0)),
               costPrice: parseFloat(String(p.cost_price ?? 0)),
               average_cost: p.average_cost != null ? parseFloat(String(p.average_cost)) : undefined,
+              retail_price: parseFloat(String(p.retail_price ?? 0)),
+              retailPrice: parseFloat(String(p.retail_price ?? 0)),
             }))
           );
         })
@@ -447,6 +475,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
 
     const addItem = (p: ProductOption) => {
       const unitCost = Number(p.cost_price ?? p.costPrice ?? p.average_cost) || 0;
+      const retailPrice = Number(p.retail_price ?? p.retailPrice ?? 0) || 0;
       setForm((f) => ({
         ...f,
         items: [
@@ -456,6 +485,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
             productId: p.id,
             quantity: 1,
             unitCost,
+            retailPrice,
             taxAmount: 0,
             subtotal: unitCost,
             expiryDate: defaultExpiryDate(),
@@ -649,6 +679,10 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           alert('Cost price cannot be negative.');
           return false;
         }
+        if ((row.retailPrice ?? 0) < 0) {
+          alert('Retail price cannot be negative.');
+          return false;
+        }
       }
       return true;
     };
@@ -666,6 +700,15 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       if (!editBillId) return;
       setLoading(true);
       try {
+        if (form.items.length > 0) {
+          try {
+            await flushSkuPricesToProducts(form.items);
+            refreshItemsRef.current?.();
+          } catch (err: unknown) {
+            alert(procurementHttpErr(err as any, 'Could not update product prices'));
+            return;
+          }
+        }
         const itemsPayload = buildPostedItemsPayload();
         const sub = itemsPayload.reduce((s, i) => s + i.subtotal, 0);
         const tax = form.items.reduce((s, i) => s + (i.taxAmount || 0), 0);
@@ -711,9 +754,22 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           alert('Cost price cannot be negative.');
           return;
         }
+        if ((row.retailPrice ?? 0) < 0) {
+          alert('Retail price cannot be negative.');
+          return;
+        }
       }
       setLoading(true);
       try {
+        if (form.items.length > 0) {
+          try {
+            await flushSkuPricesToProducts(form.items);
+            refreshItemsRef.current?.();
+          } catch (err: unknown) {
+            alert(procurementHttpErr(err as any, 'Could not update product prices'));
+            return;
+          }
+        }
         const itemsPayload = form.items.map((i) => {
           const qty = Math.max(1, Math.floor(i.quantity));
           const exp = (i.expiryDate || '').trim().slice(0, 10);
@@ -791,6 +847,15 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       if (!validatePostedLines()) return;
       setLoading(true);
       try {
+        if (form.items.length > 0) {
+          try {
+            await flushSkuPricesToProducts(form.items);
+            refreshItemsRef.current?.();
+          } catch (err: unknown) {
+            alert(procurementHttpErr(err as any, 'Could not update product prices'));
+            return;
+          }
+        }
         const itemsPayload = buildPostedItemsPayload();
         const sub = itemsPayload.reduce((s, i) => s + i.subtotal, 0);
         const tax = form.items.reduce((s, i) => s + (i.taxAmount || 0), 0);
@@ -972,7 +1037,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               {form.items.length > 0 && (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
                   <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain [scrollbar-gutter:stable] max-h-[min(60vh,calc(100dvh-18rem))] sm:max-h-[min(65vh,calc(100dvh-16rem))]">
-                    <table className="table-modern min-w-[960px]">
+                    <table className="table-modern min-w-[1080px]">
                       <thead className="sticky top-0 z-10 hidden border-b border-border bg-card shadow-erp md:table-header-group">
                         <tr>
                           <th className="table-header w-12 whitespace-nowrap text-center" title="Serial number">
@@ -982,6 +1047,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                           <th className="table-header whitespace-nowrap">Stock</th>
                           <th className="table-header whitespace-nowrap">Quantity</th>
                           <th className="table-header whitespace-nowrap text-right">Unit cost</th>
+                          <th className="table-header whitespace-nowrap text-right">Retail price</th>
                           <th className="table-header whitespace-nowrap">Expiry *</th>
                           <th className="table-header whitespace-nowrap">Batch</th>
                           <th className="table-header whitespace-nowrap text-right">Subtotal</th>
@@ -1005,6 +1071,10 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                               zebra={idx % 2 === 1}
                               onQuantityChange={(q) => updateItem(i.lineId, 'quantity', q)}
                               onUnitCostChange={(c) => updateItem(i.lineId, 'unitCost', c)}
+                              onRetailPriceChange={(rp) => updateItem(i.lineId, 'retailPrice', rp)}
+                              onSkuPricesCommit={(productId, unitCost, retailPrice) => {
+                                void commitSkuPrices(productId, unitCost, retailPrice);
+                              }}
                               onExpiryChange={(d) => updateItem(i.lineId, 'expiryDate', d)}
                               onBatchNoChange={(b) => updateItem(i.lineId, 'batchNo', b)}
                               onRemove={() => removeItem(i.lineId)}
@@ -1223,28 +1293,42 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                                   return;
                                 }
                                 try {
-                                  const bill = await procurementApi.getPurchaseBillById(b.id);
+                                  const [bill, products] = await Promise.all([
+                                    procurementApi.getPurchaseBillById(b.id),
+                                    shopApi.getProducts(),
+                                  ]);
                                   if (!bill) {
                                     alert('Could not load bill.');
                                     return;
                                   }
+                                  const plist = Array.isArray(products) ? products : [];
+                                  const retailById = new Map(
+                                    plist.map((p: { id: string; retail_price?: unknown }) => [
+                                      p.id,
+                                      parseFloat(String(p.retail_price ?? 0)) || 0,
+                                    ])
+                                  );
                                   setEditingIsDraft(bill.is_posted === false || bill.is_posted === 0);
                                   setForm({
                                     supplierId: bill.supplier_id || bill.supplierId || '',
                                     billNumber: bill.bill_number || bill.billNumber || '',
                                     billDate: (bill.bill_date || bill.billDate || '').toString().slice(0, 10),
                                     dueDate: (bill.due_date || bill.dueDate || '').toString().slice(0, 10) || '',
-                                    items: (bill.items || []).map((it: any) => ({
-                                      lineId: newLineId(),
-                                      productId: it.product_id || it.productId,
-                                      quantity: Number(it.quantity) || 1,
-                                      unitCost: Number(it.unit_cost ?? it.unitCost) || 0,
-                                      taxAmount: Number(it.tax_amount ?? it.taxAmount) || 0,
-                                      subtotal: Number(it.subtotal) || 0,
-                                      expiryDate: isoDateFromPurchaseApi(it.expiry_date ?? it.expiryDate),
-                                      expiryHighlight: false,
-                                      batchNo: String(it.batch_no ?? it.batchNo ?? ''),
-                                    })),
+                                    items: (bill.items || []).map((it: any) => {
+                                      const pid = it.product_id || it.productId;
+                                      return {
+                                        lineId: newLineId(),
+                                        productId: pid,
+                                        quantity: Number(it.quantity) || 1,
+                                        unitCost: Number(it.unit_cost ?? it.unitCost) || 0,
+                                        retailPrice: retailById.get(pid) ?? 0,
+                                        taxAmount: Number(it.tax_amount ?? it.taxAmount) || 0,
+                                        subtotal: Number(it.subtotal) || 0,
+                                        expiryDate: isoDateFromPurchaseApi(it.expiry_date ?? it.expiryDate),
+                                        expiryHighlight: false,
+                                        batchNo: String(it.batch_no ?? it.batchNo ?? ''),
+                                      };
+                                    }),
                                     paymentStatus: 'Credit',
                                     paidAmount: 0,
                                     bankAccountId: '',

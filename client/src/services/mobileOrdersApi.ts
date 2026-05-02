@@ -151,6 +151,28 @@ export interface MobileOnlineUsersResponse {
     stats: MobileUsersStats;
 }
 
+/** GET /shop/mobile-orders/reserved-stock-report */
+export interface MobileReservedStockReport {
+    summary: {
+        total_reserved_quantity: number;
+        inventory_rows_with_reservation: number;
+        distinct_products_with_reservation: number;
+        warehouses_with_reservation: number;
+        open_mobile_orders: number;
+    };
+    lines: Array<{
+        product_id: string;
+        sku: string;
+        product_name: string;
+        warehouse_id: string;
+        warehouse_name: string;
+        quantity_on_hand: number;
+        quantity_reserved: number;
+        available_hint: number;
+    }>;
+    open_orders_by_status: Array<{ status: string; order_count: number }>;
+}
+
 export const mobileOrdersApi = {
     // Orders
     getOrders: (status?: string) =>
@@ -161,6 +183,8 @@ export const mobileOrdersApi = {
         apiClient.get<MobileOrder>(`/shop/mobile-orders/${id}`),
     getRidersOverview: () =>
         apiClient.get<PosRidersOverview>('/shop/mobile-orders/riders-overview'),
+    getReservedStockReport: () =>
+        apiClient.get<MobileReservedStockReport>('/shop/mobile-orders/reserved-stock-report'),
     assignRider: (orderId: string, riderId: string) =>
         apiClient.post<{ success: boolean; orderId: string }>(`/shop/mobile-orders/${encodeURIComponent(orderId)}/assign-rider`, {
             riderId,

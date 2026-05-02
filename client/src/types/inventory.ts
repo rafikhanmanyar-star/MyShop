@@ -41,6 +41,8 @@ export interface InventoryItem {
     /** Product description shown in the mobile app when user opens the product. */
     description?: string;
     warehouseStock: Record<string, number>; // warehouseId -> quantity
+    /** Per-branch qty reserved (e.g. mobile orders); when absent, derive from total reserved */
+    warehouseReserved?: Record<string, number>;
     /** Per-branch qty that is sellable today (non-expired batches), when the server provides it */
     warehouseSellable?: Record<string, number>;
     /** Units sellable today (non-expired batches); falls back to available when absent */

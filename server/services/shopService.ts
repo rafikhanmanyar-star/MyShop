@@ -1083,7 +1083,12 @@ export class ShopService {
             jsonb_object_agg(ie.warehouse_id::text, ie.sellable_on_hand)
               FILTER (WHERE ie.warehouse_id IS NOT NULL),
             '{}'::jsonb
-          ) AS warehouse_sellable
+          ) AS warehouse_sellable,
+          COALESCE(
+            jsonb_object_agg(ie.warehouse_id::text, ie.quantity_reserved)
+              FILTER (WHERE ie.warehouse_id IS NOT NULL),
+            '{}'::jsonb
+          ) AS warehouse_reserved
         FROM i_enriched ie
         GROUP BY ie.product_id
       ),
@@ -1115,7 +1120,8 @@ export class ShopService {
           COALESCE(ia.available, 0)::numeric AS available,
           COALESCE(ia.reserved_total, 0)::numeric AS reserved_total,
           COALESCE(ia.warehouse_stock, '{}'::jsonb) AS warehouse_stock,
-          COALESCE(ia.warehouse_sellable, '{}'::jsonb) AS warehouse_sellable
+          COALESCE(ia.warehouse_sellable, '{}'::jsonb) AS warehouse_sellable,
+          COALESCE(ia.warehouse_reserved, '{}'::jsonb) AS warehouse_reserved
         FROM shop_products p
         LEFT JOIN inv_agg ia ON ia.product_id = p.id
         WHERE p.tenant_id = $1 AND p.is_active = TRUE
@@ -2182,10 +2188,32 @@ export class ShopService {
   }
 
   async deleteShopCategory(tenantId: string, categoryId: string) {
-    await this.db.query(
-      `UPDATE shop_products SET category_id = NULL WHERE tenant_id = $1 AND category_id = $2`,
+    const existing = await this.db.query(
+      `SELECT id FROM categories WHERE id = $1 AND tenant_id = $2 AND type = 'product' AND deleted_at IS NULL`,
+      [categoryId, tenantId]
+    );
+    if (existing.length === 0) {
+      const err: any = new Error('Category not found or already deleted.');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const countRows = await this.db.query<{ count: string | number }>(
+      `SELECT COUNT(*) AS count FROM shop_products
+       WHERE tenant_id = $1 AND (category_id = $2 OR subcategory_id = $2)`,
       [tenantId, categoryId]
     );
+    const rawCount = countRows[0]?.count;
+    const productCount =
+      typeof rawCount === 'number' ? rawCount : parseInt(String(rawCount ?? '0'), 10);
+    if (productCount > 0) {
+      const err: any = new Error(
+        `This category cannot be deleted because ${productCount} product(s) still reference it. Move those products to another category first.`
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+
     await this.db.query(
       `UPDATE categories SET deleted_at = NOW(), updated_at = NOW()
        WHERE id = $1 AND tenant_id = $2 AND type = 'product'`,

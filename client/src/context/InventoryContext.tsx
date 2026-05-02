@@ -131,6 +131,7 @@ function mapServerProductToItem(p: any): InventoryItem {
         imageUrl: getFullImageUrl(p.image_url) || undefined,
         description: p.mobile_description || p.description || undefined,
         warehouseStock: {},
+        warehouseReserved: {},
         salesDeactivated: Boolean(p.sales_deactivated),
     };
 }
@@ -150,6 +151,22 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
         if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
             for (const k of Object.keys(raw as object)) {
                 ws[k] = Number((raw as Record<string, unknown>)[k]) || 0;
+            }
+        }
+    }
+    let wsRes: Record<string, number> = {};
+    if (r.warehouse_reserved != null) {
+        let rawR: unknown = r.warehouse_reserved;
+        if (typeof r.warehouse_reserved === 'string') {
+            try {
+                rawR = JSON.parse(r.warehouse_reserved);
+            } catch {
+                rawR = {};
+            }
+        }
+        if (rawR && typeof rawR === 'object' && !Array.isArray(rawR)) {
+            for (const k of Object.keys(rawR as object)) {
+                wsRes[k] = Number((rawR as Record<string, unknown>)[k]) || 0;
             }
         }
     }
@@ -216,6 +233,7 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
         imageUrl: getFullImageUrl(r.image_url) || undefined,
         description: r.mobile_description || undefined,
         warehouseStock: ws,
+        warehouseReserved: Object.keys(wsRes).length ? wsRes : undefined,
         warehouseSellable: Object.keys(wsSell).length ? wsSell : undefined,
         nearestExpiry: nearestExpiry ?? undefined,
         salesDeactivated: Boolean(r.sales_deactivated),
@@ -232,11 +250,19 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
             sellable: number;
             byWh: Record<string, number>;
             byWhSellable: Record<string, number>;
+            byWhReserved: Record<string, number>;
         }
     > = {};
     inventory.forEach((inv: any) => {
         if (!stockMap[inv.product_id]) {
-            stockMap[inv.product_id] = { total: 0, reserved: 0, sellable: 0, byWh: {}, byWhSellable: {} };
+            stockMap[inv.product_id] = {
+                total: 0,
+                reserved: 0,
+                sellable: 0,
+                byWh: {},
+                byWhSellable: {},
+                byWhReserved: {},
+            };
         }
         const qty = parseFloat(inv.quantity_on_hand || '0');
         const reserved = parseFloat(inv.quantity_reserved || '0');
@@ -247,6 +273,7 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         stockMap[inv.product_id].sellable += Math.max(0, availRow);
         stockMap[inv.product_id].byWh[inv.warehouse_id] = qty;
         stockMap[inv.product_id].byWhSellable[inv.warehouse_id] = Math.max(0, availRow);
+        stockMap[inv.product_id].byWhReserved[inv.warehouse_id] = reserved;
     });
     return products.map((p: any) => {
         const w = p.weight;
@@ -288,6 +315,10 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         imageUrl: getFullImageUrl(p.image_url) || undefined,
         description: p.mobile_description || p.description || undefined,
         warehouseStock: stockMap[p.id]?.byWh || {},
+        warehouseReserved:
+            stockMap[p.id]?.byWhReserved && Object.keys(stockMap[p.id].byWhReserved).length
+                ? stockMap[p.id].byWhReserved
+                : undefined,
         warehouseSellable: stockMap[p.id]?.byWhSellable || undefined,
         salesDeactivated: Boolean(p.sales_deactivated),
     };

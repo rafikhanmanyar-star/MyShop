@@ -1648,6 +1648,109 @@ export class MobileOrderService {
         );
     }
 
+    /**
+     * POS: snapshot of inventory rows with quantity_reserved > 0 (mobile / committed stock),
+     * plus counts of open mobile orders still holding reservations.
+     */
+    async getReservedStockReport(tenantId: string): Promise<{
+        summary: {
+            total_reserved_quantity: number;
+            inventory_rows_with_reservation: number;
+            distinct_products_with_reservation: number;
+            warehouses_with_reservation: number;
+            open_mobile_orders: number;
+        };
+        lines: Array<{
+            product_id: string;
+            sku: string;
+            product_name: string;
+            warehouse_id: string;
+            warehouse_name: string;
+            quantity_on_hand: number;
+            quantity_reserved: number;
+            /** On-hand minus reserved (legacy inventory row); batch-heavy SKUs may differ from POS sellable. */
+            available_hint: number;
+        }>;
+        open_orders_by_status: Array<{ status: string; order_count: number }>;
+    }> {
+        const sumRows = await this.db.query(
+            `SELECT
+               COALESCE(SUM(i.quantity_reserved), 0)::numeric AS total_reserved,
+               COUNT(*)::int AS row_count,
+               COUNT(DISTINCT i.product_id)::int AS product_count,
+               COUNT(DISTINCT i.warehouse_id)::int AS warehouse_count
+             FROM shop_inventory i
+             WHERE i.tenant_id = $1 AND COALESCE(i.quantity_reserved, 0) > 0`,
+            [tenantId]
+        );
+
+        const lines = await this.db.query(
+            `SELECT
+               i.product_id,
+               p.sku,
+               p.name AS product_name,
+               i.warehouse_id,
+               COALESCE(NULLIF(TRIM(w.name), ''), NULLIF(TRIM(b.name), ''), i.warehouse_id) AS warehouse_name,
+               COALESCE(i.quantity_on_hand, 0)::numeric AS quantity_on_hand,
+               COALESCE(i.quantity_reserved, 0)::numeric AS quantity_reserved,
+               GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0)::numeric AS available_hint
+             FROM shop_inventory i
+             INNER JOIN shop_products p ON p.id = i.product_id AND p.tenant_id = i.tenant_id
+             LEFT JOIN shop_warehouses w ON w.id = i.warehouse_id AND w.tenant_id = i.tenant_id
+             LEFT JOIN shop_branches b ON b.id = i.warehouse_id AND b.tenant_id = i.tenant_id
+             WHERE i.tenant_id = $1 AND COALESCE(i.quantity_reserved, 0) > 0
+             ORDER BY i.quantity_reserved DESC NULLS LAST, p.name ASC`,
+            [tenantId]
+        );
+
+        const openCountRows = await this.db.query(
+            `SELECT COUNT(*)::int AS c
+             FROM mobile_orders
+             WHERE tenant_id = $1
+               AND status NOT IN ('Delivered', 'Cancelled')
+               AND COALESCE(inventory_deducted, FALSE) = FALSE`,
+            [tenantId]
+        );
+
+        const openByStatus = await this.db.query(
+            `SELECT status, COUNT(*)::int AS order_count
+             FROM mobile_orders
+             WHERE tenant_id = $1
+               AND status NOT IN ('Delivered', 'Cancelled')
+               AND COALESCE(inventory_deducted, FALSE) = FALSE
+             GROUP BY status
+             ORDER BY MIN(created_at) ASC`,
+            [tenantId]
+        );
+
+        const s = sumRows[0] || {};
+        const totalReserved = parseFloat(String(s.total_reserved ?? 0)) || 0;
+
+        return {
+            summary: {
+                total_reserved_quantity: Math.round(totalReserved * 10000) / 10000,
+                inventory_rows_with_reservation: parseInt(String(s.row_count ?? 0), 10) || 0,
+                distinct_products_with_reservation: parseInt(String(s.product_count ?? 0), 10) || 0,
+                warehouses_with_reservation: parseInt(String(s.warehouse_count ?? 0), 10) || 0,
+                open_mobile_orders: parseInt(String(openCountRows[0]?.c ?? 0), 10) || 0,
+            },
+            lines: (lines as any[]).map((r) => ({
+                product_id: r.product_id,
+                sku: r.sku,
+                product_name: r.product_name,
+                warehouse_id: r.warehouse_id,
+                warehouse_name: r.warehouse_name || r.warehouse_id,
+                quantity_on_hand: parseFloat(String(r.quantity_on_hand ?? 0)) || 0,
+                quantity_reserved: parseFloat(String(r.quantity_reserved ?? 0)) || 0,
+                available_hint: parseFloat(String(r.available_hint ?? 0)) || 0,
+            })),
+            open_orders_by_status: (openByStatus as any[]).map((r) => ({
+                status: String(r.status),
+                order_count: parseInt(String(r.order_count ?? 0), 10) || 0,
+            })),
+        };
+    }
+
     // ─── Accounting helper: get or create account ──────────────────────
 
     private async getAcc(

@@ -6,6 +6,8 @@ export interface LineItem {
   productId: string;
   quantity: number;
   unitCost: number;
+  /** Selling price (shop_products.retail_price); editable, synced to SKU when changed */
+  retailPrice: number;
   taxAmount: number;
   subtotal: number;
   /** YYYY-MM-DD (may be empty until user sets — only for malformed loaded rows) */
@@ -25,6 +27,9 @@ export interface PurchaseItemRowProps {
   reorderPoint?: number;
   onQuantityChange: (qty: number) => void;
   onUnitCostChange: (cost: number) => void;
+  onRetailPriceChange: (price: number) => void;
+  /** Persist cost + retail to the product (shop SKU); called on blur from price fields */
+  onSkuPricesCommit: (productId: string, unitCost: number, retailPrice: number) => void;
   onExpiryChange: (isoDate: string) => void;
   onBatchNoChange: (batchNo: string) => void;
   onRemove: () => void;
@@ -40,6 +45,8 @@ export default function PurchaseItemRow({
   reorderPoint = 0,
   onQuantityChange,
   onUnitCostChange,
+  onRetailPriceChange,
+  onSkuPricesCommit,
   onExpiryChange,
   onBatchNoChange,
   onRemove,
@@ -109,6 +116,19 @@ export default function PurchaseItemRow({
             step={0.01}
             value={line.unitCost}
             onChange={(e) => onUnitCostChange(parseFloat(e.target.value) || 0)}
+            onBlur={() => onSkuPricesCommit(line.productId, line.unitCost, line.retailPrice)}
+            className="input input-text w-28 rounded-lg px-2 py-1.5 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
+        </td>
+        <td className="px-4 py-3">
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={line.retailPrice}
+            onChange={(e) => onRetailPriceChange(parseFloat(e.target.value) || 0)}
+            onBlur={() => onSkuPricesCommit(line.productId, line.unitCost, line.retailPrice)}
+            aria-label="Retail price"
             className="input input-text w-28 rounded-lg px-2 py-1.5 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
         </td>
@@ -150,7 +170,7 @@ export default function PurchaseItemRow({
       </tr>
 
       <tr className="md:hidden">
-        <td colSpan={9} className="border-b border-border p-0">
+        <td colSpan={10} className="border-b border-border p-0">
           <div
             className={`rounded-xl border border-border bg-card p-4 shadow-erp ${zebra ? 'bg-table-zebra' : ''}`}
           >
@@ -216,6 +236,20 @@ export default function PurchaseItemRow({
                   step={0.01}
                   value={line.unitCost}
                   onChange={(e) => onUnitCostChange(parseFloat(e.target.value) || 0)}
+                  onBlur={() => onSkuPricesCommit(line.productId, line.unitCost, line.retailPrice)}
+                  className="input input-text mt-1 w-full rounded-lg px-2 py-1.5 tabular-nums"
+                />
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">Retail price</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={line.retailPrice}
+                  onChange={(e) => onRetailPriceChange(parseFloat(e.target.value) || 0)}
+                  onBlur={() => onSkuPricesCommit(line.productId, line.unitCost, line.retailPrice)}
+                  aria-label="Retail price"
                   className="input input-text mt-1 w-full rounded-lg px-2 py-1.5 tabular-nums"
                 />
               </div>

@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import { useOnline } from '../hooks/useOnline';
 import { getSyncMeta, countPendingSyncJobs } from '../offline/localDb';
-import { isBrowserOnline, runFullOfflineSyncRound } from '../offline/syncEngine';
+import { isBrowserOnline, processUnifiedOutbox, runPullRestoreOrDeltaInBackground } from '../offline/syncEngine';
 
 export type ConnectivityUiStatus = 'online' | 'offline' | 'syncing';
 
@@ -44,7 +44,11 @@ export function ConnectivityProvider({ children }: { children: React.ReactNode }
       refreshSyncState().catch(() => {});
     };
     window.addEventListener('myshop:pending-changed', onPending);
-    return () => window.removeEventListener('myshop:pending-changed', onPending);
+    window.addEventListener('myshop:sync:catalog-done', onPending);
+    return () => {
+      window.removeEventListener('myshop:pending-changed', onPending);
+      window.removeEventListener('myshop:sync:catalog-done', onPending);
+    };
   }, [refreshSyncState]);
 
   useEffect(() => {
@@ -90,13 +94,17 @@ export function useConnectivity() {
   return ctx;
 }
 
-/** Run sync in background and notify connectivity layer. */
+/**
+ * Flush outbox first (fast — writes queued sales to PostgreSQL), then end "Syncing" UI.
+ * Catalog bootstrap/delta can take a long time; it runs after without blocking the banner.
+ */
 export async function runBackgroundSync(): Promise<void> {
   if (!isBrowserOnline()) return;
   window.dispatchEvent(new CustomEvent('myshop:sync:start'));
   try {
-    await runFullOfflineSyncRound();
+    await processUnifiedOutbox().catch(() => {});
   } finally {
     window.dispatchEvent(new CustomEvent('myshop:sync:done'));
   }
+  void runPullRestoreOrDeltaInBackground().catch(() => {});
 }

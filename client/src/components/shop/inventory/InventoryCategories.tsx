@@ -267,8 +267,8 @@ const InventoryCategories: React.FC = () => {
     const handleDelete = async (id: string) => {
         const hasSubs = categories.some((c) => c.parent_id === id);
         const msg = hasSubs
-            ? 'Remove this category and all its subcategories? Products using them will have their category cleared.'
-            : 'Remove this category? Products using it will have their category cleared.';
+            ? 'Delete this main category? You can delete only when no products are assigned to it or its subcategories (reassign products in inventory first).'
+            : 'Delete this category? You can delete only when no products are assigned to it.';
         if (!window.confirm(msg)) return;
         try {
             await shopApi.deleteShopCategory(id);
@@ -357,7 +357,7 @@ const InventoryCategories: React.FC = () => {
         if (selectedIds.size === 0) return;
         if (
             !window.confirm(
-                `Delete ${selectedIds.size} selected categor${selectedIds.size === 1 ? 'y' : 'ies'}? Products using them will have their category cleared.`
+                `Delete ${selectedIds.size} selected categor${selectedIds.size === 1 ? 'y' : 'ies'}? Categories that still have products assigned will be skipped with an error — reassign those products first.`
             )
         ) {
             return;
