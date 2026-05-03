@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMobileOrders } from '../../context/MobileOrdersContext';
-import { mobileOrdersApi, MobileOrder, PosRidersOverview, MobileOnlineUser, MobileUsersStats, MobileReservedStockReport } from '../../services/mobileOrdersApi';
+import { mobileOrdersApi, MobileOrder, PosRidersOverview, MobileOnlineUser, MobileUsersStats, MobileReservedStockReport, MobileActiveTodayUser } from '../../services/mobileOrdersApi';
+import Modal from '../ui/Modal';
 import { QRCodeSVG } from 'qrcode.react';
 import {
     Smartphone, RefreshCw, Package, Truck, Check, X, Clock,
@@ -178,6 +179,13 @@ function timeAgo(dateStr: string): string {
     return `${hrs}h ${mins % 60}m ago`;
 }
 
+function activeTodayActivityLine(u: MobileActiveTodayUser): string {
+    if (u.is_online && u.last_seen_at) return `Online · ${timeAgo(u.last_seen_at)}`;
+    if (u.last_seen_at) return `Last in app ${timeAgo(u.last_seen_at)}`;
+    if (u.last_login_at) return `Signed in ${timeAgo(u.last_login_at)}`;
+    return 'Active today';
+}
+
 // ─── Main Page ────────────────────────────────────────────
 function MobileOrdersPageContent() {
     const {
@@ -218,6 +226,10 @@ function MobileOrdersPageContent() {
     const [onlineUsers, setOnlineUsers] = useState<MobileOnlineUser[]>([]);
     const [onlineUsersStats, setOnlineUsersStats] = useState<MobileUsersStats | null>(null);
     const [onlineUsersLoading, setOnlineUsersLoading] = useState(false);
+    const [activeTodayModalOpen, setActiveTodayModalOpen] = useState(false);
+    const [activeTodayUsers, setActiveTodayUsers] = useState<MobileActiveTodayUser[]>([]);
+    const [activeTodayModalLoading, setActiveTodayModalLoading] = useState(false);
+    const [activeTodayModalError, setActiveTodayModalError] = useState<string | null>(null);
     const [reservedStockReport, setReservedStockReport] = useState<MobileReservedStockReport | null>(null);
     const [reservedStockLoading, setReservedStockLoading] = useState(false);
     const [reservedStockError, setReservedStockError] = useState<string | null>(null);
@@ -245,6 +257,21 @@ function MobileOrdersPageContent() {
             setOnlineUsersStats(null);
         } finally {
             setOnlineUsersLoading(false);
+        }
+    }, []);
+
+    const openActiveTodayModal = useCallback(async () => {
+        setActiveTodayModalOpen(true);
+        setActiveTodayModalLoading(true);
+        setActiveTodayModalError(null);
+        try {
+            const data = await mobileOrdersApi.getActiveTodayUsers(5);
+            setActiveTodayUsers(data.users);
+        } catch (err: any) {
+            setActiveTodayUsers([]);
+            setActiveTodayModalError(err?.error || err?.message || 'Failed to load active users');
+        } finally {
+            setActiveTodayModalLoading(false);
         }
     }, []);
 
@@ -846,6 +873,7 @@ function MobileOrdersPageContent() {
                         stats={onlineUsersStats}
                         loading={onlineUsersLoading}
                         onRefresh={loadOnlineUsers}
+                        onActiveTodayClick={openActiveTodayModal}
                     />
                 ) : isReservedReportView ? (
                     <ReservedStockReportPanel
@@ -1229,6 +1257,115 @@ function MobileOrdersPageContent() {
                     </div>
                 </div>
             )}
+
+            <Modal
+                isOpen={activeTodayModalOpen}
+                onClose={() => setActiveTodayModalOpen(false)}
+                title={
+                    <div className="space-y-0.5">
+                        <div className="text-base font-bold text-foreground">Active today</div>
+                        <p className="text-xs font-normal text-muted-foreground leading-snug pr-6">
+                            Everyone who used the app or signed in at least once today. Online means a recent app heartbeat
+                            (same window as Mobile Users).
+                        </p>
+                    </div>
+                }
+                size="lg"
+                maxContentHeight={560}
+            >
+                <div className="space-y-3">
+                    {activeTodayModalLoading && activeTodayUsers.length === 0 ? (
+                        <div className="flex items-center justify-center py-16">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 dark:border-purple-400" />
+                        </div>
+                    ) : activeTodayModalError ? (
+                        <p className="text-sm text-red-600 dark:text-red-400 text-center py-8">{activeTodayModalError}</p>
+                    ) : activeTodayUsers.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-8">No customer activity recorded for today yet.</p>
+                    ) : (
+                        <ul className="space-y-2 max-h-[min(70vh,520px)] overflow-auto custom-scrollbar [scrollbar-gutter:stable] pr-1">
+                            {activeTodayUsers.map((user) => {
+                                const page = formatPageLabel(user.current_page);
+                                const cartItems = user.cart_item_count || 0;
+                                const cartTotal = user.cart_total || 0;
+                                const hasCart = cartItems > 0;
+                                return (
+                                    <li
+                                        key={user.customer_id}
+                                        className={`rounded-2xl border p-4 ${
+                                            user.is_online
+                                                ? 'border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/40 dark:bg-emerald-950/20'
+                                                : 'border-border dark:border-slate-700 bg-card dark:bg-slate-900/80'
+                                        }`}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div className="relative shrink-0">
+                                                <div
+                                                    className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                                        user.is_online
+                                                            ? 'bg-emerald-100 dark:bg-emerald-950/60'
+                                                            : 'bg-slate-100 dark:bg-slate-800'
+                                                    }`}
+                                                >
+                                                    <User
+                                                        className={`w-5 h-5 ${
+                                                            user.is_online
+                                                                ? 'text-emerald-600 dark:text-emerald-400'
+                                                                : 'text-slate-500 dark:text-slate-400'
+                                                        }`}
+                                                    />
+                                                </div>
+                                                {user.is_online ? (
+                                                    <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-card dark:border-slate-900" />
+                                                ) : null}
+                                            </div>
+                                            <div className="min-w-0 flex-1 space-y-1">
+                                                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                                    <p className="text-sm font-bold text-foreground truncate">
+                                                        {user.customer_name || 'Anonymous'}
+                                                    </p>
+                                                    <span
+                                                        className={`text-[0.65rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${
+                                                            user.is_online
+                                                                ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200'
+                                                                : 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                                        }`}
+                                                    >
+                                                        {user.is_online ? 'Online' : 'Offline'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                                                    <Phone className="w-3 h-3 shrink-0" />
+                                                    <span className="font-mono">{user.customer_phone}</span>
+                                                </p>
+                                                <p className="text-[0.7rem] text-muted-foreground">{activeTodayActivityLine(user)}</p>
+                                                {user.is_online && user.current_page ? (
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.65rem] font-semibold border ${page.color} bg-slate-50 border-slate-200 dark:bg-slate-800/50 dark:border-slate-600`}>
+                                                        <CircleDot className="w-2.5 h-2.5 shrink-0" />
+                                                        {page.label}
+                                                    </span>
+                                                ) : null}
+                                                {hasCart ? (
+                                                    <div className="flex items-center gap-2 mt-1 p-2 rounded-lg bg-amber-50/80 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/40">
+                                                        <ShoppingCart className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                                                        <span className="text-xs font-semibold text-amber-800 dark:text-amber-200">
+                                                            {cartItems} {cartItems === 1 ? 'item' : 'items'}
+                                                        </span>
+                                                        <span className="text-amber-400 dark:text-amber-600">·</span>
+                                                        <span className="text-xs font-bold text-amber-700 dark:text-amber-300 tabular-nums">
+                                                            PKR {(Number.isFinite(cartTotal) ? cartTotal : 0).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </div>
+            </Modal>
             </div>
         </div>
     );
@@ -1418,11 +1555,13 @@ function MobileUsersPanel({
     stats,
     loading,
     onRefresh,
+    onActiveTodayClick,
 }: {
     users: MobileOnlineUser[];
     stats: MobileUsersStats | null;
     loading: boolean;
     onRefresh: () => void;
+    onActiveTodayClick?: () => void;
 }) {
     const formatPrice = (p: any) => {
         const n = Number(p);
@@ -1470,7 +1609,17 @@ function MobileUsersPanel({
                         </div>
                         <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">{formatPrice(stats.total_cart_value)}</p>
                     </div>
-                    <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-700 p-4 space-y-1">
+                    <button
+                        type="button"
+                        title="View all customers active today"
+                        onClick={onActiveTodayClick}
+                        disabled={!onActiveTodayClick}
+                        className={`bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-700 p-4 space-y-1 text-left transition-colors ${
+                            onActiveTodayClick
+                                ? 'cursor-pointer hover:border-purple-300 dark:hover:border-purple-600 hover:bg-purple-50/40 dark:hover:bg-purple-950/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60'
+                                : ''
+                        }`}
+                    >
                         <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-950/60 flex items-center justify-center">
                                 <Activity className="w-4 h-4 text-purple-600 dark:text-purple-400" />
@@ -1478,7 +1627,10 @@ function MobileUsersPanel({
                             <span className="text-xs font-medium text-muted-foreground">Active Today</span>
                         </div>
                         <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 tabular-nums">{stats.active_today}</p>
-                    </div>
+                        {onActiveTodayClick ? (
+                            <p className="text-[0.65rem] text-muted-foreground font-medium">Click for list</p>
+                        ) : null}
+                    </button>
                     <div className="bg-card dark:bg-slate-900/90 rounded-2xl border border-border dark:border-slate-700 p-4 space-y-1">
                         <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">

@@ -7,6 +7,15 @@ import { checkRole } from '../../middleware/roleMiddleware.js';
 
 const router = express.Router();
 
+/** Calendar day bounds in the server's local timezone (ISO strings for timestamp comparisons). */
+function localCalendarDayBoundsIso(): { startIso: string; endIso: string } {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
 console.log('✅ Mobile-orders POS router initialized');
 
 // ════════════════════════════════════════════════════════════════════
@@ -241,6 +250,8 @@ router.get('/online-users', checkRole(['admin', 'pos_cashier']), async (req: any
     try {
         const db = getDatabaseService();
         const thresholdMinutes = parseInt(req.query.threshold as string) || 5;
+        const onlineAfterIso = new Date(Date.now() - thresholdMinutes * 60_000).toISOString();
+        const { startIso, endIso } = localCalendarDayBoundsIso();
 
         const users = await db.query(
             `SELECT
@@ -256,9 +267,9 @@ router.get('/online-users', checkRole(['admin', 'pos_cashier']), async (req: any
              FROM mobile_customer_heartbeats h
              INNER JOIN mobile_customers c ON c.id = h.customer_id AND c.tenant_id = h.tenant_id
              WHERE h.tenant_id = $1
-               AND h.last_seen_at > NOW() - INTERVAL '1 minute' * $2
+               AND h.last_seen_at > $2
              ORDER BY h.last_seen_at DESC`,
-            [req.tenantId, thresholdMinutes]
+            [req.tenantId, onlineAfterIso]
         );
 
         const totalRegistered = await db.query(
@@ -267,9 +278,15 @@ router.get('/online-users', checkRole(['admin', 'pos_cashier']), async (req: any
         );
 
         const todayActive = await db.query(
-            `SELECT COUNT(*) AS count FROM mobile_customer_heartbeats
-             WHERE tenant_id = $1 AND last_seen_at > NOW() - INTERVAL '24 hours'`,
-            [req.tenantId]
+            `SELECT COUNT(*) AS count FROM (
+                SELECT h.customer_id FROM mobile_customer_heartbeats h
+                WHERE h.tenant_id = $1 AND h.last_seen_at >= $2 AND h.last_seen_at < $3
+                UNION
+                SELECT c.id AS customer_id FROM mobile_customers c
+                WHERE c.tenant_id = $1 AND c.last_login_at IS NOT NULL
+                  AND c.last_login_at >= $2 AND c.last_login_at < $3
+            ) u`,
+            [req.tenantId, startIso, endIso]
         );
 
         const withCarts = users.filter((u: any) => (parseInt(u.cart_item_count) || 0) > 0);
@@ -278,11 +295,89 @@ router.get('/online-users', checkRole(['admin', 'pos_cashier']), async (req: any
             users,
             stats: {
                 online_now: users.length,
-                active_today: parseInt(todayActive[0]?.count) || 0,
+                active_today: parseInt(String(todayActive[0]?.count ?? '0'), 10) || 0,
                 total_registered: parseInt(totalRegistered[0]?.count) || 0,
                 browsing: users.filter((u: any) => (parseInt(u.cart_item_count) || 0) === 0).length,
                 shopping: withCarts.length,
                 total_cart_value: withCarts.reduce((s: number, u: any) => s + (parseFloat(u.cart_total) || 0), 0),
+            },
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/** Everyone who opened the app or logged in at least once today (local calendar day), with online flag from heartbeat recency. */
+router.get('/active-today-users', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const db = getDatabaseService();
+        const thresholdMinutes = parseInt(req.query.threshold as string) || 5;
+        const onlineAfterIso = new Date(Date.now() - thresholdMinutes * 60_000).toISOString();
+        const { startIso, endIso } = localCalendarDayBoundsIso();
+
+        const users = await db.query(
+            `WITH active AS (
+                SELECT customer_id FROM (
+                    SELECT h.customer_id FROM mobile_customer_heartbeats h
+                    WHERE h.tenant_id = $1 AND h.last_seen_at >= $2 AND h.last_seen_at < $3
+                    UNION
+                    SELECT c.id AS customer_id FROM mobile_customers c
+                    WHERE c.tenant_id = $1 AND c.last_login_at IS NOT NULL
+                      AND c.last_login_at >= $2 AND c.last_login_at < $3
+                ) u
+            )
+            SELECT
+                c.id AS customer_id,
+                c.name AS customer_name,
+                c.phone AS customer_phone,
+                c.created_at AS registered_at,
+                c.last_login_at,
+                h.last_seen_at,
+                h.current_page,
+                h.cart_item_count,
+                h.cart_total,
+                CASE WHEN h.last_seen_at IS NOT NULL AND h.last_seen_at > $4 THEN 1 ELSE 0 END AS is_online
+            FROM mobile_customers c
+            INNER JOIN active a ON a.customer_id = c.id
+            LEFT JOIN mobile_customer_heartbeats h ON h.customer_id = c.id AND h.tenant_id = c.tenant_id
+            WHERE c.tenant_id = $1
+            ORDER BY
+                CASE
+                    WHEN h.last_seen_at IS NULL THEN c.last_login_at
+                    WHEN c.last_login_at IS NULL THEN h.last_seen_at
+                    WHEN h.last_seen_at >= c.last_login_at THEN h.last_seen_at
+                    ELSE c.last_login_at
+                END DESC`,
+            [req.tenantId, startIso, endIso, onlineAfterIso]
+        );
+
+        const countRow = await db.query(
+            `SELECT COUNT(*) AS count FROM (
+                SELECT h.customer_id FROM mobile_customer_heartbeats h
+                WHERE h.tenant_id = $1 AND h.last_seen_at >= $2 AND h.last_seen_at < $3
+                UNION
+                SELECT c.id AS customer_id FROM mobile_customers c
+                WHERE c.tenant_id = $1 AND c.last_login_at IS NOT NULL
+                  AND c.last_login_at >= $2 AND c.last_login_at < $3
+            ) u`,
+            [req.tenantId, startIso, endIso]
+        );
+
+        res.json({
+            users: users.map((u: any) => ({
+                customer_id: u.customer_id,
+                customer_name: u.customer_name,
+                customer_phone: u.customer_phone,
+                registered_at: u.registered_at,
+                last_login_at: u.last_login_at,
+                last_seen_at: u.last_seen_at,
+                current_page: u.current_page,
+                cart_item_count: parseInt(String(u.cart_item_count ?? '0'), 10) || 0,
+                cart_total: parseFloat(String(u.cart_total ?? '0')) || 0,
+                is_online: Boolean(parseInt(String(u.is_online ?? '0'), 10)),
+            })),
+            stats: {
+                active_today: parseInt(String(countRow[0]?.count ?? '0'), 10) || 0,
             },
         });
     } catch (error: any) {

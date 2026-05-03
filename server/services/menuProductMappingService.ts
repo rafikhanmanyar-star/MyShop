@@ -106,7 +106,7 @@ export class MenuProductMappingService {
         `SELECT p.id, p.name, c.name AS category_name,
                 CASE WHEN ${SELLABLE_SQL} THEN TRUE ELSE FALSE END AS is_sellable
          FROM shop_products p
-         LEFT JOIN shop_categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
+         LEFT JOIN categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
          WHERE p.tenant_id = $1 AND p.id = $2
          LIMIT 1`,
         [tenantId, preferredProductId.trim()]
@@ -123,7 +123,7 @@ export class MenuProductMappingService {
     const exact = await this.db.query(
       `SELECT p.id, p.name, c.name AS category_name
        FROM shop_products p
-       LEFT JOIN shop_categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
+       LEFT JOIN categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
        WHERE p.tenant_id = $1 AND ${SELLABLE_SQL}
          AND LOWER(TRIM(p.name)) = $2
        LIMIT 1`,
@@ -137,7 +137,7 @@ export class MenuProductMappingService {
     const fuzzy = await this.db.query(
       `SELECT p.id, p.name, c.name AS category_name
        FROM shop_products p
-       LEFT JOIN shop_categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
+       LEFT JOIN categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
        WHERE p.tenant_id = $1 AND ${SELLABLE_SQL}
          AND (
            LOWER(p.name) LIKE $2
@@ -156,7 +156,7 @@ export class MenuProductMappingService {
       `SELECT ri.product_id, p.name, c.name AS category_name, COUNT(*) AS cnt
        FROM recipe_ingredients ri
        JOIN shop_products p ON p.id = ri.product_id AND p.tenant_id = ri.tenant_id
-       LEFT JOIN shop_categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
+       LEFT JOIN categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
        WHERE ri.tenant_id = $1 AND ri.normalized_name = $2 AND ${SELLABLE_SQL}
        GROUP BY ri.product_id, p.name, c.name
        ORDER BY cnt DESC
@@ -174,7 +174,7 @@ export class MenuProductMappingService {
     const catRows = await this.db.query(
       `SELECT p.id, p.name, c.name AS category_name
        FROM shop_products p
-       LEFT JOIN shop_categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
+       LEFT JOIN categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
        WHERE p.tenant_id = $1 AND ${SELLABLE_SQL}
          AND (${catExpr})
          AND (LOWER(p.name) LIKE $2 OR LOWER(p.name) LIKE $3)

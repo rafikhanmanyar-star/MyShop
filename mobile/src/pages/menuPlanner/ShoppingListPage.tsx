@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { menuPlannerApi } from '../../api';
 import { useApp, type CartItem } from '../../context/AppContext';
-import { useMyMenuLayout } from '../../context/MyMenuLayoutContext';
 import MenuPlannerHeader from '../../components/menuPlanner/MenuPlannerHeader';
 import { cacheShoppingList, getCachedShoppingList } from '../../services/menuPlannerCache';
 
@@ -41,7 +40,6 @@ export default function ShoppingListPage({ embedded = false, listIdOverride, con
     const { shopSlug, listId: routeListId } = useParams();
     const listId = listIdOverride ?? routeListId;
     const navigate = useNavigate();
-    const myMenu = useMyMenuLayout();
     const { state, showToast, dispatch } = useApp();
 
     const [data, setData] = useState<any>(null);
@@ -205,16 +203,10 @@ export default function ShoppingListPage({ embedded = false, listIdOverride, con
                         You don&apos;t have a shopping list yet. Open the Week tab and tap <strong>Generate Shopping List</strong> after you
                         add meals.
                     </p>
-                    {myMenu && (
-                        <button
-                            type="button"
-                            className="btn btn-primary"
-                            style={{ background: GREEN, width: '100%', maxWidth: 360 }}
-                            onClick={() => myMenu.setTab('calendar')}
-                        >
-                            Go to week planner
-                        </button>
-                    )}
+                    <p style={{ margin: 0, fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                        Open the <strong>Calendar</strong> tab above, add meals to your plan, then tap{' '}
+                        <strong>Generate Shopping List</strong>.
+                    </p>
                 </div>
             );
         }
@@ -320,20 +312,12 @@ export default function ShoppingListPage({ embedded = false, listIdOverride, con
         <div className="page fade-in" style={{ paddingBottom: 120, background: '#F6F6F8' }}>
             {!embedded && <MenuPlannerHeader />}
             <div style={{ padding: 16, maxWidth: 560, margin: '0 auto' }}>
-                {embedded && myMenu ? (
-                    <button
-                        type="button"
-                        style={{ fontSize: 14, color: GREEN, fontWeight: 600, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                        onClick={() => myMenu.setTab('dashboard')}
-                    >
-                        ← Dashboard
-                    </button>
-                ) : (
+                {!embedded && (
                     <Link to={`/${shopSlug}/menu-planner`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
                         ← Dashboard
                     </Link>
                 )}
-                <h1 style={{ fontSize: 24, fontWeight: 900, margin: '12px 0 4px' }}>Weekly List</h1>
+                <h1 style={{ fontSize: 24, fontWeight: 900, margin: `${embedded ? 0 : 12}px 0 4px` }}>Weekly List</h1>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>
                         {data?.list?.generated_at

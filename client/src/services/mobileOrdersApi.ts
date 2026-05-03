@@ -153,6 +153,25 @@ export interface MobileOnlineUsersResponse {
     stats: MobileUsersStats;
 }
 
+/** Users who used the app or logged in at least once today (shop server local calendar day). */
+export interface MobileActiveTodayUser {
+    customer_id: string;
+    customer_name: string | null;
+    customer_phone: string;
+    last_seen_at: string | null;
+    current_page: string | null;
+    cart_item_count: number;
+    cart_total: number;
+    registered_at: string;
+    last_login_at: string | null;
+    is_online: boolean;
+}
+
+export interface MobileActiveTodayUsersResponse {
+    users: MobileActiveTodayUser[];
+    stats: { active_today: number };
+}
+
 /** GET /shop/mobile-orders/reserved-stock-report */
 export interface MobileReservedStockReport {
     summary: {
@@ -233,6 +252,11 @@ export const mobileOrdersApi = {
     // Online mobile users
     getOnlineUsers: (thresholdMinutes?: number) =>
         apiClient.get<MobileOnlineUsersResponse>(`/shop/mobile-orders/online-users${thresholdMinutes ? `?threshold=${thresholdMinutes}` : ''}`),
+
+    getActiveTodayUsers: (thresholdMinutes?: number) =>
+        apiClient.get<MobileActiveTodayUsersResponse>(
+            `/shop/mobile-orders/active-today-users${thresholdMinutes != null ? `?threshold=${thresholdMinutes}` : ''}`
+        ),
 
     // Product mobile visibility
     updateProductMobile: (id: string, data: {

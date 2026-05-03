@@ -411,7 +411,43 @@ router.post('/:shopSlug/weekly-menus/:menuId/generate-shopping-list', publicTena
         res.status(201).json({ id });
     } catch (e: any) {
         const msg = String(e?.message || '');
-        res.status(/not found|No recipe/i.test(msg) ? 400 : 500).json({ error: msg });
+        res.status(/not found/i.test(msg) ? 404 : /No meal|No ingredient|weekly calendar/i.test(msg) ? 400 : 500).json({ error: msg });
+    }
+});
+
+router.get('/:shopSlug/customer-menu-items', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const list = await getWeeklyMenuPlannerService().listCustomerMenuItems(req.tenantId, req.customerId);
+        res.json({ items: list });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:shopSlug/customer-menu-items', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const id = await getWeeklyMenuPlannerService().createCustomerMenuItem(
+            req.tenantId,
+            req.customerId,
+            req.body || {}
+        );
+        res.status(201).json({ id });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+router.delete('/:shopSlug/customer-menu-items/:itemId', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getWeeklyMenuPlannerService().deleteCustomerMenuItem(
+            req.tenantId,
+            req.customerId,
+            req.params.itemId
+        );
+        res.json({ ok: true });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
     }
 });
 

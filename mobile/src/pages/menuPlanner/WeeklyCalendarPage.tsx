@@ -31,14 +31,12 @@ function addDays(iso: string, n: number): string {
 export type WeeklyCalendarPageProps = {
     menuIdOverride?: string;
     embedded?: boolean;
-    variant?: 'full' | 'configure';
     contentBottomPad?: string;
 };
 
 export default function WeeklyCalendarPage({
     menuIdOverride,
     embedded = false,
-    variant = 'full',
     contentBottomPad,
 }: WeeklyCalendarPageProps) {
     const { shopSlug, menuId: routeMenuId } = useParams();
@@ -121,7 +119,7 @@ export default function WeeklyCalendarPage({
 
     const openPick = (day: number, meal: string) => {
         if (!shopSlug || !menuId) return;
-        const returnTab = variant === 'configure' ? 'configure' : 'calendar';
+        const returnTab = 'calendar';
         if (embedded) {
             navigate(
                 `/${shopSlug}/my-menu/pick?menuId=${encodeURIComponent(menuId)}&day=${day}&mealType=${encodeURIComponent(meal)}&returnTab=${returnTab}`
@@ -236,15 +234,10 @@ export default function WeeklyCalendarPage({
                 <p style={{ marginBottom: 16, color: 'var(--text-muted)', lineHeight: 1.5 }}>
                     Create a weekly plan from the dashboard first, then you can add meals and generate a shopping list.
                 </p>
-                {embedded && myMenu ? (
-                    <button
-                        type="button"
-                        className="btn btn-primary"
-                        style={{ background: GREEN, width: '100%', maxWidth: 320 }}
-                        onClick={() => myMenu.setTab('dashboard')}
-                    >
-                        Go to dashboard
-                    </button>
+                {embedded ? (
+                    <p style={{ margin: 0, fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                        Choose the <strong>Dashboard</strong> tab above to create a weekly plan.
+                    </p>
                 ) : (
                     <Link to={`/${shopSlug}/menu-planner`} style={{ color: GREEN, fontWeight: 700 }}>
                         Open dashboard
@@ -266,32 +259,16 @@ export default function WeeklyCalendarPage({
             {!embedded && <MenuPlannerHeader />}
 
             <div style={{ padding: 16, maxWidth: 560, margin: '0 auto' }}>
-                {embedded && myMenu ? (
-                    <button
-                        type="button"
-                        style={{ fontSize: 14, color: GREEN, fontWeight: 600, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                        onClick={() => myMenu.setTab('dashboard')}
-                    >
-                        ← Dashboard
-                    </button>
-                ) : (
+                {!embedded && (
                     <Link to={`/${shopSlug}/menu-planner`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
                         ← Dashboard
                     </Link>
-                )}
-
-                {variant === 'configure' && (
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.45 }}>
-                        Add recipes from the catalog or custom meal names for each slot. Drag cards to move meals between days.
-                    </p>
                 )}
 
                 {loading || !detail ? (
                     <p style={{ marginTop: 24, color: 'var(--text-muted)' }}>Loading calendar…</p>
                 ) : (
                     <>
-                        {variant === 'full' && (
-                            <>
                                 <div
                                     className="card"
                                     style={{
@@ -359,17 +336,13 @@ export default function WeeklyCalendarPage({
                                         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>📋 Per day avg</div>
                                     </div>
                                 </div>
-                            </>
-                        )}
 
-                        {variant === 'configure' && (
-                            <div style={{ marginTop: 16 }}>
-                                <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>Week of {weekLabel}</div>
-                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Meals &amp; configuration</div>
-                            </div>
-                        )}
+                                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 16, lineHeight: 1.45 }}>
+                                    Add meals from <strong>Menu planner</strong> (shop recipes or your own items) or type a quick custom
+                                    name. Drag cards to move meals between days.
+                                </p>
 
-                        {DAY_NAMES.map((dayName, dow) => {
+                                {DAY_NAMES.map((dayName, dow) => {
                             const dateIso = displayWeekStart ? addDays(displayWeekStart, dow) : '';
                             const headerDate = dateIso ? parseIsoDate(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
                             const tgt = targetKcalForDay(dow);
@@ -422,9 +395,12 @@ export default function WeeklyCalendarPage({
                                                             width: 52,
                                                             height: 52,
                                                             borderRadius: 8,
-                                                            background: it.recipe_image_url
-                                                                ? `url(${getFullImageUrl(it.recipe_image_url)}) center/cover`
-                                                                : '#E0E0E0',
+                                                            background: (() => {
+                                                                const img = getFullImageUrl(
+                                                                    it.recipe_image_url || it.customer_item_image_url
+                                                                );
+                                                                return img ? `url(${img}) center/cover` : '#E0E0E0';
+                                                            })(),
                                                             flexShrink: 0,
                                                         }}
                                                     />
@@ -433,10 +409,17 @@ export default function WeeklyCalendarPage({
                                                             {label}
                                                         </div>
                                                         <div style={{ fontWeight: 800, fontSize: 15 }}>
-                                                            {it.recipe_title || it.custom_meal_name || 'Meal'}
+                                                            {it.recipe_title ||
+                                                                it.customer_item_name ||
+                                                                it.custom_meal_name ||
+                                                                'Meal'}
                                                         </div>
                                                         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                                                            ⏱ {(it.prep_time_minutes || 0) + (it.cook_time_minutes || 0)}m ·{' '}
+                                                            ⏱{' '}
+                                                            {it.customer_menu_item_id
+                                                                ? '—'
+                                                                : `${(it.prep_time_minutes || 0) + (it.cook_time_minutes || 0)}m`}
+                                                            ·{' '}
                                                             {it.recipe_calories ? `${it.recipe_calories} kcal` : '—'}
                                                         </div>
                                                     </div>

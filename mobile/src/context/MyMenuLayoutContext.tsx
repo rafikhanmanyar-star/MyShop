@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 
-export type MyMenuTab = 'dashboard' | 'calendar' | 'shopping' | 'configure';
+export type MyMenuTab = 'dashboard' | 'calendar' | 'shopping' | 'planner';
 
 export type MyMenuLayoutValue = {
     menuId: string | null;

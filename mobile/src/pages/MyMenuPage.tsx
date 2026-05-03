@@ -1,21 +1,15 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { MyMenuLayoutContext, type MyMenuTab } from '../context/MyMenuLayoutContext';
+import MyMenuTabStrip from '../components/menuPlanner/MyMenuTabStrip';
 import WeeklyMenuDashboardPage from './menuPlanner/WeeklyMenuDashboardPage';
 import WeeklyCalendarPage from './menuPlanner/WeeklyCalendarPage';
 import ShoppingListPage from './menuPlanner/ShoppingListPage';
-
-const GREEN = '#2E7D32';
-
-const TABS: { id: MyMenuTab; label: string }[] = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'calendar', label: 'Calendar' },
-    { id: 'shopping', label: 'Shopping list' },
-    { id: 'configure', label: 'Menu items' },
-];
+import MenuPlannerPage from './menuPlanner/MenuPlannerPage';
 
 function parseTab(s: string | null): MyMenuTab {
-    if (s === 'calendar' || s === 'shopping' || s === 'configure' || s === 'dashboard') return s;
+    if (s === 'configure') return 'planner'; // legacy URL
+    if (s === 'calendar' || s === 'shopping' || s === 'planner' || s === 'dashboard') return s;
     return 'dashboard';
 }
 
@@ -25,10 +19,31 @@ export default function MyMenuPage() {
     const [searchParams, setSearchParams] = useSearchParams();
 
     const tabFromUrl = parseTab(searchParams.get('tab'));
-    const [menuId, setMenuId] = useState<string | null>(null);
+    const menuIdFromUrl = searchParams.get('menuId');
+    const [menuId, setMenuIdState] = useState<string | null>(menuIdFromUrl);
     const listId = searchParams.get('listId');
 
     const activeTab = tabFromUrl;
+
+    useEffect(() => {
+        setMenuIdState(menuIdFromUrl);
+    }, [menuIdFromUrl]);
+
+    const setMenuId = useCallback(
+        (id: string | null) => {
+            setMenuIdState(id);
+            setSearchParams(
+                (prev) => {
+                    const n = new URLSearchParams(prev);
+                    if (id) n.set('menuId', id);
+                    else n.delete('menuId');
+                    return n;
+                },
+                { replace: true }
+            );
+        },
+        [setSearchParams]
+    );
 
     const setTab = useCallback(
         (t: MyMenuTab) => {
@@ -89,48 +104,17 @@ export default function MyMenuPage() {
                 >
                     <div style={{ padding: '12px 16px 0', maxWidth: 560, margin: '0 auto' }}>
                         <h1 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 10px', color: '#1A1A1A' }}>My Menu</h1>
-                        <div
-                            role="tablist"
-                            style={{
-                                display: 'flex',
-                                gap: 4,
-                                overflowX: 'auto',
-                                paddingBottom: 10,
-                                WebkitOverflowScrolling: 'touch',
-                            }}
-                        >
-                            {TABS.map(({ id, label }) => (
-                                <button
-                                    key={id}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={activeTab === id ? 'true' : 'false'}
-                                    onClick={() => setTab(id)}
-                                    style={{
-                                        flex: '0 0 auto',
-                                        padding: '8px 12px',
-                                        borderRadius: 999,
-                                        border: 'none',
-                                        fontSize: 13,
-                                        fontWeight: activeTab === id ? 800 : 600,
-                                        background: activeTab === id ? 'rgba(46, 125, 50, 0.15)' : '#f0f0f0',
-                                        color: activeTab === id ? GREEN : '#555',
-                                    }}
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
+                        <MyMenuTabStrip shopSlug={shopSlug} activeTab={activeTab} menuId={menuId} listId={listId} />
                     </div>
                 </div>
 
                 <div style={{ paddingBottom: innerBottomPad }}>
                     {activeTab === 'dashboard' && <WeeklyMenuDashboardPage embedded />}
                     {activeTab === 'calendar' && (
-                        <WeeklyCalendarPage embedded menuIdOverride={menuId ?? undefined} variant="full" contentBottomPad={innerBottomPad} />
+                        <WeeklyCalendarPage embedded menuIdOverride={menuId ?? undefined} contentBottomPad={innerBottomPad} />
                     )}
-                    {activeTab === 'configure' && (
-                        <WeeklyCalendarPage embedded menuIdOverride={menuId ?? undefined} variant="configure" contentBottomPad={innerBottomPad} />
+                    {activeTab === 'planner' && (
+                        <MenuPlannerPage embedded shopSlug={shopSlug} contentBottomPad={innerBottomPad} />
                     )}
                     {activeTab === 'shopping' && (
                         <ShoppingListPage embedded listIdOverride={listId || undefined} contentBottomPad={innerBottomPad} />

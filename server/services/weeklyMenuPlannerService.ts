@@ -28,9 +28,26 @@ export interface AddMenuItemInput {
   meal_type: MealType;
   recipe_id?: string | null;
   custom_meal_name?: string | null;
+  /** User-created item from Menu planner (has ingredients for shopping list). */
+  customer_menu_item_id?: string | null;
   servings?: number;
   notes?: string | null;
 }
+
+export type CustomerMenuItemIngredientInput = {
+  ingredient_name: string;
+  quantity?: number;
+  unit?: string;
+  optional?: boolean;
+  product_id?: string | null;
+};
+
+export type CreateCustomerMenuItemInput = {
+  name: string;
+  description?: string | null;
+  image_url?: string | null;
+  ingredients: CustomerMenuItemIngredientInput[];
+};
 
 export interface MoveMenuItemInput {
   day_of_week: number;
@@ -156,9 +173,14 @@ export class WeeklyMenuPlannerService {
         r.cook_time_minutes,
         r.servings AS recipe_base_servings,
         r.calories AS recipe_calories,
-        r.cuisine
+        r.cuisine,
+        cmi.name AS customer_item_name,
+        cmi.image_url AS customer_item_image_url,
+        cmi.description AS customer_item_description
        FROM weekly_menu_items wmi
        LEFT JOIN recipes r ON r.id = wmi.recipe_id AND r.tenant_id = wmi.tenant_id
+       LEFT JOIN customer_menu_items cmi
+         ON cmi.id = wmi.customer_menu_item_id AND cmi.tenant_id = wmi.tenant_id
        WHERE wmi.weekly_menu_id = $1 AND wmi.tenant_id = $2
        ORDER BY wmi.day_of_week ASC, wmi.sort_order ASC, wmi.created_at ASC`,
       [menuId, tenantId]
@@ -172,7 +194,7 @@ export class WeeklyMenuPlannerService {
         const serv = safeNum(row.servings, 1);
         totalKcal += (safeNum(row.recipe_calories, 0) * serv) / base;
       }
-      if (row.recipe_id || row.custom_meal_name) plannedMainSlots += 1;
+      if (row.recipe_id || row.custom_meal_name || row.customer_menu_item_id) plannedMainSlots += 1;
     }
 
     const daysInPlan = 7;
@@ -309,8 +331,8 @@ export class WeeklyMenuPlannerService {
         const nid = newId();
         await client.query(
           `INSERT INTO weekly_menu_items (
-            id, tenant_id, weekly_menu_id, day_of_week, meal_type, recipe_id, custom_meal_name, servings, notes, sort_order
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            id, tenant_id, weekly_menu_id, day_of_week, meal_type, recipe_id, custom_meal_name, customer_menu_item_id, servings, notes, sort_order
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [
             nid,
             tenantId,
@@ -319,6 +341,7 @@ export class WeeklyMenuPlannerService {
             it.meal_type,
             it.recipe_id,
             it.custom_meal_name,
+            it.customer_menu_item_id,
             it.servings,
             it.notes,
             it.sort_order,
@@ -336,13 +359,27 @@ export class WeeklyMenuPlannerService {
 
     const recipeId = input.recipe_id?.trim() || null;
     const custom = input.custom_meal_name?.trim() || null;
-    if (!recipeId && !custom) throw new Error('Either recipe_id or custom_meal_name is required');
+    const custItemId = input.customer_menu_item_id?.trim() || null;
+
+    const nSources = Number(Boolean(recipeId)) + Number(Boolean(custom)) + Number(Boolean(custItemId));
+    if (nSources !== 1) {
+      throw new Error('Choose exactly one: recipe_id, custom_meal_name, or customer_menu_item_id');
+    }
+
     if (recipeId) {
       const r = await this.db.query(
         `SELECT id FROM recipes WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE`,
         [recipeId, tenantId]
       );
       if (r.length === 0) throw new Error('Recipe not found or inactive');
+    }
+
+    if (custItemId) {
+      const c = await this.db.query(
+        `SELECT id FROM customer_menu_items WHERE id = $1 AND tenant_id = $2 AND customer_id = $3`,
+        [custItemId, tenantId, customerId]
+      );
+      if (c.length === 0) throw new Error('My menu item not found');
     }
 
     const day = Math.max(0, Math.min(6, Math.round(safeNum(input.day_of_week, 0))));
@@ -360,11 +397,27 @@ export class WeeklyMenuPlannerService {
     const id = newId();
     const servings = Math.max(0.25, safeNum(input.servings, 1));
 
+    const rowRecipe = recipeId || null;
+    const rowCustom = custItemId ? null : custom;
+    const rowCust = custItemId || null;
+
     await this.db.query(
       `INSERT INTO weekly_menu_items (
-        id, tenant_id, weekly_menu_id, day_of_week, meal_type, recipe_id, custom_meal_name, servings, notes, sort_order
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [id, tenantId, menuId, day, meal, recipeId, custom, servings, input.notes?.trim() || null, sortOrder]
+        id, tenant_id, weekly_menu_id, day_of_week, meal_type, recipe_id, custom_meal_name, customer_menu_item_id, servings, notes, sort_order
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [
+        id,
+        tenantId,
+        menuId,
+        day,
+        meal,
+        rowRecipe,
+        rowCustom,
+        rowCust,
+        servings,
+        input.notes?.trim() || null,
+        sortOrder,
+      ]
     );
 
     await this.db.execute(
@@ -382,16 +435,43 @@ export class WeeklyMenuPlannerService {
     patch: Partial<AddMenuItemInput>
   ) {
     const existing = await this.assertItemOwner(tenantId, customerId, itemId);
-    const recipeId =
-      patch.recipe_id !== undefined ? patch.recipe_id?.trim() || null : existing.recipe_id;
-    const custom =
+
+    let nextRecipe =
+      patch.recipe_id !== undefined ? patch.recipe_id?.trim() || null : existing.recipe_id ?? null;
+    let nextCustom =
       patch.custom_meal_name !== undefined
         ? patch.custom_meal_name?.trim() || null
-        : existing.custom_meal_name;
+        : existing.custom_meal_name ?? null;
+    let nextCust =
+      patch.customer_menu_item_id !== undefined
+        ? patch.customer_menu_item_id?.trim() || null
+        : existing.customer_menu_item_id ?? null;
 
-    const nextRecipe = recipeId ?? null;
-    const nextCustom = custom ?? null;
-    if (!nextRecipe && !nextCustom) throw new Error('Either recipe_id or custom_meal_name is required');
+    const sourcePatch =
+      patch.recipe_id !== undefined ||
+      patch.custom_meal_name !== undefined ||
+      patch.customer_menu_item_id !== undefined;
+
+    if (patch.customer_menu_item_id !== undefined) {
+      nextCust = patch.customer_menu_item_id?.trim() || null;
+      nextRecipe = null;
+      nextCustom = null;
+    } else if (patch.recipe_id !== undefined) {
+      nextRecipe = patch.recipe_id?.trim() || null;
+      nextCustom = null;
+      nextCust = null;
+    } else if (patch.custom_meal_name !== undefined) {
+      nextCustom = patch.custom_meal_name?.trim() || null;
+      nextRecipe = null;
+      nextCust = null;
+    }
+
+    if (sourcePatch) {
+      const nSources =
+        Number(Boolean(nextRecipe)) + Number(Boolean(nextCustom)) + Number(Boolean(nextCust));
+      if (nSources !== 1)
+        throw new Error('Choose exactly one: recipe_id, custom_meal_name, or customer_menu_item_id');
+    }
 
     if (nextRecipe) {
       const r = await this.db.query(
@@ -401,13 +481,21 @@ export class WeeklyMenuPlannerService {
       if (r.length === 0) throw new Error('Recipe not found or inactive');
     }
 
+    if (nextCust) {
+      const c = await this.db.query(
+        `SELECT id FROM customer_menu_items WHERE id = $1 AND tenant_id = $2 AND customer_id = $3`,
+        [nextCust, tenantId, customerId]
+      );
+      if (c.length === 0) throw new Error('My menu item not found');
+    }
+
     const parts: string[] = [];
     const vals: unknown[] = [];
     let pi = 1;
 
-    if (patch.recipe_id !== undefined || patch.custom_meal_name !== undefined) {
-      parts.push(`recipe_id = $${pi++}`, `custom_meal_name = $${pi++}`);
-      vals.push(nextRecipe, nextCustom);
+    if (sourcePatch) {
+      parts.push(`recipe_id = $${pi++}`, `custom_meal_name = $${pi++}`, `customer_menu_item_id = $${pi++}`);
+      vals.push(nextRecipe, nextCustom, nextCust);
     }
     if (patch.servings !== undefined) {
       parts.push(`servings = $${pi++}`);
@@ -485,7 +573,7 @@ export class WeeklyMenuPlannerService {
   async generateShoppingList(tenantId: string, customerId: string, menuId: string): Promise<string> {
     await this.assertMenuOwner(tenantId, customerId, menuId);
 
-    const items = await this.db.query(
+    const recipeRows = await this.db.query(
       `SELECT wmi.recipe_id, wmi.servings,
               r.servings AS base_servings
        FROM weekly_menu_items wmi
@@ -494,38 +582,91 @@ export class WeeklyMenuPlannerService {
       [menuId, tenantId]
     );
 
-    if (items.length === 0) {
-      throw new Error('No recipe-based meals in this plan; add recipes to generate a shopping list.');
-    }
-
-    const recipeIds = [...new Set((items as any[]).map((i) => i.recipe_id))];
-    const ingParams = recipeIds.map((_, idx) => `$${idx + 2}`).join(', ');
-    const ingRows = await this.db.query(
-      `SELECT ri.recipe_id, ri.ingredient_name, ri.normalized_name, ri.quantity, ri.unit, ri.optional,
-              ri.product_id
-       FROM recipe_ingredients ri
-       WHERE ri.tenant_id = $1 AND ri.recipe_id IN (${ingParams})`,
-      [tenantId, ...recipeIds]
+    const custRows = await this.db.query(
+      `SELECT wmi.customer_menu_item_id, wmi.servings
+       FROM weekly_menu_items wmi
+       JOIN customer_menu_items cmi
+         ON cmi.id = wmi.customer_menu_item_id AND cmi.tenant_id = wmi.tenant_id AND cmi.customer_id = $3
+       WHERE wmi.weekly_menu_id = $1 AND wmi.tenant_id = $2 AND wmi.customer_menu_item_id IS NOT NULL`,
+      [menuId, tenantId, customerId]
     );
 
-    const scaleByRecipe = new Map<string, number>();
-    for (const row of items as any[]) {
-      const base = Math.max(1, safeNum(row.base_servings, 1));
-      const scale = safeNum(row.servings, 1) / base;
-      scaleByRecipe.set(row.recipe_id, (scaleByRecipe.get(row.recipe_id) || 0) + scale);
+    if (recipeRows.length === 0 && custRows.length === 0) {
+      throw new Error(
+        'No meals with a recipe or my menu item in this plan; add items from the catalog or Menu planner first.'
+      );
     }
 
     const raw: RawIngredientLine[] = [];
-    for (const ir of ingRows as any[]) {
-      const totalScale = scaleByRecipe.get(ir.recipe_id) || 1;
-      raw.push({
-        ingredient_name: ir.ingredient_name,
-        normalized_name: ir.normalized_name || ir.ingredient_name,
-        quantity: safeNum(ir.quantity, 1) * totalScale,
-        unit: ir.unit,
-        product_id: ir.product_id,
-        optional: Boolean(ir.optional),
-      });
+
+    if (recipeRows.length > 0) {
+      const recipeIds = [...new Set((recipeRows as any[]).map((i) => i.recipe_id))];
+      const ingParams = recipeIds.map((_, idx) => `$${idx + 2}`).join(', ');
+      const ingRows = await this.db.query(
+        `SELECT ri.recipe_id, ri.ingredient_name, ri.normalized_name, ri.quantity, ri.unit, ri.optional,
+                ri.product_id
+         FROM recipe_ingredients ri
+         WHERE ri.tenant_id = $1 AND ri.recipe_id IN (${ingParams})`,
+        [tenantId, ...recipeIds]
+      );
+
+      const scaleByRecipe = new Map<string, number>();
+      for (const row of recipeRows as any[]) {
+        const base = Math.max(1, safeNum(row.base_servings, 1));
+        const scale = safeNum(row.servings, 1) / base;
+        scaleByRecipe.set(row.recipe_id, (scaleByRecipe.get(row.recipe_id) || 0) + scale);
+      }
+
+      for (const ir of ingRows as any[]) {
+        const totalScale = scaleByRecipe.get(ir.recipe_id) || 1;
+        raw.push({
+          ingredient_name: ir.ingredient_name,
+          normalized_name: ir.normalized_name || ir.ingredient_name,
+          quantity: safeNum(ir.quantity, 1) * totalScale,
+          unit: ir.unit,
+          product_id: ir.product_id,
+          optional: Boolean(ir.optional),
+        });
+      }
+    }
+
+    if (custRows.length > 0) {
+      const custIds = [...new Set((custRows as any[]).map((i) => i.customer_menu_item_id))];
+      const ingParams = custIds.map((_, idx) => `$${idx + 2}`).join(', ');
+      const ingRows = await this.db.query(
+        `SELECT ci.customer_menu_item_id, ci.ingredient_name, ci.normalized_name, ci.quantity, ci.unit,
+                ci.optional, ci.product_id
+         FROM customer_menu_item_ingredients ci
+         WHERE ci.tenant_id = $1 AND ci.customer_menu_item_id IN (${ingParams})`,
+        [tenantId, ...custIds]
+      );
+
+      const scaleByCustItem = new Map<string, number>();
+      for (const row of custRows as any[]) {
+        const scale = safeNum(row.servings, 1);
+        scaleByCustItem.set(
+          row.customer_menu_item_id,
+          (scaleByCustItem.get(row.customer_menu_item_id) || 0) + scale
+        );
+      }
+
+      for (const ir of ingRows as any[]) {
+        const totalScale = scaleByCustItem.get(ir.customer_menu_item_id) || 1;
+        raw.push({
+          ingredient_name: ir.ingredient_name,
+          normalized_name: ir.normalized_name || ir.ingredient_name,
+          quantity: safeNum(ir.quantity, 1) * totalScale,
+          unit: ir.unit,
+          product_id: ir.product_id,
+          optional: Boolean(ir.optional),
+        });
+      }
+    }
+
+    if (raw.length === 0) {
+      throw new Error(
+        'No ingredient lines found for this plan. Add recipes with ingredients or my menu items with an ingredient list.'
+      );
     }
 
     const aggregated = aggregateIngredients(raw);
@@ -974,7 +1115,7 @@ export class WeeklyMenuPlannerService {
       );
 
       const items = await client.query(
-        `SELECT day_of_week, meal_type, recipe_id, custom_meal_name, servings, sort_order
+        `SELECT day_of_week, meal_type, recipe_id, custom_meal_name, customer_menu_item_id, servings, sort_order
          FROM weekly_menu_items WHERE weekly_menu_id = $1 AND tenant_id = $2 ORDER BY created_at ASC`,
         [menuId, tenantId]
       );
@@ -983,8 +1124,8 @@ export class WeeklyMenuPlannerService {
         const iid = newId();
         await client.query(
           `INSERT INTO menu_template_items (
-            id, template_id, day_of_week, meal_type, recipe_id, custom_meal_name, servings, sort_order
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            id, template_id, day_of_week, meal_type, recipe_id, custom_meal_name, customer_menu_item_id, servings, sort_order
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [
             iid,
             tid,
@@ -992,6 +1133,7 @@ export class WeeklyMenuPlannerService {
             it.meal_type,
             it.recipe_id,
             it.custom_meal_name,
+            it.customer_menu_item_id,
             it.servings,
             it.sort_order,
           ]
@@ -1027,8 +1169,8 @@ export class WeeklyMenuPlannerService {
         const iid = newId();
         await client.query(
           `INSERT INTO weekly_menu_items (
-            id, tenant_id, weekly_menu_id, day_of_week, meal_type, recipe_id, custom_meal_name, servings, notes, sort_order
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULL,$9)`,
+            id, tenant_id, weekly_menu_id, day_of_week, meal_type, recipe_id, custom_meal_name, customer_menu_item_id, servings, notes, sort_order
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,$10)`,
           [
             iid,
             tenantId,
@@ -1037,6 +1179,7 @@ export class WeeklyMenuPlannerService {
             it.meal_type,
             it.recipe_id,
             it.custom_meal_name,
+            it.customer_menu_item_id,
             it.servings,
             it.sort_order,
           ]
@@ -1050,6 +1193,86 @@ export class WeeklyMenuPlannerService {
 
       await this.logEvent(tenantId, customerId, 'template_applied', { menuId, templateId });
     });
+  }
+
+  async listCustomerMenuItems(tenantId: string, customerId: string) {
+    const rows = await this.db.query(
+      `SELECT cmi.id, cmi.name, cmi.description, cmi.image_url, cmi.created_at,
+        (SELECT COUNT(*) FROM customer_menu_item_ingredients x WHERE x.customer_menu_item_id = cmi.id) AS ingredient_count
+       FROM customer_menu_items cmi
+       WHERE cmi.tenant_id = $1 AND cmi.customer_id = $2
+       ORDER BY cmi.name ASC`,
+      [tenantId, customerId]
+    );
+    return rows;
+  }
+
+  async createCustomerMenuItem(tenantId: string, customerId: string, input: CreateCustomerMenuItemInput) {
+    const name = String(input.name || '').trim();
+    if (!name) throw new Error('Name is required');
+    const ings = Array.isArray(input.ingredients) ? input.ingredients : [];
+    const cleaned = ings
+      .map((x) => ({
+        ingredient_name: String(x.ingredient_name || '').trim(),
+        quantity: safeNum(x.quantity, 1),
+        unit: String(x.unit || '').trim(),
+        optional: Boolean(x.optional),
+        product_id: x.product_id?.trim() || null,
+      }))
+      .filter((x) => x.ingredient_name.length > 0);
+    if (cleaned.length === 0) throw new Error('Add at least one ingredient');
+
+    const id = newId();
+    const desc = input.description?.trim() || null;
+    const image = input.image_url?.trim() || null;
+
+    return this.db.transaction(async (client) => {
+      await client.query(
+        `INSERT INTO customer_menu_items (id, tenant_id, customer_id, name, description, image_url)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [id, tenantId, customerId, name, desc, image]
+      );
+      let sort = 0;
+      for (const line of cleaned) {
+        const iid = newId();
+        const norm = line.ingredient_name.toLowerCase();
+        const optVal = this.db.getType() === 'postgres' ? line.optional : line.optional ? 1 : 0;
+        await client.query(
+          `INSERT INTO customer_menu_item_ingredients (
+            id, tenant_id, customer_menu_item_id, ingredient_name, normalized_name, quantity, unit, optional, product_id, sort_order
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [
+            iid,
+            tenantId,
+            id,
+            line.ingredient_name,
+            norm,
+            line.quantity,
+            line.unit,
+            optVal,
+            line.product_id,
+            sort++,
+          ]
+        );
+      }
+      return id;
+    });
+  }
+
+  async deleteCustomerMenuItem(tenantId: string, customerId: string, itemId: string) {
+    const rows = await this.db.query(
+      `SELECT id FROM customer_menu_items WHERE id = $1 AND tenant_id = $2 AND customer_id = $3`,
+      [itemId, tenantId, customerId]
+    );
+    if (rows.length === 0) throw new Error('My menu item not found');
+    const used = await this.db.query(
+      `SELECT COUNT(*) AS c FROM weekly_menu_items WHERE tenant_id = $1 AND customer_menu_item_id = $2`,
+      [tenantId, itemId]
+    );
+    if (Number((used[0] as any)?.c ?? 0) > 0) {
+      throw new Error('This item is on a weekly calendar; remove it from the plan before deleting.');
+    }
+    await this.db.execute(`DELETE FROM customer_menu_items WHERE id = $1 AND tenant_id = $2`, [itemId, tenantId]);
   }
 }
 

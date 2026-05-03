@@ -4,19 +4,16 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useApp } from '../../context/AppContext';
 import { publicApi, menuPlannerApi, getFullImageUrl } from '../../api';
 import MenuPlannerHeader from '../../components/menuPlanner/MenuPlannerHeader';
+import MyMenuTabStrip, { buildMyMenuHubPath } from '../../components/menuPlanner/MyMenuTabStrip';
+import type { MyMenuTab } from '../../context/MyMenuLayoutContext';
 
 const GREEN = '#2E7D32';
 
-const CHIPS = [
-    { id: 'pakistani', label: 'Pakistani', search: 'pakistani' },
-    { id: 'curry', label: 'Curry', search: 'curry' },
-    { id: 'spicy', label: 'Spicy', search: 'spicy' },
-    { id: 'bbq', label: 'BBQ', search: 'bbq' },
-    { id: 'rice', label: 'Rice', search: 'rice' },
-];
+type RecipeCategoryRow = { id: string; name: string; image_url?: string | null };
 
-function parseReturnTab(s: string | null): 'dashboard' | 'calendar' | 'shopping' | 'configure' {
-    if (s === 'configure' || s === 'calendar' || s === 'dashboard' || s === 'shopping') return s;
+function parseReturnTab(s: string | null): MyMenuTab {
+    if (s === 'configure') return 'planner';
+    if (s === 'planner' || s === 'calendar' || s === 'dashboard' || s === 'shopping') return s;
     return 'calendar';
 }
 
@@ -24,7 +21,7 @@ export default function RecipePickerPage() {
     const { shopSlug, menuId: routeMenuId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const { showToast } = useApp();
+    const { showToast, state } = useApp();
 
     const menuId = routeMenuId || searchParams.get('menuId') || '';
     const returnTab = parseReturnTab(searchParams.get('returnTab'));
@@ -34,26 +31,64 @@ export default function RecipePickerPage() {
     const mealType = searchParams.get('mealType') || 'lunch';
 
     const [search, setSearch] = useState('');
-    const [activeChip, setActiveChip] = useState('pakistani');
+    const [activeCategoryId, setActiveCategoryId] = useState('');
+    const [categories, setCategories] = useState<RecipeCategoryRow[]>([]);
     const [items, setItems] = useState<any[]>([]);
     const [total, setTotal] = useState(0);
     const [offset, setOffset] = useState(0);
     const [loading, setLoading] = useState(false);
     const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [selectedMy, setSelectedMy] = useState<Set<string>>(new Set());
+    const [myItems, setMyItems] = useState<{ id: string; name: string; image_url?: string | null }[]>([]);
     const parentRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!shopSlug) return;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const cats = await publicApi.getRecipeCategories(shopSlug).catch(() => []);
+                if (!cancelled) setCategories(Array.isArray(cats) ? cats : []);
+            } catch {
+                if (!cancelled) setCategories([]);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [shopSlug]);
+
+    useEffect(() => {
+        if (!shopSlug || !state.isLoggedIn) {
+            setMyItems([]);
+            return;
+        }
+        let cancelled = false;
+        void (async () => {
+            try {
+                const r = (await menuPlannerApi.listCustomerMenuItems(shopSlug)) as { items?: { id: string; name: string; image_url?: string | null }[] };
+                if (!cancelled) setMyItems(Array.isArray(r?.items) ? r.items : []);
+            } catch {
+                if (!cancelled) setMyItems([]);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [shopSlug, state.isLoggedIn]);
 
     const load = useCallback(
         async (nextOffset: number, append: boolean, searchQuery?: string) => {
             if (!shopSlug) return;
             setLoading(true);
             try {
-                const chip = CHIPS.find((c) => c.id === activeChip);
                 const raw = searchQuery !== undefined ? searchQuery : search;
-                const q = raw.trim() || chip?.search || '';
+                const q = raw.trim();
                 const data = await publicApi.getRecipes(shopSlug, {
                     search: q || undefined,
                     limit: 20,
                     offset: nextOffset,
+                    ...(activeCategoryId ? { category_id: activeCategoryId } : {}),
                 });
                 const rows = (data as any)?.items || [];
                 setTotal(Number((data as any)?.total ?? rows.length + nextOffset));
@@ -66,7 +101,7 @@ export default function RecipePickerPage() {
                 setLoading(false);
             }
         },
-        [shopSlug, activeChip]
+        [shopSlug, activeCategoryId, search]
     );
 
     useEffect(() => {
@@ -90,9 +125,20 @@ export default function RecipePickerPage() {
         });
     };
 
+    const toggleMy = (id: string) => {
+        setSelectedMy((prev) => {
+            const n = new Set(prev);
+            if (n.has(id)) n.delete(id);
+            else n.add(id);
+            return n;
+        });
+    };
+
     const confirm = async () => {
-        if (!shopSlug || !menuId || selected.size === 0) {
-            showToast('Select at least one recipe');
+        if (!shopSlug || !menuId) return;
+        const n = selected.size + selectedMy.size;
+        if (n === 0) {
+            showToast('Select at least one recipe or my item');
             return;
         }
         try {
@@ -104,64 +150,145 @@ export default function RecipePickerPage() {
                     servings: 1,
                 });
             }
-            showToast('Recipes added to plan');
+            for (const mid of selectedMy) {
+                await menuPlannerApi.addMenuItem(shopSlug, menuId, {
+                    day_of_week: day,
+                    meal_type: mealType,
+                    customer_menu_item_id: mid,
+                    servings: 1,
+                });
+            }
+            showToast('Added to plan');
             if (fromMyMenuPick) {
-                navigate(`/${shopSlug}/my-menu?tab=${returnTab}`);
+                navigate(buildMyMenuHubPath(shopSlug, returnTab, { menuId }));
             } else {
                 navigate(`/${shopSlug}/menu-planner/week/${menuId}`);
             }
         } catch (e: any) {
-            showToast(e?.message || 'Could not add recipes');
+            showToast(e?.message || 'Could not add to plan');
         }
     };
 
     if (!shopSlug || !menuId) return null;
 
-    return (
-        <div className="page fade-in" style={{ paddingBottom: 120, minHeight: '100dvh', background: '#fff' }}>
-            <MenuPlannerHeader />
-            <div style={{ padding: '0 16px 12px', maxWidth: 560, margin: '0 auto' }}>
-                <Link
-                    to={fromMyMenuPick ? `/${shopSlug}/my-menu?tab=${returnTab}` : `/${shopSlug}/menu-planner/week/${menuId}`}
-                    style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}
-                >
-                    ← {fromMyMenuPick ? 'Back' : 'Calendar'}
-                </Link>
-                <div style={{ marginTop: 12, position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }}>🔍</span>
-                    <input
-                        className="input"
-                        placeholder="Search Pakistani recipes."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && load(0, false, search)}
-                        style={{ paddingLeft: 40, borderRadius: 999, height: 48, width: '100%' }}
-                    />
-                </div>
-                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginTop: 12, paddingBottom: 4 }}>
-                    {CHIPS.map((c) => (
-                        <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => setActiveChip(c.id)}
-                            style={{
-                                flexShrink: 0,
-                                padding: '8px 16px',
-                                borderRadius: 999,
-                                border: c.id === activeChip ? 'none' : '1px solid var(--border)',
-                                background: c.id === activeChip ? GREEN : '#fff',
-                                color: c.id === activeChip ? '#fff' : '#1A1A1A',
-                                fontWeight: 600,
-                                fontSize: 13,
-                            }}
-                        >
-                            {c.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
+    const listHeight = fromMyMenuPick ? 'calc(100dvh - 300px)' : 'calc(100dvh - 220px)';
 
-            <div ref={parentRef} style={{ height: 'calc(100dvh - 220px)', overflow: 'auto', padding: '0 16px 100px' }}>
+    const myItemsBlock =
+        state.isLoggedIn && myItems.length > 0 ? (
+            <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 13, fontWeight: 800, margin: '0 0 10px', color: '#1A1A1A' }}>My items</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {myItems.map((m) => {
+                        const sel = selectedMy.has(m.id);
+                        const img = getFullImageUrl(m.image_url);
+                        return (
+                            <div
+                                key={m.id}
+                                className="card"
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    padding: 12,
+                                    borderRadius: 12,
+                                    border: sel ? `2px solid ${GREEN}` : '1px solid var(--border-light)',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        width: 56,
+                                        height: 56,
+                                        borderRadius: 10,
+                                        flexShrink: 0,
+                                        background: img ? `url(${img}) center/cover` : '#E8F5E9',
+                                    }}
+                                />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: GREEN }}>YOUR ITEM</div>
+                                    <div style={{ fontWeight: 800, fontSize: 16 }}>{m.name}</div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => toggleMy(m.id)}
+                                    style={{
+                                        padding: '10px 16px',
+                                        borderRadius: 999,
+                                        border: 'none',
+                                        fontWeight: 700,
+                                        background: sel ? '#374151' : GREEN,
+                                        color: '#fff',
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    {sel ? 'Remove' : 'Add'}
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+                <p style={{ fontSize: 13, fontWeight: 800, margin: '20px 0 8px', color: '#1A1A1A' }}>Shop recipes</p>
+            </div>
+        ) : state.isLoggedIn ? (
+            <p style={{ fontSize: 13, fontWeight: 800, margin: '0 0 12px', color: '#1A1A1A' }}>Shop recipes</p>
+        ) : null;
+
+    const searchAndCategories = (
+        <>
+            {myItemsBlock}
+            <div style={{ marginTop: 12, position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }}>🔍</span>
+                <input
+                    className="input"
+                    placeholder="Search title, cuisine, ingredients…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && load(0, false, search)}
+                    style={{ paddingLeft: 40, borderRadius: 999, height: 48, width: '100%' }}
+                />
+            </div>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginTop: 12, paddingBottom: 4 }}>
+                <button
+                    type="button"
+                    onClick={() => setActiveCategoryId('')}
+                    style={{
+                        flexShrink: 0,
+                        padding: '8px 16px',
+                        borderRadius: 999,
+                        border: !activeCategoryId ? 'none' : '1px solid var(--border)',
+                        background: !activeCategoryId ? GREEN : '#fff',
+                        color: !activeCategoryId ? '#fff' : '#1A1A1A',
+                        fontWeight: 600,
+                        fontSize: 13,
+                    }}
+                >
+                    All
+                </button>
+                {categories.map((c) => (
+                    <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setActiveCategoryId(c.id === activeCategoryId ? '' : c.id)}
+                        style={{
+                            flexShrink: 0,
+                            padding: '8px 16px',
+                            borderRadius: 999,
+                            border: c.id === activeCategoryId ? 'none' : '1px solid var(--border)',
+                            background: c.id === activeCategoryId ? GREEN : '#fff',
+                            color: c.id === activeCategoryId ? '#fff' : '#1A1A1A',
+                            fontWeight: 600,
+                            fontSize: 13,
+                        }}
+                    >
+                        {c.name}
+                    </button>
+                ))}
+            </div>
+        </>
+    );
+
+    const listAndFab = (
+        <>
+            <div ref={parentRef} style={{ height: listHeight, overflow: 'auto', padding: '0 16px 100px' }}>
                 <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
                     {rowVirtualizer.getVirtualItems().map((v) => {
                         const r = items[v.index];
@@ -334,10 +461,49 @@ export default function RecipePickerPage() {
                             fontSize: 14,
                         }}
                     >
-                        {selected.size}
+                        {selected.size + selectedMy.size}
                     </span>
                 </button>
             </div>
+        </>
+    );
+
+    if (fromMyMenuPick) {
+        return (
+            <div className="page fade-in" style={{ paddingBottom: 120, minHeight: '100dvh', background: '#fff' }}>
+                <div
+                    style={{
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 50,
+                        background: '#fff',
+                        borderBottom: '1px solid var(--border-light)',
+                    }}
+                >
+                    <div style={{ padding: '12px 16px 0', maxWidth: 560, margin: '0 auto' }}>
+                        <h1 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 10px', color: '#1A1A1A' }}>My Menu</h1>
+                        <MyMenuTabStrip shopSlug={shopSlug} activeTab={returnTab} menuId={menuId} />
+                    </div>
+                </div>
+                <div style={{ padding: '12px 16px 0', maxWidth: 560, margin: '0 auto' }}>
+                    <p style={{ margin: '4px 0 0', fontSize: 15, fontWeight: 700, color: '#1A1A1A' }}>Add to meal</p>
+                </div>
+                <div style={{ padding: '0 16px 12px', maxWidth: 560, margin: '0 auto' }}>{searchAndCategories}</div>
+                {listAndFab}
+            </div>
+        );
+    }
+
+    return (
+        <div className="page fade-in" style={{ paddingBottom: 120, minHeight: '100dvh', background: '#fff' }}>
+            <MenuPlannerHeader />
+            <div style={{ padding: '0 16px 12px', maxWidth: 560, margin: '0 auto' }}>
+                <Link to={`/${shopSlug}/menu-planner/week/${menuId}`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
+                    ← Calendar
+                </Link>
+                {searchAndCategories}
+            </div>
+            {listAndFab}
         </div>
     );
 }

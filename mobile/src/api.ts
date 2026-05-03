@@ -325,4 +325,9 @@ export const menuPlannerApi = {
             `/weekly-menus/${encodeURIComponent(menuId)}/apply-template/${encodeURIComponent(templateId)}`,
             { method: 'POST', body: '{}' }
         ),
+    listCustomerMenuItems: (shopSlug: string) => shopAuthRequest(shopSlug, '/customer-menu-items'),
+    createCustomerMenuItem: (shopSlug: string, body: Record<string, unknown>) =>
+        shopAuthRequest(shopSlug, '/customer-menu-items', { method: 'POST', body: JSON.stringify(body) }),
+    deleteCustomerMenuItem: (shopSlug: string, itemId: string) =>
+        shopAuthRequest(shopSlug, `/customer-menu-items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
 };
