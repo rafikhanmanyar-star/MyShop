@@ -195,6 +195,7 @@ export class MobileCustomerService {
                 order_acceptance_start: '09:00',
                 order_acceptance_end: '21:00',
                 estimated_delivery_minutes: 60,
+                pending_reservation_ttl_minutes: 30,
                 rider_assignment_mode: 'auto',
             };
         }
@@ -205,13 +206,19 @@ export class MobileCustomerService {
         const raw = data.rider_assignment_mode;
         const riderMode =
             raw === 'manual' || raw === 'third_party' ? raw : 'auto';
+        const rawTtl = data.pending_reservation_ttl_minutes;
+        const parsedTtl = parseInt(String(rawTtl), 10);
+        const pendingReservationTtl =
+            rawTtl == null || rawTtl === ''
+                ? 30
+                : Math.min(10080, Math.max(5, Number.isFinite(parsedTtl) ? parsedTtl : 30));
         const rows = await this.db.query(
             `INSERT INTO mobile_ordering_settings (
         tenant_id, is_enabled, minimum_order_amount, delivery_fee,
         free_delivery_above, max_delivery_radius_km, auto_confirm_orders,
         order_acceptance_start, order_acceptance_end, estimated_delivery_minutes,
-        rider_assignment_mode, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+        rider_assignment_mode, pending_reservation_ttl_minutes, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
       ON CONFLICT (tenant_id) DO UPDATE SET
         is_enabled = EXCLUDED.is_enabled,
         minimum_order_amount = EXCLUDED.minimum_order_amount,
@@ -223,6 +230,7 @@ export class MobileCustomerService {
         order_acceptance_end = EXCLUDED.order_acceptance_end,
         estimated_delivery_minutes = EXCLUDED.estimated_delivery_minutes,
         rider_assignment_mode = EXCLUDED.rider_assignment_mode,
+        pending_reservation_ttl_minutes = EXCLUDED.pending_reservation_ttl_minutes,
         updated_at = NOW()
       RETURNING *`,
             [
@@ -237,6 +245,7 @@ export class MobileCustomerService {
                 data.order_acceptance_end ?? '21:00',
                 data.estimated_delivery_minutes ?? 60,
                 riderMode,
+                pendingReservationTtl,
             ]
         );
         return rows[0];

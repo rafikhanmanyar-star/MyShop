@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { useMyMenuLayout } from '../../context/MyMenuLayoutContext';
 import { publicApi, menuPlannerApi, getFullImageUrl } from '../../api';
 import MenuPlannerHeader from '../../components/menuPlanner/MenuPlannerHeader';
 
@@ -27,10 +28,13 @@ function formatWeekRange(startIso: string): string {
     return `${a.toLocaleDateString(undefined, opts)} — ${b.toLocaleDateString(undefined, opts)}`;
 }
 
-export default function WeeklyMenuDashboardPage() {
+type WeeklyMenuDashboardPageProps = { embedded?: boolean };
+
+export default function WeeklyMenuDashboardPage({ embedded = false }: WeeklyMenuDashboardPageProps) {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
     const { state, showToast } = useApp();
+    const myMenu = useMyMenuLayout();
 
     const [menuId, setMenuId] = useState<string | null>(null);
     const [detail, setDetail] = useState<any>(null);
@@ -76,6 +80,16 @@ export default function WeeklyMenuDashboardPage() {
         void load();
     }, [load]);
 
+    useEffect(() => {
+        if (!myMenu) return;
+        myMenu.setMenuId(menuId);
+    }, [myMenu, menuId]);
+
+    useEffect(() => {
+        if (!myMenu || !detail?.last_shopping_list?.id) return;
+        myMenu.setListId(String(detail.last_shopping_list.id));
+    }, [myMenu, detail?.last_shopping_list?.id]);
+
     const createWeek = async () => {
         if (!shopSlug) return;
         try {
@@ -84,7 +98,12 @@ export default function WeeklyMenuDashboardPage() {
                 week_start_date: weekStartIso,
             })) as any;
             showToast('Week plan created');
-            navigate(`/${shopSlug}/menu-planner/week/${id}`);
+            if (myMenu) {
+                myMenu.setMenuId(id);
+                myMenu.setTab('calendar');
+            } else {
+                navigate(`/${shopSlug}/menu-planner/week/${id}`);
+            }
         } catch (e: any) {
             showToast(e?.message || 'Create failed');
         }
@@ -103,28 +122,29 @@ export default function WeeklyMenuDashboardPage() {
 
     if (!state.isLoggedIn) {
         return (
-            <div className="page fade-in" style={{ paddingBottom: 100 }}>
-                <MenuPlannerHeader />
+            <div className="page fade-in" style={{ paddingBottom: embedded ? 24 : 100 }}>
+                {!embedded && <MenuPlannerHeader />}
                 <div style={{ padding: 24, textAlign: 'center' }}>
-                    <p style={{ marginBottom: 16 }}>Sign in to use the Weekly Menu Planner.</p>
-                    <Link to={`/${shopSlug}/login`} className="btn btn-primary" style={{ background: GREEN }}>
-                        Log in
-                    </Link>
+                    <p style={{ marginBottom: 0, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                        Weekly plans and shopping lists appear here for signed-in customers.
+                    </p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="page fade-in" style={{ paddingBottom: 100, background: '#FAFAFA' }}>
-            <MenuPlannerHeader />
+        <div className="page fade-in" style={{ paddingBottom: embedded ? 24 : 100, background: '#FAFAFA' }}>
+            {!embedded && <MenuPlannerHeader />}
 
             <div style={{ padding: '16px', maxWidth: 560, margin: '0 auto' }}>
-                <div style={{ marginBottom: 8 }}>
-                    <Link to={`/${shopSlug}`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
-                        ← Home
-                    </Link>
-                </div>
+                {!embedded && (
+                    <div style={{ marginBottom: 8 }}>
+                        <Link to={`/${shopSlug}`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
+                            ← Home
+                        </Link>
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="card" style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -196,7 +216,10 @@ export default function WeeklyMenuDashboardPage() {
                                 type="button"
                                 className="btn btn-outline"
                                 style={{ marginTop: 16, width: '100%', borderColor: GREEN, color: GREEN }}
-                                onClick={() => navigate(`/${shopSlug}/menu-planner/week/${menuId}`)}
+                                onClick={() => {
+                                    if (myMenu) myMenu.setTab('calendar');
+                                    else navigate(`/${shopSlug}/menu-planner/week/${menuId}`);
+                                }}
                             >
                                 Open calendar
                             </button>
@@ -272,8 +295,16 @@ export default function WeeklyMenuDashboardPage() {
                                 className="btn btn-primary"
                                 style={{ background: GREEN, flexShrink: 0 }}
                                 onClick={() => {
-                                    if (lastList?.id) navigate(`/${shopSlug}/menu-planner/shopping/${lastList.id}`);
-                                    else showToast('Generate a shopping list from the calendar first.');
+                                    if (!lastList?.id) {
+                                        showToast('Generate a shopping list from the calendar first.');
+                                        return;
+                                    }
+                                    if (myMenu) {
+                                        myMenu.setListId(String(lastList.id));
+                                        myMenu.setTab('shopping');
+                                    } else {
+                                        navigate(`/${shopSlug}/menu-planner/shopping/${lastList.id}`);
+                                    }
                                 }}
                             >
                                 View

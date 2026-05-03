@@ -4,14 +4,58 @@ import { publicApi } from '../api';
 import RecipeCard, { type RecipeCardData } from '../components/RecipeCard';
 import { recipeFeedCacheGet, recipeFeedCacheSet } from '../utils/recipeFeedCache';
 
-type SectionKey = 'featured' | 'quick' | 'budget' | 'trending';
+/** Server clamps recipe list to 60 max */
+const BROWSE_LIMIT = 60;
 
-function sectionParams(key: SectionKey): Record<string, string | number> {
-    const base = { limit: 12, offset: 0 };
-    if (key === 'featured') return { ...base, featured: 'true' };
-    if (key === 'quick') return { ...base, quick: 'true' };
-    if (key === 'budget') return { ...base, budget: 'true' };
-    return { ...base, trending: 'true' };
+type CategoryRow = { id: string; name: string; image_url?: string | null };
+
+type BrowseSection = { key: string; title: string; items: RecipeCardData[] };
+
+function buildBrowseSections(
+    items: RecipeCardData[],
+    categories: CategoryRow[],
+    filterCatId: string
+): BrowseSection[] {
+    if (filterCatId) {
+        const cat = categories.find((c) => c.id === filterCatId);
+        const title = cat?.name || items[0]?.category_name || 'Recipes';
+        return items.length ? [{ key: filterCatId, title, items }] : [];
+    }
+
+    const nameById = new Map(categories.map((c) => [c.id, c.name] as const));
+    const buckets = new Map<string | null, RecipeCardData[]>();
+    for (const r of items) {
+        const cid = r.category_id ?? null;
+        if (!buckets.has(cid)) buckets.set(cid, []);
+        buckets.get(cid)!.push(r);
+    }
+
+    const out: BrowseSection[] = [];
+    const used = new Set<string | null>();
+
+    for (const c of categories) {
+        const list = buckets.get(c.id);
+        if (list?.length) {
+            out.push({ key: c.id, title: c.name, items: list });
+            used.add(c.id);
+        }
+    }
+
+    const unc = buckets.get(null);
+    if (unc?.length) {
+        out.push({ key: 'uncat', title: 'Other recipes', items: unc });
+        used.add(null);
+    }
+
+    for (const [cid, list] of buckets) {
+        if (!list.length || used.has(cid)) continue;
+        if (cid) {
+            const title = nameById.get(cid) || list[0]?.category_name || 'Recipes';
+            out.push({ key: cid, title, items: list });
+        }
+    }
+
+    return out;
 }
 
 export default function RecipeHome() {
@@ -19,66 +63,56 @@ export default function RecipeHome() {
     const [searchParams, setSearchParams] = useSearchParams();
     const q = (searchParams.get('q') || '').trim();
 
-    const [categories, setCategories] = useState<{ id: string; name: string; image_url?: string | null }[]>([]);
+    const [categories, setCategories] = useState<CategoryRow[]>([]);
     const [catFilter, setCatFilter] = useState<string>('');
 
-    const [featured, setFeatured] = useState<RecipeCardData[]>([]);
-    const [quick, setQuick] = useState<RecipeCardData[]>([]);
-    const [budget, setBudget] = useState<RecipeCardData[]>([]);
-    const [trending, setTrending] = useState<RecipeCardData[]>([]);
+    const [browseItems, setBrowseItems] = useState<RecipeCardData[]>([]);
     const [searchItems, setSearchItems] = useState<RecipeCardData[]>([]);
 
-    const [loading, setLoading] = useState(true);
+    const [browseLoading, setBrowseLoading] = useState(true);
     const [searchLoading, setSearchLoading] = useState(false);
 
-    const loadSection = useCallback(
-        async (key: SectionKey): Promise<RecipeCardData[]> => {
-            if (!shopSlug) return [];
-            const cacheKey = `${shopSlug}:sec:${key}`;
-            const hit = recipeFeedCacheGet<RecipeCardData[]>(cacheKey);
-            if (hit) return hit;
-            const data = await publicApi.getRecipes(shopSlug, sectionParams(key));
-            const items = (data.items || []) as RecipeCardData[];
-            recipeFeedCacheSet(cacheKey, items);
-            return items;
-        },
-        [shopSlug]
-    );
+    const loadBrowse = useCallback(async () => {
+        if (!shopSlug) return [];
+        const cacheKey = `${shopSlug}:browse:${catFilter || 'all'}`;
+        const hit = recipeFeedCacheGet<RecipeCardData[]>(cacheKey);
+        if (hit) return hit;
+        const data = await publicApi.getRecipes(shopSlug, {
+            limit: BROWSE_LIMIT,
+            offset: 0,
+            ...(catFilter ? { category_id: catFilter } : {}),
+        });
+        const items = (data.items || []) as RecipeCardData[];
+        recipeFeedCacheSet(cacheKey, items);
+        return items;
+    }, [shopSlug, catFilter]);
 
     useEffect(() => {
-        if (!shopSlug) return;
+        if (!shopSlug || q) return;
         let cancelled = false;
         (async () => {
-            setLoading(true);
+            setBrowseLoading(true);
             try {
-                const [cats, f, qu, bu, tr] = await Promise.all([
+                const [cats, items] = await Promise.all([
                     publicApi.getRecipeCategories(shopSlug).catch(() => []),
-                    loadSection('featured'),
-                    loadSection('quick'),
-                    loadSection('budget'),
-                    loadSection('trending'),
+                    loadBrowse(),
                 ]);
                 if (cancelled) return;
                 setCategories(Array.isArray(cats) ? cats : []);
-                setFeatured(f);
-                setQuick(qu);
-                setBudget(bu);
-                setTrending(tr);
+                setBrowseItems(items);
             } catch {
                 if (!cancelled) {
-                    setFeatured([]);
-                    setQuick([]);
-                    setBudget([]);
-                    setTrending([]);
+                    setCategories([]);
+                    setBrowseItems([]);
                 }
             } finally {
-                if (!cancelled) setLoading(false);
+                if (!cancelled) setBrowseLoading(false);
             }
         })();
         return () => {
             cancelled = true;
         };
-    }, [shopSlug, loadSection]);
+    }, [shopSlug, q, loadBrowse]);
 
     useEffect(() => {
         if (!shopSlug || !q) {
@@ -121,15 +155,14 @@ export default function RecipeHome() {
         !catFilter ? items : items.filter((r) => r.category_id === catFilter);
 
     const renderRow = (title: string, items: RecipeCardData[]) => {
-        const rows = filt(items);
-        if (!rows.length) return null;
+        if (!items.length) return null;
         return (
             <section className="recipe-section">
                 <div className="recipe-section__head">
                     <h2 className="recipe-section__title">{title}</h2>
                 </div>
                 <div className="recipe-row">
-                    {rows.map((r) => (
+                    {items.map((r) => (
                         <div key={r.id} className="recipe-row__cell">
                             <RecipeCard recipe={r} shopSlug={shopSlug} />
                         </div>
@@ -139,8 +172,8 @@ export default function RecipeHome() {
         );
     };
 
-    const hasSectionItems =
-        filt(featured).length + filt(quick).length + filt(budget).length + filt(trending).length > 0;
+    const browseSections = buildBrowseSections(browseItems, categories, catFilter);
+    const hasBrowse = browseSections.some((s) => s.items.length > 0);
 
     return (
         <div className="recipe-page fade-in">
@@ -207,15 +240,12 @@ export default function RecipeHome() {
 
             {!q && (
                 <>
-                    {loading ? (
+                    {browseLoading ? (
                         <p style={{ color: 'var(--text-muted)' }}>Loading recipes…</p>
                     ) : (
                         <>
-                            {renderRow('Featured', featured)}
-                            {renderRow('Quick meals', quick)}
-                            {renderRow('Budget meals', budget)}
-                            {renderRow('Trending', trending)}
-                            {!loading && !hasSectionItems && (
+                            {browseSections.map((sec) => renderRow(sec.title, sec.items))}
+                            {!browseLoading && !hasBrowse && (
                                 <p style={{ color: 'var(--text-muted)' }}>
                                     {catFilter
                                         ? 'No recipes in this category. Try another filter.'

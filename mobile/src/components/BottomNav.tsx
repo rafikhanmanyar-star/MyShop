@@ -110,14 +110,6 @@ export default function BottomNav() {
                             <button
                                 type="button"
                                 className="utilities-sheet__row"
-                                onClick={() => goUtility(`${base}/menu-planner`)}
-                            >
-                                <span>Weekly Menu Planner</span>
-                                <span className="utilities-sheet__chev" aria-hidden>›</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="utilities-sheet__row"
                                 onClick={() => goUtility(`${base}/budget`)}
                             >
                                 <span>Budget Planner</span>

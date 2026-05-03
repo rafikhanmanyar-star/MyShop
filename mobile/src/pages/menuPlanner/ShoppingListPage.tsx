@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { menuPlannerApi } from '../../api';
 import { useApp, type CartItem } from '../../context/AppContext';
+import { useMyMenuLayout } from '../../context/MyMenuLayoutContext';
 import MenuPlannerHeader from '../../components/menuPlanner/MenuPlannerHeader';
 import { cacheShoppingList, getCachedShoppingList } from '../../services/menuPlannerCache';
 
@@ -30,9 +31,17 @@ function patchFlat(items: any[] | undefined, itemId: string, body: Record<string
     return items.map((it) => (it.id === itemId ? { ...it, ...body } : it));
 }
 
-export default function ShoppingListPage() {
-    const { shopSlug, listId } = useParams();
+export type ShoppingListPageProps = {
+    embedded?: boolean;
+    listIdOverride?: string;
+    contentBottomPad?: string;
+};
+
+export default function ShoppingListPage({ embedded = false, listIdOverride, contentBottomPad }: ShoppingListPageProps) {
+    const { shopSlug, listId: routeListId } = useParams();
+    const listId = listIdOverride ?? routeListId;
     const navigate = useNavigate();
+    const myMenu = useMyMenuLayout();
     const { state, showToast, dispatch } = useApp();
 
     const [data, setData] = useState<any>(null);
@@ -186,7 +195,31 @@ export default function ShoppingListPage() {
     const est = data?.summary?.estimated_total ?? 0;
     const extCount = data?.summary?.external_market_count ?? 0;
 
-    if (!shopSlug || !listId) return null;
+    if (!shopSlug) return null;
+
+    if (!listId) {
+        if (embedded) {
+            return (
+                <div className="page fade-in" style={{ padding: 24, paddingBottom: 120, background: '#F6F6F8' }}>
+                    <p style={{ marginBottom: 16, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                        You don&apos;t have a shopping list yet. Open the Week tab and tap <strong>Generate Shopping List</strong> after you
+                        add meals.
+                    </p>
+                    {myMenu && (
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ background: GREEN, width: '100%', maxWidth: 360 }}
+                            onClick={() => myMenu.setTab('calendar')}
+                        >
+                            Go to week planner
+                        </button>
+                    )}
+                </div>
+            );
+        }
+        return null;
+    }
 
     const renderItemRow = (it: any, opts: { external: boolean }) => (
         <div
@@ -285,11 +318,21 @@ export default function ShoppingListPage() {
 
     return (
         <div className="page fade-in" style={{ paddingBottom: 120, background: '#F6F6F8' }}>
-            <MenuPlannerHeader />
+            {!embedded && <MenuPlannerHeader />}
             <div style={{ padding: 16, maxWidth: 560, margin: '0 auto' }}>
-                <Link to={`/${shopSlug}/menu-planner`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
-                    ← Dashboard
-                </Link>
+                {embedded && myMenu ? (
+                    <button
+                        type="button"
+                        style={{ fontSize: 14, color: GREEN, fontWeight: 600, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                        onClick={() => myMenu.setTab('dashboard')}
+                    >
+                        ← Dashboard
+                    </button>
+                ) : (
+                    <Link to={`/${shopSlug}/menu-planner`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
+                        ← Dashboard
+                    </Link>
+                )}
                 <h1 style={{ fontSize: 24, fontWeight: 900, margin: '12px 0 4px' }}>Weekly List</h1>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>
@@ -404,7 +447,7 @@ export default function ShoppingListPage() {
                     position: 'fixed',
                     left: 0,
                     right: 0,
-                    bottom: `calc(56px + var(--safe-bottom))`,
+                    bottom: contentBottomPad ?? 'calc(56px + var(--safe-bottom))',
                     padding: '12px 16px',
                     background: 'linear-gradient(180deg, transparent, #F6F6F8 40%)',
                     zIndex: 30,

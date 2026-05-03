@@ -80,8 +80,8 @@ function mergeDailyTrend(raw: unknown): { label: string; revenue: number }[] {
 
 function isMobileOrderPending(o: Record<string, unknown>) {
   const status = String(o.status ?? '').toLowerCase();
-  const paymentStatus = String(o.payment_status ?? o.paymentStatus ?? '').toLowerCase();
-  return status === 'pending' || paymentStatus !== 'paid';
+  /** Match Mobile Orders page: only fulfillment status Pending (not unpaid payment on cancelled/confirmed, etc.). */
+  return status === 'pending';
 }
 
 export default function DashboardPage() {

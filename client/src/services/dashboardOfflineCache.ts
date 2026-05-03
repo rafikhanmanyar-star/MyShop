@@ -121,9 +121,7 @@ export async function refreshDashboardCache(tenantId: string): Promise<void> {
     );
     const mobileList = (mobileOrders as any[]) || [];
     const mobileOrdersPending = mobileList.filter(
-      (o: any) =>
-        (o.status ?? '').toLowerCase() === 'pending' ||
-        (o.payment_status ?? '').toLowerCase() !== 'paid'
+      (o: any) => String(o.status ?? '').toLowerCase() === 'pending'
     ).length;
     const totalSalesCount = salesList.length;
     const stats: DashboardStats = {

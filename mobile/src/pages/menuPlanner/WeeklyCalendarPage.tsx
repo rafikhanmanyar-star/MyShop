@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { useMyMenuLayout } from '../../context/MyMenuLayoutContext';
 import { menuPlannerApi, getFullImageUrl } from '../../api';
 import MenuPlannerHeader from '../../components/menuPlanner/MenuPlannerHeader';
 import { cacheMenuDetail, getCachedMenuDetail } from '../../services/menuPlannerCache';
@@ -27,9 +28,23 @@ function addDays(iso: string, n: number): string {
     return d.toISOString().slice(0, 10);
 }
 
-export default function WeeklyCalendarPage() {
-    const { shopSlug, menuId } = useParams();
+export type WeeklyCalendarPageProps = {
+    menuIdOverride?: string;
+    embedded?: boolean;
+    variant?: 'full' | 'configure';
+    contentBottomPad?: string;
+};
+
+export default function WeeklyCalendarPage({
+    menuIdOverride,
+    embedded = false,
+    variant = 'full',
+    contentBottomPad,
+}: WeeklyCalendarPageProps) {
+    const { shopSlug, menuId: routeMenuId } = useParams();
+    const menuId = menuIdOverride ?? routeMenuId;
     const navigate = useNavigate();
+    const myMenu = useMyMenuLayout();
     const { state, showToast } = useApp();
 
     const [detail, setDetail] = useState<any>(null);
@@ -106,7 +121,14 @@ export default function WeeklyCalendarPage() {
 
     const openPick = (day: number, meal: string) => {
         if (!shopSlug || !menuId) return;
-        navigate(`/${shopSlug}/menu-planner/week/${menuId}/pick?day=${day}&mealType=${encodeURIComponent(meal)}`);
+        const returnTab = variant === 'configure' ? 'configure' : 'calendar';
+        if (embedded) {
+            navigate(
+                `/${shopSlug}/my-menu/pick?menuId=${encodeURIComponent(menuId)}&day=${day}&mealType=${encodeURIComponent(meal)}&returnTab=${returnTab}`
+            );
+        } else {
+            navigate(`/${shopSlug}/menu-planner/week/${menuId}/pick?day=${day}&mealType=${encodeURIComponent(meal)}`);
+        }
     };
 
     const addCustom = async () => {
@@ -181,21 +203,53 @@ export default function WeeklyCalendarPage() {
         try {
             const r = await menuPlannerApi.generateShoppingList(shopSlug, menuId);
             const id = (r as any)?.id;
-            if (id) navigate(`/${shopSlug}/menu-planner/shopping/${id}`);
+            if (id) {
+                if (myMenu) {
+                    myMenu.setListId(String(id));
+                    myMenu.setTab('shopping');
+                } else {
+                    navigate(`/${shopSlug}/menu-planner/shopping/${id}`);
+                }
+            }
         } catch (e: any) {
             showToast(e?.message || 'Could not generate list');
         }
     };
 
-    if (!shopSlug || !menuId) return null;
+    const fabBottom = contentBottomPad ?? 'calc(72px + var(--safe-bottom))';
+
+    if (!shopSlug) return null;
 
     if (!state.isLoggedIn) {
         return (
             <div className="page fade-in" style={{ paddingBottom: 100 }}>
-                <MenuPlannerHeader />
-                <p style={{ padding: 24 }}>
-                    <Link to={`/${shopSlug}/login`}>Log in</Link> to edit your plan.
+                {!embedded && <MenuPlannerHeader />}
+                <p style={{ padding: 24, color: 'var(--text-muted)', lineHeight: 1.5 }}>An active session is required to edit this plan.</p>
+            </div>
+        );
+    }
+
+    if (!menuId) {
+        return (
+            <div className="page fade-in" style={{ padding: 24, paddingBottom: 120, background: '#F5F5F7' }}>
+                {!embedded && <MenuPlannerHeader />}
+                <p style={{ marginBottom: 16, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    Create a weekly plan from the dashboard first, then you can add meals and generate a shopping list.
                 </p>
+                {embedded && myMenu ? (
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ background: GREEN, width: '100%', maxWidth: 320 }}
+                        onClick={() => myMenu.setTab('dashboard')}
+                    >
+                        Go to dashboard
+                    </button>
+                ) : (
+                    <Link to={`/${shopSlug}/menu-planner`} style={{ color: GREEN, fontWeight: 700 }}>
+                        Open dashboard
+                    </Link>
+                )}
             </div>
         );
     }
@@ -208,85 +262,112 @@ export default function WeeklyCalendarPage() {
     const dailyBudget = 1200;
 
     return (
-        <div className="page fade-in" style={{ paddingBottom: 120, background: '#F5F5F7' }}>
-            <MenuPlannerHeader />
+        <div className="page fade-in" style={{ paddingBottom: embedded ? 16 : 120, background: '#F5F5F7' }}>
+            {!embedded && <MenuPlannerHeader />}
 
             <div style={{ padding: 16, maxWidth: 560, margin: '0 auto' }}>
-                <Link to={`/${shopSlug}/menu-planner`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
-                    ← Dashboard
-                </Link>
+                {embedded && myMenu ? (
+                    <button
+                        type="button"
+                        style={{ fontSize: 14, color: GREEN, fontWeight: 600, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                        onClick={() => myMenu.setTab('dashboard')}
+                    >
+                        ← Dashboard
+                    </button>
+                ) : (
+                    <Link to={`/${shopSlug}/menu-planner`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
+                        ← Dashboard
+                    </Link>
+                )}
+
+                {variant === 'configure' && (
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.45 }}>
+                        Add recipes from the catalog or custom meal names for each slot. Drag cards to move meals between days.
+                    </p>
+                )}
 
                 {loading || !detail ? (
                     <p style={{ marginTop: 24, color: 'var(--text-muted)' }}>Loading calendar…</p>
                 ) : (
                     <>
-                        <div
-                            className="card"
-                            style={{
-                                marginTop: 16,
-                                padding: 16,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                borderRadius: 14,
-                                boxShadow: 'var(--shadow)',
-                            }}
-                        >
-                            <button
-                                type="button"
-                                aria-label="Previous week view"
-                                style={{ border: 'none', background: 'transparent', fontSize: 20, color: GREEN }}
-                                onClick={() => setWeekOffset((w) => w - 1)}
-                            >
-                                ‹
-                            </button>
-                            <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontWeight: 800, fontSize: 16 }}>
-                                    Week of {weekLabel}
+                        {variant === 'full' && (
+                            <>
+                                <div
+                                    className="card"
+                                    style={{
+                                        marginTop: 16,
+                                        padding: 16,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        borderRadius: 14,
+                                        boxShadow: 'var(--shadow)',
+                                    }}
+                                >
+                                    <button
+                                        type="button"
+                                        aria-label="Previous week view"
+                                        style={{ border: 'none', background: 'transparent', fontSize: 20, color: GREEN }}
+                                        onClick={() => setWeekOffset((w) => w - 1)}
+                                    >
+                                        ‹
+                                    </button>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontWeight: 800, fontSize: 16 }}>
+                                            Week of {weekLabel}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>
+                                            ACTIVE PLANNING PHASE
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        aria-label="Next week view"
+                                        style={{ border: 'none', background: 'transparent', fontSize: 20, color: GREEN }}
+                                        onClick={() => setWeekOffset((w) => w + 1)}
+                                    >
+                                        ›
+                                    </button>
                                 </div>
-                                <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>
-                                    ACTIVE PLANNING PHASE
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                aria-label="Next week view"
-                                style={{ border: 'none', background: 'transparent', fontSize: 20, color: GREEN }}
-                                onClick={() => setWeekOffset((w) => w + 1)}
-                            >
-                                ›
-                            </button>
-                        </div>
 
-                        {weekOffset !== 0 && (
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                        Viewing a shifted week for reference. Meal edits apply to your saved plan&apos;s dates.
-                    </p>
-                )}
+                                {weekOffset !== 0 && (
+                                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                                        Viewing a shifted week for reference. Meal edits apply to your saved plan&apos;s dates.
+                                    </p>
+                                )}
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
-                            <div style={{ background: 'rgba(46,125,50,0.1)', borderRadius: 14, padding: 14 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#1B5E20' }}>DAILY CALORIES</div>
-                                <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>
-                                    {dailyKcal.toLocaleString()} / 2500
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
+                                    <div style={{ background: 'rgba(46,125,50,0.1)', borderRadius: 14, padding: 14 }}>
+                                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#1B5E20' }}>DAILY CALORIES</div>
+                                        <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>
+                                            {dailyKcal.toLocaleString()} / 2500
+                                        </div>
+                                        <div style={{ marginTop: 8, height: 6, borderRadius: 3, background: 'rgba(0,0,0,0.08)' }}>
+                                            <div
+                                                style={{
+                                                    width: `${Math.min(100, Math.round((dailyKcal / 2500) * 100))}%`,
+                                                    height: '100%',
+                                                    background: GREEN,
+                                                    borderRadius: 3,
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ background: 'rgba(212, 175, 55, 0.15)', borderRadius: 14, padding: 14 }}>
+                                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#795548' }}>EST. BUDGET</div>
+                                        <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>Rs {dailyBudget.toLocaleString()}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>📋 Per day avg</div>
+                                    </div>
                                 </div>
-                                <div style={{ marginTop: 8, height: 6, borderRadius: 3, background: 'rgba(0,0,0,0.08)' }}>
-                                    <div
-                                        style={{
-                                            width: `${Math.min(100, Math.round((dailyKcal / 2500) * 100))}%`,
-                                            height: '100%',
-                                            background: GREEN,
-                                            borderRadius: 3,
-                                        }}
-                                    />
-                                </div>
+                            </>
+                        )}
+
+                        {variant === 'configure' && (
+                            <div style={{ marginTop: 16 }}>
+                                <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>Week of {weekLabel}</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Meals &amp; configuration</div>
                             </div>
-                            <div style={{ background: 'rgba(212, 175, 55, 0.15)', borderRadius: 14, padding: 14 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#795548' }}>EST. BUDGET</div>
-                                <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>Rs {dailyBudget.toLocaleString()}</div>
-                                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>📋 Per day avg</div>
-                            </div>
-                        </div>
+                        )}
 
                         {DAY_NAMES.map((dayName, dow) => {
                             const dateIso = displayWeekStart ? addDays(displayWeekStart, dow) : '';
@@ -426,7 +507,7 @@ export default function WeeklyCalendarPage() {
                     position: 'fixed',
                     left: 16,
                     right: 16,
-                    bottom: `calc(72px + var(--safe-bottom))`,
+                    bottom: fabBottom,
                     zIndex: 40,
                 }}
             >

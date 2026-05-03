@@ -1266,7 +1266,8 @@ function ReservedStockReportPanel({
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
                         “POS sellable hint” is on-hand minus reserved on this inventory row; expiry batches may further limit sellable
-                        stock.
+                        stock. Pending checkout orders stop reserving after the time limit in Ordering Parameters (stock is freed; customers
+                        must place a new order to re-check availability).
                     </p>
                 </div>
                 <button
@@ -2669,6 +2670,31 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         />
                                         <span className="flex items-center pr-3 text-xs font-bold text-muted-foreground tabular-nums">MINS</span>
                                     </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="mobile-pending-reservation-ttl" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                                        Pending hold timeout
+                                    </label>
+                                    <div className="flex rounded-xl bg-white shadow-sm ring-1 ring-slate-200/80 focus-within:ring-2 focus-within:ring-[#004494] dark:bg-slate-900 dark:ring-slate-600">
+                                        <input
+                                            id="mobile-pending-reservation-ttl"
+                                            type="number"
+                                            min={5}
+                                            max={10080}
+                                            value={localSettings.pending_reservation_ttl_minutes ?? 30}
+                                            onChange={e =>
+                                                setLocalSettings({
+                                                    ...localSettings,
+                                                    pending_reservation_ttl_minutes: parseInt(e.target.value, 10) || 30,
+                                                })
+                                            }
+                                            className="w-full min-w-0 rounded-l-xl border-0 bg-transparent px-3.5 py-2.5 text-sm outline-none"
+                                        />
+                                        <span className="flex items-center pr-3 text-xs font-bold text-muted-foreground tabular-nums">MINS</span>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                                        Unconfirmed pending orders cancel after this time and release reserved stock (5–10080).
+                                    </p>
                                 </div>
                                 <div>
                                     <label htmlFor="mobile-order-from" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Accept Orders From</label>

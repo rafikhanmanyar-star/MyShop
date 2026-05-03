@@ -15,11 +15,20 @@ const CHIPS = [
     { id: 'rice', label: 'Rice', search: 'rice' },
 ];
 
+function parseReturnTab(s: string | null): 'dashboard' | 'calendar' | 'shopping' | 'configure' {
+    if (s === 'configure' || s === 'calendar' || s === 'dashboard' || s === 'shopping') return s;
+    return 'calendar';
+}
+
 export default function RecipePickerPage() {
-    const { shopSlug, menuId } = useParams();
+    const { shopSlug, menuId: routeMenuId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { showToast } = useApp();
+
+    const menuId = routeMenuId || searchParams.get('menuId') || '';
+    const returnTab = parseReturnTab(searchParams.get('returnTab'));
+    const fromMyMenuPick = Boolean(!routeMenuId && searchParams.get('menuId'));
 
     const day = Number(searchParams.get('day') || '0');
     const mealType = searchParams.get('mealType') || 'lunch';
@@ -96,7 +105,11 @@ export default function RecipePickerPage() {
                 });
             }
             showToast('Recipes added to plan');
-            navigate(`/${shopSlug}/menu-planner/week/${menuId}`);
+            if (fromMyMenuPick) {
+                navigate(`/${shopSlug}/my-menu?tab=${returnTab}`);
+            } else {
+                navigate(`/${shopSlug}/menu-planner/week/${menuId}`);
+            }
         } catch (e: any) {
             showToast(e?.message || 'Could not add recipes');
         }
@@ -108,8 +121,11 @@ export default function RecipePickerPage() {
         <div className="page fade-in" style={{ paddingBottom: 120, minHeight: '100dvh', background: '#fff' }}>
             <MenuPlannerHeader />
             <div style={{ padding: '0 16px 12px', maxWidth: 560, margin: '0 auto' }}>
-                <Link to={`/${shopSlug}/menu-planner/week/${menuId}`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
-                    ← Calendar
+                <Link
+                    to={fromMyMenuPick ? `/${shopSlug}/my-menu?tab=${returnTab}` : `/${shopSlug}/menu-planner/week/${menuId}`}
+                    style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}
+                >
+                    ← {fromMyMenuPick ? 'Back' : 'Calendar'}
                 </Link>
                 <div style={{ marginTop: 12, position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }}>🔍</span>

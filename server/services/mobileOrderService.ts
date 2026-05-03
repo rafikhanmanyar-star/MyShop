@@ -1230,7 +1230,9 @@ export class MobileOrderService {
             if (newStatus === 'Cancelled') {
                 updateFields.push(`cancelled_at = NOW()`);
                 updateFields.push(`cancelled_by = $${pIdx}`);
-                updateParams.push(changedByType === 'customer' ? 'customer' : 'shop');
+                updateParams.push(
+                    changedByType === 'customer' ? 'customer' : changedByType === 'system' ? 'system' : 'shop'
+                );
                 pIdx++;
                 if (note) {
                     updateFields.push(`cancellation_reason = $${pIdx}`);
@@ -1884,6 +1886,50 @@ export class MobileOrderService {
         );
 
         await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+    }
+
+    /**
+     * Auto-cancel stale Pending orders so quantity_reserved is released for POS and other customers.
+     * TTL per tenant: mobile_ordering_settings.pending_reservation_ttl_minutes (clamped 5–10080; default 30).
+     * New checkout runs placeOrder() which re-checks stock before reserving again.
+     */
+    async expireStalePendingReservations(): Promise<{ cancelled: number; orderIds: string[] }> {
+        const TTL_MIN = 5;
+        const TTL_MAX = 10080;
+        const rows = await this.db.query(
+            `SELECT o.id, o.tenant_id, o.created_at,
+              COALESCE(s.pending_reservation_ttl_minutes, 30) AS pending_reservation_ttl_minutes
+         FROM mobile_orders o
+         LEFT JOIN mobile_ordering_settings s ON s.tenant_id = o.tenant_id
+         WHERE o.status = 'Pending'`
+        );
+        const now = Date.now();
+        const stale = (rows as any[]).filter((r) => {
+            const raw = parseInt(String(r.pending_reservation_ttl_minutes ?? 30), 10);
+            const ttl = Math.min(TTL_MAX, Math.max(TTL_MIN, Number.isFinite(raw) ? raw : 30));
+            const created = new Date(r.created_at).getTime();
+            return Number.isFinite(created) && created + ttl * 60_000 < now;
+        });
+
+        const orderIds: string[] = [];
+        for (const r of stale) {
+            const tenantId = String(r.tenant_id);
+            const orderId = String(r.id);
+            try {
+                await this.updateOrderStatus(
+                    tenantId,
+                    orderId,
+                    'Cancelled',
+                    'system',
+                    'system',
+                    'Reservation expired: pending order was not confirmed within the configured time.'
+                );
+                orderIds.push(orderId);
+            } catch (e) {
+                console.warn('[mobile] expireStalePendingReservations: skip order', orderId, e);
+            }
+        }
+        return { cancelled: orderIds.length, orderIds };
     }
 }
 

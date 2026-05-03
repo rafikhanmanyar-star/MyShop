@@ -81,6 +81,8 @@ export interface MobileOrderingSettings {
     order_acceptance_start: string;
     order_acceptance_end: string;
     estimated_delivery_minutes: number;
+    /** Minutes a Pending order may hold stock before auto-cancel (server clamps 5–10080). */
+    pending_reservation_ttl_minutes?: number;
     rider_assignment_mode: 'auto' | 'manual' | 'third_party';
 }
 

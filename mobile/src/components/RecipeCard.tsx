@@ -9,6 +9,8 @@ export type RecipeCardData = {
     prep_time_minutes?: number;
     difficulty?: string | null;
     category_id?: string | null;
+    /** Present on mobile list/detail payloads for grouping and labels */
+    category_name?: string | null;
 };
 
 const RecipeCard = memo(function RecipeCard({

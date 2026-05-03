@@ -23,6 +23,7 @@ import platformAuthRoutes from './routes/platformAuth.js';
 import { platformAdminMiddleware } from '../middleware/platformAdminMiddleware.js';
 import { runMigrations } from '../scripts/run-migrations.js';
 import { getPlatformAuthService } from '../services/platformAuthService.js';
+import { getMobileOrderService } from '../services/mobileOrderService.js';
 import { fileURLToPath } from 'url';
 import fs from 'node:fs';
 
@@ -188,6 +189,24 @@ async function start() {
       console.log(`✅ MyShop API running at http://${HOST}:${PORT}`);
       console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
     });
+
+    // Release quantity_reserved on stale Pending mobile orders (TTL in mobile_ordering_settings).
+    if (process.env.DISABLE_MOBILE_PENDING_RESERVATION_SWEEP !== 'true') {
+      const sweepMs = parseInt(process.env.MOBILE_PENDING_RESERVATION_SWEEP_MS || '', 10);
+      const intervalMs = Number.isFinite(sweepMs) && sweepMs >= 60_000 ? sweepMs : 5 * 60_000;
+      const runSweep = () => {
+        getMobileOrderService()
+          .expireStalePendingReservations()
+          .then((r) => {
+            if (r.cancelled > 0) {
+              console.log(`[mobile] Auto-cancelled ${r.cancelled} stale pending order(s); inventory reservations released.`);
+            }
+          })
+          .catch((e) => console.error('[mobile] Pending reservation sweep failed:', e));
+      };
+      setTimeout(runSweep, 15_000);
+      setInterval(runSweep, intervalMs);
+    }
   } catch (error) {
     console.error('❌ Critical failure during startup:', error);
   }

@@ -134,6 +134,7 @@ export default function App() {
           <Route path="recipes" element={<RecipeHome />} />
           <Route path="recipes/:id" element={<RecipeDetail />} />
           <Route path="my-menu" element={<MyMenuPage />} />
+          <Route path="my-menu/pick" element={<RecipePickerPage />} />
           <Route path="menu-planner" element={<WeeklyMenuDashboardPage />} />
           <Route path="menu-planner/week/:menuId" element={<WeeklyCalendarPage />} />
           <Route path="menu-planner/week/:menuId/pick" element={<RecipePickerPage />} />
