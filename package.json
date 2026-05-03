@@ -1,6 +1,6 @@
 {
   "name": "myshop",
-  "version": "1.0.168",
+  "version": "1.0.169",
   "description": "MyShop - POS & Inventory Management",
   "main": "electron/main.js",
   "private": true,
@@ -12,6 +12,8 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
+    "dev:mobile": "cd mobile && npm run dev",
+    "dev:rider": "cd rider && npm run dev",
     "build": "npm run build:server && npm run build:client",
     "build:server": "cd server && npm run build",
     "migrate": "cd server && npm run migrate",
@@ -19,7 +21,7 @@
     "build:client": "cd client && npm run build",
     "build:client:cloud": "cd client && npm run build:cloud",
     "electron": "npm run build && electron .",
-    "electron:dev": "concurrently \"npm run dev:server\" \"wait-on http://localhost:3000/api/health && electron . --dev\"",
+    "electron:dev": "concurrently -n server,mobile,rider,electron -c blue,cyan,magenta,green \"npm run dev:server\" \"npm run dev:mobile\" \"npm run dev:rider\" \"wait-on http://localhost:3001/api/health && electron . --dev\"",
     "electron:cloud": "npm run build:client:cloud && electron . --cloud",
     "pack": "npm run build:client:cloud && electron-builder --dir -c electron-builder.cloud.json",
     "pack:local": "npm run build && electron-builder --dir",
@@ -30,7 +32,7 @@
     "release": "powershell -ExecutionPolicy Bypass -File ./build-and-push.ps1",
     "release:minor": "powershell -ExecutionPolicy Bypass -File ./build-and-push.ps1 -BumpType minor",
     "release:major": "powershell -ExecutionPolicy Bypass -File ./build-and-push.ps1 -BumpType major",
-    "postinstall": "cd server && npm install && cd ../client && npm install"
+    "postinstall": "cd server && npm install && cd ../client && npm install && cd ../mobile && npm install && cd ../rider && npm install"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

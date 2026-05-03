@@ -1,5 +1,5 @@
 /** Keep in sync with client/src/config/apiUrl.ts so API + image URLs resolve the same way. */
-const API_PORT = 3000;
+const API_PORT = 3001;
 
 export function getApiBaseUrl(): string {
     const env = import.meta.env.VITE_API_URL as string | undefined;
@@ -22,7 +22,7 @@ export function getApiBaseUrl(): string {
             return `http://localhost:${API_PORT}/api`;
         }
 
-        // Production without env: assume API on same host (or localhost:3000 in dev-like setups)
+        // Production without env: assume API on same host (or localhost:3001 in dev-like setups)
         return `${protocol}//${hostname}${hostname === 'localhost' ? `:${API_PORT}` : ''}/api`;
     }
 
@@ -226,4 +226,103 @@ export const customerApi = {
         request(`${API_BASE}/${shopSlug}/recipes/${encodeURIComponent(recipeId)}/save`, { method: 'POST', body: '{}' }),
     unsaveRecipe: (shopSlug: string, recipeId: string) =>
         request(`${API_BASE}/${shopSlug}/recipes/${encodeURIComponent(recipeId)}/save`, { method: 'DELETE' }),
+};
+
+function shopAuthRequest(shopSlug: string, path: string, options: RequestInit = {}) {
+    return request(`${API_BASE}/${shopSlug}${path}`, options);
+}
+
+/** Authenticated routes under `/api/mobile/:shopSlug/...` */
+export const menuPlannerApi = {
+    createMenu: (shopSlug: string, body: { title: string; week_start_date: string }) =>
+        shopAuthRequest(shopSlug, '/weekly-menus', { method: 'POST', body: JSON.stringify(body) }),
+    listMenus: (shopSlug: string, params?: { week_start_date?: string; limit?: number; offset?: number }) => {
+        const q = new URLSearchParams();
+        if (params?.week_start_date) q.set('week_start_date', params.week_start_date);
+        if (params?.limit != null) q.set('limit', String(params.limit));
+        if (params?.offset != null) q.set('offset', String(params.offset));
+        const qs = q.toString();
+        return shopAuthRequest(shopSlug, `/weekly-menus${qs ? `?${qs}` : ''}`);
+    },
+    getMenu: (shopSlug: string, menuId: string) => shopAuthRequest(shopSlug, `/weekly-menus/${encodeURIComponent(menuId)}`),
+    updateMenu: (shopSlug: string, menuId: string, body: Record<string, unknown>) =>
+        shopAuthRequest(shopSlug, `/weekly-menus/${encodeURIComponent(menuId)}`, {
+            method: 'PUT',
+            body: JSON.stringify(body),
+        }),
+    deleteMenu: (shopSlug: string, menuId: string) =>
+        shopAuthRequest(shopSlug, `/weekly-menus/${encodeURIComponent(menuId)}`, { method: 'DELETE' }),
+    duplicateMenu: (shopSlug: string, menuId: string, week_start_date: string) =>
+        shopAuthRequest(shopSlug, `/weekly-menus/${encodeURIComponent(menuId)}/duplicate`, {
+            method: 'POST',
+            body: JSON.stringify({ week_start_date }),
+        }),
+    addMenuItem: (shopSlug: string, menuId: string, body: Record<string, unknown>) =>
+        shopAuthRequest(shopSlug, `/weekly-menus/${encodeURIComponent(menuId)}/items`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        }),
+    updateMenuItem: (shopSlug: string, itemId: string, body: Record<string, unknown>) =>
+        shopAuthRequest(shopSlug, `/menu-items/${encodeURIComponent(itemId)}`, {
+            method: 'PUT',
+            body: JSON.stringify(body),
+        }),
+    deleteMenuItem: (shopSlug: string, itemId: string) =>
+        shopAuthRequest(shopSlug, `/menu-items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
+    moveMenuItem: (shopSlug: string, itemId: string, body: Record<string, unknown>) =>
+        shopAuthRequest(shopSlug, `/menu-items/${encodeURIComponent(itemId)}/move`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+        }),
+    generateShoppingList: (shopSlug: string, menuId: string) =>
+        shopAuthRequest(shopSlug, `/weekly-menus/${encodeURIComponent(menuId)}/generate-shopping-list`, {
+            method: 'POST',
+            body: '{}',
+        }),
+    getShoppingList: (shopSlug: string, listId: string) =>
+        shopAuthRequest(shopSlug, `/shopping-lists/${encodeURIComponent(listId)}`),
+    getExternalMarketList: (shopSlug: string, listId: string, acceptPlainText?: boolean) => {
+        const token = localStorage.getItem('mobile_token');
+        const url = `${getApiBaseUrl()}/mobile/${shopSlug}/shopping-lists/${encodeURIComponent(listId)}/external-market-list`;
+        return fetch(url, {
+            headers: {
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                ...(acceptPlainText ? { Accept: 'text/plain' } : { Accept: 'application/json' }),
+            },
+        }).then(async (res) => {
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error((err as any).error || `Request failed (${res.status})`);
+            }
+            return acceptPlainText ? res.text() : res.json();
+        });
+    },
+    patchShoppingItem: (
+        shopSlug: string,
+        listId: string,
+        itemId: string,
+        body: { is_checked?: boolean; is_at_home?: boolean; matched_product_id?: string | null }
+    ) =>
+        shopAuthRequest(
+            shopSlug,
+            `/shopping-lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`,
+            { method: 'PATCH', body: JSON.stringify(body) }
+        ),
+    addShoppingToCart: (shopSlug: string, listId: string, body: { all?: boolean; item_ids?: string[] }) =>
+        shopAuthRequest(shopSlug, `/shopping-lists/${encodeURIComponent(listId)}/add-to-cart`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        }),
+    listMenuTemplates: (shopSlug: string) => shopAuthRequest(shopSlug, '/menu-templates'),
+    createTemplateFromMenu: (shopSlug: string, menuId: string, name: string, visibility: 'private' | 'public') =>
+        shopAuthRequest(shopSlug, `/menu-templates/from-menu/${encodeURIComponent(menuId)}`, {
+            method: 'POST',
+            body: JSON.stringify({ name, visibility }),
+        }),
+    applyTemplate: (shopSlug: string, menuId: string, templateId: string) =>
+        shopAuthRequest(
+            shopSlug,
+            `/weekly-menus/${encodeURIComponent(menuId)}/apply-template/${encodeURIComponent(templateId)}`,
+            { method: 'POST', body: '{}' }
+        ),
 };

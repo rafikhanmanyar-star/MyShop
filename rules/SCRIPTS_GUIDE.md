@@ -18,7 +18,7 @@ If you just want to work on the web interface without Electron:
 ```bash
 npm run dev
 ```
-*   **What it does**: Starts both the backend API (port 3000) and the frontend Vite server (port 5173).
+*   **What it does**: Starts both the backend API (port 3001) and the frontend Vite server (port 5173).
 *   **URL**: http://localhost:5173
 
 ### 2. Electron Development (Local API)

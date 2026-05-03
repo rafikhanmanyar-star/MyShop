@@ -8,7 +8,7 @@ import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 import { parsePakistanMobile, pakistanMobileDigitsToE164 } from '../utils/pakistanMobile.js';
 import { deductInventoryFefo, insertReturnRestockBatch } from './inventoryBatchService.js';
 
-/** Strip absolute URLs (e.g. http://localhost:3000/uploads/...) to relative paths for DB storage. */
+/** Strip absolute URLs (e.g. http://localhost:3001/uploads/...) to relative paths for DB storage. */
 function normalizeImageUrl(url: string | null | undefined): string | null {
   if (!url || !url.trim()) return null;
   const trimmed = url.trim();

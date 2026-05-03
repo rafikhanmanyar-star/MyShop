@@ -5,9 +5,9 @@ function getApiBaseUrl(): string {
     const isDevServer = import.meta.env.DEV && protocol !== 'file:';
     if (isDevServer) return '/api';
     if (env) return env.endsWith('/api') ? env : `${env.replace(/\/?$/, '')}/api`;
-    return `${protocol}//${hostname}${hostname === 'localhost' ? ':3000' : ''}/api`;
+    return `${protocol}//${hostname}${hostname === 'localhost' ? ':3001' : ''}/api`;
   }
-  return env ? (env.endsWith('/api') ? env : `${env.replace(/\/?$/, '')}/api`) : 'http://localhost:3000/api';
+  return env ? (env.endsWith('/api') ? env : `${env.replace(/\/?$/, '')}/api`) : 'http://localhost:3001/api';
 }
 
 const API_BASE = `${getApiBaseUrl()}/rider`;

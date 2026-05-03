@@ -12,9 +12,9 @@ Run the app in development mode for local testing.
 
 | Command | Description |
 |--------|-------------|
-| `npm run electron:dev` | Starts dev server + client, waits for API, then launches Electron in dev mode. Use this to test locally with hot reload. |
+| `npm run electron:dev` | Starts the API server, **mobile** storefront (Vite), **rider** app (Vite), waits for `/api/health`, then launches Electron in dev mode. Open the mobile PWA at **http://localhost:5175** and the rider app at **http://localhost:5180** (both proxy `/api` to `localhost:3001`; local API default port is **3001** so **3000** stays free for other apps). |
 
-**What it does:** Runs server and client in dev mode, then opens the Electron app. No build, no commit, no push. Ideal for day-to-day development.
+**What it does:** Runs the backend plus mobile and rider dev servers in parallel with Electron. No build, no commit, no push. Use **`npm run dev`** if you only need the POS web client (Vite on **http://localhost:5173**) plus the API without Electron or mobile/rider.
 
 ### Full (with push to GitHub)
 

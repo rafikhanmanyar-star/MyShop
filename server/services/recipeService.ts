@@ -330,7 +330,11 @@ export class RecipeService {
 
     params.push(limit, offset);
     const rows = await this.db.query(
-      `SELECT r.*, c.name AS category_name
+      `SELECT r.id, r.tenant_id, r.title, r.slug, r.description, r.image_url, r.video_url,
+              r.prep_time_minutes, r.cook_time_minutes, r.servings, r.difficulty, r.cuisine, r.calories,
+              r.category_id, r.is_active, r.is_featured, r.is_quick_meal, r.is_budget_meal, r.is_trending,
+              r.created_by, r.created_at, r.updated_at,
+              c.name AS category_name
        FROM recipes r
        LEFT JOIN recipe_categories c ON c.id = r.category_id AND c.tenant_id = r.tenant_id
        ${wh}

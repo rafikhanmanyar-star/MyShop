@@ -1,4 +1,4 @@
-const API_PORT = 3000;
+const API_PORT = 3001;
 
 export function getApiBaseUrl(): string {
   const env = import.meta.env.VITE_API_URL as string | undefined;

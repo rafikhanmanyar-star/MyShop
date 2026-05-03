@@ -23,11 +23,19 @@ import AccountSettings from './pages/AccountSettings';
 import NotificationsPage from './pages/NotificationsPage';
 import RecipeHome from './pages/RecipeHome';
 import RecipeDetail from './pages/RecipeDetail';
+import MyMenuPage from './pages/MyMenuPage';
+import WeeklyMenuDashboardPage from './pages/menuPlanner/WeeklyMenuDashboardPage';
+import WeeklyCalendarPage from './pages/menuPlanner/WeeklyCalendarPage';
+import RecipePickerPage from './pages/menuPlanner/RecipePickerPage';
+import ShoppingListPage from './pages/menuPlanner/ShoppingListPage';
+import MenuTemplatesPage from './pages/menuPlanner/MenuTemplatesPage';
+import NutritionSummaryPage from './pages/menuPlanner/NutritionSummaryPage';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
 import OfflineBanner from './components/OfflineBanner';
 import { processOrderQueue, subscribeToOnline } from './services/orderSyncService';
 import { processPendingProductQueue } from './services/productSyncService';
+import { processMenuPlannerQueue } from './services/menuPlannerSyncQueue';
 import { useHeartbeat } from './hooks/useHeartbeat';
 
 function HeartbeatReporter() {
@@ -55,9 +63,10 @@ function SyncOnOnline() {
         window.dispatchEvent(new CustomEvent('myshop:mobile-sync:start'));
       }
       try {
-        const [orderResult, productResult] = await Promise.all([
+        const [orderResult, productResult, menuPlannerResult] = await Promise.all([
           processOrderQueue(),
           processPendingProductQueue(),
+          processMenuPlannerQueue(),
         ]);
         if (orderResult.succeeded > 0) {
           void refreshLoyalty({ force: true });
@@ -65,6 +74,13 @@ function SyncOnOnline() {
         }
         if (productResult.succeeded > 0) {
           showToast(productResult.succeeded === 1 ? 'Product synced!' : `${productResult.succeeded} products synced!`);
+        }
+        if (menuPlannerResult.succeeded > 0) {
+          showToast(
+            menuPlannerResult.succeeded === 1
+              ? 'Menu planner synced!'
+              : `${menuPlannerResult.succeeded} menu planner updates synced!`
+          );
         }
       } finally {
         if (typeof window !== 'undefined') {
@@ -117,6 +133,13 @@ export default function App() {
           <Route path="budget/:id" element={<BudgetDetail />} />
           <Route path="recipes" element={<RecipeHome />} />
           <Route path="recipes/:id" element={<RecipeDetail />} />
+          <Route path="my-menu" element={<MyMenuPage />} />
+          <Route path="menu-planner" element={<WeeklyMenuDashboardPage />} />
+          <Route path="menu-planner/week/:menuId" element={<WeeklyCalendarPage />} />
+          <Route path="menu-planner/week/:menuId/pick" element={<RecipePickerPage />} />
+          <Route path="menu-planner/shopping/:listId" element={<ShoppingListPage />} />
+          <Route path="menu-planner/templates" element={<MenuTemplatesPage />} />
+          <Route path="menu-planner/nutrition/:menuId" element={<NutritionSummaryPage />} />
         </Route>
 
         {/* Landing page only at root — app is bound to shop when URL is /:shopSlug */}

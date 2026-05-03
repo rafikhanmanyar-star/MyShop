@@ -93,10 +93,10 @@ DATABASE_URL=postgresql://user:password@host:port/database
 JWT_SECRET=your-secret-key-change-this
 
 # Server port
-PORT=3000
+PORT=3001
 
 # Allowed CORS origins
-CORS_ORIGIN=http://localhost:5173,http://localhost:5174
+CORS_ORIGIN=http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5180
 
 # Environment
 NODE_ENV=development

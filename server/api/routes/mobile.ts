@@ -13,6 +13,7 @@ import { getOfferService } from '../../services/offerService.js';
 import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/mobileMiddleware.js';
 import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
 import { getRecipeService } from '../../services/recipeService.js';
+import { getWeeklyMenuPlannerService } from '../../services/weeklyMenuPlannerService.js';
 import jwt from 'jsonwebtoken';
 
 const router = express.Router();
@@ -285,6 +286,256 @@ router.get('/:shopSlug/recipe-categories', publicTenantMiddleware(db), async (re
         res.status(500).json({ error: e.message });
     }
 });
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  Weekly menu planner (auth + tenant from shop slug)               ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+router.post('/:shopSlug/weekly-menus', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { title, week_start_date } = req.body || {};
+        const id = await getWeeklyMenuPlannerService().createMenu(req.tenantId, req.customerId, {
+            title,
+            week_start_date,
+        });
+        res.status(201).json({ id });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+router.get('/:shopSlug/weekly-menus', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 20;
+        const offset = req.query.offset ? parseInt(String(req.query.offset), 10) : 0;
+        const week_start_date = req.query.week_start_date ? String(req.query.week_start_date) : undefined;
+        const data = await getWeeklyMenuPlannerService().listMenus(req.tenantId, req.customerId, {
+            week_start_date,
+            limit,
+            offset,
+        });
+        res.json(data);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/:shopSlug/weekly-menus/:menuId', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const data = await getWeeklyMenuPlannerService().getMenuDetail(req.tenantId, req.customerId, req.params.menuId);
+        res.json(data);
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.put('/:shopSlug/weekly-menus/:menuId', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getWeeklyMenuPlannerService().updateMenu(req.tenantId, req.customerId, req.params.menuId, req.body || {});
+        res.json({ ok: true });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.delete('/:shopSlug/weekly-menus/:menuId', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getWeeklyMenuPlannerService().softDeleteMenu(req.tenantId, req.customerId, req.params.menuId);
+        res.json({ ok: true });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.post('/:shopSlug/weekly-menus/:menuId/duplicate', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const week_start_date = String((req.body || {}).week_start_date || '');
+        const id = await getWeeklyMenuPlannerService().duplicateMenu(
+            req.tenantId,
+            req.customerId,
+            req.params.menuId,
+            week_start_date
+        );
+        res.status(201).json({ id });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.post('/:shopSlug/weekly-menus/:menuId/items', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const id = await getWeeklyMenuPlannerService().addMenuItem(req.tenantId, req.customerId, req.params.menuId, req.body || {});
+        res.status(201).json({ id });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+router.put('/:shopSlug/menu-items/:itemId', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getWeeklyMenuPlannerService().updateMenuItem(req.tenantId, req.customerId, req.params.itemId, req.body || {});
+        res.json({ ok: true });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.delete('/:shopSlug/menu-items/:itemId', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getWeeklyMenuPlannerService().deleteMenuItem(req.tenantId, req.customerId, req.params.itemId);
+        res.json({ ok: true });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.patch('/:shopSlug/menu-items/:itemId/move', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getWeeklyMenuPlannerService().moveMenuItem(req.tenantId, req.customerId, req.params.itemId, req.body || {});
+        res.json({ ok: true });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.post('/:shopSlug/weekly-menus/:menuId/generate-shopping-list', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const id = await getWeeklyMenuPlannerService().generateShoppingList(req.tenantId, req.customerId, req.params.menuId);
+        res.status(201).json({ id });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(/not found|No recipe/i.test(msg) ? 400 : 500).json({ error: msg });
+    }
+});
+
+router.get('/:shopSlug/shopping-lists/:listId', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const data = await getWeeklyMenuPlannerService().getShoppingListDetail(
+            req.tenantId,
+            req.customerId,
+            req.params.listId
+        );
+        res.json(data);
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.get(
+    '/:shopSlug/shopping-lists/:listId/external-market-list',
+    publicTenantMiddleware(db),
+    mobileAuthMiddleware(db),
+    async (req: any, res) => {
+        try {
+            const data = await getWeeklyMenuPlannerService().getExternalMarketListForExport(
+                req.tenantId,
+                req.customerId,
+                req.params.listId
+            );
+            const accept = String(req.headers.accept || '');
+            if (accept.includes('text/plain')) {
+                const body = data.lines
+                    .map((l: { ingredient_name: string; quantity: number; unit: string }) => {
+                        const u = l.unit ? String(l.unit) : '';
+                        return `${l.ingredient_name} — ${l.quantity}${u ? ` ${u}` : ''}`;
+                    })
+                    .join('\n');
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+                return res.send(body || '');
+            }
+            res.json(data);
+        } catch (e: any) {
+            const msg = String(e?.message || '');
+            res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+        }
+    }
+);
+
+router.patch('/:shopSlug/shopping-lists/:listId/items/:itemId', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getWeeklyMenuPlannerService().patchShoppingListItem(
+            req.tenantId,
+            req.customerId,
+            req.params.listId,
+            req.params.itemId,
+            req.body || {}
+        );
+        res.json({ ok: true });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.post('/:shopSlug/shopping-lists/:listId/add-to-cart', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { all: allFlag, item_ids } = req.body || {};
+        const data = await getWeeklyMenuPlannerService().addShoppingListToCart(
+            req.tenantId,
+            req.customerId,
+            req.params.listId,
+            { all: Boolean(allFlag), item_ids: Array.isArray(item_ids) ? item_ids : undefined }
+        );
+        res.json(data);
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.get('/:shopSlug/menu-templates', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const list = await getWeeklyMenuPlannerService().listTemplates(req.tenantId, req.customerId);
+        res.json({ items: list });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:shopSlug/menu-templates/from-menu/:menuId', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { name, visibility } = req.body || {};
+        const id = await getWeeklyMenuPlannerService().createTemplateFromMenu(
+            req.tenantId,
+            req.customerId,
+            req.params.menuId,
+            name,
+            visibility === 'public' ? 'public' : 'private'
+        );
+        res.status(201).json({ id });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.post(
+    '/:shopSlug/weekly-menus/:menuId/apply-template/:templateId',
+    publicTenantMiddleware(db),
+    mobileAuthMiddleware(db),
+    async (req: any, res) => {
+        try {
+            await getWeeklyMenuPlannerService().applyTemplate(
+                req.tenantId,
+                req.customerId,
+                req.params.menuId,
+                req.params.templateId
+            );
+            res.json({ ok: true });
+        } catch (e: any) {
+            const msg = String(e?.message || '');
+            res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+        }
+    }
+);
 
 // Shop info (branding, hours, settings)
 router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) => {

@@ -20,7 +20,7 @@ function sendUpdateStatus(...args) {
     mainWindow.webContents.send('update-status', ...args);
   }
 }
-const PORT = 3000;
+const PORT = 3001;
 const isDev = process.argv.includes('--dev');
 
 function detectCloudMode() {

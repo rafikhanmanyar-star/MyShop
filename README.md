@@ -93,14 +93,14 @@ Instead of the Electron app, you can run the API and frontend separately:
    cd server
    npm run dev
    ```
-   The server runs at http://localhost:3000 and runs migrations automatically.
+   The server runs at http://localhost:3001 and runs migrations automatically.
 
 2. **Start the frontend**
    ```bash
    cd client
    npm run dev
    ```
-   The frontend runs at http://localhost:5173 with API proxy to port 3000.
+   The frontend runs at http://localhost:5173 with API proxy to port 3001.
 
 3. **Register an account**  
    Open http://localhost:5173, click "Create one", and register. This creates a tenant with an admin user.

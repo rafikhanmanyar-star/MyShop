@@ -12,7 +12,7 @@ const appVersion = process.env.RELEASE_APP_VERSION || pkg.version || '0.0.0';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const apiTarget = env.VITE_API_URL || 'http://localhost:3000';
+  const apiTarget = env.VITE_API_URL || 'http://localhost:3001';
 
   /** Electron `loadFile()` uses file:// — absolute `/assets/...` breaks (ERR_FILE_NOT_FOUND). Use `npm run build:cloud` or `--mode cloud`. */
   const useRelativeAssetBase =

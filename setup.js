@@ -52,8 +52,8 @@ async function main() {
       envContent = `# Render Cloud Database
 DATABASE_URL=postgresql://myshop_db_staging_user:1svMSUH15ssv1LA0AVYPVJSHaWy2lfEj@dpg-d6aqlkumcj7s73ekis60-a.oregon-postgres.render.com/myshop_db_staging
 JWT_SECRET=myshop-dev-secret-change-in-production
-PORT=3000
-CORS_ORIGIN=http://localhost:5173,http://localhost:5174
+PORT=3001
+CORS_ORIGIN=http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5180
 NODE_ENV=development
 `;
       console.log('✓ Configured for Render Cloud Database');
@@ -69,8 +69,8 @@ NODE_ENV=development
       envContent = `# Local PostgreSQL Configuration
 DATABASE_URL=postgresql://${dbUser}:${dbPass}@${dbHost}:${dbPort}/${dbName}
 JWT_SECRET=myshop-dev-secret-change-in-production
-PORT=3000
-CORS_ORIGIN=http://localhost:5173,http://localhost:5174
+PORT=3001
+CORS_ORIGIN=http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5180
 NODE_ENV=development
 `;
       console.log('✓ Configured for Local PostgreSQL');
@@ -81,8 +81,8 @@ NODE_ENV=development
       envContent = `# SQLite Local Configuration
 DATABASE_URL=sqlite://${dbFile}
 JWT_SECRET=myshop-dev-secret-change-in-production
-PORT=3000
-CORS_ORIGIN=http://localhost:5173,http://localhost:5174
+PORT=3001
+CORS_ORIGIN=http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5180
 NODE_ENV=development
 `;
       console.log('✓ Configured for SQLite Local');
@@ -93,8 +93,8 @@ NODE_ENV=development
 DATABASE_URL=postgresql://localhost/myshop_local
 DISABLE_MIGRATIONS=true
 JWT_SECRET=myshop-dev-secret-change-in-production
-PORT=3000
-CORS_ORIGIN=http://localhost:5173,http://localhost:5174
+PORT=3001
+CORS_ORIGIN=http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5180
 NODE_ENV=development
 `;
       console.log('✓ Configured for Test Mode (No Database)');

@@ -32,7 +32,7 @@ const uploadsPath = path.resolve(process.cwd(), 'uploads');
 
 const app = express();
 const clientDistPath = process.env.CLIENT_DIST_PATH;
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = '0.0.0.0';
 
 // CORS — With CORS_ORIGIN=* (see render.yaml) every browser origin is allowed, including the rider
@@ -40,7 +40,7 @@ const HOST = '0.0.0.0';
 // (e.g. https://myshop-rider.onrender.com) alongside the mobile and POS dev origins.
 const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5180'];
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5180'];
 
 app.use(cors({
   origin: (origin, callback) => {

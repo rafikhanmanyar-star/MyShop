@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { shopApi } from '../../../services/shopApi';
-import { ArrowLeft, Plus, Trash2, GripVertical, Upload, ChefHat } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, GripVertical, Upload, ChefHat, Pencil, Search } from 'lucide-react';
+import { Table, TableHeaderRow, TableHead, TableBody, TableRow, TableCell } from '../../ui/Table';
 
 type IngDraft = {
   key: string;
@@ -57,6 +58,7 @@ export default function RecipeEditPage() {
   const [steps, setSteps] = useState<StepDraft[]>([]);
 
   const [dragStep, setDragStep] = useState<string | null>(null);
+  const ingredientNameRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const filteredProducts = useMemo(() => {
     const q = prodSearch.trim().toLowerCase();
@@ -65,6 +67,28 @@ export default function RecipeEditPage() {
       .filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
       .slice(0, 80);
   }, [products, prodSearch]);
+
+  const quickAddProducts = useMemo(() => {
+    if (!prodSearch.trim()) return [];
+    return filteredProducts.slice(0, 10);
+  }, [filteredProducts, prodSearch]);
+
+  const productOptionsForRow = useCallback(
+    (ing: IngDraft): ProductOpt[] => {
+      const q = prodSearch.trim().toLowerCase();
+      const base = !q
+        ? products.slice(0, 120)
+        : products
+            .filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
+            .slice(0, 120);
+      if (ing.product_id) {
+        const cur = products.find((p) => p.id === ing.product_id);
+        if (cur && !base.some((p) => p.id === cur.id)) return [cur, ...base];
+      }
+      return base;
+    },
+    [products, prodSearch]
+  );
 
   const loadBase = useCallback(async () => {
     const [c, p] = await Promise.all([shopApi.getRecipeCategories(), shopApi.getProducts()]);
@@ -79,16 +103,7 @@ export default function RecipeEditPage() {
   useEffect(() => {
     if (isNew) {
       setLoading(false);
-      setIngredients([
-        {
-          key: genKey(),
-          ingredient_name: '',
-          quantity: '1',
-          unit: '',
-          optional: false,
-          product_id: '',
-        },
-      ]);
+      setIngredients([]);
       setSteps([{ key: genKey(), instruction: '', image_url: '' }]);
       return;
     }
@@ -155,13 +170,36 @@ export default function RecipeEditPage() {
     }
   };
 
-  const addIng = () =>
+  const addBlankIngredient = () =>
     setIngredients((s) => [
       ...s,
       { key: genKey(), ingredient_name: '', quantity: '1', unit: '', optional: false, product_id: '' },
     ]);
 
-  const removeIng = (key: string) => setIngredients((s) => s.filter((x) => x.key !== key));
+  const addIngredientFromProduct = (p: ProductOpt) => {
+    setIngredients((s) => [
+      ...s,
+      {
+        key: genKey(),
+        ingredient_name: p.name,
+        quantity: '1',
+        unit: '',
+        optional: false,
+        product_id: p.id,
+      },
+    ]);
+  };
+
+  const removeIng = (key: string) => {
+    delete ingredientNameRefs.current[key];
+    setIngredients((s) => s.filter((x) => x.key !== key));
+  };
+
+  const focusIngredientRow = (key: string) => {
+    const el = ingredientNameRefs.current[key];
+    el?.focus();
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
 
   const patchIng = (key: string, patch: Partial<IngDraft>) =>
     setIngredients((s) => s.map((x) => (x.key === key ? { ...x, ...patch } : x)));
@@ -203,8 +241,12 @@ export default function RecipeEditPage() {
       setErr('Title is required');
       return;
     }
+    if (ingPayload.length === 0) {
+      setErr('Add at least one ingredient');
+      return;
+    }
     if (ingPayload.some((x) => !x.ingredient_name || !x.product_id)) {
-      setErr('Each ingredient needs a name and linked product');
+      setErr('Each ingredient needs a name and a mapped product');
       return;
     }
 
@@ -274,8 +316,7 @@ export default function RecipeEditPage() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
+      <div className="max-w-3xl space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
           <h2 className="font-medium text-slate-900 dark:text-slate-100">Basics</h2>
           <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">Title *</label>
           <input
@@ -404,90 +445,176 @@ export default function RecipeEditPage() {
           </div>
         </div>
 
-        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
-          <div className="flex items-center justify-between">
+      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+          <div>
             <h2 className="font-medium text-slate-900 dark:text-slate-100">Ingredients *</h2>
-            <button
-              type="button"
-              onClick={addIng}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
-            >
-              <Plus className="h-3 w-3" /> Add
-            </button>
-          </div>
-          <p className="text-xs text-slate-500">Map each ingredient to a store product so carts can be generated.</p>
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2 dark:border-slate-800">
-            <label className="text-xs font-medium text-slate-600">Find product</label>
-            <input
-              className="flex-1 min-w-[180px] rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-950"
-              placeholder="Search by name or SKU…"
-              value={prodSearch}
-              onChange={(e) => setProdSearch(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            {ingredients.map((ing) => (
-              <div
-                key={ing.key}
-                className="rounded-lg border border-slate-100 p-2 dark:border-slate-800"
-              >
-                <div className="grid gap-2 md:grid-cols-2">
-                  <input
-                    className="rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-950"
-                    placeholder="Ingredient name"
-                    value={ing.ingredient_name}
-                    onChange={(e) => patchIng(ing.key, { ingredient_name: e.target.value })}
-                  />
-                  <div className="flex gap-2">
-                    <input
-                      className="w-20 rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-950"
-                      placeholder="Qty"
-                      value={ing.quantity}
-                      onChange={(e) => patchIng(ing.key, { quantity: e.target.value })}
-                    />
-                    <input
-                      className="flex-1 rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-950"
-                      placeholder="Unit (cup, g, pcs)"
-                      value={ing.unit}
-                      onChange={(e) => patchIng(ing.key, { unit: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <label className="text-xs text-slate-600">Mapped product</label>
-                  <select
-                    className="min-w-[220px] flex-1 rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-950"
-                    value={ing.product_id}
-                    onChange={(e) => patchIng(ing.key, { product_id: e.target.value })}
-                  >
-                    <option value="">Select product…</option>
-                    {filteredProducts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.sku})
-                      </option>
-                    ))}
-                  </select>
-                  <label className="flex items-center gap-1 text-xs">
-                    <input
-                      type="checkbox"
-                      checked={ing.optional}
-                      onChange={(e) => patchIng(ing.key, { optional: e.target.checked })}
-                    />{' '}
-                    Optional
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => removeIng(ing.key)}
-                    className="rounded p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                    aria-label="Remove ingredient"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+            <p className="mt-1 text-xs text-slate-500">
+              Search the catalog below, pick a match to add a line, or add a blank row and map the product in the
+              table.
+            </p>
           </div>
         </div>
+
+        <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+            <div className="min-w-0 flex-1">
+              <label htmlFor="recipe-prod-search" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                Search products (name or SKU)
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="recipe-prod-search"
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm dark:border-slate-600 dark:bg-slate-950"
+                  placeholder="e.g. oil, rice, masala…"
+                  value={prodSearch}
+                  onChange={(e) => setProdSearch(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={addBlankIngredient}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+            >
+              <Plus className="h-4 w-4" />
+              Add blank row
+            </button>
+          </div>
+
+          {quickAddProducts.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-1.5 text-xs font-medium text-slate-600 dark:text-slate-400">Quick add from search</p>
+              <div className="flex max-h-32 flex-wrap gap-2 overflow-y-auto">
+                {quickAddProducts.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => addIngredientFromProduct(p)}
+                    className="max-w-full truncate rounded-full border border-slate-200 bg-white px-3 py-1 text-left text-xs font-medium text-slate-700 hover:border-violet-300 hover:bg-violet-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-violet-500 dark:hover:bg-violet-950/50"
+                    title={`${p.name} (${p.sku})`}
+                  >
+                    + {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {ingredients.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
+            No ingredients yet. Use search quick-add or &quot;Add blank row&quot;.
+          </p>
+        ) : (
+          <Table className="!min-w-[860px]">
+            <thead>
+              <TableHeaderRow className="!bg-slate-50 dark:!bg-slate-800/80">
+                <TableHead className="!w-10 !whitespace-nowrap text-center text-xs font-semibold">#</TableHead>
+                <TableHead className="!min-w-[140px] text-xs font-semibold">Ingredient name</TableHead>
+                <TableHead className="!w-20 text-xs font-semibold">Qty</TableHead>
+                <TableHead className="!w-24 text-xs font-semibold">Unit</TableHead>
+                <TableHead className="!min-w-[220px] text-xs font-semibold">Mapped product</TableHead>
+                <TableHead className="!w-24 text-center text-xs font-semibold">Optional</TableHead>
+                <TableHead className="!w-[100px] text-right text-xs font-semibold">Actions</TableHead>
+              </TableHeaderRow>
+            </thead>
+            <TableBody>
+              {ingredients.map((ing, idx) => {
+                const opts = productOptionsForRow(ing);
+                return (
+                  <TableRow key={ing.key} className="align-middle">
+                    <TableCell className="text-center text-xs text-slate-500">{idx + 1}</TableCell>
+                    <TableCell>
+                      <input
+                        ref={(el) => {
+                          ingredientNameRefs.current[ing.key] = el;
+                        }}
+                        aria-label={`Ingredient ${idx + 1} name`}
+                        className="w-full min-w-[120px] rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
+                        placeholder="Name"
+                        value={ing.ingredient_name}
+                        onChange={(e) => patchIng(ing.key, { ingredient_name: e.target.value })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        aria-label={`Ingredient ${idx + 1} quantity`}
+                        className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
+                        value={ing.quantity}
+                        onChange={(e) => patchIng(ing.key, { quantity: e.target.value })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        aria-label={`Ingredient ${idx + 1} unit`}
+                        className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
+                        placeholder="g, cup…"
+                        value={ing.unit}
+                        onChange={(e) => patchIng(ing.key, { unit: e.target.value })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <select
+                        aria-label={`Ingredient ${idx + 1} mapped product`}
+                        className="w-full max-w-md rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
+                        value={ing.product_id}
+                        onChange={(e) => patchIng(ing.key, { product_id: e.target.value })}
+                      >
+                        <option value="">Select product…</option>
+                        {opts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.sku})
+                          </option>
+                        ))}
+                      </select>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <input
+                        type="checkbox"
+                        aria-label={`Ingredient ${idx + 1} optional`}
+                        checked={ing.optional}
+                        onChange={(e) => patchIng(ing.key, { optional: e.target.checked })}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => focusIngredientRow(ing.key)}
+                          className="rounded-md p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                          title="Edit — focus ingredient name"
+                          aria-label={`Edit ingredient row ${idx + 1}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeIng(ing.key)}
+                          className="rounded-md p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                          title="Remove ingredient"
+                          aria-label={`Delete ingredient row ${idx + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+        <p className="text-xs text-slate-500">
+          Tip: keep the search box filled to narrow the mapped-product dropdown for every row. The current row&apos;s
+          selection is always included in its list.
+        </p>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
@@ -537,6 +664,8 @@ export default function RecipeEditPage() {
                 type="button"
                 onClick={() => removeStep(st.key)}
                 className="self-start rounded p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                aria-label={`Remove step ${idx + 1}`}
+                title="Remove step"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
