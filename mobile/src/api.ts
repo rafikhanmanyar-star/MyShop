@@ -38,8 +38,8 @@ export function getBaseUrl(): string {
     return url.replace(/\/api$/, '');
 }
 
-export function getFullImageUrl(path: string | undefined): string | undefined {
-    if (!path) return undefined;
+export function getFullImageUrl(path: string | null | undefined): string | undefined {
+    if (path == null || path === '') return undefined;
     const raw = String(path).trim();
     if (!raw) return undefined;
     if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:') || raw.startsWith('blob:')) {
