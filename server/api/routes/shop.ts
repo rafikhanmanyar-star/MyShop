@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import sharp from 'sharp';
+import recipesAdminRoutes from './recipesAdmin.js';
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -47,6 +48,8 @@ const categoryIconUpload = multer({
 const router = express.Router();
 
 console.log('✅ Shop router initialized');
+
+router.use('/admin/recipes', recipesAdminRoutes);
 
 // --- Offline sync (bootstrap + incremental) ---
 router.get('/sync/bootstrap', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {

@@ -249,6 +249,33 @@ export const shopApi = {
   createOffer: (data: Record<string, unknown>) => apiClient.post<{ id: string }>('/shop/offers', data),
   updateOffer: (id: string, data: Record<string, unknown>) => apiClient.put(`/shop/offers/${id}`, data),
   deleteOffer: (id: string) => apiClient.delete(`/shop/offers/${id}`),
+
+  getRecipeCategories: () => apiClient.get<any[]>('/shop/admin/recipes/categories'),
+  createRecipeCategory: (data: { name: string; image_url?: string | null }) =>
+    apiClient.post<{ id: string }>('/shop/admin/recipes/categories', data),
+  updateRecipeCategory: (id: string, data: { name?: string; image_url?: string | null }) =>
+    apiClient.put(`/shop/admin/recipes/categories/${id}`, data),
+  deleteRecipeCategory: (id: string) => apiClient.delete(`/shop/admin/recipes/categories/${id}`),
+  getRecipes: (params?: Record<string, string | number | undefined>) => {
+    const q = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== '') q.set(k, String(v));
+      });
+    }
+    const qs = q.toString();
+    return apiClient.get<any>(`/shop/admin/recipes${qs ? `?${qs}` : ''}`);
+  },
+  getRecipe: (id: string) => apiClient.get<any>(`/shop/admin/recipes/${encodeURIComponent(id)}`),
+  createRecipe: (data: Record<string, unknown>) => apiClient.post<{ id: string }>('/shop/admin/recipes', data),
+  updateRecipe: (id: string, data: Record<string, unknown>) =>
+    apiClient.put(`/shop/admin/recipes/${encodeURIComponent(id)}`, data),
+  deleteRecipe: (id: string) => apiClient.delete(`/shop/admin/recipes/${encodeURIComponent(id)}`),
+  uploadRecipeImage: (file: File) => {
+    const fd = new FormData();
+    fd.append('image', file);
+    return apiClient.post<{ imageUrl: string }>('/shop/admin/recipes/upload-image', fd);
+  },
 };
 
 // --- Khata / Customer Credit API ---

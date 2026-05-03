@@ -21,6 +21,8 @@ import BudgetCreation from './pages/BudgetCreation';
 import BudgetDetail from './pages/BudgetDetail';
 import AccountSettings from './pages/AccountSettings';
 import NotificationsPage from './pages/NotificationsPage';
+import RecipeHome from './pages/RecipeHome';
+import RecipeDetail from './pages/RecipeDetail';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
 import OfflineBanner from './components/OfflineBanner';
@@ -113,6 +115,8 @@ export default function App() {
           <Route path="budget" element={<BudgetDashboard />} />
           <Route path="budget/create" element={<BudgetCreation />} />
           <Route path="budget/:id" element={<BudgetDetail />} />
+          <Route path="recipes" element={<RecipeHome />} />
+          <Route path="recipes/:id" element={<RecipeDetail />} />
         </Route>
 
         {/* Landing page only at root — app is bound to shop when URL is /:shopSlug */}

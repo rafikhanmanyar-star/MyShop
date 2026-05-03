@@ -12,6 +12,8 @@ import {
 import { getOfferService } from '../../services/offerService.js';
 import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/mobileMiddleware.js';
 import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
+import { getRecipeService } from '../../services/recipeService.js';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 const db = getDatabaseService();
@@ -165,6 +167,124 @@ router.get('/notifications/stream', mobileAuthMiddleware(db), async (req: any, r
 // ║  PUBLIC ROUTES — No auth required (resolved via shop slug)      ║
 // ╚══════════════════════════════════════════════════════════════════╝
 
+// Recipes (saved list must be registered before /recipes/:id)
+router.get('/:shopSlug/recipes/saved', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+        const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+        const data = await getRecipeService().listSavedRecipes(req.tenantId, req.customerId, { limit, offset });
+        res.json(data);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/:shopSlug/recipes', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const {
+            category_id,
+            search,
+            trending,
+            featured,
+            quick,
+            budget,
+            limit,
+            offset,
+        } = req.query;
+        const data = await getRecipeService().listMobileRecipes(req.tenantId, {
+            category_id: category_id as string,
+            search: search as string,
+            trending: trending === 'true',
+            featured: featured === 'true',
+            quick: quick === 'true',
+            budget: budget === 'true',
+            limit: limit ? parseInt(limit as string, 10) : undefined,
+            offset: offset ? parseInt(offset as string, 10) : undefined,
+        });
+        res.json(data);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/:shopSlug/recipes/:id', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const token = req.headers.authorization?.replace(/^Bearer\s+/i, '')?.trim();
+        let customerId: string | null = null;
+        if (token && process.env.JWT_SECRET) {
+            try {
+                const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
+                if (decoded?.type === 'mobile_customer' && decoded.tenantId === req.tenantId) {
+                    customerId = decoded.customerId;
+                }
+            } catch {
+                /* optional auth */
+            }
+        }
+        const data = await getRecipeService().getMobileRecipeDetail(req.tenantId, req.params.id, customerId);
+        if (!data) return res.status(404).json({ error: 'Recipe not found' });
+        res.json(data);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/:shopSlug/recipes/:id/generate-cart', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const servingsRaw = (req.body as any)?.servings;
+        const servings =
+            servingsRaw !== undefined && servingsRaw !== null ? parseFloat(String(servingsRaw)) : undefined;
+        const items = await getRecipeService().generateCartForRecipe(
+            req.tenantId,
+            req.params.id,
+            servings !== undefined && Number.isFinite(servings) && servings > 0 ? servings : undefined
+        );
+        res.json({
+            items: items.map((row) => ({
+                product_id: row.product_id,
+                product_name: row.product_name,
+                quantity: row.quantity,
+                sku: row.sku,
+                price: row.price,
+                tax_rate: row.tax_rate,
+                image_url: row.image_url,
+                available_stock: row.available_stock,
+            })),
+        });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        const status = /not found|not available|No ingredients/i.test(msg) ? 400 : 500;
+        res.status(status).json({ error: msg });
+    }
+});
+
+router.post('/:shopSlug/recipes/:id/save', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getRecipeService().saveRecipeForUser(req.tenantId, req.customerId, req.params.id);
+        res.json({ ok: true });
+    } catch (e: any) {
+        const msg = String(e?.message || '');
+        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
+    }
+});
+
+router.delete('/:shopSlug/recipes/:id/save', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getRecipeService().unsaveRecipeForUser(req.tenantId, req.customerId, req.params.id);
+        res.json({ ok: true });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+router.get('/:shopSlug/recipe-categories', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const list = await getRecipeService().listCategories(req.tenantId);
+        res.json(list);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // Shop info (branding, hours, settings)
 router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) => {

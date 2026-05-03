@@ -190,6 +190,13 @@ export default function Home() {
                     />
                 </form>
 
+                <div className="home-recipes-banner">
+                    <Link to={`/${shopSlug}/recipes`}>
+                        <span>Recipe ideas — add ingredients to your cart</span>
+                        <span aria-hidden>→</span>
+                    </Link>
+                </div>
+
                 {state.isLoggedIn && (
                     <div className="home-loyalty-card">
                         <div className="home-loyalty-card__main">

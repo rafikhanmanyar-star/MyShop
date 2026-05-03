@@ -85,6 +85,7 @@ interface AppState {
 type Action =
     | { type: 'SET_SHOP'; slug: string; shop: ShopInfo; settings: ShopSettings; branding: TenantBranding }
     | { type: 'ADD_TO_CART'; item: CartItem }
+    | { type: 'MERGE_RECIPE_CART_ITEMS'; lines: CartItem[] }
     | { type: 'UPDATE_QTY'; productId: string; quantity: number }
     | { type: 'REMOVE_FROM_CART'; productId: string }
     | { type: 'CLEAR_CART' }
@@ -349,6 +350,37 @@ function reducer(state: AppState, action: Action): AppState {
             saveCart(newCart);
             saveOfferCart(newOffers);
             return { ...state, cart: newCart, offerBundles: newOffers };
+        }
+
+        case 'MERGE_RECIPE_CART_ITEMS': {
+            let cart = [...state.cart];
+            const productIds = new Set(action.lines.map(l => l.productId));
+            for (const add of action.lines) {
+                const idx = cart.findIndex(i => i.productId === add.productId);
+                if (idx >= 0) {
+                    const mergedQty = cart[idx].quantity + add.quantity;
+                    const cap =
+                        add.available_stock > 0 ? Math.min(mergedQty, add.available_stock) : mergedQty;
+                    cart[idx] = {
+                        ...cart[idx],
+                        quantity: cap,
+                        price: add.price,
+                        tax_rate: add.tax_rate,
+                        available_stock: add.available_stock,
+                        name: add.name,
+                        sku: add.sku,
+                        image_url: add.image_url ?? cart[idx].image_url,
+                    };
+                } else {
+                    const q =
+                        add.available_stock > 0 ? Math.min(add.quantity, add.available_stock) : add.quantity;
+                    cart.push({ ...add, quantity: q });
+                }
+            }
+            const newOffers = state.offerBundles.filter(o => !o.productIds.some(pid => productIds.has(pid)));
+            saveCart(cart);
+            saveOfferCart(newOffers);
+            return { ...state, cart, offerBundles: newOffers };
         }
 
         case 'UPDATE_QTY': {

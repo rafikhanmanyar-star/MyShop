@@ -10,7 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User
+  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User, ChefHat
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
 import { ConnectivityProvider } from './context/ConnectivityContext';
@@ -32,6 +32,8 @@ const DailyReportPage = lazy(() => import('./components/shop/accounting/DailyRep
 const ExpensePage = lazy(() => import('./components/shop/expenses/ExpensePage'));
 const MobileOrdersPage = lazy(() => import('./components/shop/MobileOrdersPage'));
 const OffersPage = lazy(() => import('./components/shop/OffersPage'));
+const RecipesListPage = lazy(() => import('./components/shop/recipes/RecipesListPage'));
+const RecipeEditPage = lazy(() => import('./components/shop/recipes/RecipeEditPage'));
 const ForecastPage = lazy(() => import('./components/shop/ForecastPage'));
 const CashierDashboardPage = lazy(() => import('./components/shop/cashier/CashierDashboardPage'));
 const ShiftsAdminPage = lazy(() => import('./components/shop/cashier/ShiftsAdminPage'));
@@ -67,6 +69,7 @@ const navSections: NavSection[] = [
       { path: '/sales-returns', label: 'Sales Return', icon: Undo2, roles: ['admin', 'pos_cashier', 'accountant'] },
       { path: '/mobile-orders', label: 'Mobile Orders', icon: Smartphone, roles: ['admin', 'pos_cashier'] },
       { path: '/offers', label: 'Offers', icon: Tag, roles: ['admin'] },
+      { path: '/recipes', label: 'Recipes', icon: ChefHat, roles: ['admin'] },
     ],
   },
   {
@@ -360,6 +363,9 @@ function AppLayout() {
               />
               <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MobileOrdersPage /></div> : <Navigate to="/" replace />} />
               <Route path="/offers" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><OffersPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/recipes" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><RecipesListPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/recipes/new" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-auto"><RecipeEditPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/recipes/:id" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-auto"><RecipeEditPage /></div> : <Navigate to="/" replace />} />
 
               <Route path="/inventory" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><InventoryPage /></div> : <Navigate to="/" replace />} />
               <Route path="/procurement" element={['admin', 'accountant'].includes(role) ? <ProcurementPage /> : <Navigate to="/" replace />} />

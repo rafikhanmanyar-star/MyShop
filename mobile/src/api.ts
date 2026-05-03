@@ -108,6 +108,21 @@ export const publicApi = {
         request(`${API_BASE}/${slug}/products/${encodeURIComponent(id)}/recommendations`),
     getOffers: (slug: string) => request(`${API_BASE}/${slug}/offers`),
     getOffer: (slug: string, offerId: string) => request(`${API_BASE}/${slug}/offers/${offerId}`),
+    getRecipeCategories: (slug: string) => request(`${API_BASE}/${slug}/recipe-categories`),
+    getRecipes: (slug: string, params: Record<string, string | number | undefined> = {}) => {
+        const q = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => {
+            if (v !== undefined && v !== '') q.set(k, String(v));
+        });
+        const qs = q.toString();
+        return request(`${API_BASE}/${slug}/recipes${qs ? `?${qs}` : ''}`);
+    },
+    getRecipe: (slug: string, id: string) => request(`${API_BASE}/${slug}/recipes/${encodeURIComponent(id)}`),
+    generateRecipeCart: (slug: string, id: string, body?: { servings?: number }) =>
+        request(`${API_BASE}/${slug}/recipes/${encodeURIComponent(id)}/generate-cart`, {
+            method: 'POST',
+            body: JSON.stringify(body || {}),
+        }),
     getBrands: (slug: string) => request(`${API_BASE}/${slug}/brands`),
     getBranding: (slug: string) => request(`${API_BASE}/${slug}/branding`),
     /** Create product/SKU (used when syncing offline-created products; requires backend POST /api/mobile/:shopSlug/products) */
@@ -200,4 +215,15 @@ export const customerApi = {
     getBudgetAlerts: () => request(`${API_BASE}/budget-alerts`),
     /** Loyalty balance (backend-calculated; same source as POS) */
     getLoyaltyPoints: () => request(`${API_BASE}/loyalty-points`),
+    getSavedRecipes: (shopSlug: string, params?: { limit?: number; offset?: number }) => {
+        const q = new URLSearchParams();
+        if (params?.limit != null) q.set('limit', String(params.limit));
+        if (params?.offset != null) q.set('offset', String(params.offset));
+        const qs = q.toString();
+        return request(`${API_BASE}/${shopSlug}/recipes/saved${qs ? `?${qs}` : ''}`);
+    },
+    saveRecipe: (shopSlug: string, recipeId: string) =>
+        request(`${API_BASE}/${shopSlug}/recipes/${encodeURIComponent(recipeId)}/save`, { method: 'POST', body: '{}' }),
+    unsaveRecipe: (shopSlug: string, recipeId: string) =>
+        request(`${API_BASE}/${shopSlug}/recipes/${encodeURIComponent(recipeId)}/save`, { method: 'DELETE' }),
 };

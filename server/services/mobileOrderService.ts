@@ -81,7 +81,7 @@ function parseAttributesJson(val: any): Record<string, unknown> | null {
 }
 
 /** Sellable qty expression for mobile catalog (tenant param is always $1). */
-function mobileProductSellableStockSql(): string {
+export function mobileProductSellableStockSql(): string {
     return `COALESCE((
           SELECT SUM(
             CASE
