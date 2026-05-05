@@ -13,12 +13,15 @@ const TABS: { id: MyMenuTab; label: string }[] = [
 export function buildMyMenuHubPath(
     shopSlug: string,
     tab: MyMenuTab,
-    opts?: { menuId?: string | null; listId?: string | null }
+    opts?: { menuId?: string | null; listId?: string | null; calendarDay?: number | null }
 ): string {
     const q = new URLSearchParams();
     q.set('tab', tab);
     if (opts?.menuId) q.set('menuId', opts.menuId);
     if (opts?.listId) q.set('listId', opts.listId);
+    if (opts?.calendarDay != null && opts.calendarDay >= 0 && opts.calendarDay <= 6) {
+        q.set('day', String(opts.calendarDay));
+    }
     return `/${shopSlug}/my-menu?${q.toString()}`;
 }
 

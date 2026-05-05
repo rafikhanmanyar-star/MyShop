@@ -160,9 +160,14 @@ export default function RecipePickerPage() {
             }
             showToast('Added to plan');
             if (fromMyMenuPick) {
-                navigate(buildMyMenuHubPath(shopSlug, returnTab, { menuId }));
+                navigate(
+                    buildMyMenuHubPath(shopSlug, returnTab, {
+                        menuId,
+                        calendarDay: returnTab === 'calendar' ? day : null,
+                    })
+                );
             } else {
-                navigate(`/${shopSlug}/menu-planner/week/${menuId}`);
+                navigate(`/${shopSlug}/menu-planner/week/${menuId}?day=${day}`);
             }
         } catch (e: any) {
             showToast(e?.message || 'Could not add to plan');
@@ -498,7 +503,10 @@ export default function RecipePickerPage() {
         <div className="page fade-in" style={{ paddingBottom: 120, minHeight: '100dvh', background: '#fff' }}>
             <MenuPlannerHeader />
             <div style={{ padding: '0 16px 12px', maxWidth: 560, margin: '0 auto' }}>
-                <Link to={`/${shopSlug}/menu-planner/week/${menuId}`} style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}>
+                <Link
+                    to={`/${shopSlug}/menu-planner/week/${menuId}?day=${day}`}
+                    style={{ fontSize: 14, color: GREEN, fontWeight: 600 }}
+                >
                     ← Calendar
                 </Link>
                 {searchAndCategories}

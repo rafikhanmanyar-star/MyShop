@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { useMyMenuLayout } from '../../context/MyMenuLayoutContext';
 import { menuPlannerApi, getFullImageUrl } from '../../api';
@@ -28,6 +28,10 @@ function addDays(iso: string, n: number): string {
     return d.toISOString().slice(0, 10);
 }
 
+function itemDisplayName(it: any): string {
+    return it.recipe_title || it.customer_item_name || it.custom_meal_name || 'Meal';
+}
+
 export type WeeklyCalendarPageProps = {
     menuIdOverride?: string;
     embedded?: boolean;
@@ -42,6 +46,7 @@ export default function WeeklyCalendarPage({
     const { shopSlug, menuId: routeMenuId } = useParams();
     const menuId = menuIdOverride ?? routeMenuId;
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const myMenu = useMyMenuLayout();
     const { state, showToast } = useApp();
 
@@ -51,6 +56,39 @@ export default function WeeklyCalendarPage({
     const [customOpen, setCustomOpen] = useState<{ day: number; meal: string } | null>(null);
     const [customName, setCustomName] = useState('');
     const [dragItemId, setDragItemId] = useState<string | null>(null);
+
+    const selectedDay = useMemo(() => {
+        const raw = searchParams.get('day');
+        if (raw === null || raw === '') return null;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0 || n > 6 || !Number.isInteger(n)) return null;
+        return n;
+    }, [searchParams]);
+
+    const openDayDetail = useCallback(
+        (dow: number) => {
+            setSearchParams(
+                (prev) => {
+                    const n = new URLSearchParams(prev);
+                    n.set('day', String(dow));
+                    return n;
+                },
+                { replace: true }
+            );
+        },
+        [setSearchParams]
+    );
+
+    const closeDayDetail = useCallback(() => {
+        setSearchParams(
+            (prev) => {
+                const n = new URLSearchParams(prev);
+                n.delete('day');
+                return n;
+            },
+            { replace: true }
+        );
+    }, [setSearchParams]);
 
     const baseWeekStart = useMemo(
         () => (detail?.menu?.week_start_date ? String(detail.menu.week_start_date).slice(0, 10) : null),
@@ -216,6 +254,138 @@ export default function WeeklyCalendarPage({
 
     const fabBottom = contentBottomPad ?? 'calc(72px + var(--safe-bottom))';
 
+    const renderDayEditor = (dow: number) => {
+        const dayName = DAY_NAMES[dow];
+        const dateIso = displayWeekStart ? addDays(displayWeekStart, dow) : '';
+        const headerDate = dateIso ? parseIsoDate(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+        const tgt = targetKcalForDay(dow);
+
+        return (
+            <section key={dow} style={{ marginTop: selectedDay !== null ? 12 : 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>
+                        {dayName}, {headerDate}
+                    </h3>
+                    <span
+                        style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: PURPLE,
+                            background: 'rgba(126,87,194,0.12)',
+                            padding: '4px 10px',
+                            borderRadius: 8,
+                        }}
+                    >
+                        TARGET: {tgt} KCAL
+                    </span>
+                </div>
+
+                {MEAL_ORDER.map(({ key, label }) => (
+                    <div
+                        key={key}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => onDropTo(dow, key)}
+                        style={{ marginBottom: 10 }}
+                    >
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{label}</div>
+                        {(byDayMeal.get(`${dow}:${key}`) || []).map((it: any) => (
+                            <div
+                                key={it.id}
+                                draggable
+                                onDragStart={() => setDragItemId(it.id)}
+                                className="card"
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 10,
+                                    padding: 10,
+                                    marginBottom: 8,
+                                    borderRadius: 12,
+                                    border: '1px solid var(--border)',
+                                }}
+                            >
+                                <div
+                                    style={{
+                                        width: 52,
+                                        height: 52,
+                                        borderRadius: 8,
+                                        background: (() => {
+                                            const img = getFullImageUrl(it.recipe_image_url || it.customer_item_image_url);
+                                            return img ? `url(${img}) center/cover` : '#E0E0E0';
+                                        })(),
+                                        flexShrink: 0,
+                                    }}
+                                />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 0.5 }}>{label}</div>
+                                    <div style={{ fontWeight: 800, fontSize: 15 }}>{itemDisplayName(it)}</div>
+                                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                        ⏱{' '}
+                                        {it.customer_menu_item_id
+                                            ? '—'
+                                            : `${(it.prep_time_minutes || 0) + (it.cook_time_minutes || 0)}m`}
+                                        · {it.recipe_calories ? `${it.recipe_calories} kcal` : '—'}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    aria-label="Swap meal"
+                                    style={{ border: 'none', background: 'transparent', fontSize: 18, color: GREEN }}
+                                    onClick={() => openPick(dow, key)}
+                                >
+                                    ⇄
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-label="Remove"
+                                    style={{ border: 'none', background: 'transparent', fontSize: 16, color: '#999' }}
+                                    onClick={() => removeItem(it.id)}
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() => openPick(dow, key)}
+                            style={{
+                                width: '100%',
+                                border: `2px dashed ${GREEN}`,
+                                borderRadius: 12,
+                                padding: 14,
+                                background: '#fff',
+                                color: GREEN,
+                                fontWeight: 700,
+                                fontSize: 20,
+                                marginTop: 4,
+                            }}
+                        >
+                            +
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setCustomOpen({ day: dow, meal: key });
+                                setCustomName('');
+                            }}
+                            style={{
+                                width: '100%',
+                                marginTop: 6,
+                                fontSize: 13,
+                                color: 'var(--text-secondary)',
+                                background: 'none',
+                                border: 'none',
+                                textDecoration: 'underline',
+                            }}
+                        >
+                            Add custom {label.toLowerCase()} name…
+                        </button>
+                    </div>
+                ))}
+            </section>
+        );
+    };
+
     if (!shopSlug) return null;
 
     if (!state.isLoggedIn) {
@@ -254,6 +424,72 @@ export default function WeeklyCalendarPage({
     const dailyKcal = ns?.estimated_daily_calories ?? 2150;
     const dailyBudget = 1200;
 
+    const weekChrome = !loading && detail && (
+        <>
+            <div
+                className="card"
+                style={{
+                    marginTop: 16,
+                    padding: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderRadius: 14,
+                    boxShadow: 'var(--shadow)',
+                }}
+            >
+                <button
+                    type="button"
+                    aria-label="Previous week view"
+                    style={{ border: 'none', background: 'transparent', fontSize: 20, color: GREEN }}
+                    onClick={() => setWeekOffset((w) => w - 1)}
+                >
+                    ‹
+                </button>
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>Week of {weekLabel}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>ACTIVE PLANNING PHASE</div>
+                </div>
+                <button
+                    type="button"
+                    aria-label="Next week view"
+                    style={{ border: 'none', background: 'transparent', fontSize: 20, color: GREEN }}
+                    onClick={() => setWeekOffset((w) => w + 1)}
+                >
+                    ›
+                </button>
+            </div>
+
+            {weekOffset !== 0 && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                    Viewing a shifted week for reference. Meal edits apply to your saved plan&apos;s dates.
+                </p>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
+                <div style={{ background: 'rgba(46,125,50,0.1)', borderRadius: 14, padding: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#1B5E20' }}>DAILY CALORIES</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>{dailyKcal.toLocaleString()} / 2500</div>
+                    <div style={{ marginTop: 8, height: 6, borderRadius: 3, background: 'rgba(0,0,0,0.08)' }}>
+                        <div
+                            style={{
+                                width: `${Math.min(100, Math.round((dailyKcal / 2500) * 100))}%`,
+                                height: '100%',
+                                background: GREEN,
+                                borderRadius: 3,
+                            }}
+                        />
+                    </div>
+                </div>
+                <div style={{ background: 'rgba(212, 175, 55, 0.15)', borderRadius: 14, padding: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#795548' }}>EST. BUDGET</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>Rs {dailyBudget.toLocaleString()}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>📋 Per day avg</div>
+                </div>
+            </div>
+        </>
+    );
+
     return (
         <div className="page fade-in" style={{ paddingBottom: embedded ? 16 : 120, background: '#F5F5F7' }}>
             {!embedded && <MenuPlannerHeader />}
@@ -269,218 +505,113 @@ export default function WeeklyCalendarPage({
                     <p style={{ marginTop: 24, color: 'var(--text-muted)' }}>Loading calendar…</p>
                 ) : (
                     <>
-                                <div
-                                    className="card"
-                                    style={{
-                                        marginTop: 16,
-                                        padding: 16,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        borderRadius: 14,
-                                        boxShadow: 'var(--shadow)',
-                                    }}
-                                >
-                                    <button
-                                        type="button"
-                                        aria-label="Previous week view"
-                                        style={{ border: 'none', background: 'transparent', fontSize: 20, color: GREEN }}
-                                        onClick={() => setWeekOffset((w) => w - 1)}
-                                    >
-                                        ‹
-                                    </button>
-                                    <div style={{ textAlign: 'center' }}>
-                                        <div style={{ fontWeight: 800, fontSize: 16 }}>
-                                            Week of {weekLabel}
-                                        </div>
-                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: 1, marginTop: 4 }}>
-                                            ACTIVE PLANNING PHASE
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        aria-label="Next week view"
-                                        style={{ border: 'none', background: 'transparent', fontSize: 20, color: GREEN }}
-                                        onClick={() => setWeekOffset((w) => w + 1)}
-                                    >
-                                        ›
-                                    </button>
-                                </div>
+                        {weekChrome}
 
-                                {weekOffset !== 0 && (
-                                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
-                                        Viewing a shifted week for reference. Meal edits apply to your saved plan&apos;s dates.
-                                    </p>
-                                )}
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
-                                    <div style={{ background: 'rgba(46,125,50,0.1)', borderRadius: 14, padding: 14 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#1B5E20' }}>DAILY CALORIES</div>
-                                        <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>
-                                            {dailyKcal.toLocaleString()} / 2500
-                                        </div>
-                                        <div style={{ marginTop: 8, height: 6, borderRadius: 3, background: 'rgba(0,0,0,0.08)' }}>
-                                            <div
-                                                style={{
-                                                    width: `${Math.min(100, Math.round((dailyKcal / 2500) * 100))}%`,
-                                                    height: '100%',
-                                                    background: GREEN,
-                                                    borderRadius: 3,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div style={{ background: 'rgba(212, 175, 55, 0.15)', borderRadius: 14, padding: 14 }}>
-                                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, color: '#795548' }}>EST. BUDGET</div>
-                                        <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>Rs {dailyBudget.toLocaleString()}</div>
-                                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>📋 Per day avg</div>
-                                    </div>
-                                </div>
-
+                        {selectedDay === null ? (
+                            <>
                                 <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 16, lineHeight: 1.45 }}>
-                                    Add meals from <strong>Menu planner</strong> (shop recipes or your own items) or type a quick custom
-                                    name. Drag cards to move meals between days.
+                                    Tap a day to add or edit meals. Use <strong>Menu planner</strong> for recipes and custom items, or type a
+                                    quick custom name on the day screen.
                                 </p>
 
-                                {DAY_NAMES.map((dayName, dow) => {
-                            const dateIso = displayWeekStart ? addDays(displayWeekStart, dow) : '';
-                            const headerDate = dateIso ? parseIsoDate(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
-                            const tgt = targetKcalForDay(dow);
-                            return (
-                                <section key={dow} style={{ marginTop: 24 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                                        <h3 style={{ fontSize: 16, fontWeight: 800 }}>
-                                            {dayName}, {headerDate}
-                                        </h3>
-                                        <span
-                                            style={{
-                                                fontSize: 11,
-                                                fontWeight: 700,
-                                                color: PURPLE,
-                                                background: 'rgba(126,87,194,0.12)',
-                                                padding: '4px 10px',
-                                                borderRadius: 8,
-                                            }}
-                                        >
-                                            TARGET: {tgt} KCAL
-                                        </span>
-                                    </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+                                    {DAY_NAMES.map((dayName, dow) => {
+                                        const dateIso = displayWeekStart ? addDays(displayWeekStart, dow) : '';
+                                        const headerDate = dateIso
+                                            ? parseIsoDate(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                                            : '';
+                                        const tgt = targetKcalForDay(dow);
+                                        const lines = MEAL_ORDER.map(({ key, label }) => {
+                                            const mealItems = byDayMeal.get(`${dow}:${key}`) || [];
+                                            const text =
+                                                mealItems.length > 0 ? mealItems.map(itemDisplayName).join(', ') : '—';
+                                            return { label, text };
+                                        });
+                                        const hasAny = lines.some((l) => l.text !== '—');
 
-                                    {MEAL_ORDER.map(({ key, label }) => (
-                                        <div
-                                            key={key}
-                                            onDragOver={(e) => e.preventDefault()}
-                                            onDrop={() => onDropTo(dow, key)}
-                                            style={{ marginBottom: 10 }}
-                                        >
-                                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{label}</div>
-                                            {(byDayMeal.get(`${dow}:${key}`) || []).map((it: any) => (
-                                                <div
-                                                    key={it.id}
-                                                    draggable
-                                                    onDragStart={() => setDragItemId(it.id)}
-                                                    className="card"
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: 10,
-                                                        padding: 10,
-                                                        marginBottom: 8,
-                                                        borderRadius: 12,
-                                                        border: '1px solid var(--border)',
-                                                    }}
-                                                >
-                                                    <div
+                                        return (
+                                            <button
+                                                key={dow}
+                                                type="button"
+                                                onClick={() => openDayDetail(dow)}
+                                                className="card"
+                                                style={{
+                                                    textAlign: 'left',
+                                                    padding: 14,
+                                                    borderRadius: 14,
+                                                    border: '1px solid var(--border-light)',
+                                                    boxShadow: 'var(--shadow)',
+                                                    background: '#fff',
+                                                    cursor: 'pointer',
+                                                    width: '100%',
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                                    <div style={{ fontSize: 16, fontWeight: 800, color: '#1A1A1A' }}>
+                                                        {dayName}
+                                                        <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>, {headerDate}</span>
+                                                    </div>
+                                                    <span
                                                         style={{
-                                                            width: 52,
-                                                            height: 52,
+                                                            fontSize: 10,
+                                                            fontWeight: 700,
+                                                            color: PURPLE,
+                                                            background: 'rgba(126,87,194,0.12)',
+                                                            padding: '4px 8px',
                                                             borderRadius: 8,
-                                                            background: (() => {
-                                                                const img = getFullImageUrl(
-                                                                    it.recipe_image_url || it.customer_item_image_url
-                                                                );
-                                                                return img ? `url(${img}) center/cover` : '#E0E0E0';
-                                                            })(),
                                                             flexShrink: 0,
                                                         }}
-                                                    />
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 0.5 }}>
-                                                            {label}
-                                                        </div>
-                                                        <div style={{ fontWeight: 800, fontSize: 15 }}>
-                                                            {it.recipe_title ||
-                                                                it.customer_item_name ||
-                                                                it.custom_meal_name ||
-                                                                'Meal'}
-                                                        </div>
-                                                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                                                            ⏱{' '}
-                                                            {it.customer_menu_item_id
-                                                                ? '—'
-                                                                : `${(it.prep_time_minutes || 0) + (it.cook_time_minutes || 0)}m`}
-                                                            ·{' '}
-                                                            {it.recipe_calories ? `${it.recipe_calories} kcal` : '—'}
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        aria-label="Swap meal"
-                                                        style={{ border: 'none', background: 'transparent', fontSize: 18, color: GREEN }}
-                                                        onClick={() => openPick(dow, key)}
                                                     >
-                                                        ⇄
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        aria-label="Remove"
-                                                        style={{ border: 'none', background: 'transparent', fontSize: 16, color: '#999' }}
-                                                        onClick={() => removeItem(it.id)}
-                                                    >
-                                                        ×
-                                                    </button>
+                                                        {tgt} kcal
+                                                    </span>
                                                 </div>
-                                            ))}
-                                            <button
-                                                type="button"
-                                                onClick={() => openPick(dow, key)}
-                                                style={{
-                                                    width: '100%',
-                                                    border: `2px dashed ${GREEN}`,
-                                                    borderRadius: 12,
-                                                    padding: 14,
-                                                    background: '#fff',
-                                                    color: GREEN,
-                                                    fontWeight: 700,
-                                                    fontSize: 20,
-                                                    marginTop: 4,
-                                                }}
-                                            >
-                                                +
+                                                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                                    {lines.map(({ label, text }) => (
+                                                        <div key={label} style={{ fontSize: 13, lineHeight: 1.35 }}>
+                                                            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 0.4 }}>
+                                                                {label}
+                                                            </span>
+                                                            <div style={{ fontWeight: text === '—' ? 500 : 600, color: text === '—' ? '#aaa' : '#333' }}>
+                                                                {text}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {!hasAny && (
+                                                    <p style={{ margin: '10px 0 0', fontSize: 12, color: GREEN, fontWeight: 700 }}>
+                                                        Tap to plan this day →
+                                                    </p>
+                                                )}
                                             </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setCustomOpen({ day: dow, meal: key });
-                                                    setCustomName('');
-                                                }}
-                                                style={{
-                                                    width: '100%',
-                                                    marginTop: 6,
-                                                    fontSize: 13,
-                                                    color: 'var(--text-secondary)',
-                                                    background: 'none',
-                                                    border: 'none',
-                                                    textDecoration: 'underline',
-                                                }}
-                                            >
-                                                Add custom {label.toLowerCase()} name…
-                                            </button>
-                                        </div>
-                                    ))}
-                                </section>
-                            );
-                        })}
+                                        );
+                                    })}
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={closeDayDetail}
+                                    style={{
+                                        marginTop: 16,
+                                        border: 'none',
+                                        background: 'transparent',
+                                        padding: 0,
+                                        fontSize: 15,
+                                        fontWeight: 700,
+                                        color: GREEN,
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    ← Week
+                                </button>
+                                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.45 }}>
+                                    Add meals from <strong>Menu planner</strong> (shop recipes or your own items) or type a quick custom name.
+                                    Drag cards to move meals between slots or days — open other days from the week view to drop there.
+                                </p>
+                                {renderDayEditor(selectedDay)}
+                            </>
+                        )}
                     </>
                 )}
             </div>
