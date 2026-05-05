@@ -1114,6 +1114,26 @@ export class ProcurementService {
   }
 
   /**
+   * Set Posted | Partial | Paid from current paid_amount / balance_due for posted purchase bills.
+   */
+  private async recalcPostedBillPaymentStatuses(client: any, tenantId: string, billIds: string[]): Promise<void> {
+    const ids = [...new Set(billIds.filter((id) => typeof id === 'string' && id.length > 0))];
+    if (ids.length === 0) return;
+    const ph = ids.map((_, i) => `$${i + 2}`).join(', ');
+    await client.query(
+      `UPDATE purchase_bills
+       SET status = CASE
+         WHEN balance_due <= 0 THEN 'Paid'
+         WHEN paid_amount > 0 THEN 'Partial'
+         ELSE 'Posted'
+       END,
+       updated_at = NOW()
+       WHERE tenant_id = $1 AND is_posted = TRUE AND id IN (${ph})`,
+      [tenantId, ...ids]
+    );
+  }
+
+  /**
    * Update supplier payment: reverse existing allocations and accounting, then apply new data.
    * Bills linked to this payment get their status updated from new allocations.
    */
@@ -1136,19 +1156,21 @@ export class ProcurementService {
         [tenantId, paymentId]
       );
 
-      // Reverse: un-apply from bills (add back balance, update status)
+      // Reverse: un-apply from bills (restore balance; status recalculated below)
+      const oldBillIds: string[] = [];
       for (const a of allocs) {
         const amt = parseFloat(a.amount) || 0;
         if (amt <= 0) continue;
+        const bid = a.purchase_bill_id as string;
+        if (bid) oldBillIds.push(bid);
         await client.query(
           `UPDATE purchase_bills
-           SET paid_amount = paid_amount - $1, balance_due = balance_due + $1,
-               status = CASE WHEN (balance_due + $1) >= total_amount THEN 'Posted' WHEN (paid_amount - $1) > 0 THEN 'Partial' ELSE 'Posted' END,
-               updated_at = NOW()
+           SET paid_amount = paid_amount - $1, balance_due = balance_due + $1, updated_at = NOW()
            WHERE id = $2 AND tenant_id = $3`,
-          [amt, a.purchase_bill_id, tenantId]
+          [amt, bid, tenantId]
         );
       }
+      await this.recalcPostedBillPaymentStatuses(client, tenantId, oldBillIds);
 
       await client.query('DELETE FROM purchase_bill_payments WHERE tenant_id = $1 AND supplier_payment_id = $2', [tenantId, paymentId]);
       await this.reverseSupplierPaymentAccounting(client, tenantId, paymentId, oldAmount, oldBankId);
@@ -1169,9 +1191,11 @@ export class ProcurementService {
         ]
       );
 
-      // Re-apply new allocations (same as record)
+      // Re-apply new allocations
+      const newBillIds: string[] = [];
       for (const alloc of data.allocations) {
         if (alloc.amount <= 0) continue;
+        newBillIds.push(alloc.purchaseBillId);
         const br = await client.query(
           `SELECT is_posted FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
           [tenantId, alloc.purchaseBillId]
@@ -1187,13 +1211,12 @@ export class ProcurementService {
         );
         await client.query(
           `UPDATE purchase_bills
-           SET paid_amount = paid_amount + $1, balance_due = balance_due - $1,
-               status = CASE WHEN (balance_due - $1) <= 0 THEN 'Paid' ELSE 'Partial' END,
-               updated_at = NOW()
+           SET paid_amount = paid_amount + $1, balance_due = balance_due - $1, updated_at = NOW()
            WHERE id = $2 AND tenant_id = $3`,
           [alloc.amount, alloc.purchaseBillId, tenantId]
         );
       }
+      await this.recalcPostedBillPaymentStatuses(client, tenantId, newBillIds);
 
       const apAccId = await this.getOrCreateAccount(
         client,
@@ -1269,21 +1292,19 @@ export class ProcurementService {
         `SELECT purchase_bill_id, amount FROM purchase_bill_payments WHERE tenant_id = $1 AND supplier_payment_id = $2`,
         [tenantId, paymentId]
       );
+      const affectedBillIds: string[] = [];
       for (const a of allocs) {
         const amt = parseFloat(a.amount) || 0;
         if (amt <= 0) continue;
+        const bid = a.purchase_bill_id as string;
+        if (bid) affectedBillIds.push(bid);
         await client.query(
-          `UPDATE purchase_bills
-           SET paid_amount = paid_amount - $1, balance_due = balance_due + $1, updated_at = NOW()
+          `UPDATE purchase_bills SET paid_amount = paid_amount - $1, balance_due = balance_due + $1, updated_at = NOW()
            WHERE id = $2 AND tenant_id = $3`,
-          [amt, a.purchase_bill_id, tenantId]
+          [amt, bid, tenantId]
         );
       }
-      await client.query(
-        `UPDATE purchase_bills SET status = CASE WHEN balance_due <= 0 THEN 'Paid' WHEN paid_amount > 0 THEN 'Partial' ELSE 'Posted' END, updated_at = NOW()
-         WHERE tenant_id = $1 AND id = ANY($2::text[])`,
-        [tenantId, allocs.map((a: any) => a.purchase_bill_id)]
-      );
+      await this.recalcPostedBillPaymentStatuses(client, tenantId, affectedBillIds);
 
       await client.query('DELETE FROM purchase_bill_payments WHERE tenant_id = $1 AND supplier_payment_id = $2', [tenantId, paymentId]);
       await this.reverseSupplierPaymentAccounting(client, tenantId, paymentId, amount, bankId);
@@ -1472,7 +1493,37 @@ export class ProcurementService {
       params.push(supplierId);
     }
     sql += ` ORDER BY sp.payment_date DESC`;
-    return this.db.query(sql, params);
+    const payments = await this.db.query(sql, params);
+    if (!payments.length) return payments;
+
+    const ids = (payments as any[]).map((p) => p.id).filter(Boolean);
+    if (ids.length === 0) return payments;
+
+    const idPlaceholders = ids.map((_, idx) => `$${idx + 2}`).join(', ');
+    const allocSql = `
+      SELECT pbp.supplier_payment_id AS supplier_payment_id, pb.bill_number AS bill_number
+      FROM purchase_bill_payments pbp
+      JOIN purchase_bills pb ON pb.id = pbp.purchase_bill_id AND pb.tenant_id = pbp.tenant_id
+      WHERE pbp.tenant_id = $1 AND pbp.supplier_payment_id IN (${idPlaceholders})
+      ORDER BY pb.bill_number ASC
+    `;
+    const allocRows = await this.db.query(allocSql, [tenantId, ...ids]);
+
+    const byPay = new Map<string, string[]>();
+    for (const r of allocRows as any[]) {
+      const pid = r.supplier_payment_id;
+      const bn = r.bill_number;
+      if (!pid || bn == null || bn === '') continue;
+      if (!byPay.has(pid)) byPay.set(pid, []);
+      const arr = byPay.get(pid)!;
+      const s = String(bn);
+      if (!arr.includes(s)) arr.push(s);
+    }
+
+    return (payments as any[]).map((p) => ({
+      ...p,
+      allocated_bill_numbers: byPay.get(p.id)?.join(', ') ?? '',
+    }));
   }
 
   async getSupplierPaymentById(tenantId: string, paymentId: string) {

@@ -193,3 +193,11 @@ export async function sharePurchaseOrderPdfToWhatsApp(
 
   return 'downloaded';
 }
+
+/** Open WhatsApp with a plain-text message (optionally to the vendor's number). */
+export function openWhatsAppTextMessage(text: string, vendorPhone?: string): void {
+  const msg = encodeURIComponent(text.trim());
+  const phone = normalizeWhatsAppPhone(vendorPhone);
+  const url = phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}

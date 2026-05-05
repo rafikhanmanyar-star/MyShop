@@ -30,6 +30,7 @@ import RecipePickerPage from './pages/menuPlanner/RecipePickerPage';
 import ShoppingListPage from './pages/menuPlanner/ShoppingListPage';
 import MenuTemplatesPage from './pages/menuPlanner/MenuTemplatesPage';
 import NutritionSummaryPage from './pages/menuPlanner/NutritionSummaryPage';
+import UtilitiesHubPage from './pages/UtilitiesHubPage';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
 import OfflineBanner from './components/OfflineBanner';
@@ -128,6 +129,7 @@ export default function App() {
           <Route path="notifications" element={<NotificationsPage />} />
 
           {/* Budget Feature */}
+          <Route path="utilities" element={<UtilitiesHubPage />} />
           <Route path="budget" element={<BudgetDashboard />} />
           <Route path="budget/create" element={<BudgetCreation />} />
           <Route path="budget/:id" element={<BudgetDetail />} />

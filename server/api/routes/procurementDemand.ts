@@ -4,6 +4,28 @@ import { checkRole } from '../../middleware/roleMiddleware.js';
 
 const router = express.Router();
 
+router.get('/vendor-auto-bill', checkRole(['admin', 'accountant']), async (req: any, res) => {
+  try {
+    const supplierId = String(req.query.supplierId ?? '').trim();
+    if (!supplierId) {
+      return res.status(400).json({ error: 'supplierId is required' });
+    }
+    const coverDays = req.query.coverDays ? parseInt(req.query.coverDays as string, 10) : undefined;
+    const salesWindowDays = req.query.salesWindowDays
+      ? parseInt(req.query.salesWindowDays as string, 10)
+      : undefined;
+
+    const result = await getProcurementDemandService().generateVendorAutoBillSuggestions(req.tenantId, supplierId, {
+      coverDays,
+      salesWindowDays,
+    });
+    res.json(result);
+  } catch (e: any) {
+    console.error('Vendor auto-bill suggestions error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/analyze', checkRole(['admin', 'accountant']), async (req: any, res) => {
   try {
     const salesWindowDays = req.query.salesWindowDays

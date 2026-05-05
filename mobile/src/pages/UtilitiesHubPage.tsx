@@ -1,0 +1,137 @@
+import type { ReactNode } from 'react';
+import { Link, useParams } from 'react-router-dom';
+
+type Tile = {
+    to: string;
+    title: string;
+    description: string;
+    gradient: string;
+    icon: ReactNode;
+};
+
+function IconBudget() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 0 1-1v-2Z" />
+            <path d="M18 5h.01" />
+            <path d="M19 11v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6" />
+            <path d="M3 11h16" />
+            <path d="M7 15h.01" />
+            <path d="M11 15h4" />
+        </svg>
+    );
+}
+
+function IconMyMenu() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M7 8h4" />
+            <path d="M7 12h10" />
+            <path d="M7 16h7" />
+            <path d="M16 2v4" />
+            <path d="M8 2v4" />
+        </svg>
+    );
+}
+
+function IconRecipes() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            <path d="M8 7h8" />
+            <path d="M8 11h8" />
+            <path d="M8 15h5" />
+        </svg>
+    );
+}
+
+export default function UtilitiesHubPage() {
+    const { shopSlug } = useParams();
+    if (!shopSlug) return null;
+
+    const base = `/${shopSlug}`;
+    const tiles: Tile[] = [
+        {
+            to: `${base}/budget`,
+            title: 'Budget Planner',
+            description: 'Track spending and meal budgets',
+            gradient: 'linear-gradient(145deg, #0d9488 0%, #14b8a6 45%, #2dd4bf 100%)',
+            icon: <IconBudget />,
+        },
+        {
+            to: `${base}/my-menu`,
+            title: 'My Menu',
+            description: 'Weekly plans, shopping & meals',
+            gradient: 'linear-gradient(145deg, #7c3aed 0%, #8b5cf6 50%, #a78bfa 100%)',
+            icon: <IconMyMenu />,
+        },
+        {
+            to: `${base}/recipes`,
+            title: 'Recipes',
+            description: 'Browse and save ideas',
+            gradient: 'linear-gradient(145deg, #ea580c 0%, #f97316 50%, #fb923c 100%)',
+            icon: <IconRecipes />,
+        },
+    ];
+
+    return (
+        <div className="page fade-in" style={{ paddingBottom: 100 }}>
+            <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8 }}>Utilities</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 24, lineHeight: 1.45 }}>
+                Quick access to planning tools for your kitchen and budget.
+            </p>
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr',
+                    gap: 14,
+                }}
+            >
+                {tiles.map((tile) => (
+                    <Link
+                        key={tile.to}
+                        to={tile.to}
+                        className="utilities-hub-tile"
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 16,
+                            padding: '18px 18px',
+                            borderRadius: 'var(--radius-xl, 16px)',
+                            background: 'var(--surface-elevated, var(--card-bg, #fff))',
+                            border: '1px solid var(--border-subtle, rgba(0,0,0,0.08))',
+                            textDecoration: 'none',
+                            color: 'inherit',
+                            boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+                        }}
+                    >
+                        <div
+                            style={{
+                                width: 72,
+                                height: 72,
+                                borderRadius: 18,
+                                background: tile.gradient,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.25)',
+                            }}
+                        >
+                            {tile.icon}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>{tile.title}</div>
+                            <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{tile.description}</div>
+                        </div>
+                        <span style={{ marginLeft: 'auto', color: 'var(--text-tertiary, var(--text-secondary))', fontSize: 22, lineHeight: 1 }} aria-hidden>
+                            ›
+                        </span>
+                    </Link>
+                ))}
+            </div>
+        </div>
+    );
+}

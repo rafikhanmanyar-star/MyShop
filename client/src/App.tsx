@@ -19,6 +19,7 @@ import { SyncOnOnline } from './components/SyncOnOnline';
 import OfflineBanner from './components/OfflineBanner';
 import AppHeader from './components/AppHeader';
 import { InventoryPageHeaderProvider } from './context/InventoryPageHeaderContext';
+import { ProcurementPageHeaderProvider } from './context/ProcurementPageHeaderContext';
 import { useAutoLogout } from './hooks/useAutoLogout';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
@@ -323,6 +324,7 @@ function AppLayout() {
         <ShiftsProvider>
           <MobileOrdersProvider>
           <InventoryPageHeaderProvider>
+          <ProcurementPageHeaderProvider>
           <SyncOnOnline />
           <Suspense fallback={null}>
             <ShopRealtimeBridge />
@@ -368,7 +370,18 @@ function AppLayout() {
               <Route path="/recipes/:id" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-auto"><RecipeEditPage /></div> : <Navigate to="/" replace />} />
 
               <Route path="/inventory" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><InventoryPage /></div> : <Navigate to="/" replace />} />
-              <Route path="/procurement" element={['admin', 'accountant'].includes(role) ? <ProcurementPage /> : <Navigate to="/" replace />} />
+              <Route
+                path="/procurement"
+                element={
+                  ['admin', 'accountant'].includes(role) ? (
+                    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+                      <ProcurementPage />
+                    </div>
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
               <Route path="/loyalty" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><LoyaltyPage /></div> : <Navigate to="/" replace />} />
               <Route path="/khata" element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <KhataPage /> : <Navigate to="/" replace />} />
               <Route path="/multi-store" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MultiStorePage /></div> : <Navigate to="/" replace />} />
@@ -391,6 +404,7 @@ function AppLayout() {
           </div>
         </main>
       </div>
+          </ProcurementPageHeaderProvider>
           </InventoryPageHeaderProvider>
           </MobileOrdersProvider>
         </ShiftsProvider>

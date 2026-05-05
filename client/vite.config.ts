@@ -10,13 +10,16 @@ const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf-8'));
 /** Set by release script so the UI matches the installer before package.json is bumped. */
 const appVersion = process.env.RELEASE_APP_VERSION || pkg.version || '0.0.0';
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const apiTarget = env.VITE_API_URL || 'http://localhost:3001';
+  const rawApiTarget = env.VITE_API_URL || 'http://localhost:3001';
+  /** Browser calls `/api/...`; proxy forwards to `target + /api/...`. Strip a trailing `/api` from env so we never hit `/api/api/...`. */
+  const proxyApiTarget = rawApiTarget.replace(/\/api\/?$/, '');
 
-  /** Electron `loadFile()` uses file:// — absolute `/assets/...` breaks (ERR_FILE_NOT_FOUND). Use `npm run build:cloud` or `--mode cloud`. */
+  /** Electron `loadFile()` uses file:// — absolute `/assets/...` breaks (ERR_FILE_NOT_FOUND). Only apply in production builds, not `vite dev`. */
   const useRelativeAssetBase =
-    process.env.VITE_ELECTRON_BUILD === '1' || mode === 'cloud';
+    command === 'build' &&
+    (process.env.VITE_ELECTRON_BUILD === '1' || mode === 'cloud');
 
   return {
     plugins: [react(), tailwindcss()],
@@ -31,12 +34,12 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         '/api': {
-          target: apiTarget,
+          target: proxyApiTarget,
           changeOrigin: true,
           secure: true,
         },
         '/uploads': {
-          target: apiTarget,
+          target: proxyApiTarget,
           changeOrigin: true,
           secure: false,
         },

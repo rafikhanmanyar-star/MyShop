@@ -1,15 +1,29 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
-import { procurementApi, shopApi } from '../../../services/shopApi';
-import { createPurchaseBillOfflineFirst, setProcurementCache } from '../../../services/procurementSyncService';
+import { procurementApi, procurementDemandApi, shopApi } from '../../../services/shopApi';
+import { createPurchaseBillOfflineFirst, recordSupplierPaymentOfflineFirst, setProcurementCache } from '../../../services/procurementSyncService';
 import { getProcurementCache, getTenantId } from '../../../services/procurementOfflineCache';
 import { useAppContext } from '../../../context/AppContext';
 import { useInventory } from '../../../context/InventoryContext';
 import Button from '../../ui/Button';
 import { CURRENCY } from '../../../constants';
-import { Pencil, Trash2, Wallet, Eye, Share2, ChevronLeft, ChevronRight, AlertTriangle, Info } from 'lucide-react';
+import {
+  Pencil,
+  Trash2,
+  Wallet,
+  Eye,
+  Share2,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  Sparkles,
+  FolderTree,
+} from 'lucide-react';
 import {
   generatePurchaseOrderPdfBlob,
   sharePurchaseOrderPdfToWhatsApp,
+  openWhatsAppTextMessage,
   type PurchaseOrderPdfInput,
 } from '../../../services/procurement/purchaseOrderPdf';
 import AddVendorModal from './AddVendorModal';
@@ -22,6 +36,7 @@ import TotalSummaryCard from './TotalSummaryCard';
 import PaymentSelector, { type PaymentStatus } from './PaymentSelector';
 import { showProcurementToast } from './utils/showProcurementToast';
 import Modal from '../../ui/Modal';
+import { SupplierPaymentEditDialog, SupplierPaymentDeleteDialog } from './supplierPaymentRecordDialogs';
 
 function newLineId(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -111,6 +126,24 @@ function procurementHttpErr(err: unknown, fallback: string): string {
 
 const BILL_LIST_PAGE_SIZE = 12;
 
+const LEDGER_DEFAULT_COL_WIDTHS = [140, 220, 112, 168, 120, 104, 168];
+
+const MIN_LEDGER_COL_WIDTH = 48;
+
+type LedgerSortColumn = 'reference' | 'vendor' | 'issueDate' | 'dueOrApplied' | 'amount' | 'status' | 'actions';
+
+type LedgerTypeFilter = 'all' | 'bills' | 'payments';
+
+const LEDGER_TABLE_COLUMNS: { key: LedgerSortColumn; label: string; headerAlign?: 'right' }[] = [
+  { key: 'reference', label: 'Reference' },
+  { key: 'vendor', label: 'Vendor' },
+  { key: 'issueDate', label: 'Issue / paid on' },
+  { key: 'dueOrApplied', label: 'Due / applied to' },
+  { key: 'amount', label: 'Amount', headerAlign: 'right' },
+  { key: 'status', label: 'Status' },
+  { key: 'actions', label: 'Actions', headerAlign: 'right' },
+];
+
 const ROW_AVATAR_COLORS = [
   'bg-sky-100 text-sky-700',
   'bg-indigo-100 text-indigo-600',
@@ -143,6 +176,8 @@ function formatBillDateDisplay(ymd: string | undefined): string {
 
 type ProcurementRowStatus = 'PAID' | 'POSTED' | 'AWAITING';
 
+type PurchaseLedgerRow = { kind: 'bill'; item: any } | { kind: 'payment'; item: any };
+
 function getProcurementRowStatus(b: { is_posted?: unknown; status?: unknown }): ProcurementRowStatus {
   const posted = b.is_posted !== false && b.is_posted !== 0;
   const st = String(b.status ?? '').trim();
@@ -150,6 +185,66 @@ function getProcurementRowStatus(b: { is_posted?: unknown; status?: unknown }): 
   if (st === 'Paid') return 'PAID';
   if (st === 'Partial') return 'AWAITING';
   return 'POSTED';
+}
+
+function ledgerRowSortValues(
+  row: PurchaseLedgerRow,
+  vendorById: Map<string, VendorOption>
+): Record<LedgerSortColumn, string | number> {
+  if (row.kind === 'bill') {
+    const b = row.item;
+    const sid = String(b.supplier_id ?? b.supplierId ?? '');
+    const v = sid ? vendorById.get(sid) : undefined;
+    const vendorTitle = String(v?.company_name || v?.companyName || b.supplier_name || '—').trim();
+    const billNum = String(b.bill_number ?? b.billNumber ?? '').toLowerCase();
+    return {
+      reference: billNum || String(b.id ?? ''),
+      vendor: vendorTitle.toLowerCase(),
+      issueDate: String(b.bill_date ?? b.billDate ?? '').slice(0, 10),
+      dueOrApplied: String(b.due_date ?? b.dueDate ?? '').slice(0, 10),
+      amount: Number(b.total_amount ?? b.totalAmount ?? 0),
+      status: getProcurementRowStatus(b),
+      actions: `bill:${String(b.id ?? '')}`,
+    };
+  }
+  const p = row.item;
+  const psid = String(p.supplier_id ?? '');
+  const pv = psid ? vendorById.get(psid) : undefined;
+  const pVendorTitle = String(pv?.company_name || pv?.companyName || p.supplier_name || '—').trim();
+  const refLabel = (String(p.reference ?? '').trim() || String(p.id ?? '').slice(0, 10)).toLowerCase();
+  return {
+    reference: refLabel,
+    vendor: pVendorTitle.toLowerCase(),
+    issueDate: String(p.payment_date ?? p.paymentDate ?? '').slice(0, 10),
+    dueOrApplied: String(p.allocated_bill_numbers ?? '').toLowerCase(),
+    amount: Number(p.amount) || 0,
+    status: 'payment',
+    actions: `payment:${String(p.id ?? '')}`,
+  };
+}
+
+function compareLedgerRows(
+  a: PurchaseLedgerRow,
+  b: PurchaseLedgerRow,
+  col: LedgerSortColumn,
+  dir: 'asc' | 'desc',
+  vendorById: Map<string, VendorOption>
+): number {
+  const va = ledgerRowSortValues(a, vendorById);
+  const vb = ledgerRowSortValues(b, vendorById);
+  const mult = dir === 'asc' ? 1 : -1;
+  const av = va[col];
+  const bv = vb[col];
+  let cmp = 0;
+  if (typeof av === 'number' && typeof bv === 'number') {
+    cmp = av === bv ? 0 : av < bv ? -1 : 1;
+  } else {
+    cmp = String(av).localeCompare(String(bv), undefined, { sensitivity: 'base', numeric: true });
+  }
+  if (cmp !== 0) return cmp * mult;
+  const ida = String(a.kind === 'bill' ? a.item.id : a.item.id);
+  const idb = String(b.kind === 'bill' ? b.item.id : b.item.id);
+  return ida.localeCompare(idb) * mult;
 }
 
 /** Days overdue if due date is before today and there is an outstanding balance. */
@@ -167,12 +262,78 @@ export interface PurchaseBillsSectionHandle {
   openNewPurchaseBill: () => void;
 }
 
-interface PurchaseBillsSectionProps {
-  onPayRemaining?: (bill: { id: string; supplier_id?: string; supplier_name?: string; balance_due: number }) => void;
+type QuickPayShareInfo = {
+  synced: boolean;
+  paymentId?: string;
+  localId?: string;
+  billId: string;
+  billNumber: string;
+  vendorName: string;
+  vendorPhone?: string;
+  amount: number;
+  paymentDate: string;
+  paymentMethod: 'Bank' | 'Cash';
+  bankLabel?: string;
+  reference: string;
+  notes: string;
+};
+
+/** Match UUID-shaped strings so we don't put internal DB ids in vendor-facing WhatsApp text. */
+function isUuidString(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
 }
 
+function buildQuickPayWhatsAppMessage(info: QuickPayShareInfo, currency: string): string {
+  const lines = [
+    '*Supplier payment*',
+    '',
+    `Bill: #${info.billNumber || info.billId}`,
+    `Vendor: ${info.vendorName}`,
+    `${currency} ${info.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    `Payment date: ${info.paymentDate}`,
+    `Method: ${info.paymentMethod}${info.bankLabel ? ` — ${info.bankLabel}` : ''}`,
+  ];
+  if (!info.synced) {
+    lines.push('', '(Queued offline — will sync when online)');
+  }
+  const refTrim = String(info.reference ?? '').trim();
+  if (refTrim) lines.push(`Reference: ${refTrim}`);
+  if (info.notes) lines.push(`Notes: ${info.notes}`);
+  if (info.paymentId && !isUuidString(info.paymentId)) lines.push(`Payment ID: ${info.paymentId}`);
+  if (info.localId) lines.push(`Pending ref: ${info.localId}`);
+  return lines.join('\n');
+}
+
+function buildLedgerPaymentWhatsAppMessage(
+  p: any,
+  opts: { vendorName: string; bankLabel?: string; currency: string }
+): string {
+  const paidOn = String(p.payment_date ?? p.paymentDate ?? '').slice(0, 10);
+  const payAmt = Number(p.amount) || 0;
+  const refTrim = String(p.reference ?? '').trim();
+  const allocBills = String(p.allocated_bill_numbers ?? '').trim();
+  const method = String(p.payment_method ?? '').trim() || '—';
+  const notes = String(p.notes ?? '').trim();
+  const lines = [
+    '*Supplier payment*',
+    '',
+    `Vendor: ${opts.vendorName}`,
+    `${opts.currency} ${payAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    `Payment date: ${paidOn}`,
+    `Method: ${method}${opts.bankLabel ? ` — ${opts.bankLabel}` : ''}`,
+  ];
+  if (refTrim) lines.push(`Reference: ${refTrim}`);
+  if (allocBills) lines.push(`Applied to bills: ${allocBills}`);
+  if (notes) lines.push(`Notes: ${notes}`);
+  const pid = p.id != null ? String(p.id).trim() : '';
+  if (pid && !isUuidString(pid) && pid !== refTrim) lines.push(`Payment ID: ${pid}`);
+  return lines.join('\n');
+}
+
+interface PurchaseBillsSectionProps {}
+
 const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBillsSectionProps>(
-  function PurchaseBillsSection({ onPayRemaining }, ref) {
+  function PurchaseBillsSection(_props, ref) {
     const { state: appState, dispatch: appDispatch } = useAppContext();
     const inventory = useInventory();
     const [bills, setBills] = useState<any[]>([]);
@@ -212,6 +373,36 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     const [receiptShop, setReceiptShop] = useState<{ name?: string; address?: string; phone?: string }>({});
     const [sharingPdfBillId, setSharingPdfBillId] = useState<string | null>(null);
     const [formErrors, setFormErrors] = useState<{ supplier?: string; items?: string }>({});
+    const [supplierPayments, setSupplierPayments] = useState<any[]>([]);
+    const [selectedVendorFilterId, setSelectedVendorFilterId] = useState<string | null>(null);
+    const [vendorTreeSearch, setVendorTreeSearch] = useState('');
+    const [vendorTreeSort, setVendorTreeSort] = useState<{ col: 'name' | 'ap'; dir: 'asc' | 'desc' }>({
+      col: 'name',
+      dir: 'asc',
+    });
+    const [editSupplierPaymentId, setEditSupplierPaymentId] = useState<string | null>(null);
+    const [deleteSupplierPaymentId, setDeleteSupplierPaymentId] = useState<string | null>(null);
+    const [quickPayBill, setQuickPayBill] = useState<any | null>(null);
+    const [quickPayForm, setQuickPayForm] = useState({
+      amount: 0,
+      paymentDate: '',
+      paymentMethod: 'Bank' as 'Bank' | 'Cash',
+      bankAccountId: '',
+      notes: '',
+    });
+    const [quickPaySuccess, setQuickPaySuccess] = useState<QuickPayShareInfo | null>(null);
+    const [quickPayPaying, setQuickPayPaying] = useState(false);
+    const [autoBillMode, setAutoBillMode] = useState(false);
+    const [autoBillCoverDays, setAutoBillCoverDays] = useState(10);
+    const [autoBillLoading, setAutoBillLoading] = useState(false);
+    const [ledgerTypeFilter, setLedgerTypeFilter] = useState<LedgerTypeFilter>('all');
+    const [ledgerSort, setLedgerSort] = useState<{ col: LedgerSortColumn; dir: 'asc' | 'desc' }>({
+      col: 'issueDate',
+      dir: 'desc',
+    });
+    const [ledgerColWidths, setLedgerColWidths] = useState<number[]>(() => [...LEDGER_DEFAULT_COL_WIDTHS]);
+    const ledgerColWidthsRef = useRef(ledgerColWidths);
+    ledgerColWidthsRef.current = ledgerColWidths;
 
     const vendors: VendorOption[] = (vendorsFromApi.length > 0 ? vendorsFromApi : appState.vendors || []) as VendorOption[];
 
@@ -231,35 +422,147 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       });
     }, [bills]);
 
-    const billTotalPages = Math.max(1, Math.ceil(sortedBills.length / BILL_LIST_PAGE_SIZE));
-    const billSafePage = Math.min(billListPage, billTotalPages);
-    const pagedBills = sortedBills.slice((billSafePage - 1) * BILL_LIST_PAGE_SIZE, billSafePage * BILL_LIST_PAGE_SIZE);
+    const accountsPayableByVendorId = useMemo(() => {
+      const m = new Map<string, number>();
+      for (const b of bills) {
+        const sid = String(b.supplier_id ?? b.supplierId ?? '');
+        if (!sid) continue;
+        const bal = Number(b.balance_due) || 0;
+        if (bal <= 0) continue;
+        m.set(sid, (m.get(sid) || 0) + bal);
+      }
+      return m;
+    }, [bills]);
+
+    const vendorTreeEntries = useMemo(() => {
+      return [...vendors]
+        .filter((v) => v?.id)
+        .map((v) => ({
+          id: v.id as string,
+          name: String(v.name || v.company_name || v.companyName || 'Vendor').trim() || 'Vendor',
+          ap: accountsPayableByVendorId.get(v.id as string) || 0,
+        }));
+    }, [vendors, accountsPayableByVendorId]);
+
+    const filteredVendorTreeEntries = useMemo(() => {
+      const q = vendorTreeSearch.trim().toLowerCase();
+      if (!q) return vendorTreeEntries;
+      return vendorTreeEntries.filter((e) => e.name.toLowerCase().includes(q));
+    }, [vendorTreeEntries, vendorTreeSearch]);
+
+    const displayedVendorTreeEntries = useMemo(() => {
+      const rows = [...filteredVendorTreeEntries];
+      const mult = vendorTreeSort.dir === 'asc' ? 1 : -1;
+      rows.sort((a, b) => {
+        if (vendorTreeSort.col === 'name') {
+          const cmp = a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+          if (cmp !== 0) return cmp * mult;
+          return (a.ap === b.ap ? 0 : a.ap < b.ap ? -1 : 1) * mult;
+        }
+        const cmpAp = a.ap === b.ap ? 0 : a.ap < b.ap ? -1 : 1;
+        if (cmpAp !== 0) return cmpAp * mult;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) * mult;
+      });
+      return rows;
+    }, [filteredVendorTreeEntries, vendorTreeSort]);
+
+    const toggleVendorTreeSort = useCallback((col: 'name' | 'ap') => {
+      setVendorTreeSort((s) => (s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
+    }, []);
+
+    const ledgerRowsMerged = useMemo(() => {
+      const sid = selectedVendorFilterId;
+      const rows: PurchaseLedgerRow[] = [];
+      for (const b of sortedBills) {
+        if (sid && String(b.supplier_id ?? b.supplierId ?? '') !== sid) continue;
+        rows.push({ kind: 'bill', item: b });
+      }
+      for (const p of supplierPayments) {
+        if (sid && String(p.supplier_id ?? '') !== sid) continue;
+        rows.push({ kind: 'payment', item: p });
+      }
+      return rows;
+    }, [sortedBills, supplierPayments, selectedVendorFilterId]);
+
+    const filteredSortedLedgerRows = useMemo(() => {
+      let rows = ledgerRowsMerged;
+      if (ledgerTypeFilter === 'bills') rows = rows.filter((r) => r.kind === 'bill');
+      else if (ledgerTypeFilter === 'payments') rows = rows.filter((r) => r.kind === 'payment');
+      return [...rows].sort((a, b) => compareLedgerRows(a, b, ledgerSort.col, ledgerSort.dir, vendorById));
+    }, [ledgerRowsMerged, ledgerTypeFilter, ledgerSort, vendorById]);
+
+    const toggleLedgerSort = useCallback((col: LedgerSortColumn) => {
+      setLedgerSort((s) => (s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
+    }, []);
+
+    const beginLedgerColumnResize = useCallback((colIndex: number, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const snapshot = [...ledgerColWidthsRef.current];
+      const onMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - startX;
+        const next = [...snapshot];
+        next[colIndex] = Math.max(MIN_LEDGER_COL_WIDTH, snapshot[colIndex] + dx);
+        setLedgerColWidths(next);
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }, []);
+
+    const ledgerPaginationEnabled = selectedVendorFilterId == null;
+    const billTotalPages = ledgerPaginationEnabled
+      ? Math.max(1, Math.ceil(filteredSortedLedgerRows.length / BILL_LIST_PAGE_SIZE))
+      : 1;
+    const billSafePage = ledgerPaginationEnabled ? Math.min(billListPage, billTotalPages) : 1;
+    const displayLedgerRows = ledgerPaginationEnabled
+      ? filteredSortedLedgerRows.slice((billSafePage - 1) * BILL_LIST_PAGE_SIZE, billSafePage * BILL_LIST_PAGE_SIZE)
+      : filteredSortedLedgerRows;
+
+    const selectedVendorLedgerSummary = useMemo(() => {
+      if (!selectedVendorFilterId) return null;
+      let billCount = 0;
+      let billsTotalGross = 0;
+      let billsBalanceDue = 0;
+      let paymentCount = 0;
+      let paymentsTotal = 0;
+      for (const r of ledgerRowsMerged) {
+        if (r.kind === 'bill') {
+          billCount += 1;
+          const b = r.item;
+          billsTotalGross += Number(b.total_amount ?? b.totalAmount ?? 0) || 0;
+          billsBalanceDue += Number(b.balance_due) || 0;
+        } else {
+          paymentCount += 1;
+          paymentsTotal += Number(r.item.amount) || 0;
+        }
+      }
+      const vo = vendorById.get(selectedVendorFilterId);
+      const vendorLabel = String(vo?.company_name || vo?.companyName || vo?.name || 'Vendor').trim() || 'Vendor';
+      return {
+        vendorLabel,
+        billCount,
+        billsTotalGross,
+        billsBalanceDue,
+        paymentCount,
+        paymentsTotal,
+      };
+    }, [selectedVendorFilterId, ledgerRowsMerged, vendorById]);
+
+    const ledgerEmptyMessage =
+      ledgerRowsMerged.length === 0
+        ? selectedVendorFilterId
+          ? 'No bills or payments for this vendor'
+          : 'No purchase bills or supplier payments yet'
+        : 'No rows match this filter. Try All transactions.';
 
     useEffect(() => {
       setBillListPage(1);
-    }, [bills.length]);
-
-    const procurementInsight = useMemo(() => {
-      const openAp = sortedBills.reduce((s, b) => s + (Number(b.balance_due) > 0 ? Number(b.balance_due) || 0 : 0), 0);
-      const overdueCount = sortedBills.filter((b) => {
-        const bal = Number(b.balance_due) || 0;
-        return overdueDaysIfAny(String(b.due_date ?? b.dueDate ?? '').slice(0, 10), bal) != null;
-      }).length;
-      return { openAp, overdueCount, totalBills: sortedBills.length };
-    }, [sortedBills]);
-
-    const topOverdueAlert = useMemo(() => {
-      const withBalance = sortedBills.filter((b) => (Number(b.balance_due) || 0) > 0);
-      let best: { bill: any; days: number } | null = null;
-      for (const bill of withBalance) {
-        const due = String(bill.due_date ?? bill.dueDate ?? '').slice(0, 10);
-        const days = overdueDaysIfAny(due, Number(bill.balance_due) || 0);
-        if (days != null && (!best || days > best.days)) best = { bill, days };
-      }
-      if (!best) return null;
-      const name = best.bill.supplier_name || 'A supplier';
-      return { name, days: best.days, billNum: best.bill.bill_number || best.bill.billNumber };
-    }, [sortedBills]);
+    }, [selectedVendorFilterId, bills.length, supplierPayments.length, ledgerTypeFilter]);
 
     const selectedVendor = vendors.find((v) => v.id === form.supplierId);
     const vendorDisplayName = selectedVendor
@@ -302,12 +605,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       if (isOnline && tenantId) {
         Promise.all([
           procurementApi.getPurchaseBills(),
+          procurementApi.getSupplierPayments(),
           shopApi.getVendors(),
           shopApi.getWarehouses(),
           shopApi.getBankAccounts(),
         ])
-          .then(([b, v, w, ba]) => {
-            setBills(normalizeList(b));
+          .then(([b, pay, v, w, ba]) => {
+            const billList = normalizeList(b);
+            const payList = normalizeList(pay);
+            setBills(billList);
+            setSupplierPayments(payList);
             const vList = normalizeList(v);
             setVendorsFromApi(vList);
             if (vList.length > 0) {
@@ -325,17 +632,19 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               });
             }
             setBankAccounts(normalizeList(ba));
-            setProcurementCache(tenantId, { purchaseBills: normalizeList(b) }).catch(() => {});
+            setProcurementCache(tenantId, { purchaseBills: billList, supplierPayments: payList }).catch(() => {});
           })
           .catch(() => {
             if (tenantId) {
               getProcurementCache(tenantId)
                 .then((c) => {
                   if (c?.data?.purchaseBills?.length) setBills(c.data.purchaseBills);
+                  if (c?.data?.supplierPayments?.length) setSupplierPayments(c.data.supplierPayments);
                 })
                 .catch(() => {});
             }
             setBills([]);
+            setSupplierPayments([]);
             setVendorsFromApi([]);
             setBankAccounts([]);
           })
@@ -347,6 +656,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         getProcurementCache(tenantId)
           .then((c) => {
             if (c?.data?.purchaseBills?.length) setBills(c.data.purchaseBills);
+            if (c?.data?.supplierPayments?.length) setSupplierPayments(c.data.supplierPayments);
           })
           .catch(() => setBills([]))
           .finally(() => setLoadingData(false));
@@ -361,6 +671,108 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
 
       setLoadingData(false);
     }, [appDispatch]);
+
+    const openQuickPay = useCallback(
+      (b: any) => {
+        if (!purchaseBillCanPay(b)) return;
+        const bal = Number(b.balance_due) || 0;
+        if (bal <= 0) return;
+        const billDate =
+          String(b.bill_date ?? b.billDate ?? '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+        const hasBanks = bankAccounts.length > 0;
+        setQuickPayBill(b);
+        setQuickPaySuccess(null);
+        setQuickPayForm({
+          amount: Math.round(bal * 100) / 100,
+          paymentDate: billDate,
+          paymentMethod: hasBanks ? 'Bank' : 'Cash',
+          bankAccountId: hasBanks ? String(bankAccounts[0]?.id ?? '') : '',
+          notes: '',
+        });
+      },
+      [bankAccounts]
+    );
+
+    const closeQuickPay = useCallback(() => {
+      setQuickPayBill(null);
+      setQuickPaySuccess(null);
+      setQuickPayPaying(false);
+    }, []);
+
+    const submitQuickPay = useCallback(async () => {
+      if (!quickPayBill) return;
+      const supplierId = String(quickPayBill.supplier_id ?? quickPayBill.supplierId ?? '');
+      if (!supplierId) {
+        showProcurementToast('Bill has no supplier.', 'error');
+        return;
+      }
+      const maxBal = Number(quickPayBill.balance_due) || 0;
+      const amt = Math.round(Number(quickPayForm.amount) * 100) / 100;
+      if (amt <= 0 || amt > maxBal + 0.001) {
+        showProcurementToast(`Amount must be between 0.01 and ${maxBal.toFixed(2)}.`, 'error');
+        return;
+      }
+      if (quickPayForm.paymentMethod === 'Bank' && !quickPayForm.bankAccountId) {
+        showProcurementToast('Select a bank account.', 'error');
+        return;
+      }
+      const billNum = String(quickPayBill.bill_number ?? quickPayBill.billNumber ?? '');
+      const reference = `Pay-${billNum || quickPayBill.id}`;
+      const vopt = vendors.find((v) => v.id === supplierId);
+      const rawVendor = vendorsFromApi.find((x: any) => String(x.id) === supplierId);
+      const vendorName = String(
+        vopt?.company_name || vopt?.companyName || quickPayBill.supplier_name || vopt?.name || 'Supplier'
+      ).trim();
+      const vendorPhone = rawVendor?.contact_no ?? rawVendor?.contactNo ?? undefined;
+      const bankLabel =
+        quickPayForm.paymentMethod === 'Bank'
+          ? bankAccounts.find((x) => x.id === quickPayForm.bankAccountId)?.name
+          : undefined;
+
+      setQuickPayPaying(true);
+      try {
+        const payload = {
+          supplierId,
+          amount: amt,
+          paymentMethod: quickPayForm.paymentMethod,
+          bankAccountId:
+            quickPayForm.paymentMethod === 'Bank' && quickPayForm.bankAccountId
+              ? quickPayForm.bankAccountId
+              : undefined,
+          paymentDate: quickPayForm.paymentDate,
+          reference,
+          notes: quickPayForm.notes.trim() || undefined,
+          allocations: [{ purchaseBillId: quickPayBill.id, amount: amt }],
+        };
+        const result = await recordSupplierPaymentOfflineFirst(payload);
+        const body = result.result as { id?: string } | undefined;
+        const paymentId = result.synced && body?.id ? body.id : undefined;
+        showProcurementToast(
+          result.synced ? 'Payment recorded — bill updated' : 'Payment queued offline — will sync when online',
+          'success'
+        );
+        loadBillsAndFormData();
+        setQuickPaySuccess({
+          synced: !!result.synced,
+          paymentId,
+          localId: result.localId,
+          billId: quickPayBill.id,
+          billNumber: billNum,
+          vendorName,
+          vendorPhone,
+          amount: amt,
+          paymentDate: quickPayForm.paymentDate,
+          paymentMethod: quickPayForm.paymentMethod,
+          bankLabel,
+          reference,
+          notes: quickPayForm.notes.trim(),
+        });
+      } catch (err: unknown) {
+        alert(procurementHttpErr(err, 'Failed to record payment'));
+      } finally {
+        setQuickPayPaying(false);
+      }
+    }, [quickPayBill, quickPayForm, bankAccounts, vendors, vendorsFromApi, loadBillsAndFormData]);
 
     useEffect(() => {
       loadBillsAndFormData();
@@ -536,22 +948,110 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       setEditBillId(null);
       setEditingIsDraft(false);
       setFormErrors({});
+      setAutoBillMode(false);
     }, []);
+
+    const applyVendorAutoLines = useCallback(async (supplierId: string, coverDays: number) => {
+      const sid = String(supplierId || '').trim();
+      if (!sid) return;
+      const days = Math.max(1, Math.min(90, Math.floor(coverDays) || 1));
+      setAutoBillLoading(true);
+      try {
+        const res = await procurementDemandApi.vendorAutoBill({
+          supplierId: sid,
+          coverDays: days,
+          salesWindowDays: 30,
+        });
+        const lines = Array.isArray(res?.lines) ? res.lines : [];
+        const items: LineItem[] = lines.map((row: any) => {
+          const qty = Math.max(1, Math.floor(Number(row.suggested_order_qty) || 1));
+          const unitCost = Number(row.cost_price) || 0;
+          const retailPrice = Number(row.retail_price) || 0;
+          return {
+            lineId: newLineId(),
+            productId: String(row.product_id),
+            quantity: qty,
+            unitCost,
+            retailPrice,
+            taxAmount: 0,
+            subtotal: qty * unitCost,
+            expiryDate: defaultExpiryDate(),
+            expiryHighlight: true,
+            batchNo: '',
+          };
+        });
+        setForm((f) => ({ ...f, items }));
+        if (items.length === 0) {
+          showProcurementToast(
+            'No suggested quantities for this window. Try a longer horizon, or add lines manually (products need past sales and prior purchases from this vendor).',
+            'info'
+          );
+        } else {
+          showProcurementToast(`Loaded ${items.length} recommended line(s). You can edit quantities or add products.`, 'success');
+        }
+      } catch (err: unknown) {
+        const st = (err as { status?: number }).status;
+        if (st === 404) {
+          alert(
+            'Auto purchase bill is not available from this server (HTTP 404). The hosted API may need to be redeployed with the latest code, or your dev proxy may be misconfigured. Try: run `npm run dev` from the repo root for a local API, or fix `VITE_API_URL` in client/.env.cloud (use your API origin; trailing /api is optional).'
+          );
+        } else {
+          alert(procurementHttpErr(err, 'Could not load recommendations'));
+        }
+      } finally {
+        setAutoBillLoading(false);
+      }
+    }, []);
+
+    const openAutoPurchaseBill = useCallback(() => {
+      const sid = selectedVendorFilterId;
+      if (!sid) {
+        showProcurementToast('Select a vendor in the sidebar first (not “All vendors”).', 'error');
+        return;
+      }
+      const v = vendors.find((x) => x.id === sid);
+      if (!v) {
+        showProcurementToast('Vendor not found. Refresh the page and try again.', 'error');
+        return;
+      }
+      resetFormFields();
+      setAutoBillMode(true);
+      setForm({
+        supplierId: sid,
+        billNumber: `PB-${Date.now()}`,
+        billDate: new Date().toISOString().slice(0, 10),
+        dueDate: '',
+        items: [],
+        paymentStatus: 'Credit',
+        paidAmount: 0,
+        bankAccountId: '',
+        notes: '',
+      });
+      setVendorSearch(
+        `${v.name}${(v.company_name ?? v.companyName) ? ` (${v.company_name ?? v.companyName})` : ''}`
+      );
+      setProductSearch('');
+      setShowForm(true);
+      const days = Math.max(1, Math.min(90, Math.floor(autoBillCoverDays) || 1));
+      void applyVendorAutoLines(sid, days);
+    }, [selectedVendorFilterId, vendors, resetFormFields, applyVendorAutoLines, autoBillCoverDays]);
 
     const closeForm = useCallback(() => {
       resetFormFields();
       setShowForm(false);
     }, [resetFormFields]);
 
+    const openNewPurchaseBillForm = useCallback(() => {
+      resetFormFields();
+      setShowForm(true);
+    }, [resetFormFields]);
+
     useImperativeHandle(
       ref,
       () => ({
-        openNewPurchaseBill: () => {
-          resetFormFields();
-          setShowForm(true);
-        },
+        openNewPurchaseBill: openNewPurchaseBillForm,
       }),
-      [resetFormFields]
+      [openNewPurchaseBillForm]
     );
 
     const runSharePdfFromSnapshot = async (snap: {
@@ -937,7 +1437,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     };
 
     return (
-      <div className="space-y-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
         <Modal
           isOpen={showForm}
           onClose={() => {
@@ -960,6 +1460,48 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               }}
               className="flex min-h-0 flex-1 flex-col gap-2"
             >
+              {autoBillMode && !editBillId && (
+                <div
+                  className="shrink-0 rounded-lg border border-amber-200/80 bg-amber-50/40 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/25"
+                  role="region"
+                  aria-label="Smart purchase suggestions"
+                >
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="text-sm font-semibold text-foreground">Suggested lines</span>
+                    <label className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                      Order for the next
+                      <input
+                        type="number"
+                        min={1}
+                        max={90}
+                        value={autoBillCoverDays}
+                        onChange={(e) => {
+                          const n = parseInt(e.target.value, 10);
+                          setAutoBillCoverDays(Number.isFinite(n) ? Math.max(1, Math.min(90, n)) : 1);
+                        }}
+                        className="input input-text w-16 py-1 text-center text-sm font-semibold tabular-nums"
+                        disabled={autoBillLoading}
+                        aria-label="Days of demand to cover from sales trend"
+                      />
+                      days
+                    </label>
+                    <button
+                      type="button"
+                      disabled={autoBillLoading || !form.supplierId}
+                      onClick={() => {
+                        const d = Math.max(1, Math.min(90, Math.floor(autoBillCoverDays) || 1));
+                        void applyVendorAutoLines(form.supplierId, d);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                    >
+                      {autoBillLoading ? 'Computing…' : 'Refresh recommendations'}
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                    Products are limited to items on past bills from this vendor. Quantities use a 30-day sales average: suggested order ≈ max(0, daily sales × days minus current stock). Adjust lines or add products as needed.
+                  </p>
+                </div>
+              )}
               <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
                 <div ref={vendorDropdownRef} className="min-w-0 sm:col-span-2 xl:col-span-1">
                   <SupplierSelect
@@ -979,6 +1521,10 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                       );
                       setVendorDropdownOpen(false);
                       if (formErrors.supplier) setFormErrors((e) => ({ ...e, supplier: undefined }));
+                      if (autoBillMode && !editBillId) {
+                        const d = Math.max(1, Math.min(90, Math.floor(autoBillCoverDays) || 1));
+                        void applyVendorAutoLines(v.id, d);
+                      }
                     }}
                     onAddSupplier={() => setShowAddVendorModal(true)}
                   />
@@ -1180,320 +1726,636 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           </div>
         </Modal>
 
-        <div className="card overflow-hidden p-0 shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left">
-              <thead className="border-b border-border bg-muted/40">
-                <tr className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  <th className="whitespace-nowrap px-4 py-3">Bill ID</th>
-                  <th className="whitespace-nowrap px-4 py-3">Vendor</th>
-                  <th className="whitespace-nowrap px-4 py-3">Issue date</th>
-                  <th className="whitespace-nowrap px-4 py-3">Due date</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-right">Amount</th>
-                  <th className="whitespace-nowrap px-4 py-3">Status</th>
-                  <th className="whitespace-nowrap px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {loadingData && bills.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      Loading purchase bills…
-                    </td>
-                  </tr>
-                ) : pagedBills.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      No purchase bills yet
-                    </td>
-                  </tr>
-                ) : (
-                  pagedBills.map((b) => {
-                    const balanceDue = Number(b.balance_due) || 0;
-                    const rowStatus = getProcurementRowStatus(b);
-                    const sid = String(b.supplier_id ?? b.supplierId ?? '');
-                    const v = sid ? vendorById.get(sid) : undefined;
-                    const vendorTitle = String(v?.company_name || v?.companyName || b.supplier_name || '—').trim();
-                    const vendorSub = String(v?.description || '').trim() || 'Supplier';
-                    const issue = String(b.bill_date ?? b.billDate ?? '').slice(0, 10);
-                    const due = String(b.due_date ?? b.dueDate ?? '').slice(0, 10);
-                    const od = overdueDaysIfAny(due, balanceDue);
-                    const billNum = String(b.bill_number ?? b.billNumber ?? '');
-                    const showView = rowStatus !== 'PAID';
-                    const statusClass =
-                      rowStatus === 'PAID'
-                        ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                        : rowStatus === 'POSTED'
-                          ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
-                          : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200';
-
-                    return (
-                      <tr key={b.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3">
-                          <span className="text-sm font-bold text-foreground">#{billNum}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rowAvatarColor(sid || b.id)}`}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 lg:min-h-[calc(100dvh-12rem)] lg:flex-row lg:items-stretch">
+          <aside className="flex w-full shrink-0 flex-col lg:w-80 lg:min-w-[20rem] xl:w-96">
+            <div className="card flex max-h-[min(52dvh,520px)] min-h-[280px] flex-1 flex-col overflow-hidden p-0 shadow-sm lg:h-full lg:max-h-none lg:min-h-0">
+              <div className="shrink-0 border-b border-border bg-muted/30 px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <FolderTree className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-xs font-bold uppercase tracking-wide text-foreground">Vendors</h2>
+                    <p className="truncate text-[10px] text-muted-foreground">Accounts payable by vendor</p>
+                    <label htmlFor="vendor-tree-search" className="sr-only">
+                      Search vendors
+                    </label>
+                    <input
+                      id="vendor-tree-search"
+                      type="search"
+                      autoComplete="off"
+                      placeholder="Search vendors…"
+                      value={vendorTreeSearch}
+                      onChange={(e) => setVendorTreeSearch(e.target.value)}
+                      className="input input-text mt-2 h-9 w-full rounded-lg py-1.5 text-sm placeholder:text-muted-foreground"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+                <div
+                  className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border bg-card px-2.5 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+                  role="row"
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleVendorTreeSort('name')}
+                    className={`flex min-w-0 items-center gap-0.5 text-left font-bold uppercase tracking-wider transition-colors hover:text-foreground ${
+                      vendorTreeSort.col === 'name' ? 'text-foreground' : ''
+                    }`}
+                    aria-label={
+                      vendorTreeSort.col === 'name'
+                        ? `Vendor sorted ${vendorTreeSort.dir === 'asc' ? 'A–Z' : 'Z–A'}`
+                        : 'Sort by vendor name'
+                    }
+                  >
+                    <span className="truncate">Vendor</span>
+                    {vendorTreeSort.col === 'name' &&
+                      (vendorTreeSort.dir === 'asc' ? (
+                        <ChevronUp className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+                      ))}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleVendorTreeSort('ap')}
+                    className={`flex shrink-0 items-center justify-end gap-0.5 whitespace-nowrap text-right font-bold uppercase tracking-wider transition-colors hover:text-foreground ${
+                      vendorTreeSort.col === 'ap' ? 'text-foreground' : ''
+                    }`}
+                    aria-label={
+                      vendorTreeSort.col === 'ap'
+                        ? `Amount due sorted ${vendorTreeSort.dir === 'asc' ? 'low to high' : 'high to low'}`
+                        : 'Sort by amount due'
+                    }
+                  >
+                    <span>Amount due</span>
+                    {vendorTreeSort.col === 'ap' &&
+                      (vendorTreeSort.dir === 'asc' ? (
+                        <ChevronUp className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+                      ) : (
+                        <ChevronDown className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+                      ))}
+                  </button>
+                </div>
+                <div className="space-y-0.5 p-2 pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedVendorFilterId(null)}
+                    className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border px-2 py-2 text-left transition-colors ${
+                      selectedVendorFilterId == null
+                        ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                        : 'border-transparent hover:bg-muted/80'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">All vendors</span>
+                      <span className="block truncate text-[10px] text-muted-foreground">Every bill and payment</span>
+                    </div>
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">—</span>
+                  </button>
+                  <ul className="space-y-0.5" aria-label="Filter by vendor and open balance">
+                    {displayedVendorTreeEntries.map((entry) => {
+                      const selected = selectedVendorFilterId === entry.id;
+                      const apStr = `${CURRENCY} ${entry.ap.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                      return (
+                        <li key={entry.id}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedVendorFilterId(entry.id)}
+                            className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border px-2 py-2 text-left transition-colors ${
+                              selected
+                                ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                                : 'border-transparent hover:bg-muted/80'
+                            }`}
+                          >
+                            <span className="min-w-0 truncate text-sm font-semibold">{entry.name}</span>
+                            <span
+                              className={`shrink-0 text-xs font-semibold tabular-nums ${entry.ap > 0 ? 'text-destructive' : 'text-muted-foreground'}`}
+                              title={apStr}
                             >
-                              {vendorInitialsFromName(vendorTitle || b.supplier_name || '?')}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold text-foreground">{vendorTitle}</div>
-                              <div className="truncate text-[11px] text-muted-foreground">{vendorSub}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">{formatBillDateDisplay(issue)}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {due ? (
-                            <span className={od != null ? 'font-bold text-destructive' : 'text-muted-foreground'}>
-                              {formatBillDateDisplay(due)}
-                              {od != null && (
-                                <span className="ml-1 font-bold text-destructive">Overdue ({od}d)</span>
-                              )}
+                              {apStr}
                             </span>
-                          ) : (
-                            '—'
-                          )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {!loadingData && vendorTreeEntries.length === 0 && (
+                    <p className="px-1 py-4 text-center text-xs text-muted-foreground">No vendors in directory yet</p>
+                  )}
+                  {!loadingData && vendorTreeEntries.length > 0 && filteredVendorTreeEntries.length === 0 && (
+                    <p className="px-1 py-4 text-center text-xs text-muted-foreground">No vendors match your search</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="card flex min-h-[min(48dvh,360px)] flex-1 flex-col overflow-hidden p-0 shadow-sm lg:min-h-0">
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/25 px-3 py-2.5">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                  <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    Purchase ledger
+                  </span>
+                  <div
+                    className="inline-flex rounded-lg border border-border bg-background p-0.5 shadow-sm"
+                    role="group"
+                    aria-label="Filter by transaction type"
+                  >
+                    {(
+                      [
+                        { id: 'all' as const, label: 'All transactions' },
+                        { id: 'bills' as const, label: 'Bills' },
+                        { id: 'payments' as const, label: 'Payments' },
+                      ] as const
+                    ).map(({ id, label }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setLedgerTypeFilter(id)}
+                        className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          ledgerTypeFilter === id
+                            ? 'bg-primary text-primary-foreground shadow-sm'
+                            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <button
+                  type="button"
+                  disabled={!selectedVendorFilterId || autoBillLoading}
+                  onClick={openAutoPurchaseBill}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                  title={
+                    selectedVendorFilterId
+                      ? 'Open a new bill with this vendor and suggested line quantities'
+                      : 'Select a vendor in the sidebar first'
+                  }
+                >
+                  <Sparkles className="h-4 w-4 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
+                  Auto purchase bill
+                </button>
+                <button
+                  type="button"
+                  onClick={openNewPurchaseBillForm}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[#0047AB] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#003694] dark:bg-[#0047AB] dark:hover:bg-[#003694]"
+                >
+                  <Plus className="h-4 w-4 shrink-0" strokeWidth={2.5} aria-hidden />
+                  New Bill
+                </button>
+              </div>
+            </div>
+              <div className="min-h-0 flex-1 overflow-auto">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[960px] table-fixed text-left">
+                  <colgroup>
+                    {ledgerColWidths.map((w, i) => (
+                      <col key={i} style={{ width: w, minWidth: MIN_LEDGER_COL_WIDTH }} />
+                    ))}
+                  </colgroup>
+                  <thead className="border-b border-border bg-muted/40">
+                    <tr>
+                      {LEDGER_TABLE_COLUMNS.map(({ key, label, headerAlign }, idx) => (
+                        <th key={key} className="relative p-0 align-bottom">
+                          <button
+                            type="button"
+                            onClick={() => toggleLedgerSort(key)}
+                            className={`flex w-full items-center gap-1 px-4 py-3 pr-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground ${
+                              headerAlign === 'right' ? 'justify-end text-right' : 'justify-start text-left'
+                            }`}
+                          >
+                            <span className="truncate">{label}</span>
+                            {ledgerSort.col === key &&
+                              (ledgerSort.dir === 'asc' ? (
+                                <ChevronUp className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+                              ))}
+                          </button>
+                          <div
+                            role="separator"
+                            aria-orientation="vertical"
+                            aria-hidden
+                            onMouseDown={(e) => beginLedgerColumnResize(idx, e)}
+                            className="absolute right-0 top-0 z-10 h-full w-1.5 max-w-[6px] cursor-col-resize select-none hover:bg-primary/30 active:bg-primary/50"
+                          />
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {loadingData && bills.length === 0 && supplierPayments.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                          Loading purchase bills…
                         </td>
-                        <td className="numeric-data px-4 py-3 text-right text-sm font-bold text-foreground">
+                      </tr>
+                    ) : displayLedgerRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                          {ledgerEmptyMessage}
+                        </td>
+                      </tr>
+                    ) : (
+                      displayLedgerRows.map((row) => {
+                        if (row.kind === 'bill') {
+                          const b = row.item;
+                          const balanceDue = Number(b.balance_due) || 0;
+                          const rowStatus = getProcurementRowStatus(b);
+                          const sid = String(b.supplier_id ?? b.supplierId ?? '');
+                          const v = sid ? vendorById.get(sid) : undefined;
+                          const vendorTitle = String(v?.company_name || v?.companyName || b.supplier_name || '—').trim();
+                          const vendorSub = String(v?.description || '').trim() || 'Supplier';
+                          const issue = String(b.bill_date ?? b.billDate ?? '').slice(0, 10);
+                          const due = String(b.due_date ?? b.dueDate ?? '').slice(0, 10);
+                          const od = overdueDaysIfAny(due, balanceDue);
+                          const billNum = String(b.bill_number ?? b.billNumber ?? '');
+                          const showView = rowStatus !== 'PAID';
+                          const statusClass =
+                            rowStatus === 'PAID'
+                              ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                              : rowStatus === 'POSTED'
+                                ? 'bg-sky-50 text-sky-700 ring-1 ring-sky-200'
+                                : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200';
+
+                          return (
+                            <tr key={`bill-${b.id}`} className="hover:bg-muted/30 transition-colors">
+                              <td className="px-4 py-3">
+                                <span className="text-sm font-bold text-foreground">#{billNum}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rowAvatarColor(sid || b.id)}`}
+                                  >
+                                    {vendorInitialsFromName(vendorTitle || b.supplier_name || '?')}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-semibold text-foreground">{vendorTitle}</div>
+                                    <div className="truncate text-[11px] text-muted-foreground">{vendorSub}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-muted-foreground">{formatBillDateDisplay(issue)}</td>
+                              <td className="px-4 py-3 text-sm">
+                                {due ? (
+                                  <span className={od != null ? 'font-bold text-destructive' : 'text-muted-foreground'}>
+                                    {formatBillDateDisplay(due)}
+                                    {od != null && (
+                                      <span className="ml-1 font-bold text-destructive">Overdue ({od}d)</span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
+                              <td className="numeric-data px-4 py-3 text-right text-sm font-bold text-foreground">
+                                {CURRENCY}{' '}
+                                {Number(b.total_amount ?? b.totalAmount ?? 0).toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${statusClass}`}
+                                >
+                                  {rowStatus}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex items-center justify-end gap-0.5">
+                                  {showView && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingBillId(b.id)}
+                                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+                                      title="View bill"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    disabled={!purchaseBillCanEdit(b)}
+                                    onClick={async () => {
+                                      if (!purchaseBillCanEdit(b)) {
+                                        alert('This bill cannot be edited because it has been paid (fully or partially).');
+                                        return;
+                                      }
+                                      try {
+                                        const [bill, products] = await Promise.all([
+                                          procurementApi.getPurchaseBillById(b.id),
+                                          shopApi.getProducts(),
+                                        ]);
+                                        if (!bill) {
+                                          alert('Could not load bill.');
+                                          return;
+                                        }
+                                        const plist = Array.isArray(products) ? products : [];
+                                        const retailById = new Map(
+                                          plist.map((p: { id: string; retail_price?: unknown }) => [
+                                            p.id,
+                                            parseFloat(String(p.retail_price ?? 0)) || 0,
+                                          ])
+                                        );
+                                        setEditingIsDraft(bill.is_posted === false || bill.is_posted === 0);
+                                        setForm({
+                                          supplierId: bill.supplier_id || bill.supplierId || '',
+                                          billNumber: bill.bill_number || bill.billNumber || '',
+                                          billDate: (bill.bill_date || bill.billDate || '').toString().slice(0, 10),
+                                          dueDate: (bill.due_date || bill.dueDate || '').toString().slice(0, 10) || '',
+                                          items: (bill.items || []).map((it: any) => {
+                                            const pid = it.product_id || it.productId;
+                                            return {
+                                              lineId: newLineId(),
+                                              productId: pid,
+                                              quantity: Number(it.quantity) || 1,
+                                              unitCost: Number(it.unit_cost ?? it.unitCost) || 0,
+                                              retailPrice: retailById.get(pid) ?? 0,
+                                              taxAmount: Number(it.tax_amount ?? it.taxAmount) || 0,
+                                              subtotal: Number(it.subtotal) || 0,
+                                              expiryDate: isoDateFromPurchaseApi(it.expiry_date ?? it.expiryDate),
+                                              expiryHighlight: false,
+                                              batchNo: String(it.batch_no ?? it.batchNo ?? ''),
+                                            };
+                                          }),
+                                          paymentStatus: 'Credit',
+                                          paidAmount: 0,
+                                          bankAccountId: '',
+                                          notes: bill.notes || '',
+                                        });
+                                        setVendorSearch(bill.supplier_name || '');
+                                        setEditBillId(b.id);
+                                        setAutoBillMode(false);
+                                        setShowForm(true);
+                                      } catch (err: any) {
+                                        alert(procurementHttpErr(err, 'Failed to load bill'));
+                                      }
+                                    }}
+                                    className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary disabled:pointer-events-none disabled:opacity-40"
+                                    title={purchaseBillCanEdit(b) ? 'Edit bill' : 'Paid bills cannot be edited'}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeleteConfirmBillId(b.id)}
+                                    className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-destructive"
+                                    title="Delete bill"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => shareExistingBillToWhatsApp(b.id)}
+                                    disabled={!!sharingPdfBillId}
+                                    className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+                                    title="Share purchase order PDF on WhatsApp"
+                                  >
+                                    <Share2 className={`h-4 w-4 ${sharingPdfBillId === b.id ? 'animate-pulse' : ''}`} />
+                                  </button>
+                                  {purchaseBillCanPay(b) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openQuickPay(b)}
+                                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-primary transition-colors hover:bg-accent"
+                                      title="Pay bill"
+                                    >
+                                      <Wallet className="h-4 w-4" />
+                                      Pay
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        const p = row.item;
+                        const psid = String(p.supplier_id ?? '');
+                        const pv = psid ? vendorById.get(psid) : undefined;
+                        const pVendorTitle = String(pv?.company_name || pv?.companyName || p.supplier_name || '—').trim();
+                        const pVendorSub = String(p.payment_method ?? 'Payment').trim();
+                        const paidOn = String(p.payment_date ?? p.paymentDate ?? '').slice(0, 10);
+                        const allocBills = String(p.allocated_bill_numbers ?? '').trim();
+                        const payAmt = Number(p.amount) || 0;
+                        const refLabel = String(p.reference ?? '').trim() || String(p.id ?? '').slice(0, 10);
+                        const rawVendorPay = vendorsFromApi.find((x: any) => String(x.id) === psid);
+                        const vendorPhonePay = rawVendorPay?.contact_no ?? rawVendorPay?.contactNo ?? undefined;
+                        const payMethod = String(p.payment_method ?? '').trim();
+                        const bankLabelPay =
+                          payMethod === 'Bank'
+                            ? bankAccounts.find((x) => x.id === (p.bank_account_id ?? p.bankAccountId))?.name
+                            : undefined;
+
+                        return (
+                          <tr
+                            key={`pay-${p.id}`}
+                            className="bg-emerald-50/35 hover:bg-emerald-50/55 dark:bg-emerald-950/25 dark:hover:bg-emerald-950/40 transition-colors"
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <Wallet className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                                <div className="min-w-0">
+                                  <div className="text-sm font-bold text-emerald-800 dark:text-emerald-200">Bill payment</div>
+                                  <div className="truncate font-mono text-[11px] text-muted-foreground">{refLabel}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rowAvatarColor(psid || p.id)}`}
+                                >
+                                  {vendorInitialsFromName(pVendorTitle || p.supplier_name || '?')}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-semibold text-foreground">{pVendorTitle}</div>
+                                  <div className="truncate text-[11px] text-muted-foreground">{pVendorSub}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-muted-foreground">{formatBillDateDisplay(paidOn)}</td>
+                            <td className="px-4 py-3 text-sm text-muted-foreground">
+                              {allocBills ? (
+                                <span title={allocBills}>
+                                  Bills: <span className="font-medium text-foreground">{allocBills}</span>
+                                </span>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                            <td className="numeric-data px-4 py-3 text-right text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                              {CURRENCY}{' '}
+                              {payAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-block rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-bold uppercase text-violet-700 ring-1 ring-violet-200 dark:bg-violet-950/50 dark:text-violet-200 dark:ring-violet-800">
+                                Payment
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditSupplierPaymentId(p.id)}
+                                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+                                  title="Edit payment"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteSupplierPaymentId(p.id)}
+                                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-destructive"
+                                  title="Delete payment"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    openWhatsAppTextMessage(
+                                      buildLedgerPaymentWhatsAppMessage(p, {
+                                        vendorName: pVendorTitle || String(p.supplier_name ?? 'Supplier').trim(),
+                                        bankLabel: bankLabelPay,
+                                        currency: CURRENCY,
+                                      }),
+                                      vendorPhonePay
+                                    )
+                                  }
+                                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+                                  title="Share payment details on WhatsApp"
+                                >
+                                  <Share2 className="h-4 w-4" aria-hidden />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              </div>
+
+              {ledgerPaginationEnabled && filteredSortedLedgerRows.length > 0 && (
+                <div className="flex shrink-0 flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    Showing {(billSafePage - 1) * BILL_LIST_PAGE_SIZE + 1} to{' '}
+                    {Math.min(billSafePage * BILL_LIST_PAGE_SIZE, filteredSortedLedgerRows.length)} of{' '}
+                    {filteredSortedLedgerRows.length} entries
+                  </span>
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setBillListPage((p) => Math.max(1, p - 1))}
+                      disabled={billSafePage <= 1}
+                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    {Array.from({ length: Math.min(billTotalPages, 5) }, (_, i) => {
+                      let pageNum: number;
+                      if (billTotalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (billSafePage <= 3) {
+                        pageNum = i + 1;
+                      } else if (billSafePage >= billTotalPages - 2) {
+                        pageNum = billTotalPages - 4 + i;
+                      } else {
+                        pageNum = billSafePage - 2 + i;
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setBillListPage(pageNum)}
+                          className={`h-8 min-w-[32px] rounded-md text-xs font-semibold transition-colors ${
+                            billSafePage === pageNum
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'text-muted-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setBillListPage((p) => Math.min(billTotalPages, p + 1))}
+                      disabled={billSafePage >= billTotalPages}
+                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
+                      aria-label="Next page"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+              {selectedVendorFilterId && selectedVendorLedgerSummary && (
+                <div
+                  className="shrink-0 border-t border-border bg-muted/35 px-3 py-2.5 dark:bg-muted/20"
+                  role="status"
+                  aria-label={`${selectedVendorLedgerSummary.vendorLabel} ledger summary`}
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-6 sm:gap-y-1">
+                    <span className="text-xs font-bold text-foreground">
+                      {selectedVendorLedgerSummary.vendorLabel}
+                      <span className="ml-1.5 font-normal text-muted-foreground">— summary</span>
+                    </span>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] sm:text-xs">
+                      <span className="text-muted-foreground">
+                        <span className="font-semibold text-foreground">{selectedVendorLedgerSummary.billCount}</span> bill
+                        {selectedVendorLedgerSummary.billCount === 1 ? '' : 's'}
+                        <span className="mx-1.5 text-border">·</span>
+                        Total billed{' '}
+                        <span className="whitespace-nowrap font-semibold tabular-nums text-foreground">
                           {CURRENCY}{' '}
-                          {Number(b.total_amount ?? b.totalAmount ?? 0).toLocaleString(undefined, {
+                          {selectedVendorLedgerSummary.billsTotalGross.toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${statusClass}`}
-                          >
-                            {rowStatus}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-0.5">
-                            {showView && (
-                              <button
-                                type="button"
-                                onClick={() => setViewingBillId(b.id)}
-                                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
-                                title="View bill"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              disabled={!purchaseBillCanEdit(b)}
-                              onClick={async () => {
-                                if (!purchaseBillCanEdit(b)) {
-                                  alert('This bill cannot be edited because it has been paid (fully or partially).');
-                                  return;
-                                }
-                                try {
-                                  const [bill, products] = await Promise.all([
-                                    procurementApi.getPurchaseBillById(b.id),
-                                    shopApi.getProducts(),
-                                  ]);
-                                  if (!bill) {
-                                    alert('Could not load bill.');
-                                    return;
-                                  }
-                                  const plist = Array.isArray(products) ? products : [];
-                                  const retailById = new Map(
-                                    plist.map((p: { id: string; retail_price?: unknown }) => [
-                                      p.id,
-                                      parseFloat(String(p.retail_price ?? 0)) || 0,
-                                    ])
-                                  );
-                                  setEditingIsDraft(bill.is_posted === false || bill.is_posted === 0);
-                                  setForm({
-                                    supplierId: bill.supplier_id || bill.supplierId || '',
-                                    billNumber: bill.bill_number || bill.billNumber || '',
-                                    billDate: (bill.bill_date || bill.billDate || '').toString().slice(0, 10),
-                                    dueDate: (bill.due_date || bill.dueDate || '').toString().slice(0, 10) || '',
-                                    items: (bill.items || []).map((it: any) => {
-                                      const pid = it.product_id || it.productId;
-                                      return {
-                                        lineId: newLineId(),
-                                        productId: pid,
-                                        quantity: Number(it.quantity) || 1,
-                                        unitCost: Number(it.unit_cost ?? it.unitCost) || 0,
-                                        retailPrice: retailById.get(pid) ?? 0,
-                                        taxAmount: Number(it.tax_amount ?? it.taxAmount) || 0,
-                                        subtotal: Number(it.subtotal) || 0,
-                                        expiryDate: isoDateFromPurchaseApi(it.expiry_date ?? it.expiryDate),
-                                        expiryHighlight: false,
-                                        batchNo: String(it.batch_no ?? it.batchNo ?? ''),
-                                      };
-                                    }),
-                                    paymentStatus: 'Credit',
-                                    paidAmount: 0,
-                                    bankAccountId: '',
-                                    notes: bill.notes || '',
-                                  });
-                                  setVendorSearch(bill.supplier_name || '');
-                                  setEditBillId(b.id);
-                                  setShowForm(true);
-                                } catch (err: any) {
-                                  alert(procurementHttpErr(err, 'Failed to load bill'));
-                                }
-                              }}
-                              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-primary disabled:pointer-events-none disabled:opacity-40"
-                              title={purchaseBillCanEdit(b) ? 'Edit bill' : 'Paid bills cannot be edited'}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteConfirmBillId(b.id)}
-                              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-destructive"
-                              title="Delete bill"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => shareExistingBillToWhatsApp(b.id)}
-                              disabled={!!sharingPdfBillId}
-                              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50"
-                              title="Share purchase order PDF on WhatsApp"
-                            >
-                              <Share2 className={`h-4 w-4 ${sharingPdfBillId === b.id ? 'animate-pulse' : ''}`} />
-                            </button>
-                            {onPayRemaining && purchaseBillCanPay(b) && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  onPayRemaining({
-                                    id: b.id,
-                                    supplier_id: b.supplier_id,
-                                    supplier_name: b.supplier_name,
-                                    balance_due: balanceDue,
-                                  })
-                                }
-                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-primary transition-colors hover:bg-accent"
-                                title="Pay remaining amount"
-                              >
-                                <Wallet className="h-4 w-4" />
-                                Pay
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {sortedBills.length > 0 && (
-            <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs text-muted-foreground">
-                Showing {(billSafePage - 1) * BILL_LIST_PAGE_SIZE + 1} to{' '}
-                {Math.min(billSafePage * BILL_LIST_PAGE_SIZE, sortedBills.length)} of {sortedBills.length} entries
-              </span>
-              <div className="flex items-center justify-end gap-1">
-                <button
-                  type="button"
-                  onClick={() => setBillListPage((p) => Math.max(1, p - 1))}
-                  disabled={billSafePage <= 1}
-                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                {Array.from({ length: Math.min(billTotalPages, 5) }, (_, i) => {
-                  let pageNum: number;
-                  if (billTotalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (billSafePage <= 3) {
-                    pageNum = i + 1;
-                  } else if (billSafePage >= billTotalPages - 2) {
-                    pageNum = billTotalPages - 4 + i;
-                  } else {
-                    pageNum = billSafePage - 2 + i;
-                  }
-                  return (
-                    <button
-                      key={pageNum}
-                      type="button"
-                      onClick={() => setBillListPage(pageNum)}
-                      className={`h-8 min-w-[32px] rounded-md text-xs font-semibold transition-colors ${
-                        billSafePage === pageNum
-                          ? 'bg-primary text-primary-foreground shadow-sm'
-                          : 'text-muted-foreground hover:bg-muted'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => setBillListPage((p) => Math.min(billTotalPages, p + 1))}
-                  disabled={billSafePage >= billTotalPages}
-                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted disabled:opacity-30"
-                  aria-label="Next page"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-amber-200/80 bg-amber-50/80 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
-            <div className="flex gap-3">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden />
-              <div>
-                <h3 className="text-sm font-bold text-amber-900 dark:text-amber-100">Procurement alert</h3>
-                {topOverdueAlert ? (
-                  <p className="mt-1 text-sm leading-relaxed text-amber-900/90 dark:text-amber-50/90">
-                    <span className="font-medium">{topOverdueAlert.name}</span> has bill{' '}
-                    <span className="font-mono">#{topOverdueAlert.billNum}</span> overdue by {topOverdueAlert.days} day
-                    {topOverdueAlert.days === 1 ? '' : 's'}. Review payment terms or schedule supplier payment.
-                  </p>
-                ) : (
-                  <p className="mt-1 text-sm text-amber-900/85 dark:text-amber-50/85">
-                    No overdue payables with an open balance. Outstanding accounts payable total{' '}
-                    <span className="font-semibold tabular-nums">
-                      {CURRENCY} {procurementInsight.openAp.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    </span>
-                    .
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-sky-200/80 bg-sky-50/80 p-4 dark:border-sky-900/50 dark:bg-sky-950/30">
-            <div className="flex gap-3">
-              <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-600" aria-hidden />
-              <div>
-                <h3 className="text-sm font-bold text-sky-900 dark:text-sky-100">System insight</h3>
-                <p className="mt-1 text-sm leading-relaxed text-sky-900/90 dark:text-sky-50/90">
-                  You have <span className="font-semibold">{procurementInsight.totalBills}</span> purchase bill
-                  {procurementInsight.totalBills === 1 ? '' : 's'} on record
-                  {procurementInsight.overdueCount > 0 ? (
-                    <>
-                      ; <span className="font-semibold text-destructive">{procurementInsight.overdueCount}</span> with
-                      overdue due dates and open balance.
-                    </>
-                  ) : (
-                    <>; no overdue due dates with open balance.</>
-                  )}{' '}
-                  Open AP:{' '}
-                  <span className="font-semibold tabular-nums">
-                    {CURRENCY} {procurementInsight.openAp.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  </span>
-                  .
-                </p>
-              </div>
+                        </span>
+                        <span className="mx-1.5 text-border">·</span>
+                        Balance due{' '}
+                        <span
+                          className={`whitespace-nowrap font-semibold tabular-nums ${
+                            selectedVendorLedgerSummary.billsBalanceDue > 0 ? 'text-destructive' : 'text-foreground'
+                          }`}
+                        >
+                          {CURRENCY}{' '}
+                          {selectedVendorLedgerSummary.billsBalanceDue.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </span>
+                      <span className="text-muted-foreground">
+                        <span className="font-semibold text-foreground">{selectedVendorLedgerSummary.paymentCount}</span>{' '}
+                        payment
+                        {selectedVendorLedgerSummary.paymentCount === 1 ? '' : 's'}
+                        <span className="mx-1.5 text-border">·</span>
+                        Total paid{' '}
+                        <span className="whitespace-nowrap font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                          {CURRENCY}{' '}
+                          {selectedVendorLedgerSummary.paymentsTotal.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1645,6 +2507,215 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
             </div>
           </div>
         )}
+
+        <Modal
+          isOpen={!!quickPayBill}
+          onClose={() => !quickPayPaying && closeQuickPay()}
+          title={quickPaySuccess ? 'Payment recorded' : 'Pay supplier bill'}
+          size="md"
+        >
+          {quickPayBill && !quickPaySuccess && (
+            <div className="space-y-4 text-sm">
+              <div>
+                <span className="label mb-1 block">Vendor</span>
+                <p className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 font-semibold text-foreground">
+                  {(() => {
+                    const sid = String(quickPayBill.supplier_id ?? quickPayBill.supplierId ?? '');
+                    const v = sid ? vendorById.get(sid) : undefined;
+                    return String(
+                      v?.company_name || v?.companyName || quickPayBill.supplier_name || v?.name || '—'
+                    ).trim();
+                  })()}
+                </p>
+              </div>
+              <div>
+                <label className="label mb-1 block" htmlFor="quick-pay-amount">
+                  Amount ({CURRENCY})
+                </label>
+                <input
+                  id="quick-pay-amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={Number(quickPayBill.balance_due) || 0}
+                  value={quickPayForm.amount || ''}
+                  onChange={(e) => setQuickPayForm((f) => ({ ...f, amount: parseFloat(e.target.value) || 0 }))}
+                  className="input input-text w-full tabular-nums"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Balance due: {CURRENCY}{' '}
+                  {Number(quickPayBill.balance_due || 0).toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </p>
+              </div>
+              <div>
+                <label className="label mb-1 block" htmlFor="quick-pay-date">
+                  Payment date
+                </label>
+                <input
+                  id="quick-pay-date"
+                  type="date"
+                  value={quickPayForm.paymentDate}
+                  onChange={(e) => setQuickPayForm((f) => ({ ...f, paymentDate: e.target.value }))}
+                  className="input input-text w-full"
+                />
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Starts from the bill issue date; change if needed.
+                </p>
+              </div>
+              <div>
+                <span className="label mb-1 block">Pay from</span>
+                <div className="flex flex-wrap gap-3">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="quick-pay-method"
+                      checked={quickPayForm.paymentMethod === 'Bank'}
+                      onChange={() =>
+                        setQuickPayForm((f) => ({
+                          ...f,
+                          paymentMethod: 'Bank',
+                          bankAccountId: bankAccounts[0]?.id ? String(bankAccounts[0].id) : f.bankAccountId,
+                        }))
+                      }
+                      disabled={bankAccounts.length === 0}
+                    />
+                    <span>Bank account</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="radio"
+                      name="quick-pay-method"
+                      checked={quickPayForm.paymentMethod === 'Cash'}
+                      onChange={() => setQuickPayForm((f) => ({ ...f, paymentMethod: 'Cash', bankAccountId: '' }))}
+                    />
+                    <span>Cash</span>
+                  </label>
+                </div>
+              </div>
+              {quickPayForm.paymentMethod === 'Bank' && bankAccounts.length > 0 && (
+                <div>
+                  <label className="label mb-1 block" htmlFor="quick-pay-bank">
+                    Bank account
+                  </label>
+                  <select
+                    id="quick-pay-bank"
+                    value={quickPayForm.bankAccountId}
+                    onChange={(e) => setQuickPayForm((f) => ({ ...f, bankAccountId: e.target.value }))}
+                    className="input input-text w-full"
+                  >
+                    <option value="">Select account…</option>
+                    {bankAccounts.map((acc: { id: string; name: string }) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {quickPayForm.paymentMethod === 'Bank' && bankAccounts.length === 0 && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                  No bank accounts on file. Choose Cash or add an account in settings.
+                </p>
+              )}
+              <div>
+                <label className="label mb-1 block" htmlFor="quick-pay-notes">
+                  Notes (optional)
+                </label>
+                <textarea
+                  id="quick-pay-notes"
+                  value={quickPayForm.notes}
+                  onChange={(e) => setQuickPayForm((f) => ({ ...f, notes: e.target.value }))}
+                  rows={2}
+                  className="input input-text w-full resize-y placeholder:text-muted-foreground"
+                  placeholder="Memo for this payment"
+                />
+              </div>
+              <div className="flex flex-col-reverse gap-2 border-t border-border pt-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  disabled={quickPayPaying}
+                  onClick={() => closeQuickPay()}
+                  className="btn-secondary rounded-lg px-4 py-2.5 text-sm font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    quickPayPaying ||
+                    (quickPayForm.paymentMethod === 'Bank' && (!quickPayForm.bankAccountId || bankAccounts.length === 0))
+                  }
+                  onClick={() => void submitQuickPay()}
+                  className="btn-primary rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
+                >
+                  {quickPayPaying ? 'Processing…' : 'Pay'}
+                </button>
+              </div>
+            </div>
+          )}
+          {quickPaySuccess && (
+            <div className="space-y-4 text-sm">
+              <p className="text-muted-foreground">
+                Payment saved and the bill has been updated. Share the purchase bill (PDF) or a payment summary with the vendor on
+                WhatsApp.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => void shareExistingBillToWhatsApp(quickPaySuccess.billId)}
+                  disabled={!!sharingPdfBillId}
+                  className="btn-primary inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share bill (PDF)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    openWhatsAppTextMessage(
+                      buildQuickPayWhatsAppMessage(quickPaySuccess, CURRENCY),
+                      quickPaySuccess.vendorPhone
+                    )
+                  }
+                  className="btn-secondary inline-flex flex-1 items-center justify-center gap-2 rounded-xl border-primary/30 px-4 py-2.5 text-sm font-semibold text-primary"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share payment details
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => closeQuickPay()}
+                className="btn-secondary w-full rounded-lg px-4 py-2.5 text-sm font-semibold"
+              >
+                Done
+              </button>
+            </div>
+          )}
+        </Modal>
+
+        <SupplierPaymentEditDialog
+          paymentId={editSupplierPaymentId}
+          vendors={vendors as any[]}
+          bankAccounts={bankAccounts}
+          onClose={() => setEditSupplierPaymentId(null)}
+          onSaved={() => {
+            showProcurementToast('Payment updated', 'success');
+            loadBillsAndFormData();
+          }}
+        />
+
+        <SupplierPaymentDeleteDialog
+          paymentId={deleteSupplierPaymentId}
+          onClose={() => setDeleteSupplierPaymentId(null)}
+          onDeleted={() => {
+            showProcurementToast('Payment removed — bills updated', 'success');
+            loadBillsAndFormData();
+          }}
+        />
 
         <AddVendorModal
           isOpen={showAddVendorModal}

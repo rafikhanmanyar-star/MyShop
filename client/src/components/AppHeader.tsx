@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useMobileOrders, type MobileOrderBellAlert } from '../context/MobileOrdersContext';
 import { useInventoryPageHeaderPayload } from '../context/InventoryPageHeaderContext';
+import { useProcurementPageHeaderPayload } from '../context/ProcurementPageHeaderContext';
 import { ICONS } from '../constants';
 import ThemeToggle from './ui/ThemeToggle';
 
@@ -189,11 +190,12 @@ export function AppHeaderToolbar({ className = '' }: { className?: string }) {
 
 /**
  * Top app bar: mobile-order notifications (bell), theme toggle, signed-in user.
- * On `/inventory`, the page registers title, tabs, and New SKU here to save vertical space.
+ * On `/procurement`, the page registers title and tabs; primary actions (e.g. New Bill) live on the Purchase Bills content.
  */
 export default function AppHeader({ className = '' }: { className?: string }) {
   const { pathname } = useLocation();
   const inventoryHeader = useInventoryPageHeaderPayload();
+  const procurementHeader = useProcurementPageHeaderPayload();
 
   if (pathname === '/inventory' && inventoryHeader) {
     const { activeTab, setActiveTab, onNewSku, tabs } = inventoryHeader;
@@ -250,6 +252,54 @@ export default function AppHeader({ className = '' }: { className?: string }) {
               </button>
               <AppHeaderToolbar />
             </div>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  if (pathname === '/procurement' && procurementHeader) {
+    const { activeTab, setActiveTab, tabs } = procurementHeader;
+    return (
+      <header
+        className={`mb-3 flex shrink-0 flex-col gap-3 border-b border-[#E5E7EB] pb-3 dark:border-gray-700 lg:flex-row lg:items-center lg:justify-between lg:gap-6 ${className}`}
+      >
+        <div className="min-w-0 shrink-0 lg:max-w-md">
+          <h1 className="truncate text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100 md:text-2xl">
+            Procurement
+          </h1>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-3 lg:max-w-4xl xl:max-w-none">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-end xl:gap-4">
+          <nav
+            className="flex min-h-[2.5rem] min-w-0 flex-1 items-stretch gap-0 overflow-x-auto border-b border-[#E5E7EB] dark:border-slate-600"
+            aria-label="Procurement sections"
+          >
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors sm:text-sm ${
+                    isActive
+                      ? '-mb-px border-[#0047AB] text-[#0047AB] dark:border-[#5b8cff] dark:text-[#5b8cff]'
+                      : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {React.cloneElement(tab.icon as React.ReactElement<{ width?: number; height?: number }>, {
+                    width: 16,
+                    height: 16,
+                  })}
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
+          <div className="flex shrink-0 items-center justify-end gap-2 sm:gap-3">
+            <AppHeaderToolbar />
+          </div>
           </div>
         </div>
       </header>

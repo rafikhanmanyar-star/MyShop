@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { menuPlannerApi, publicApi, getFullImageUrl } from '../../api';
@@ -24,6 +24,156 @@ type CustomerRow = {
     ingredient_count?: number;
 };
 
+type IngredientFormRow = { name: string; product_id: string | null; qty: string; unit: string };
+
+type CatalogProductBrief = { id: string; name: string };
+
+/** Ingredient name: searchable shop catalog + free-text fallback (no product_id) for external items. */
+function IngredientShopProductCombo({
+    shopSlug,
+    name,
+    product_id,
+    onIngredientFieldChange,
+}: {
+    shopSlug: string;
+    name: string;
+    product_id: string | null;
+    onIngredientFieldChange: (name: string, product_id: string | null) => void;
+}) {
+    const wrapRef = useRef<HTMLDivElement | null>(null);
+    const [open, setOpen] = useState(false);
+    const [hits, setHits] = useState<CatalogProductBrief[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const loadHits = useCallback(
+        async (q: string) => {
+            if (!shopSlug) return;
+            setLoading(true);
+            try {
+                const data = (await publicApi.getProducts(shopSlug, {
+                    limit: '12',
+                    ...(q.trim() ? { search: q.trim() } : {}),
+                })) as { items?: CatalogProductBrief[] };
+                const items = Array.isArray(data.items) ? data.items : [];
+                setHits(
+                    items
+                        .map((x: any) => ({ id: String(x.id ?? ''), name: String(x.name ?? '').trim() }))
+                        .filter((x: CatalogProductBrief) => x.id && x.name)
+                );
+            } catch {
+                setHits([]);
+            } finally {
+                setLoading(false);
+            }
+        },
+        [shopSlug]
+    );
+
+    useEffect(() => {
+        if (!open) return;
+        const t = window.setTimeout(() => {
+            void loadHits(name);
+        }, 280);
+        return () => window.clearTimeout(t);
+    }, [open, name, loadHits]);
+
+    useEffect(() => {
+        if (!open) return;
+        const close = (e: MouseEvent) => {
+            if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [open]);
+
+    return (
+        <div ref={wrapRef} style={{ flex: 1, minWidth: 0 }}>
+            <input
+                className="input"
+                placeholder="Search shop products or type a custom ingredient"
+                value={name}
+                aria-label="Ingredient name"
+                onFocus={() => setOpen(true)}
+                onChange={(e) => onIngredientFieldChange(e.target.value, null)}
+                style={{ width: '100%' }}
+            />
+            {product_id && (
+                <div style={{ marginTop: 4, fontSize: 11, color: GREEN, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span>Linked to shop catalog — shopping list uses this SKU</span>
+                    <button
+                        type="button"
+                        aria-label="Unlink shop product — use custom text only"
+                        onClick={() => onIngredientFieldChange(name, null)}
+                        style={{
+                            border: 'none',
+                            background: 'rgba(46,125,50,0.12)',
+                            color: '#1B5E20',
+                            borderRadius: 8,
+                            padding: '2px 8px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                        }}
+                    >
+                        Clear link
+                    </button>
+                </div>
+            )}
+            {open && (
+                <div
+                    style={{
+                        marginTop: 6,
+                        maxHeight: 200,
+                        overflowY: 'auto',
+                        border: '1px solid var(--border-light)',
+                        borderRadius: 10,
+                        background: '#fff',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                    }}
+                >
+                    {loading && (
+                        <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+                            Searching catalog…
+                        </div>
+                    )}
+                    {!loading && hits.length === 0 && (
+                        <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                            No matching shop products — keep typing to use this line as a <strong>custom</strong> ingredient.
+                        </div>
+                    )}
+                    {!loading &&
+                        hits.map((p) => (
+                            <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                    onIngredientFieldChange(p.name, p.id);
+                                    setOpen(false);
+                                }}
+                                style={{
+                                    display: 'block',
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    border: 'none',
+                                    borderBottom: '1px solid #eee',
+                                    background: '#fff',
+                                    padding: '10px 12px',
+                                    fontSize: 13,
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                {p.name}
+                            </button>
+                        ))}
+                </div>
+            )}
+            {!product_id && !open && name.trim().length > 0 && (
+                <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>Custom ingredient (not linked to catalog)</div>
+            )}
+        </div>
+    );
+}
+
 export type MenuPlannerPageProps = {
     shopSlug: string;
     embedded?: boolean;
@@ -46,8 +196,8 @@ export default function MenuPlannerPage({ shopSlug, embedded = false, contentBot
     const [formDesc, setFormDesc] = useState('');
     const [formImageFile, setFormImageFile] = useState<File | null>(null);
     const [formImagePreview, setFormImagePreview] = useState<string | null>(null);
-    const [formIngredients, setFormIngredients] = useState<{ name: string; qty: string; unit: string }[]>([
-        { name: '', qty: '1', unit: '' },
+    const [formIngredients, setFormIngredients] = useState<IngredientFormRow[]>([
+        { name: '', product_id: null, qty: '1', unit: '' },
     ]);
     const [saving, setSaving] = useState(false);
 
@@ -119,7 +269,7 @@ export default function MenuPlannerPage({ shopSlug, embedded = false, contentBot
         setFormImageFile(null);
         if (formImagePreview) URL.revokeObjectURL(formImagePreview);
         setFormImagePreview(null);
-        setFormIngredients([{ name: '', qty: '1', unit: '' }]);
+        setFormIngredients([{ name: '', product_id: null, qty: '1', unit: '' }]);
         setSheetOpen(true);
     };
 
@@ -143,6 +293,7 @@ export default function MenuPlannerPage({ shopSlug, embedded = false, contentBot
                 ingredient_name: r.name.trim(),
                 quantity: parseFloat(r.qty) || 1,
                 unit: r.unit.trim(),
+                ...(r.product_id ? { product_id: r.product_id } : {}),
             }))
             .filter((r) => r.ingredient_name.length > 0);
         if (ingredients.length === 0) {
@@ -396,56 +547,69 @@ export default function MenuPlannerPage({ shopSlug, embedded = false, contentBot
                             <label style={{ fontSize: 13, fontWeight: 600 }}>Ingredients</label>
                             <button
                                 type="button"
-                                onClick={() => setFormIngredients((p) => [...p, { name: '', qty: '1', unit: '' }])}
+                                onClick={() =>
+                                    setFormIngredients((p) => [...p, { name: '', product_id: null, qty: '1', unit: '' }])
+                                }
                                 style={{ border: 'none', background: 'none', color: GREEN, fontWeight: 700, fontSize: 13 }}
                             >
                                 + Add line
                             </button>
                         </div>
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 12px', lineHeight: 1.45 }}>
+                            Search and choose a shop product when you buy it here — your shopping list will match that SKU. Type any
+                            other ingredient (outside the catalog) as custom text — it still appears on your list without a product
+                            link.
+                        </p>
                         {formIngredients.map((row, i) => (
-                            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                                <input
-                                    className="input"
-                                    placeholder="e.g. Tomatoes"
-                                    value={row.name}
-                                    onChange={(e) =>
+                            <div key={i} style={{ marginBottom: 14 }}>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                <IngredientShopProductCombo
+                                    shopSlug={shopSlug}
+                                    name={row.name}
+                                    product_id={row.product_id}
+                                    onIngredientFieldChange={(newName, pid) =>
                                         setFormIngredients((p) =>
-                                            p.map((x, j) => (j === i ? { ...x, name: e.target.value } : x))
+                                            p.map((x, j) =>
+                                                j === i ? { ...x, name: newName, product_id: pid } : x
+                                            )
                                         )
                                     }
-                                    style={{ flex: 1 }}
                                 />
                                 <input
                                     className="input"
                                     placeholder="Qty"
                                     value={row.qty}
+                                    aria-label={`Quantity ingredient ${i + 1}`}
                                     onChange={(e) =>
                                         setFormIngredients((p) =>
                                             p.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x))
                                         )
                                     }
-                                    style={{ width: 56 }}
+                                    style={{ width: 56, flexShrink: 0 }}
                                 />
                                 <input
                                     className="input"
                                     placeholder="Unit"
                                     value={row.unit}
+                                    aria-label={`Unit ingredient ${i + 1}`}
                                     onChange={(e) =>
                                         setFormIngredients((p) =>
                                             p.map((x, j) => (j === i ? { ...x, unit: e.target.value } : x))
                                         )
                                     }
-                                    style={{ width: 72 }}
+                                    style={{ width: 72, flexShrink: 0 }}
                                 />
                                 {formIngredients.length > 1 && (
                                     <button
                                         type="button"
+                                        aria-label={`Remove ingredient line ${i + 1}`}
                                         onClick={() => setFormIngredients((p) => p.filter((_, j) => j !== i))}
-                                        style={{ border: 'none', background: 'transparent', color: '#999' }}
+                                        style={{ border: 'none', background: 'transparent', color: '#999', flexShrink: 0 }}
                                     >
                                         ×
                                     </button>
                                 )}
+                                </div>
                             </div>
                         ))}
                         <button

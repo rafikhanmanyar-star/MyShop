@@ -608,6 +608,13 @@ export const procurementApi = {
 
 // --- Procurement Demand (Smart Procurement) API ---
 export const procurementDemandApi = {
+  vendorAutoBill: (params: { supplierId: string; coverDays?: number; salesWindowDays?: number }) => {
+    const q = new URLSearchParams();
+    q.set('supplierId', params.supplierId);
+    if (params.coverDays != null) q.set('coverDays', String(params.coverDays));
+    if (params.salesWindowDays != null) q.set('salesWindowDays', String(params.salesWindowDays));
+    return apiClient.get<any>(`/shop/procurement/demand/vendor-auto-bill?${q.toString()}`);
+  },
   analyze: (params?: { salesWindowDays?: number; minimumDaysThreshold?: number; targetStockDays?: number }) => {
     const q = new URLSearchParams();
     if (params?.salesWindowDays != null) q.set('salesWindowDays', String(params.salesWindowDays));

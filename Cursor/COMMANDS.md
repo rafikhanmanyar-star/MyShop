@@ -13,8 +13,9 @@ Run the app in development mode for local testing.
 | Command | Description |
 |--------|-------------|
 | `npm run electron:dev` | Starts the API server, **mobile** storefront (Vite), **rider** app (Vite), waits for `/api/health`, then launches Electron in dev mode. Open the mobile PWA at **http://localhost:5175** and the rider app at **http://localhost:5180** (both proxy `/api` to `localhost:3001`; local API default port is **3001** so **3000** stays free for other apps). |
+| `npm run dev:pos:cloud` | **POS web client only** (Vite on **http://localhost:5173**) talking to the **cloud API** (no local `server`, no Electron, no Git push). Set `VITE_API_URL` in `client/.env.cloud` (copy from `client/.env.cloud.example`) or in `client/.env.local`. The dev server **proxies** `/api` and `/uploads` to that host so the app behaves like a normal local dev build. |
 
-**What it does:** Runs the backend plus mobile and rider dev servers in parallel with Electron. No build, no commit, no push. Use **`npm run dev`** if you only need the POS web client (Vite on **http://localhost:5173**) plus the API without Electron or mobile/rider.
+**What it does:** These commands only run dev servers (no installable build, no commit, no push to GitHub). **`npm run electron:dev`** starts the local API, mobile and rider Vite apps, and Electron. **`npm run dev:pos:cloud`** starts only the POS web app against your configured cloud `VITE_API_URL`. **`npm run dev`** starts the local API plus the POS web client on **http://localhost:5173** (no Electron, no mobile/rider).
 
 ### Full (with push to GitHub)
 
@@ -82,6 +83,7 @@ One command runs the PowerShell script that does all steps: bump version, build,
 | Action | Build / run only | Full (with push to GitHub) |
 |--------|-------------------|----------------------------|
 | **Local test** | `npm run electron:dev` | — (run-only; use installable release when ready to ship) |
+| **POS vs cloud API** | `npm run dev:pos:cloud` | — |
 | **Database migrations** | `npm run migrate` (from repo root or `server/`) | — |
 | **Installable (local stack)** | `npm run dist:local` or `npm run dist:win:local` | — (use `release` for cloud + push) |
 | **Installable (cloud, Windows)** | `npm run dist:win` | `npm run release` (patch), `npm run release:minor`, `npm run release:major` |

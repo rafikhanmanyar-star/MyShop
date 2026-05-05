@@ -1980,6 +1980,11 @@ img {
   line-height: 1;
 }
 
+.utilities-hub-tile:active {
+  opacity: 0.92;
+  transform: scale(0.995);
+}
+
 /* ─── Left filter drawer (Browse) ─────────────────────────── */
 
 @keyframes slideInLeft {

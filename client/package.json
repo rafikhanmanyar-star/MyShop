@@ -1,12 +1,12 @@
 {
   "name": "myshop-client",
   "private": true,
-  "version": "1.0.172",
+  "version": "1.0.173",
   "type": "module",
   "scripts": {
     "check:typography": "node scripts/check-typography.mjs",
     "dev": "vite",
-    "dev:cloud": "vite --mode local",
+    "dev:cloud": "vite --mode cloud",
     "build": "tsc && vite build",
     "build:cloud": "tsc && cross-env VITE_ELECTRON_BUILD=1 vite build --mode cloud",
     "preview": "vite preview"

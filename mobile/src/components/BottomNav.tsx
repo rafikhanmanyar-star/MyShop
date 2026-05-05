@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { Link, useParams, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useParams, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 // Simple SVG icons (inline to avoid lucide dependency)
@@ -15,9 +14,7 @@ const icons = {
 export default function BottomNav() {
     const { shopSlug } = useParams();
     const { pathname } = useLocation();
-    const navigate = useNavigate();
     const { cartCount } = useApp();
-    const [utilitiesOpen, setUtilitiesOpen] = useState(false);
 
     if (!shopSlug) return null;
 
@@ -28,28 +25,11 @@ export default function BottomNav() {
     };
 
     const utilitiesActive =
+        pathname === `${base}/utilities` ||
         pathname.startsWith(`${base}/budget`) ||
         pathname.startsWith(`${base}/recipes`) ||
         pathname.startsWith(`${base}/my-menu`) ||
         pathname.startsWith(`${base}/menu-planner`);
-
-    useEffect(() => {
-        setUtilitiesOpen(false);
-    }, [pathname]);
-
-    useEffect(() => {
-        if (!utilitiesOpen) return;
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setUtilitiesOpen(false);
-        };
-        document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [utilitiesOpen]);
-
-    const goUtility = (to: string) => {
-        setUtilitiesOpen(false);
-        navigate(to);
-    };
 
     return (
         <>
@@ -75,66 +55,11 @@ export default function BottomNav() {
                     {icons.orders}
                     <span>Orders</span>
                 </Link>
-                <button
-                    type="button"
-                    className={utilitiesActive ? 'active' : ''}
-                    aria-haspopup="dialog"
-                    aria-expanded={utilitiesOpen ? 'true' : 'false'}
-                    onClick={() => setUtilitiesOpen((open) => !open)}
-                >
+                <Link to={`${base}/utilities`} className={utilitiesActive ? 'active' : ''}>
                     {icons.utilities}
                     <span>Utilities</span>
-                </button>
+                </Link>
             </nav>
-            {utilitiesOpen && (
-                <div
-                    className="bottom-sheet-overlay"
-                    style={{ zIndex: 1100 }}
-                    role="presentation"
-                    onClick={() => setUtilitiesOpen(false)}
-                >
-                    <div
-                        className="bottom-sheet utilities-sheet"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-labelledby="utilities-sheet-title"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="bottom-sheet-header">
-                            <h2 id="utilities-sheet-title">Utilities</h2>
-                            <button type="button" className="btn btn-outline" style={{ padding: '6px 12px', fontSize: 14 }} onClick={() => setUtilitiesOpen(false)}>
-                                Close
-                            </button>
-                        </div>
-                        <div className="utilities-sheet__list">
-                            <button
-                                type="button"
-                                className="utilities-sheet__row"
-                                onClick={() => goUtility(`${base}/budget`)}
-                            >
-                                <span>Budget Planner</span>
-                                <span className="utilities-sheet__chev" aria-hidden>›</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="utilities-sheet__row"
-                                onClick={() => goUtility(`${base}/recipes`)}
-                            >
-                                <span>Recipes</span>
-                                <span className="utilities-sheet__chev" aria-hidden>›</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="utilities-sheet__row"
-                                onClick={() => goUtility(`${base}/my-menu`)}
-                            >
-                                <span>My Menu</span>
-                                <span className="utilities-sheet__chev" aria-hidden>›</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </>
     );
 }

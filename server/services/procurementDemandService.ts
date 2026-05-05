@@ -40,6 +40,26 @@ export interface DemandResult {
   };
 }
 
+/** One line for “auto purchase bill”: vendor catalog from past bills + suggested qty from sales velocity. */
+export interface VendorAutoBillLine {
+  product_id: string;
+  product_name: string;
+  sku: string;
+  cost_price: number;
+  retail_price: number;
+  current_stock: number;
+  avg_daily_sales: number;
+  suggested_order_qty: number;
+}
+
+export interface VendorAutoBillResult {
+  supplier_id: string;
+  cover_days: number;
+  sales_window_days: number;
+  lines: VendorAutoBillLine[];
+  generated_at: string;
+}
+
 function computePriority(daysOfStock: number | null, hasData: boolean): DemandItem['priority'] {
   if (!hasData) return 'NO_DATA';
   if (daysOfStock === null || daysOfStock <= 3) return 'HIGH';
@@ -154,6 +174,104 @@ export class ProcurementDemandService {
         no_data: noDataCount,
         estimated_purchase_cost: Math.round(estimatedCost * 100) / 100,
       },
+    };
+  }
+
+  /**
+   * Products that appear on historical purchase bills for this supplier, with suggested order qty:
+   * ceil(max(0, avg_daily_sales * coverDays - current_stock)), avg_daily from POS sales in salesWindowDays.
+   */
+  async generateVendorAutoBillSuggestions(
+    tenantId: string,
+    supplierId: string,
+    options?: { coverDays?: number; salesWindowDays?: number }
+  ): Promise<VendorAutoBillResult> {
+    const coverDays = Math.max(1, Math.min(90, options?.coverDays ?? 10));
+    const salesWindowDays = Math.max(1, Math.min(90, options?.salesWindowDays ?? 30));
+
+    const rows: any[] = await this.db.query(
+      `WITH vendor_skus AS (
+        SELECT DISTINCT pbi.product_id
+        FROM purchase_bill_items pbi
+        INNER JOIN purchase_bills pb ON pb.id = pbi.purchase_bill_id AND pb.tenant_id = pbi.tenant_id
+        WHERE pbi.tenant_id = $1 AND pb.supplier_id = $2
+      ),
+      last_unit_cost AS (
+        SELECT DISTINCT ON (pbi.product_id)
+          pbi.product_id,
+          pbi.unit_cost
+        FROM purchase_bill_items pbi
+        INNER JOIN purchase_bills pb ON pb.id = pbi.purchase_bill_id AND pb.tenant_id = pbi.tenant_id
+        WHERE pbi.tenant_id = $1 AND pb.supplier_id = $2
+        ORDER BY pbi.product_id, pb.bill_date DESC NULLS LAST, pb.created_at DESC
+      )
+      SELECT
+        p.id                   AS product_id,
+        p.name                 AS product_name,
+        p.sku,
+        COALESCE(luc.unit_cost, p.cost_price, 0) AS unit_cost_from_vendor,
+        COALESCE(p.cost_price, 0)    AS cost_price_fallback,
+        COALESCE(p.retail_price, 0)  AS retail_price,
+        COALESCE(inv.total_stock, 0) AS current_stock,
+        COALESCE(sales.qty_sold, 0)  AS qty_sold_in_window
+      FROM shop_products p
+      INNER JOIN vendor_skus vs ON vs.product_id = p.id
+      LEFT JOIN last_unit_cost luc ON luc.product_id = p.id
+      LEFT JOIN (
+        SELECT product_id, SUM(quantity_on_hand) AS total_stock
+        FROM shop_inventory
+        WHERE tenant_id = $1
+        GROUP BY product_id
+      ) inv ON inv.product_id = p.id
+      LEFT JOIN (
+        SELECT si.product_id, SUM(si.quantity) AS qty_sold
+        FROM shop_sale_items si
+        JOIN shop_sales s ON s.id = si.sale_id AND s.tenant_id = $1
+        WHERE s.status != 'cancelled'
+          AND s.created_at >= NOW() - MAKE_INTERVAL(days => $3)
+        GROUP BY si.product_id
+      ) sales ON sales.product_id = p.id
+      WHERE p.tenant_id = $1 AND p.is_active = TRUE
+      ORDER BY p.name`,
+      [tenantId, supplierId, salesWindowDays]
+    );
+
+    const lines: VendorAutoBillLine[] = [];
+    for (const r of rows) {
+      const currentStock = parseFloat(r.current_stock) || 0;
+      const qtySold = parseFloat(r.qty_sold_in_window) || 0;
+      const avgDaily = salesWindowDays > 0 ? qtySold / salesWindowDays : 0;
+      const hasData = qtySold > 0;
+      const unitFromVendor = parseFloat(r.unit_cost_from_vendor);
+      const costPrice =
+        (Number.isFinite(unitFromVendor) && unitFromVendor > 0 ? unitFromVendor : parseFloat(r.cost_price_fallback)) || 0;
+
+      let suggestedQty = 0;
+      if (hasData) {
+        const required = avgDaily * coverDays;
+        suggestedQty = Math.ceil(Math.max(0, required - currentStock));
+      }
+
+      if (suggestedQty <= 0) continue;
+
+      lines.push({
+        product_id: r.product_id,
+        product_name: r.product_name,
+        sku: r.sku || '',
+        cost_price: Math.round(costPrice * 10000) / 10000,
+        retail_price: Math.round((parseFloat(r.retail_price) || 0) * 10000) / 10000,
+        current_stock: Math.round(currentStock * 1000) / 1000,
+        avg_daily_sales: Math.round(avgDaily * 100) / 100,
+        suggested_order_qty: suggestedQty,
+      });
+    }
+
+    return {
+      supplier_id: supplierId,
+      cover_days: coverDays,
+      sales_window_days: salesWindowDays,
+      lines,
+      generated_at: new Date().toISOString(),
     };
   }
 
