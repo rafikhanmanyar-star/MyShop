@@ -244,7 +244,7 @@ export default function RecipeHome() {
                         <p style={{ color: 'var(--text-muted)' }}>Loading recipes…</p>
                     ) : (
                         <>
-                            {browseSections.map((sec) => renderRow(sec.title, sec.items))}
+                            {browseSections.map((sec) => renderListSection(sec.title, sec.items))}
                             {!browseLoading && !hasBrowse && (
                                 <p style={{ color: 'var(--text-muted)' }}>
                                     {catFilter
