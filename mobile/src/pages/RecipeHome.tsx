@@ -154,20 +154,20 @@ export default function RecipeHome() {
     const filt = (items: RecipeCardData[]) =>
         !catFilter ? items : items.filter((r) => r.category_id === catFilter);
 
-    const renderRow = (title: string, items: RecipeCardData[]) => {
+    const renderListSection = (title: string, items: RecipeCardData[]) => {
         if (!items.length) return null;
         return (
             <section className="recipe-section">
                 <div className="recipe-section__head">
                     <h2 className="recipe-section__title">{title}</h2>
                 </div>
-                <div className="recipe-row">
+                <ul className="recipe-list" role="list">
                     {items.map((r) => (
-                        <div key={r.id} className="recipe-row__cell">
+                        <li key={r.id} className="recipe-list__item">
                             <RecipeCard recipe={r} shopSlug={shopSlug} />
-                        </div>
+                        </li>
                     ))}
-                </div>
+                </ul>
             </section>
         );
     };
@@ -227,13 +227,13 @@ export default function RecipeHome() {
                     ) : filt(searchItems).length === 0 ? (
                         <p style={{ color: 'var(--text-muted)' }}>No recipes match.</p>
                     ) : (
-                        <div className="recipe-row">
+                        <ul className="recipe-list" role="list">
                             {filt(searchItems).map((r) => (
-                                <div key={r.id} className="recipe-row__cell">
+                                <li key={r.id} className="recipe-list__item">
                                     <RecipeCard recipe={r} shopSlug={shopSlug} />
-                                </div>
+                                </li>
                             ))}
-                        </div>
+                        </ul>
                     )}
                 </section>
             )}

@@ -3,6 +3,12 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { shopApi } from '../../../services/shopApi';
 import { ArrowLeft, Plus, Trash2, GripVertical, Upload, ChefHat, Pencil, Search } from 'lucide-react';
 import { Table, TableHeaderRow, TableHead, TableBody, TableRow, TableCell } from '../../ui/Table';
+import {
+  clearRecipeDraft,
+  readRecipeDraft,
+  writeRecipeDraft,
+  type RecipeEditDraftPayload,
+} from './recipeEditDraftStorage';
 
 type IngDraft = {
   key: string;
@@ -24,6 +30,10 @@ type ProductOpt = { id: string; name: string; sku: string };
 function genKey() {
   return `k-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
+
+const fieldSm =
+  'h-8 w-full rounded-md border border-slate-200 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-950';
+const labelXs = 'text-[11px] font-medium leading-tight text-slate-600 dark:text-slate-400';
 
 export default function RecipeEditPage() {
   const { id } = useParams();
@@ -56,6 +66,21 @@ export default function RecipeEditPage() {
 
   const [ingredients, setIngredients] = useState<IngDraft[]>([]);
   const [steps, setSteps] = useState<StepDraft[]>([]);
+
+  /** True after baseline load + optional draft restore; enables autosave + unmount flush */
+  const [draftHydrated, setDraftHydrated] = useState(false);
+  /** Server `updated_at` when this form was synced (edit flow); aligns draft snapshots with edits */
+  const baselineUpdatedAtRef = useRef<string | null>(null);
+  const draftHydratedRef = useRef(false);
+  useEffect(() => {
+    draftHydratedRef.current = draftHydrated;
+  }, [draftHydrated]);
+
+  /** Latest form snapshot for unmount persistence (excluding React keys) */
+  type DraftSnap = Omit<RecipeEditDraftPayload, 'v' | 'savedAt' | 'recipeScope' | 'serverUpdatedAt'>;
+  const snapshotRef = useRef<DraftSnap | null>(null);
+  const autosaveTimerRef = useRef<number | undefined>(undefined);
+  const suppressPersistRef = useRef(false);
 
   const [dragStep, setDragStep] = useState<string | null>(null);
   const ingredientNameRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -100,64 +125,243 @@ export default function RecipeEditPage() {
     void loadBase();
   }, [loadBase]);
 
+  const applyDraftPayload = useCallback((d: RecipeEditDraftPayload) => {
+    setProdSearch(typeof d.prodSearch === 'string' ? d.prodSearch : '');
+    setTitle(d.title || '');
+    setDescription(d.description || '');
+    setImageUrl(d.imageUrl || '');
+    setVideoUrl(d.videoUrl || '');
+    setPrep(typeof d.prep === 'string' ? d.prep : '0');
+    setCook(typeof d.cook === 'string' ? d.cook : '0');
+    setServings(typeof d.servings === 'string' ? d.servings : '1');
+    setDifficulty(d.difficulty || '');
+    setCuisine(d.cuisine || '');
+    setCalories(typeof d.calories === 'string' ? d.calories : '');
+    setCategoryId(d.categoryId || '');
+    setIsActive(!!d.isActive);
+    setIsFeatured(!!d.isFeatured);
+    setIsQuick(!!d.isQuick);
+    setIsBudget(!!d.isBudget);
+    setIsTrending(!!d.isTrending);
+    setIngredients(
+      (d.ingredients || []).map((x) => ({
+        key: genKey(),
+        ingredient_name: x.ingredient_name || '',
+        quantity: typeof x.quantity === 'string' ? x.quantity : '1',
+        unit: typeof x.unit === 'string' ? x.unit : '',
+        optional: !!x.optional,
+        product_id: typeof x.product_id === 'string' ? x.product_id : '',
+      }))
+    );
+    const st = Array.isArray(d.steps) && d.steps.length ? d.steps : [{ instruction: '', image_url: '' }];
+    setSteps(
+      st.map((x) => ({
+        key: genKey(),
+        instruction: typeof x.instruction === 'string' ? x.instruction : '',
+        image_url: typeof x.image_url === 'string' ? x.image_url : '',
+      }))
+    );
+  }, []);
+
+  const applyServerRecipe = useCallback((full: any) => {
+    const r = full.recipe;
+    baselineUpdatedAtRef.current = r?.updated_at != null ? String(r.updated_at) : null;
+    setTitle(r.title || '');
+    setDescription(r.description || '');
+    setImageUrl(r.image_url || '');
+    setVideoUrl(r.video_url || '');
+    setPrep(String(r.prep_time_minutes ?? 0));
+    setCook(String(r.cook_time_minutes ?? 0));
+    setServings(String(r.servings ?? 1));
+    setDifficulty(r.difficulty || '');
+    setCuisine(r.cuisine || '');
+    setCalories(r.calories != null ? String(r.calories) : '');
+    setCategoryId(r.category_id || '');
+    setIsActive(!!r.is_active);
+    setIsFeatured(!!r.is_featured);
+    setIsQuick(!!r.is_quick_meal);
+    setIsBudget(!!r.is_budget_meal);
+    setIsTrending(!!r.is_trending);
+    setProdSearch('');
+    setIngredients(
+      (full.ingredients || []).map((x: any) => ({
+        key: genKey(),
+        ingredient_name: x.ingredient_name || '',
+        quantity: String(x.quantity ?? 1),
+        unit: x.unit || '',
+        optional: !!x.optional,
+        product_id: x.product_id || '',
+      }))
+    );
+    setSteps(
+      (full.steps || []).length > 0
+        ? (full.steps || []).map((x: any) => ({
+            key: genKey(),
+            instruction: x.instruction || '',
+            image_url: x.image_url || '',
+          }))
+        : [{ key: genKey(), instruction: '', image_url: '' }]
+    );
+  }, []);
+
   useEffect(() => {
+    suppressPersistRef.current = false;
+    setDraftHydrated(false);
+    ingredientNameRefs.current = {};
+    baselineUpdatedAtRef.current = null;
+
     if (isNew) {
+      setErr('');
       setLoading(false);
-      setIngredients([]);
-      setSteps([{ key: genKey(), instruction: '', image_url: '' }]);
+      const d = readRecipeDraft('new');
+      if (d && d.recipeScope === 'new') {
+        applyDraftPayload(d);
+      } else {
+        setProdSearch('');
+        setTitle('');
+        setDescription('');
+        setImageUrl('');
+        setVideoUrl('');
+        setPrep('0');
+        setCook('0');
+        setServings('1');
+        setDifficulty('');
+        setCuisine('');
+        setCalories('');
+        setCategoryId('');
+        setIsActive(true);
+        setIsFeatured(false);
+        setIsQuick(false);
+        setIsBudget(false);
+        setIsTrending(false);
+        setIngredients([]);
+        setSteps([{ key: genKey(), instruction: '', image_url: '' }]);
+      }
+      setDraftHydrated(true);
       return;
     }
+
     let cancelled = false;
-    (async () => {
+    void (async () => {
       setLoading(true);
       setErr('');
       try {
         const full = await shopApi.getRecipe(id!);
         if (cancelled) return;
         const r = full.recipe;
-        setTitle(r.title || '');
-        setDescription(r.description || '');
-        setImageUrl(r.image_url || '');
-        setVideoUrl(r.video_url || '');
-        setPrep(String(r.prep_time_minutes ?? 0));
-        setCook(String(r.cook_time_minutes ?? 0));
-        setServings(String(r.servings ?? 1));
-        setDifficulty(r.difficulty || '');
-        setCuisine(r.cuisine || '');
-        setCalories(r.calories != null ? String(r.calories) : '');
-        setCategoryId(r.category_id || '');
-        setIsActive(!!r.is_active);
-        setIsFeatured(!!r.is_featured);
-        setIsQuick(!!r.is_quick_meal);
-        setIsBudget(!!r.is_budget_meal);
-        setIsTrending(!!r.is_trending);
-        setIngredients(
-          (full.ingredients || []).map((x: any) => ({
-            key: genKey(),
-            ingredient_name: x.ingredient_name || '',
-            quantity: String(x.quantity ?? 1),
-            unit: x.unit || '',
-            optional: !!x.optional,
-            product_id: x.product_id || '',
-          }))
-        );
-        setSteps(
-          (full.steps || []).map((x: any) => ({
-            key: genKey(),
-            instruction: x.instruction || '',
-            image_url: x.image_url || '',
-          }))
-        );
+        const baseNorm = r?.updated_at != null ? String(r.updated_at) : null;
+        baselineUpdatedAtRef.current = baseNorm;
+
+        const d = readRecipeDraft(id!);
+        const draftBaseNorm = d?.serverUpdatedAt != null ? String(d.serverUpdatedAt) : null;
+        const match =
+          d && d.v === 1 && d.recipeScope === id && draftBaseNorm === baseNorm;
+
+        if (match) {
+          applyDraftPayload(d);
+        } else {
+          applyServerRecipe(full);
+          if (d?.recipeScope === id) clearRecipeDraft(id!);
+        }
+        setDraftHydrated(true);
       } catch (e: any) {
         if (!cancelled) setErr(e?.message || 'Failed to load');
+        if (!cancelled) setDraftHydrated(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [id, isNew]);
+  }, [id, isNew, applyDraftPayload, applyServerRecipe]);
+
+  useEffect(() => {
+    snapshotRef.current = {
+      prodSearch,
+      title,
+      description,
+      imageUrl,
+      videoUrl,
+      prep,
+      cook,
+      servings,
+      difficulty,
+      cuisine,
+      calories,
+      categoryId,
+      isActive,
+      isFeatured,
+      isQuick,
+      isBudget,
+      isTrending,
+      ingredients: ingredients.map(({ ingredient_name, quantity, unit, optional, product_id }) => ({
+        ingredient_name,
+        quantity,
+        unit,
+        optional,
+        product_id,
+      })),
+      steps: steps.map(({ instruction, image_url }) => ({ instruction, image_url })),
+    };
+  });
+
+  const persistDraftNow = useCallback((scope: 'new' | string) => {
+    if (suppressPersistRef.current) return;
+    const snap = snapshotRef.current;
+    if (!snap || !draftHydratedRef.current) return;
+    const payload: RecipeEditDraftPayload = {
+      v: 1,
+      recipeScope: scope,
+      savedAt: Date.now(),
+      serverUpdatedAt: baselineUpdatedAtRef.current,
+      ...snap,
+    };
+    writeRecipeDraft(scope, payload);
+  }, []);
+
+  useEffect(() => {
+    const scope: 'new' | string = isNew ? 'new' : id!;
+    return () => {
+      window.clearTimeout(autosaveTimerRef.current);
+      persistDraftNow(scope);
+    };
+  }, [id, isNew, persistDraftNow]);
+
+  useEffect(() => {
+    if (!draftHydrated || loading || saving) return;
+    const scope: 'new' | string = isNew ? 'new' : id!;
+    window.clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = window.setTimeout(() => persistDraftNow(scope), 380);
+    return () => window.clearTimeout(autosaveTimerRef.current);
+  }, [
+    draftHydrated,
+    loading,
+    saving,
+    isNew,
+    id,
+    prodSearch,
+    title,
+    description,
+    imageUrl,
+    videoUrl,
+    prep,
+    cook,
+    servings,
+    difficulty,
+    cuisine,
+    calories,
+    categoryId,
+    isActive,
+    isFeatured,
+    isQuick,
+    isBudget,
+    isTrending,
+    ingredients,
+    steps,
+    persistDraftNow,
+  ]);
 
   const uploadHero = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -275,9 +479,13 @@ export default function RecipeEditPage() {
     try {
       if (isNew) {
         await shopApi.createRecipe(body);
+        suppressPersistRef.current = true;
+        clearRecipeDraft('new');
         navigate('/recipes');
       } else {
         await shopApi.updateRecipe(id!, body);
+        suppressPersistRef.current = true;
+        clearRecipeDraft(id!);
         navigate('/recipes');
       }
     } catch (e: any) {
@@ -296,400 +504,463 @@ export default function RecipeEditPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-4 md:p-6">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto p-2 sm:p-3 md:p-4 lg:overflow-hidden">
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 pb-2 dark:border-slate-700">
         <Link
           to="/recipes"
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
+          className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-200 px-2.5 text-xs font-medium hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
         >
-          <ArrowLeft className="h-4 w-4" /> Back
+          <ArrowLeft className="h-3.5 w-3.5" /> Back
         </Link>
-        <ChefHat className="h-6 w-6 text-violet-600" />
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        <ChefHat className="h-5 w-5 shrink-0 text-violet-600" />
+        <h1 className="min-w-0 flex-1 text-base font-semibold text-slate-900 dark:text-slate-100">
           {isNew ? 'New recipe' : 'Edit recipe'}
         </h1>
-      </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/recipes')}
+            className="h-8 rounded-md border border-slate-200 px-3 text-xs dark:border-slate-600"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void save()}
+            className="h-8 rounded-md bg-violet-600 px-4 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : isNew ? 'Create' : 'Save'}
+          </button>
+        </div>
+      </header>
 
       {err && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+        <div className="shrink-0 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           {err}
         </div>
       )}
 
-      <div className="max-w-3xl space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
-          <h2 className="font-medium text-slate-900 dark:text-slate-100">Basics</h2>
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">Title *</label>
-          <input
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400">Description</label>
-          <textarea
-            className="min-h-[88px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <div className="grid grid-cols-2 gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-row lg:gap-3">
+        {/* Left: basics + steps (scroll inside steps when many) */}
+        <div className="flex min-h-0 w-full flex-col gap-2 lg:h-full lg:min-h-0 lg:w-[40%] lg:shrink-0 xl:w-[36%]">
+          <section className="shrink-0 space-y-2 rounded-lg border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-900/40">
+            <h2 className="text-xs font-semibold text-slate-900 dark:text-slate-100">Basics</h2>
             <div>
-              <label className="block text-xs font-medium text-slate-600">Category</label>
-              <select
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-              >
-                <option value="">—</option>
-                {cats.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600">Cuisine</label>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-                value={cuisine}
-                onChange={(e) => setCuisine(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600">Prep (min)</label>
-              <input
-                type="number"
-                min={0}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-                value={prep}
-                onChange={(e) => setPrep(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600">Cook (min)</label>
-              <input
-                type="number"
-                min={0}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-                value={cook}
-                onChange={(e) => setCook(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600">Servings</label>
-              <input
-                type="number"
-                min={1}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-                value={servings}
-                onChange={(e) => setServings(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-600">Difficulty</label>
-              <input
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-                placeholder="Easy, Medium…"
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-600">Calories</label>
-              <input
-                type="number"
-                min={0}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-                value={calories}
-                onChange={(e) => setCalories(e.target.value)}
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600">Video URL</label>
-            <input
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-600">Hero image</label>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800">
-                <Upload className="h-4 w-4" /> Upload
-                <input type="file" accept="image/*" className="hidden" onChange={uploadHero} />
+              <label htmlFor="recipe-title" className={`mb-0.5 block ${labelXs}`}>
+                Title *
               </label>
-              {imageUrl && <span className="truncate text-xs text-slate-500">{imageUrl}</span>}
+              <input id="recipe-title" className={fieldSm} value={title} onChange={(e) => setTitle(e.target.value)} />
             </div>
-          </div>
-          <div className="flex flex-wrap gap-4 border-t border-slate-100 pt-3 dark:border-slate-800">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Active
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} /> Featured
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={isQuick} onChange={(e) => setIsQuick(e.target.checked)} /> Quick meal
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={isBudget} onChange={(e) => setIsBudget(e.target.checked)} /> Budget meal
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={isTrending} onChange={(e) => setIsTrending(e.target.checked)} /> Trending
-            </label>
-          </div>
-        </div>
-
-      <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="font-medium text-slate-900 dark:text-slate-100">Ingredients *</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Search the catalog below, pick a match to add a line, or add a blank row and map the product in the
-              table.
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-            <div className="min-w-0 flex-1">
-              <label htmlFor="recipe-prod-search" className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">
-                Search products (name or SKU)
+            <div>
+              <label htmlFor="recipe-desc" className={`mb-0.5 block ${labelXs}`}>
+                Description
               </label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <textarea
+                id="recipe-desc"
+                rows={2}
+                className={`${fieldSm} min-h-[42px] resize-y py-1.5`}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-4">
+              <div className="col-span-2 sm:col-span-2">
+                <label htmlFor="recipe-category" className={`mb-0.5 block ${labelXs}`}>
+                  Category
+                </label>
+                <select
+                  id="recipe-category"
+                  title="Recipe category"
+                  className={fieldSm}
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {cats.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-1">
+                <label htmlFor="recipe-cuisine" className={`mb-0.5 block ${labelXs}`}>
+                  Cuisine
+                </label>
+                <input id="recipe-cuisine" className={fieldSm} value={cuisine} onChange={(e) => setCuisine(e.target.value)} placeholder="Optional" />
+              </div>
+              <div className="col-span-1">
+                <label htmlFor="recipe-difficulty" className={`mb-0.5 block ${labelXs}`}>
+                  Difficulty
+                </label>
                 <input
-                  id="recipe-prod-search"
-                  className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm dark:border-slate-600 dark:bg-slate-950"
-                  placeholder="e.g. oil, rice, masala…"
-                  value={prodSearch}
-                  onChange={(e) => setProdSearch(e.target.value)}
-                  autoComplete="off"
+                  id="recipe-difficulty"
+                  className={fieldSm}
+                  placeholder="Easy…"
+                  value={difficulty}
+                  onChange={(e) => setDifficulty(e.target.value)}
                 />
               </div>
             </div>
-            <button
-              type="button"
-              onClick={addBlankIngredient}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
-            >
-              <Plus className="h-4 w-4" />
-              Add blank row
-            </button>
-          </div>
 
-          {quickAddProducts.length > 0 && (
-            <div className="mt-3">
-              <p className="mb-1.5 text-xs font-medium text-slate-600 dark:text-slate-400">Quick add from search</p>
-              <div className="flex max-h-32 flex-wrap gap-2 overflow-y-auto">
-                {quickAddProducts.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => addIngredientFromProduct(p)}
-                    className="max-w-full truncate rounded-full border border-slate-200 bg-white px-3 py-1 text-left text-xs font-medium text-slate-700 hover:border-violet-300 hover:bg-violet-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-violet-500 dark:hover:bg-violet-950/50"
-                    title={`${p.name} (${p.sku})`}
-                  >
-                    + {p.name}
-                  </button>
-                ))}
+            <div className="grid grid-cols-4 gap-2">
+              <div>
+                <label className={`mb-0.5 block ${labelXs}`}>Prep</label>
+                <input
+                  type="number"
+                  min={0}
+                  className={fieldSm}
+                  value={prep}
+                  onChange={(e) => setPrep(e.target.value)}
+                  title="Prep time (minutes)"
+                />
+              </div>
+              <div>
+                <label className={`mb-0.5 block ${labelXs}`}>Cook</label>
+                <input
+                  type="number"
+                  min={0}
+                  className={fieldSm}
+                  value={cook}
+                  onChange={(e) => setCook(e.target.value)}
+                  title="Cook time (minutes)"
+                />
+              </div>
+              <div>
+                <label className={`mb-0.5 block ${labelXs}`}>Srv</label>
+                <input
+                  type="number"
+                  min={1}
+                  className={fieldSm}
+                  value={servings}
+                  onChange={(e) => setServings(e.target.value)}
+                  title="Servings"
+                />
+              </div>
+              <div>
+                <label className={`mb-0.5 block ${labelXs}`}>kcal</label>
+                <input
+                  type="number"
+                  min={0}
+                  className={fieldSm}
+                  value={calories}
+                  onChange={(e) => setCalories(e.target.value)}
+                  title="Calories"
+                />
               </div>
             </div>
-          )}
-        </div>
 
-        {ingredients.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-500 dark:border-slate-700">
-            No ingredients yet. Use search quick-add or &quot;Add blank row&quot;.
-          </p>
-        ) : (
-          <Table className="!min-w-[860px]">
-            <thead>
-              <TableHeaderRow className="!bg-slate-50 dark:!bg-slate-800/80">
-                <TableHead className="!w-10 !whitespace-nowrap text-center text-xs font-semibold">#</TableHead>
-                <TableHead className="!min-w-[140px] text-xs font-semibold">Ingredient name</TableHead>
-                <TableHead className="!w-20 text-xs font-semibold">Qty</TableHead>
-                <TableHead className="!w-24 text-xs font-semibold">Unit</TableHead>
-                <TableHead className="!min-w-[220px] text-xs font-semibold">Mapped product</TableHead>
-                <TableHead className="!w-24 text-center text-xs font-semibold">Optional</TableHead>
-                <TableHead className="!w-[100px] text-right text-xs font-semibold">Actions</TableHead>
-              </TableHeaderRow>
-            </thead>
-            <TableBody>
-              {ingredients.map((ing, idx) => {
-                const opts = productOptionsForRow(ing);
-                return (
-                  <TableRow key={ing.key} className="align-middle">
-                    <TableCell className="text-center text-xs text-slate-500">{idx + 1}</TableCell>
-                    <TableCell>
-                      <input
-                        ref={(el) => {
-                          ingredientNameRefs.current[ing.key] = el;
-                        }}
-                        aria-label={`Ingredient ${idx + 1} name`}
-                        className="w-full min-w-[120px] rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
-                        placeholder="Name"
-                        value={ing.ingredient_name}
-                        onChange={(e) => patchIng(ing.key, { ingredient_name: e.target.value })}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <input
-                        type="number"
-                        min={0}
-                        step="any"
-                        aria-label={`Ingredient ${idx + 1} quantity`}
-                        className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
-                        value={ing.quantity}
-                        onChange={(e) => patchIng(ing.key, { quantity: e.target.value })}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <input
-                        aria-label={`Ingredient ${idx + 1} unit`}
-                        className="w-full rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
-                        placeholder="g, cup…"
-                        value={ing.unit}
-                        onChange={(e) => patchIng(ing.key, { unit: e.target.value })}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <select
-                        aria-label={`Ingredient ${idx + 1} mapped product`}
-                        className="w-full max-w-md rounded-md border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
-                        value={ing.product_id}
-                        onChange={(e) => patchIng(ing.key, { product_id: e.target.value })}
-                      >
-                        <option value="">Select product…</option>
-                        {opts.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.sku})
-                          </option>
-                        ))}
-                      </select>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <input
-                        type="checkbox"
-                        aria-label={`Ingredient ${idx + 1} optional`}
-                        checked={ing.optional}
-                        onChange={(e) => patchIng(ing.key, { optional: e.target.checked })}
-                        className="h-4 w-4 rounded border-slate-300"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => focusIngredientRow(ing.key)}
-                          className="rounded-md p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                          title="Edit — focus ingredient name"
-                          aria-label={`Edit ingredient row ${idx + 1}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeIng(ing.key)}
-                          className="rounded-md p-2 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                          title="Remove ingredient"
-                          aria-label={`Delete ingredient row ${idx + 1}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        )}
-        <p className="text-xs text-slate-500">
-          Tip: keep the search box filled to narrow the mapped-product dropdown for every row. The current row&apos;s
-          selection is always included in its list.
-        </p>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900/40">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-medium text-slate-900 dark:text-slate-100">Steps</h2>
-          <button
-            type="button"
-            onClick={addStep}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
-          >
-            <Plus className="h-3 w-3" /> Add step
-          </button>
-        </div>
-        <p className="mb-3 text-xs text-slate-500">Drag steps to reorder.</p>
-        <div className="space-y-2">
-          {steps.map((st, idx) => (
-            <div
-              key={st.key}
-              draggable
-              onDragStart={() => setDragStep(st.key)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => {
-                if (dragStep) reorderSteps(dragStep, st.key);
-                setDragStep(null);
-              }}
-              className="flex gap-2 rounded-lg border border-slate-100 p-2 dark:border-slate-800"
-            >
-              <div className="flex cursor-grab items-center text-slate-400">
-                <GripVertical className="h-5 w-5" />
-                <span className="ml-1 w-6 text-center text-xs font-semibold text-slate-500">{idx + 1}</span>
-              </div>
-              <div className="min-w-0 flex-1 space-y-2">
-                <textarea
-                  className="min-h-[64px] w-full rounded border border-slate-200 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-950"
-                  placeholder="Instruction"
-                  value={st.instruction}
-                  onChange={(e) => patchStep(st.key, { instruction: e.target.value })}
-                />
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <label htmlFor="recipe-video" className={`mb-0.5 block ${labelXs}`}>
+                  Video URL
+                </label>
                 <input
-                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-950"
-                  placeholder="Step image URL (optional)"
-                  value={st.image_url}
-                  onChange={(e) => patchStep(st.key, { image_url: e.target.value })}
+                  id="recipe-video"
+                  className={fieldSm}
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="https://…"
                 />
+              </div>
+              <div className="shrink-0">
+                <label className={`mb-0.5 block ${labelXs}`}>Hero</label>
+                <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800">
+                  <Upload className="h-3.5 w-3.5" /> Upload
+                  <input type="file" accept="image/*" className="hidden" onChange={uploadHero} />
+                </label>
+              </div>
+            </div>
+            {imageUrl ? (
+              <p className="truncate text-[10px] text-slate-500" title={imageUrl}>
+                {imageUrl}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[11px] dark:border-slate-800">
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-slate-300"
+                  checked={isActive}
+                  onChange={(e) => setIsActive(e.target.checked)}
+                />
+                Active
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-slate-300"
+                  checked={isFeatured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                />
+                Featured
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-slate-300"
+                  checked={isQuick}
+                  onChange={(e) => setIsQuick(e.target.checked)}
+                />
+                Quick
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-slate-300"
+                  checked={isBudget}
+                  onChange={(e) => setIsBudget(e.target.checked)}
+                />
+                Budget
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded border-slate-300"
+                  checked={isTrending}
+                  onChange={(e) => setIsTrending(e.target.checked)}
+                />
+                Trending
+              </label>
+            </div>
+          </section>
+
+          <section className="flex min-h-0 flex-1 flex-col rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
+              <div>
+                <h2 className="text-xs font-semibold text-slate-900 dark:text-slate-100">Steps</h2>
+                <p className="text-[10px] text-slate-500">Drag to reorder · scroll when list grows</p>
               </div>
               <button
                 type="button"
-                onClick={() => removeStep(st.key)}
-                className="self-start rounded p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                aria-label={`Remove step ${idx + 1}`}
-                title="Remove step"
+                onClick={addStep}
+                className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-slate-200 px-2 text-[11px] hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
               >
-                <Trash2 className="h-4 w-4" />
+                <Plus className="h-3 w-3" /> Add
               </button>
             </div>
-          ))}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-2">
+              <div className="space-y-1.5 pr-0.5">
+                {steps.map((st, idx) => (
+                  <div
+                    key={st.key}
+                    draggable
+                    onDragStart={() => setDragStep(st.key)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (dragStep) reorderSteps(dragStep, st.key);
+                      setDragStep(null);
+                    }}
+                    className="flex gap-1.5 rounded-md border border-slate-100 p-1.5 dark:border-slate-800"
+                  >
+                    <div className="flex cursor-grab items-start pt-1 text-slate-400">
+                      <GripVertical className="h-4 w-4 shrink-0" />
+                      <span className="w-5 shrink-0 text-center text-[10px] font-bold text-slate-500">{idx + 1}</span>
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <textarea
+                        rows={2}
+                        className="min-h-[40px] w-full resize-y rounded border border-slate-200 px-1.5 py-1 text-xs dark:border-slate-600 dark:bg-slate-950"
+                        placeholder="Instruction"
+                        value={st.instruction}
+                        onChange={(e) => patchStep(st.key, { instruction: e.target.value })}
+                      />
+                      <input
+                        className="h-7 w-full rounded border border-slate-200 px-1.5 text-[11px] dark:border-slate-600 dark:bg-slate-950"
+                        placeholder="Step image URL (optional)"
+                        value={st.image_url}
+                        onChange={(e) => patchStep(st.key, { image_url: e.target.value })}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeStep(st.key)}
+                      className="shrink-0 rounded p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                      aria-label={`Remove step ${idx + 1}`}
+                      title="Remove step"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
         </div>
-      </div>
 
-      <div className="flex justify-end gap-2 pb-8">
-        <button
-          type="button"
-          onClick={() => navigate('/recipes')}
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm dark:border-slate-600"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          disabled={saving}
-          onClick={() => void save()}
-          className="rounded-lg bg-violet-600 px-5 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : isNew ? 'Create recipe' : 'Save changes'}
-        </button>
+        {/* Right: ingredients — table scrolls independently */}
+        <section className="flex min-w-0 flex-1 flex-col rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/40 min-h-[280px] lg:h-full lg:min-h-0">
+          <div className="shrink-0 space-y-2 border-b border-slate-100 p-2.5 dark:border-slate-800">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="text-xs font-semibold text-slate-900 dark:text-slate-100">Ingredients *</h2>
+                <p className="text-[10px] text-slate-500">
+                  Search to quick-add or add a blank row; map each line to a product.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="min-w-0 flex-1">
+                <label htmlFor="recipe-prod-search" className={`mb-0.5 block ${labelXs}`}>
+                  Catalog search
+                </label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                  <input
+                    id="recipe-prod-search"
+                    className="h-8 w-full rounded-md border border-slate-200 bg-white py-1 pl-8 pr-2 text-sm dark:border-slate-600 dark:bg-slate-950"
+                    placeholder="Name or SKU…"
+                    value={prodSearch}
+                    onChange={(e) => setProdSearch(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={addBlankIngredient}
+                className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md bg-violet-600 px-3 text-xs font-medium text-white hover:bg-violet-700"
+              >
+                <Plus className="h-3.5 w-3.5" /> Blank row
+              </button>
+            </div>
+            {quickAddProducts.length > 0 && (
+              <div className="rounded-md bg-slate-50/90 p-1.5 dark:bg-slate-950/40">
+                <p className="mb-1 text-[10px] font-medium text-slate-600 dark:text-slate-400">Quick add</p>
+                <div className="flex max-h-16 flex-wrap gap-1 overflow-y-auto">
+                  {quickAddProducts.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => addIngredientFromProduct(p)}
+                      className="max-w-full truncate rounded-full border border-slate-200 bg-white px-2 py-0.5 text-left text-[10px] font-medium hover:border-violet-300 dark:border-slate-600 dark:bg-slate-900"
+                      title={`${p.name} (${p.sku})`}
+                    >
+                      + {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-auto">
+            {ingredients.length === 0 ? (
+              <div className="flex h-full min-h-[120px] items-center justify-center border border-dashed border-slate-200 text-xs text-slate-500 dark:border-slate-700">
+                No ingredients — search above or add a blank row.
+              </div>
+            ) : (
+              <Table className="!min-w-[760px]">
+                <thead>
+                  <TableHeaderRow className="!bg-slate-50 dark:!bg-slate-800/80">
+                    <TableHead className="!w-8 !py-2 text-center text-[11px] font-semibold">#</TableHead>
+                    <TableHead className="!min-w-[120px] !py-2 text-[11px] font-semibold">Ingredient</TableHead>
+                    <TableHead className="!w-16 !py-2 text-[11px] font-semibold">Qty</TableHead>
+                    <TableHead className="!w-16 !py-2 text-[11px] font-semibold">Unit</TableHead>
+                    <TableHead className="!min-w-[180px] !py-2 text-[11px] font-semibold">Product</TableHead>
+                    <TableHead className="!w-14 py-2 text-center text-[11px] font-semibold">Opt</TableHead>
+                    <TableHead className="!w-[72px] !py-2 text-right text-[11px] font-semibold">⋯</TableHead>
+                  </TableHeaderRow>
+                </thead>
+                <TableBody>
+                  {ingredients.map((ing, idx) => {
+                    const opts = productOptionsForRow(ing);
+                    const cellIn = 'h-8 rounded border border-slate-200 px-1.5 text-xs dark:border-slate-600 dark:bg-slate-950';
+                    return (
+                      <TableRow key={ing.key} className="align-middle">
+                        <TableCell className="py-1.5 text-center text-[11px] text-slate-500">{idx + 1}</TableCell>
+                        <TableCell className="py-1.5">
+                          <input
+                            ref={(el) => {
+                              ingredientNameRefs.current[ing.key] = el;
+                            }}
+                            aria-label={`Ingredient ${idx + 1} name`}
+                            className={`${cellIn} w-full min-w-[100px]`}
+                            placeholder="Name"
+                            value={ing.ingredient_name}
+                            onChange={(e) => patchIng(ing.key, { ingredient_name: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell className="py-1.5">
+                          <input
+                            type="number"
+                            min={0}
+                            step="any"
+                            aria-label={`Ingredient ${idx + 1} quantity`}
+                            className={`${cellIn} w-full`}
+                            value={ing.quantity}
+                            onChange={(e) => patchIng(ing.key, { quantity: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell className="py-1.5">
+                          <input
+                            aria-label={`Ingredient ${idx + 1} unit`}
+                            className={`${cellIn} w-full`}
+                            placeholder="g…"
+                            value={ing.unit}
+                            onChange={(e) => patchIng(ing.key, { unit: e.target.value })}
+                          />
+                        </TableCell>
+                        <TableCell className="py-1.5">
+                          <select
+                            aria-label={`Ingredient ${idx + 1} mapped product`}
+                            className={`${cellIn} w-full max-w-md`}
+                            value={ing.product_id}
+                            onChange={(e) => patchIng(ing.key, { product_id: e.target.value })}
+                          >
+                            <option value="">Product…</option>
+                            {opts.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.sku})
+                              </option>
+                            ))}
+                          </select>
+                        </TableCell>
+                        <TableCell className="py-1.5 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Ingredient ${idx + 1} optional`}
+                            checked={ing.optional}
+                            onChange={(e) => patchIng(ing.key, { optional: e.target.checked })}
+                            className="h-3.5 w-3.5 rounded border-slate-300"
+                          />
+                        </TableCell>
+                        <TableCell className="py-1.5">
+                          <div className="flex justify-end gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => focusIngredientRow(ing.key)}
+                              className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                              title="Focus row"
+                              aria-label={`Edit ingredient row ${idx + 1}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeIng(ing.key)}
+                              className="rounded-md p-1.5 text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                              title="Remove"
+                              aria-label={`Delete ingredient row ${idx + 1}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+          <p className="shrink-0 border-t border-slate-100 px-2.5 py-1 text-[10px] text-slate-500 dark:border-slate-800">
+            Search narrows product dropdowns. Each row always includes its current selection.
+          </p>
+        </section>
       </div>
     </div>
   );

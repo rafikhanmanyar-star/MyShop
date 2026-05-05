@@ -111,7 +111,7 @@ export default function MyMenuPage() {
                 <div style={{ paddingBottom: innerBottomPad }}>
                     {activeTab === 'dashboard' && <WeeklyMenuDashboardPage embedded />}
                     {activeTab === 'calendar' && (
-                        <WeeklyCalendarPage embedded menuIdOverride={menuId ?? undefined} contentBottomPad={innerBottomPad} />
+                        <WeeklyCalendarPage embedded menuIdOverride={menuId ?? undefined} />
                     )}
                     {activeTab === 'planner' && (
                         <MenuPlannerPage embedded shopSlug={shopSlug} contentBottomPad={innerBottomPad} />

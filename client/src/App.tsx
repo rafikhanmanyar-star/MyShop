@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { installElectronFocusRecovery } from './utils/electronFocusRecovery';
-import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { ShiftsProvider } from './context/ShiftsContext';
@@ -43,6 +43,12 @@ const SalesReturnListPage = lazy(() => import('./components/shop/salesReturns/Sa
 const SalesReturnCreatePage = lazy(() => import('./components/shop/salesReturns/SalesReturnCreatePage'));
 const SalesReturnDetailPage = lazy(() => import('./components/shop/salesReturns/SalesReturnDetailPage'));
 const ShopRealtimeBridge = lazy(() => import('./components/shop/ShopRealtimeBridge'));
+
+/** Remount editor when :id changes so form state does not leak between recipes */
+function RecipeEditRouteById() {
+  const { id } = useParams<{ id: string }>();
+  return <RecipeEditPage key={id} />;
+}
 
 type NavItem = {
   path: string;
@@ -366,8 +372,8 @@ function AppLayout() {
               <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MobileOrdersPage /></div> : <Navigate to="/" replace />} />
               <Route path="/offers" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><OffersPage /></div> : <Navigate to="/" replace />} />
               <Route path="/recipes" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><RecipesListPage /></div> : <Navigate to="/" replace />} />
-              <Route path="/recipes/new" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-auto"><RecipeEditPage /></div> : <Navigate to="/" replace />} />
-              <Route path="/recipes/:id" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-auto"><RecipeEditPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/recipes/new" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><RecipeEditPage key="new" /></div> : <Navigate to="/" replace />} />
+              <Route path="/recipes/:id" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><RecipeEditRouteById /></div> : <Navigate to="/" replace />} />
 
               <Route path="/inventory" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><InventoryPage /></div> : <Navigate to="/" replace />} />
               <Route

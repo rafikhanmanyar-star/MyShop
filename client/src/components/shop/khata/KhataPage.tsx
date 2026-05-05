@@ -422,52 +422,23 @@ const KhataPage: React.FC = () => {
 
   const directoryRows = useMemo(() => {
     const q = directoryQuery.trim().toLowerCase();
-    return summary
-      .filter((row) => {
-        if (!q) return true;
-        const c = contactById.get(row.customer_id);
-        const climit = ''; // no credit limit column in schema — placeholder for search UX
-        const hay = [
-          row.customer_name,
-          c?.company_name,
-          c?.contact_no,
-          clientCode(row.customer_id),
-          climit,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        return hay.includes(q);
-      })
-      .map((row) => {
-        const openDebits = allLedger.filter(
-          (e) => e.customer_id === row.customer_id && e.type === 'debit' && debitRemaining(e) > PAID_EPS
-        );
-        let maxOverdueDays = 0;
-        for (const e of openDebits) {
-          const age = daysSince(e.created_at);
-          if (age > OVERDUE_AFTER_DAYS) maxOverdueDays = Math.max(maxOverdueDays, age - OVERDUE_AFTER_DAYS);
-        }
-        let status: { label: string; className: string };
-        if (row.balance <= PAID_EPS) {
-          status = {
-            label: 'CURRENT',
-            className: 'text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40',
-          };
-        } else if (maxOverdueDays > 0) {
-          status = {
-            label: `OVERDUE (${maxOverdueDays}D)`,
-            className: 'text-red-700 bg-red-50 dark:text-red-300 dark:bg-red-950/40',
-          };
-        } else {
-          status = {
-            label: 'NET 30',
-            className: 'text-slate-600 bg-slate-100 dark:text-slate-300 dark:bg-slate-800/80',
-          };
-        }
-        return { ...row, status };
-      });
-  }, [summary, directoryQuery, contactById, allLedger]);
+    return summary.filter((row) => {
+      if (!q) return true;
+      const c = contactById.get(row.customer_id);
+      const climit = ''; // no credit limit column in schema — placeholder for search UX
+      const hay = [
+        row.customer_name,
+        c?.company_name,
+        c?.contact_no,
+        clientCode(row.customer_id),
+        climit,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [summary, directoryQuery, contactById]);
 
   const toggleDirectorySort = useCallback((col: 'name' | 'balance') => {
     setDirectorySort((s) => (s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
@@ -929,14 +900,6 @@ const KhataPage: React.FC = () => {
                                       {initials(row.customer_name)}
                                     </span>
                                     <span className="min-w-0 truncate text-sm font-semibold">{row.customer_name}</span>
-                                  </span>
-                                  <span className="mt-0.5 block truncate pl-9 text-[10px] text-muted-foreground">
-                                    {clientCode(row.customer_id)} ·{' '}
-                                    <span
-                                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${row.status.className}`}
-                                    >
-                                      {row.status.label}
-                                    </span>
                                   </span>
                                 </div>
                                 <span

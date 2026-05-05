@@ -189,8 +189,14 @@ export default function RecipeDetail() {
                     href={recipe.video_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ display: 'inline-block', marginTop: 12, fontWeight: 600 }}
+                    className="recipe-video-cta"
+                    aria-label={`Watch recipe video (${recipe.title})`}
                 >
+                    <span className="recipe-video-cta__icon" aria-hidden>
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" focusable="false">
+                            <path d="M8 5v14l11-7L8 5z" />
+                        </svg>
+                    </span>
                     Watch video →
                 </a>
             )}

@@ -35,13 +35,11 @@ function itemDisplayName(it: any): string {
 export type WeeklyCalendarPageProps = {
     menuIdOverride?: string;
     embedded?: boolean;
-    contentBottomPad?: string;
 };
 
 export default function WeeklyCalendarPage({
     menuIdOverride,
     embedded = false,
-    contentBottomPad,
 }: WeeklyCalendarPageProps) {
     const { shopSlug, menuId: routeMenuId } = useParams();
     const menuId = menuIdOverride ?? routeMenuId;
@@ -252,8 +250,6 @@ export default function WeeklyCalendarPage({
         }
     };
 
-    const fabBottom = contentBottomPad ?? 'calc(72px + var(--safe-bottom))';
-
     const renderDayEditor = (dow: number) => {
         const dayName = DAY_NAMES[dow];
         const dateIso = displayWeekStart ? addDays(displayWeekStart, dow) : '';
@@ -429,7 +425,7 @@ export default function WeeklyCalendarPage({
             <div
                 className="card"
                 style={{
-                    marginTop: 16,
+                    marginTop: 0,
                     padding: 16,
                     display: 'flex',
                     alignItems: 'center',
@@ -505,6 +501,35 @@ export default function WeeklyCalendarPage({
                     <p style={{ marginTop: 24, color: 'var(--text-muted)' }}>Loading calendar…</p>
                 ) : (
                     <>
+                        <div
+                            style={{
+                                marginTop: embedded ? 4 : 12,
+                                marginBottom: 12,
+                            }}
+                        >
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={genList}
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    background: GREEN,
+                                    borderRadius: 999,
+                                    padding: '8px 14px',
+                                    fontWeight: 700,
+                                    fontSize: 13,
+                                    boxShadow: '0 2px 8px rgba(46,125,50,0.2)',
+                                    width: 'auto',
+                                    border: 'none',
+                                }}
+                            >
+                                <span aria-hidden>🛒</span>
+                                Generate list
+                            </button>
+                        </div>
+
                         {weekChrome}
 
                         {selectedDay === null ? (
@@ -614,33 +639,6 @@ export default function WeeklyCalendarPage({
                         )}
                     </>
                 )}
-            </div>
-
-            <div
-                style={{
-                    position: 'fixed',
-                    left: 16,
-                    right: 16,
-                    bottom: fabBottom,
-                    zIndex: 40,
-                }}
-            >
-                <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{
-                        width: '100%',
-                        background: GREEN,
-                        borderRadius: 999,
-                        padding: '14px 20px',
-                        fontWeight: 800,
-                        fontSize: 16,
-                        boxShadow: '0 8px 24px rgba(46,125,50,0.35)',
-                    }}
-                    onClick={genList}
-                >
-                    🛒 Generate Shopping List
-                </button>
             </div>
 
             {customOpen && (
