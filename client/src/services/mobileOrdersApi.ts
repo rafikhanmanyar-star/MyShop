@@ -32,6 +32,8 @@ export interface MobileOrder {
     delivery_lat?: number | null;
     delivery_lng?: number | null;
     delivery_notes?: string;
+    /** Customer-chosen delivery time (home delivery); also shown to POS and rider */
+    estimated_delivery_at?: string | null;
     customer_phone: string;
     customer_name: string;
     /** True when POS staff marked the loyalty member (mobile app customer) as verified. */

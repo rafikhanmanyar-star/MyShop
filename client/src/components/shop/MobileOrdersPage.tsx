@@ -115,6 +115,20 @@ function formatShortTime(d: string): string {
     return new Date(d).toLocaleTimeString('en-PK', { hour: 'numeric', minute: '2-digit' });
 }
 
+/** Customer-chosen slot from `mobile_orders.estimated_delivery_at` */
+function formatCustomerScheduledDelivery(iso: string | null | undefined): string | null {
+    if (iso == null || String(iso).trim() === '') return null;
+    const t = new Date(String(iso));
+    if (Number.isNaN(t.getTime())) return null;
+    return t.toLocaleString('en-PK', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+}
+
 function mobileOrderPaymentBadge(order: Pick<MobileOrder, 'payment_method' | 'payment_status'>): {
     label: string;
     className: string;
@@ -439,6 +453,13 @@ function MobileOrdersPageContent() {
     const handlePrintUnpaidReceipt = async (order: MobileOrder) => {
         try {
             const orderToPrint = order.items?.length ? order : await mobileOrdersApi.getOrder(order.id);
+            const schedReceipt =
+                orderToPrint.payment_method !== 'SelfCollection'
+                    ? (() => {
+                          const s = formatCustomerScheduledDelivery(orderToPrint.estimated_delivery_at);
+                          return s ? `\nRequested delivery: ${s}` : '';
+                      })()
+                    : '';
             const { createThermalPrinter } = await import('../../services/printer/thermalPrinter');
             const printer = createThermalPrinter();
 
@@ -464,7 +485,7 @@ function MobileOrdersPageContent() {
                 payments: [
                     { method: formatMobilePaymentMethod(orderToPrint.payment_method), amount: parseFloat(String(orderToPrint.grand_total)) }
                 ],
-                footer: `UNPAID MOBILE ORDER\nDelivery: ${formatMobilePaymentMethod(orderToPrint.payment_method)}\nDelivery Fee: PKR ${orderToPrint.delivery_fee}\n${orderToPrint.delivery_address ? `Address: ${orderToPrint.delivery_address}\n` : ''}${orderToPrint.delivery_notes || ''}`,
+                footer: `UNPAID MOBILE ORDER\nDelivery: ${formatMobilePaymentMethod(orderToPrint.payment_method)}\nDelivery Fee: PKR ${orderToPrint.delivery_fee}\n${orderToPrint.delivery_address ? `Address: ${orderToPrint.delivery_address}\n` : ''}${orderToPrint.delivery_notes ? `${orderToPrint.delivery_notes}\n` : ''}${schedReceipt}`,
                 showBarcode: true,
             });
         } catch (err: any) {
@@ -475,6 +496,13 @@ function MobileOrdersPageContent() {
     const handlePrintMobileInvoice = async (order: MobileOrder) => {
         try {
             const orderToPrint = order.items?.length ? order : await mobileOrdersApi.getOrder(order.id);
+            const schedReceipt =
+                orderToPrint.payment_method !== 'SelfCollection'
+                    ? (() => {
+                          const s = formatCustomerScheduledDelivery(orderToPrint.estimated_delivery_at);
+                          return s ? `\nRequested delivery: ${s}` : '';
+                      })()
+                    : '';
             const { createThermalPrinter } = await import('../../services/printer/thermalPrinter');
             const printer = createThermalPrinter();
             const paid = orderToPrint.payment_status === 'Paid';
@@ -503,7 +531,7 @@ function MobileOrdersPageContent() {
                         amount: parseFloat(String(orderToPrint.grand_total)),
                     },
                 ],
-                footer: `${paid ? 'INVOICE — PAID' : 'INVOICE — UNPAID'}\nRef: ${orderToPrint.order_number}\nDelivery: ${formatMobilePaymentMethod(orderToPrint.payment_method)}\nDelivery Fee: PKR ${orderToPrint.delivery_fee}\n${orderToPrint.delivery_address ? `Address: ${orderToPrint.delivery_address}\n` : ''}${orderToPrint.delivery_notes ? `Note: ${orderToPrint.delivery_notes}\n` : ''}`,
+                footer: `${paid ? 'INVOICE — PAID' : 'INVOICE — UNPAID'}\nRef: ${orderToPrint.order_number}\nDelivery: ${formatMobilePaymentMethod(orderToPrint.payment_method)}\nDelivery Fee: PKR ${orderToPrint.delivery_fee}\n${orderToPrint.delivery_address ? `Address: ${orderToPrint.delivery_address}\n` : ''}${orderToPrint.delivery_notes ? `Note: ${orderToPrint.delivery_notes}\n` : ''}${schedReceipt}`,
                 showBarcode: true,
             });
         } catch (err: any) {
@@ -523,6 +551,13 @@ function MobileOrdersPageContent() {
 
             if (newStatus === 'Confirmed') {
                 const orderToPrint = updatedOrderData || await mobileOrdersApi.getOrder(orderId);
+                const schedLine =
+                    orderToPrint.payment_method !== 'SelfCollection'
+                        ? (() => {
+                              const s = formatCustomerScheduledDelivery(orderToPrint.estimated_delivery_at);
+                              return s ? `\nRequested delivery: ${s}` : '';
+                          })()
+                        : '';
                 const { createThermalPrinter } = await import('../../services/printer/thermalPrinter');
                 const printer = createThermalPrinter();
 
@@ -548,7 +583,7 @@ function MobileOrdersPageContent() {
                     payments: [
                         { method: orderToPrint.payment_method, amount: parseFloat(String(orderToPrint.grand_total)) }
                     ],
-                    footer: `UNPAID RECEIPT\nDelivery Fee: ${orderToPrint.delivery_fee}\n${orderToPrint.delivery_notes || ''}`,
+                    footer: `UNPAID RECEIPT\nDelivery Fee: ${orderToPrint.delivery_fee}\n${orderToPrint.delivery_notes ? `${orderToPrint.delivery_notes}\n` : ''}${schedLine}`,
                     showBarcode: true
                 });
             }
@@ -986,6 +1021,13 @@ function MobileOrdersPageContent() {
                                                             {order.rider_name || 'Courier'}
                                                         </p>
                                                     )}
+                                                    {formatCustomerScheduledDelivery(order.estimated_delivery_at) &&
+                                                        order.payment_method !== 'SelfCollection' && (
+                                                            <p className="text-[0.7rem] text-violet-800 dark:text-violet-200 flex items-center gap-1 mt-1">
+                                                                <Clock className="w-3 h-3 shrink-0" />
+                                                                Deliver by {formatCustomerScheduledDelivery(order.estimated_delivery_at)}
+                                                            </p>
+                                                        )}
                                                 </div>
                                                 <span className="text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums shrink-0">
                                                     {formatPrice(order.grand_total)}
@@ -1041,6 +1083,13 @@ function MobileOrdersPageContent() {
                                                                 </span>
                                                             )}
                                                     </div>
+                                                    {formatCustomerScheduledDelivery(order.estimated_delivery_at) &&
+                                                        order.payment_method !== 'SelfCollection' && (
+                                                            <p className="text-[0.7rem] text-violet-800 dark:text-violet-200 flex items-center gap-1 mt-1.5">
+                                                                <Clock className="w-3 h-3 shrink-0" />
+                                                                Deliver by {formatCustomerScheduledDelivery(order.estimated_delivery_at)}
+                                                            </p>
+                                                        )}
                                                 </div>
                                                 <span className="text-base font-bold text-slate-900 dark:text-slate-100 tabular-nums shrink-0">
                                                     {formatPrice(order.grand_total)}
@@ -1999,6 +2048,14 @@ function OrderDetailPanel({
                                         <MapPin className="w-3.5 h-3.5 shrink-0" />
                                         View on map
                                     </a>
+                                )}
+                            {formatCustomerScheduledDelivery(order.estimated_delivery_at) &&
+                                order.payment_method !== 'SelfCollection' && (
+                                    <p className="text-xs font-semibold text-violet-800 dark:text-violet-200 mt-3 flex items-center gap-1.5">
+                                        <Clock className="w-3.5 h-3.5 shrink-0 opacity-80" />
+                                        Customer requested delivery:{' '}
+                                        {formatCustomerScheduledDelivery(order.estimated_delivery_at)}
+                                    </p>
                                 )}
                         </div>
                         <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 bg-white dark:bg-slate-950">

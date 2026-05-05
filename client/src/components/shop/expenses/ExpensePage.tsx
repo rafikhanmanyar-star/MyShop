@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Wallet, BarChart3, Settings, Receipt } from 'lucide-react';
+import { BarChart3, Settings, Receipt } from 'lucide-react';
 import ExpensesTab from './ExpensesTab';
 import ExpenseReportsTab from './ExpenseReportsTab';
 import ExpenseSettingsTab from './ExpenseSettingsTab';
@@ -35,16 +35,10 @@ const ExpensePage: React.FC = () => {
   return (
     <div className="flex w-full min-w-0 flex-col h-full bg-muted/80 dark:bg-slate-800">
       <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
-        <div className="mb-6 flex items-start gap-3">
-          <div className="p-2 rounded-xl bg-indigo-100 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400">
-            <Wallet className="w-7 h-7" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Expenses</h1>
-            <p className="text-muted-foreground dark:text-slate-400 text-sm font-medium mt-0.5">
-              Record shop spending, tie each line to the chart of accounts, and review trends by category and month.
-            </p>
-          </div>
+        <div className="mb-6">
+          <p className="text-muted-foreground dark:text-slate-400 text-sm font-medium">
+            Record shop spending, tie each line to the chart of accounts, and review trends by category and month.
+          </p>
         </div>
         <div className="flex gap-6">
           {tabs.map((tab) => (

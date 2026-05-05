@@ -22,6 +22,8 @@ export interface PendingOrderPayload {
     paymentMethod: string;
     idempotencyKey: string;
     branchId?: string;
+    /** ISO 8601; optional scheduled home delivery */
+    scheduledDeliveryAt?: string;
 }
 
 export interface PendingOrderItem {

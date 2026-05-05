@@ -18,6 +18,23 @@ type DeliverySuggestion = {
     lastUsedAt?: string;
 };
 
+function toDatetimeLocalValue(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function defaultScheduledLocalInput(): string {
+    const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    d.setSeconds(0, 0);
+    let m = Math.ceil(d.getMinutes() / 15) * 15;
+    if (m >= 60) {
+        d.setHours(d.getHours() + 1);
+        m = 0;
+    }
+    d.setMinutes(m);
+    return toDatetimeLocalValue(d);
+}
+
 export default function Checkout() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
@@ -29,6 +46,8 @@ export default function Checkout() {
     const deliveryAddressTypeRef = useRef<DeliveryAddressChoice>('permanent');
     const [notes, setNotes] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>('COD');
+    const [scheduleDelivery, setScheduleDelivery] = useState(false);
+    const [scheduleLocal, setScheduleLocal] = useState('');
     const [loading, setLoading] = useState(false);
     const [deliveryLat, setDeliveryLat] = useState<number | null>(null);
     const [deliveryLng, setDeliveryLng] = useState<number | null>(null);
@@ -160,6 +179,7 @@ export default function Checkout() {
         if (paymentMethod === 'SelfCollection') {
             setDeliveryLat(null);
             setDeliveryLng(null);
+            setScheduleDelivery(false);
         }
     }, [paymentMethod]);
 
@@ -265,6 +285,21 @@ export default function Checkout() {
                 return;
             }
             if (!checkDeliveryPinAllowed(deliveryLat, deliveryLng)) return;
+            if (scheduleDelivery) {
+                if (!scheduleLocal.trim()) {
+                    showToast('Please choose a date and time for scheduled delivery');
+                    return;
+                }
+                const t = new Date(scheduleLocal).getTime();
+                if (Number.isNaN(t)) {
+                    showToast('Invalid delivery date or time');
+                    return;
+                }
+                if (t < Date.now() + 15 * 60 * 1000) {
+                    showToast('Scheduled time must be at least 15 minutes from now');
+                    return;
+                }
+            }
         }
 
         setLoading(true);
@@ -300,6 +335,12 @@ export default function Checkout() {
                 paymentMethod,
                 idempotencyKey,
                 ...(state.branchId ? { branchId: state.branchId } : {}),
+                ...(!isPickup &&
+                scheduleDelivery &&
+                scheduleLocal.trim() &&
+                !Number.isNaN(new Date(scheduleLocal).getTime())
+                    ? { scheduledDeliveryAt: new Date(scheduleLocal).toISOString() }
+                    : {}),
                 ...(!isPickup &&
                 deliveryLat != null &&
                 deliveryLng != null &&
@@ -665,6 +706,69 @@ export default function Checkout() {
                             onChange={e => setNotes(e.target.value)}
                         />
                     </div>
+
+                    <div
+                        style={{
+                            marginTop: 16,
+                            paddingTop: 16,
+                            borderTop: '1px solid var(--border-light)',
+                        }}
+                    >
+                        <label
+                            style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 10,
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                fontSize: 14,
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={scheduleDelivery}
+                                onChange={(e) => {
+                                    const on = e.target.checked;
+                                    setScheduleDelivery(on);
+                                    if (on) {
+                                        setScheduleLocal((s) => s || defaultScheduledLocalInput());
+                                    }
+                                }}
+                                style={{ marginTop: 3, width: 18, height: 18, flexShrink: 0 }}
+                            />
+                            <span>
+                                Schedule delivery
+                                <span
+                                    style={{
+                                        display: 'block',
+                                        fontWeight: 400,
+                                        fontSize: 12,
+                                        color: 'var(--text-muted)',
+                                        marginTop: 4,
+                                        lineHeight: 1.4,
+                                    }}
+                                >
+                                    Choose when you want the order delivered. The shop and courier will see this time.
+                                </span>
+                            </span>
+                        </label>
+                        {scheduleDelivery ? (
+                            <div className="input-group" style={{ marginTop: 12, marginBottom: 0 }}>
+                                <label htmlFor="schedule-dt">Date &amp; time</label>
+                                <input
+                                    id="schedule-dt"
+                                    className="input"
+                                    type="datetime-local"
+                                    min={toDatetimeLocalValue(new Date(Date.now() + 15 * 60 * 1000))}
+                                    value={scheduleLocal}
+                                    onChange={(e) => setScheduleLocal(e.target.value)}
+                                />
+                                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                                    Earliest: 15 minutes from now · Up to 14 days ahead (confirmed by the shop when they accept your order).
+                                </p>
+                            </div>
+                        ) : null}
+                    </div>
                 </div>
             )}
 
@@ -721,12 +825,24 @@ export default function Checkout() {
                 </div>
             </div>
 
-            {/* ETA — home delivery only */}
-            {!isPickup && state.settings?.estimated_delivery_minutes && (
-                <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-                    🕐 Estimated delivery in {state.settings.estimated_delivery_minutes} minutes
-                </p>
-            )}
+            {/* ETA / schedule — home delivery only */}
+            {!isPickup &&
+                (scheduleDelivery && scheduleLocal.trim() && !Number.isNaN(new Date(scheduleLocal).getTime()) ? (
+                    <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+                        📅 Requested delivery:{' '}
+                        {new Date(scheduleLocal).toLocaleString(undefined, {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                        })}
+                    </p>
+                ) : state.settings?.estimated_delivery_minutes ? (
+                    <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+                        🕐 Typical delivery in about {state.settings.estimated_delivery_minutes} minutes (not a guaranteed slot unless you schedule above)
+                    </p>
+                ) : null)}
 
             {/* Place Order */}
             {!online && (

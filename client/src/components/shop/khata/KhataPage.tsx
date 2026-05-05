@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Mail,
   Download,
-  Wallet,
   Filter,
+  Wallet,
   Pencil,
   Trash2,
   Clock,
   ShieldCheck,
   AlertTriangle,
+  FolderTree,
+  ChevronUp,
+  ChevronDown,
+  MessageCircle,
 } from 'lucide-react';
 import { khataApi, KhataLedgerEntry, KhataSummaryRow, shopApi, ShopBankAccount } from '../../../services/shopApi';
 import { CURRENCY } from '../../../constants';
 import Modal from '../../ui/Modal';
-import { parsePakistanMobile } from '../../../utils/pakistanMobile';
+import { normalizeWhatsAppPhone, openWhatsAppTextMessage } from '../../../services/procurement/purchaseOrderPdf';
 
 const PAID_EPS = 0.009;
 const DSO_CRITICAL_DAYS = 45;
@@ -53,16 +56,6 @@ function daysSince(dateStr: string): number {
 
 function formatMoney(n: number, min = 2, max = 2): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: min, maximumFractionDigits: max });
-}
-
-/** WhatsApp / wa.me: digits only, no leading + */
-function phoneDigitsForWhatsApp(raw: string | null | undefined): string | null {
-  if (!raw?.trim()) return null;
-  const pk = parsePakistanMobile(raw);
-  if (pk.ok) return pk.digits;
-  const d = raw.replace(/\D/g, '');
-  if (d.length >= 10 && d.length <= 15) return d;
-  return null;
 }
 
 function rowDisplayType(entry: KhataLedgerEntry): string {
@@ -133,6 +126,54 @@ function buildWhatsappStatementMessage(
   return header + '\n' + body + more;
 }
 
+function buildKhataPaymentConfirmationMessage(opts: {
+  customerName: string;
+  amount: number;
+  currency: string;
+  note?: string;
+  dateStr?: string;
+}): string {
+  const d = opts.dateStr ?? new Date().toLocaleString();
+  const lines = [
+    `*Payment received — thank you*`,
+    '',
+    `Dear ${opts.customerName},`,
+    '',
+    `We have recorded your payment of *${opts.currency} ${formatMoney(opts.amount)}* on ${d}.`,
+  ];
+  if (opts.note?.trim()) lines.push('', `Reference: ${opts.note.trim()}`);
+  lines.push('', 'If anything looks incorrect, please reply and we will fix it.');
+  return lines.join('\n');
+}
+
+function buildKhataPendingReminderMessage(
+  customerName: string,
+  currency: string,
+  closing: number,
+  ledger: KhataLedgerEntry[],
+  remainingOnDebit: (e: KhataLedgerEntry) => number
+): string {
+  const open = ledger.filter((e) => e.type === 'debit' && remainingOnDebit(e) > PAID_EPS);
+  const lines = [
+    `*Reminder — balance due*`,
+    '',
+    `Hi ${customerName},`,
+    '',
+    `Your current balance with us is *${currency} ${formatMoney(Math.max(0, closing))}*.`,
+  ];
+  if (open.length > 0) {
+    lines.push('', '*Open amounts by invoice:*');
+    for (const e of open.slice(0, 8)) {
+      const ref = referenceLabel(e);
+      const due = remainingOnDebit(e);
+      lines.push(`• ${ref} — ${currency} ${formatMoney(due)} (${new Date(e.created_at).toLocaleDateString()})`);
+    }
+    if (open.length > 8) lines.push(`… and ${open.length - 8} more`);
+  }
+  lines.push('', 'Please arrange payment when convenient. Thank you.');
+  return lines.join('\n');
+}
+
 const KhataPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -155,6 +196,11 @@ const KhataPage: React.FC = () => {
     { id: string; name: string; contact_no: string | null; company_name?: string | null }[]
   >([]);
   const [directoryQuery, setDirectoryQuery] = useState('');
+  const [directorySort, setDirectorySort] = useState<{ col: 'name' | 'balance'; dir: 'asc' | 'desc' }>({
+    col: 'name',
+    dir: 'asc',
+  });
+  const [ledgerTypeFilter, setLedgerTypeFilter] = useState<'all' | 'invoices' | 'payments'>('all');
   const [customerFooter, setCustomerFooter] = useState<{
     totalDebit: number;
     totalCredit: number;
@@ -239,6 +285,10 @@ const KhataPage: React.FC = () => {
   useEffect(() => {
     void loadLedger(selectedCustomerId);
   }, [selectedCustomerId, loadLedger]);
+
+  useEffect(() => {
+    setLedgerTypeFilter('all');
+  }, [selectedCustomerId]);
 
   useEffect(() => {
     if (!selectedCustomerId) {
@@ -419,6 +469,32 @@ const KhataPage: React.FC = () => {
       });
   }, [summary, directoryQuery, contactById, allLedger]);
 
+  const toggleDirectorySort = useCallback((col: 'name' | 'balance') => {
+    setDirectorySort((s) => (s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
+  }, []);
+
+  const sortedDirectoryRows = useMemo(() => {
+    const rows = [...directoryRows];
+    const mult = directorySort.dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      if (directorySort.col === 'name') {
+        const c = a.customer_name.localeCompare(b.customer_name, undefined, { sensitivity: 'base' });
+        if (c !== 0) return c * mult;
+        return a.customer_id.localeCompare(b.customer_id) * mult;
+      }
+      const c = a.balance - b.balance;
+      if (c !== 0) return (c < 0 ? -1 : 1) * mult;
+      return a.customer_name.localeCompare(b.customer_name, undefined, { sensitivity: 'base' }) * mult;
+    });
+    return rows;
+  }, [directoryRows, directorySort]);
+
+  const displayedLedger = useMemo(() => {
+    if (ledgerTypeFilter === 'invoices') return ledger.filter((e) => e.type === 'debit');
+    if (ledgerTypeFilter === 'payments') return ledger.filter((e) => e.type === 'credit');
+    return ledger;
+  }, [ledger, ledgerTypeFilter]);
+
   const selectedContact = selectedCustomerId ? contactById.get(selectedCustomerId) : undefined;
   const highRisk =
     (customerFooter?.balance ?? 0) > 300000 ||
@@ -553,13 +629,21 @@ const KhataPage: React.FC = () => {
     e.preventDefault();
     const amount = parseFloat(receiveAmount);
     if (!receiveCustomerId || !receiveBankAccountId || !amount || amount <= 0) return;
+    const payCustomerId = receiveCustomerId;
+    const payAmount = amount;
+    const payNote = receiveNote.trim();
+    const payName =
+      customers.find((c) => c.id === payCustomerId)?.name ||
+      (payCustomerId === selectedCustomerId ? selectedCustomerName : '') ||
+      'Customer';
+    const payPhone = customers.find((c) => c.id === payCustomerId)?.contact_no ?? null;
     setReceiveSubmitting(true);
     try {
       await khataApi.receivePayment({
-        customerId: receiveCustomerId,
-        amount,
+        customerId: payCustomerId,
+        amount: payAmount,
         bankAccountId: receiveBankAccountId,
-        note: receiveNote.trim() || undefined,
+        note: payNote || undefined,
         ...(receiveApplyToLedgerId ? { applyToLedgerId: receiveApplyToLedgerId } : {}),
       });
       setReceiveModalOpen(false);
@@ -571,6 +655,15 @@ const KhataPage: React.FC = () => {
       setReceiveApplyToLedgerId(null);
       await refreshSummaryAndLedger();
       void loadCustomers();
+      if (normalizeWhatsAppPhone(payPhone)) {
+        const msg = buildKhataPaymentConfirmationMessage({
+          customerName: payName,
+          amount: payAmount,
+          currency: CURRENCY,
+          note: payNote || undefined,
+        });
+        openWhatsAppTextMessage(msg, payPhone ?? undefined);
+      }
     } catch (err) {
       console.error('Receive payment failed', err);
       alert('Failed to record payment. Please try again.');
@@ -588,8 +681,8 @@ const KhataPage: React.FC = () => {
       alert('Select a customer first.');
       return;
     }
-    const phone = phoneDigitsForWhatsApp(selectedContact?.contact_no ?? null);
-    if (!phone) {
+    const phone = selectedContact?.contact_no;
+    if (!normalizeWhatsAppPhone(phone)) {
       alert(
         'This customer needs a valid mobile number (Pakistan 03… or 923…) on their contact record to open WhatsApp.'
       );
@@ -597,8 +690,35 @@ const KhataPage: React.FC = () => {
     }
     const closing = customerFooter?.balance ?? summary.find((s) => s.customer_id === selectedCustomerId)?.balance ?? 0;
     const text = buildWhatsappStatementMessage(selectedCustomerName, closing, ledger);
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    openWhatsAppTextMessage(text, phone ?? undefined);
+  };
+
+  const sendPendingReminderWhatsApp = () => {
+    if (!selectedCustomerId || !selectedCustomerName) {
+      alert('Select a customer first.');
+      return;
+    }
+    const phone = selectedContact?.contact_no;
+    if (!normalizeWhatsAppPhone(phone)) {
+      alert('Add a valid mobile number on this contact to send a WhatsApp reminder.');
+      return;
+    }
+    const closing = customerFooter?.balance ?? summary.find((s) => s.customer_id === selectedCustomerId)?.balance ?? 0;
+    if (closing <= PAID_EPS) {
+      alert('This customer has no balance due.');
+      return;
+    }
+    const text = buildKhataPendingReminderMessage(selectedCustomerName, CURRENCY, closing, ledger, debitRemaining);
+    openWhatsAppTextMessage(text, phone ?? undefined);
+  };
+
+  const openMemberWhatsAppChat = () => {
+    const phone = selectedContact?.contact_no;
+    if (!normalizeWhatsAppPhone(phone)) {
+      alert('No valid WhatsApp number on file for this member.');
+      return;
+    }
+    openWhatsAppTextMessage(`Hi ${selectedCustomerName}`, phone ?? undefined);
   };
 
   const exportLedgerCsv = () => {
@@ -694,176 +814,303 @@ const KhataPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-6 md:px-8 md:py-8">
-        <div className="mx-auto flex max-w-[1600px] min-h-[480px] gap-6 lg:gap-8">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-6 md:px-8 md:py-8">
+        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-4 lg:min-h-[calc(100dvh-14rem)] lg:flex-row lg:items-stretch">
           {loading ? (
             <div className="flex flex-1 items-center justify-center py-24">
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-100 border-t-violet-600 dark:border-violet-950 dark:border-t-violet-400" />
             </div>
           ) : (
             <>
-              {/* Client directory */}
-              <aside className="flex w-full shrink-0 flex-col rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:w-[340px]">
-                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">Client Directory</h2>
-                  <button
-                    type="button"
-                    onClick={() => setDirectoryQuery('')}
-                    className="text-xs font-semibold text-violet-600 hover:text-violet-700 dark:text-violet-400"
-                  >
-                    View All
-                  </button>
-                </div>
-                <div className="border-b border-slate-100 px-5 py-3 dark:border-slate-800">
-                  <div className="relative">
-                    <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="search"
-                      value={directoryQuery}
-                      onChange={(e) => setDirectoryQuery(e.target.value)}
-                      placeholder="Filter by name or credit limit…"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none ring-violet-500/30 placeholder:text-slate-400 focus:border-violet-500 focus:ring-2 dark:border-slate-700 dark:bg-slate-800/80 dark:text-white"
-                    />
-                  </div>
-                </div>
-                <ul className="max-h-[calc(100vh-280px)] min-h-[320px] overflow-y-auto">
-                  {directoryRows.length === 0 ? (
-                    <li className="px-5 py-12 text-center text-sm text-slate-500">No matching clients with khata activity.</li>
-                  ) : (
-                    directoryRows.map((row) => (
-                      <li key={row.customer_id}>
+              <aside className="flex w-full shrink-0 flex-col lg:w-80 lg:min-w-[20rem] xl:w-96">
+                <div className="card flex max-h-[min(52dvh,520px)] min-h-[280px] flex-1 flex-col overflow-hidden p-0 shadow-sm lg:h-full lg:max-h-none lg:min-h-0">
+                  <div className="shrink-0 border-b border-border bg-muted/30 px-3 py-2.5">
+                    <div className="flex items-start gap-2">
+                      <FolderTree className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <h2 className="text-xs font-bold uppercase tracking-wide text-foreground">Members</h2>
+                        <p className="truncate text-[10px] text-muted-foreground">Receivables by member (khata)</p>
+                        <label htmlFor="member-tree-search" className="sr-only">
+                          Filter members
+                        </label>
+                        <div className="relative mt-2">
+                          <Filter className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                          <input
+                            id="member-tree-search"
+                            type="search"
+                            autoComplete="off"
+                            value={directoryQuery}
+                            onChange={(e) => setDirectoryQuery(e.target.value)}
+                            placeholder="Filter by name, ID, phone…"
+                            className="input input-text h-9 w-full rounded-lg py-1.5 pl-8 pr-2 text-sm placeholder:text-muted-foreground"
+                          />
+                        </div>
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedCustomerId(row.customer_id);
-                            setSelectedCustomerName(row.customer_name);
-                          }}
-                          className={`flex w-full items-start gap-3 border-l-4 px-4 py-3.5 text-left transition-colors ${
-                            selectedCustomerId === row.customer_id
-                              ? 'border-violet-600 bg-violet-50/90 dark:border-violet-500 dark:bg-violet-950/40'
-                              : 'border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/60'
-                          }`}
+                          onClick={() => setDirectoryQuery('')}
+                          className="mt-1.5 text-[10px] font-semibold text-primary hover:underline"
                         >
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                            {initials(row.customer_name)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate font-semibold text-slate-900 dark:text-white">{row.customer_name}</div>
-                            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{clientCode(row.customer_id)}</div>
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-sm font-bold tabular-nums text-slate-800 dark:text-slate-200">
-                                {CURRENCY} {formatMoney(row.balance)}
-                              </span>
-                              <span
-                                className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${row.status.className}`}
-                              >
-                                {row.status.label}
-                              </span>
-                            </div>
-                          </div>
+                          Clear filter
                         </button>
-                      </li>
-                    ))
-                  )}
-                </ul>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
+                    <div
+                      className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border bg-card px-2.5 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleDirectorySort('name')}
+                        className={`flex min-w-0 items-center gap-0.5 text-left font-bold uppercase tracking-wider transition-colors hover:text-foreground ${
+                          directorySort.col === 'name' ? 'text-foreground' : ''
+                        }`}
+                        aria-label={
+                          directorySort.col === 'name'
+                            ? `Member sorted ${directorySort.dir === 'asc' ? 'A–Z' : 'Z–A'}`
+                            : 'Sort by member name'
+                        }
+                      >
+                        <span className="truncate">Member</span>
+                        {directorySort.col === 'name' &&
+                          (directorySort.dir === 'asc' ? (
+                            <ChevronUp className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+                          ) : (
+                            <ChevronDown className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+                          ))}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleDirectorySort('balance')}
+                        className={`flex shrink-0 items-center justify-end gap-0.5 whitespace-nowrap text-right font-bold uppercase tracking-wider transition-colors hover:text-foreground ${
+                          directorySort.col === 'balance' ? 'text-foreground' : ''
+                        }`}
+                        aria-label={
+                          directorySort.col === 'balance'
+                            ? `Balance sorted ${directorySort.dir === 'asc' ? 'low to high' : 'high to low'}`
+                            : 'Sort by amount payable'
+                        }
+                      >
+                        <span>Payable</span>
+                        {directorySort.col === 'balance' &&
+                          (directorySort.dir === 'asc' ? (
+                            <ChevronUp className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+                          ) : (
+                            <ChevronDown className="h-3 w-3 shrink-0 opacity-90" aria-hidden />
+                          ))}
+                      </button>
+                    </div>
+                    <ul className="space-y-0.5 p-2 pt-1.5" aria-label="Members with khata balance">
+                      {sortedDirectoryRows.length === 0 ? (
+                        <li className="px-1 py-8 text-center text-xs text-muted-foreground">
+                          No matching members with khata activity.
+                        </li>
+                      ) : (
+                        sortedDirectoryRows.map((row) => {
+                          const selected = selectedCustomerId === row.customer_id;
+                          const balStr = `${CURRENCY} ${formatMoney(row.balance)}`;
+                          return (
+                            <li key={row.customer_id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCustomerId(row.customer_id);
+                                  setSelectedCustomerName(row.customer_name);
+                                }}
+                                className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border px-2 py-2 text-left transition-colors ${
+                                  selected
+                                    ? 'border-primary bg-primary/10 text-foreground shadow-sm'
+                                    : 'border-transparent hover:bg-muted/80'
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <span className="flex items-center gap-2">
+                                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+                                      {initials(row.customer_name)}
+                                    </span>
+                                    <span className="min-w-0 truncate text-sm font-semibold">{row.customer_name}</span>
+                                  </span>
+                                  <span className="mt-0.5 block truncate pl-9 text-[10px] text-muted-foreground">
+                                    {clientCode(row.customer_id)} ·{' '}
+                                    <span
+                                      className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${row.status.className}`}
+                                    >
+                                      {row.status.label}
+                                    </span>
+                                  </span>
+                                </div>
+                                <span
+                                  className={`shrink-0 text-xs font-semibold tabular-nums ${
+                                    row.balance > PAID_EPS ? 'text-destructive' : 'text-muted-foreground'
+                                  }`}
+                                  title={balStr}
+                                >
+                                  {balStr}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })
+                      )}
+                    </ul>
+                  </div>
+                </div>
               </aside>
 
               {/* Ledger detail */}
-              <section className="flex min-w-0 flex-1 flex-col rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="card flex min-h-[min(48dvh,360px)] flex-1 flex-col overflow-hidden p-0 shadow-sm lg:min-h-0">
                 {!selectedCustomerId ? (
                   <div className="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center">
-                    <p className="text-slate-500 dark:text-slate-400">Select a client to view the full khata ledger.</p>
+                    <p className="text-muted-foreground">Select a member in the tree to view invoices and payments.</p>
                   </div>
                 ) : (
                   <>
-                    <div className="border-b border-slate-100 px-6 py-5 dark:border-slate-800 md:px-8 md:py-6">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white md:text-2xl">
-                              {selectedCustomerName}
-                            </h1>
-                            {highRisk && (
-                              <span className="rounded-full bg-red-100 px-3 py-0.5 text-xs font-bold uppercase tracking-wide text-red-800 dark:bg-red-950/60 dark:text-red-300">
-                                High risk
-                              </span>
-                            )}
+                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/25 px-3 py-2.5">
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                        <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                          Khata ledger
+                        </span>
+                        <div
+                          className="inline-flex rounded-lg border border-border bg-background p-0.5 shadow-sm"
+                          role="group"
+                          aria-label="Filter by transaction type"
+                        >
+                          {(
+                            [
+                              { id: 'all' as const, label: 'All' },
+                              { id: 'invoices' as const, label: 'Invoices' },
+                              { id: 'payments' as const, label: 'Payments' },
+                            ] as const
+                          ).map(({ id, label }) => (
+                            <button
+                              key={id}
+                              type="button"
+                              onClick={() => setLedgerTypeFilter(id)}
+                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                ledgerTypeFilter === id
+                                  ? 'bg-primary text-primary-foreground shadow-sm'
+                                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={sendStatementWhatsApp}
+                          className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted"
+                          title="Send full statement on WhatsApp"
+                        >
+                          <MessageCircle className="h-4 w-4 shrink-0" />
+                          Statement
+                        </button>
+                        <button
+                          type="button"
+                          onClick={sendPendingReminderWhatsApp}
+                          className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted"
+                          title="Send pending balance reminder on WhatsApp"
+                        >
+                          <MessageCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+                          Remind
+                        </button>
+                        <button
+                          type="button"
+                          onClick={exportLedgerCsv}
+                          className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted"
+                        >
+                          <Download className="h-4 w-4 shrink-0" />
+                          Export
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openReceiveModalForCurrentCustomer}
+                          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                        >
+                          <Wallet className="h-4 w-4 shrink-0" />
+                          Receive Payment
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="border-b border-border px-6 py-4 md:px-8">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <h1 className="text-xl font-bold tracking-tight text-foreground md:text-2xl">{selectedCustomerName}</h1>
+                          {highRisk && (
+                            <span className="rounded-full bg-destructive/15 px-3 py-0.5 text-xs font-bold uppercase tracking-wide text-destructive">
+                              High risk
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tax ID</div>
+                            <div className="mt-1 text-foreground">—</div>
                           </div>
-                          <div className="mt-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-                            <div>
-                              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Tax ID</div>
-                              <div className="mt-1 text-slate-700 dark:text-slate-300">—</div>
-                            </div>
-                            <div>
-                              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Payment terms</div>
-                              <div className="mt-1 text-slate-700 dark:text-slate-300">On account</div>
-                            </div>
-                            <div>
-                              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Contact</div>
-                              <div className="mt-1 text-slate-700 dark:text-slate-300">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Payment terms</div>
+                            <div className="mt-1 text-foreground">On account</div>
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-foreground">
+                              <span>
                                 {selectedContact?.name || selectedCustomerName}
                                 {selectedContact?.contact_no && (
                                   <>
                                     {' · '}
-                                    <span className="text-violet-600 dark:text-violet-400">{selectedContact.contact_no}</span>
+                                    <span className="text-primary">{selectedContact.contact_no}</span>
                                   </>
                                 )}
-                              </div>
+                              </span>
+                              {selectedContact?.contact_no && normalizeWhatsAppPhone(selectedContact.contact_no) ? (
+                                <button
+                                  type="button"
+                                  onClick={openMemberWhatsAppChat}
+                                  className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-700 hover:bg-muted dark:text-emerald-400"
+                                >
+                                  <MessageCircle className="h-3 w-3" />
+                                  WhatsApp
+                                </button>
+                              ) : null}
                             </div>
                           </div>
-                        </div>
-                        <div className="flex flex-shrink-0 flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={sendStatementWhatsApp}
-                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                          >
-                            <Mail className="h-4 w-4" />
-                            Send Statement
-                          </button>
-                          <button
-                            type="button"
-                            onClick={exportLedgerCsv}
-                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                          >
-                            <Download className="h-4 w-4" />
-                            Export
-                          </button>
-                          <button
-                            type="button"
-                            onClick={openReceiveModalForCurrentCustomer}
-                            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600"
-                          >
-                            <Wallet className="h-4 w-4" />
-                            Receive Payment
-                          </button>
                         </div>
                       </div>
                     </div>
 
-                    <div className="min-h-0 flex-1 overflow-x-auto">
+                    <div className="min-h-0 flex-1 overflow-auto">
                       {ledger.length === 0 ? (
-                        <div className="p-12 text-center text-sm text-slate-500">No transactions for this customer.</div>
+                        <div className="p-12 text-center text-sm text-muted-foreground">No transactions for this member.</div>
+                      ) : displayedLedger.length === 0 ? (
+                        <div className="p-12 text-center text-sm text-muted-foreground">
+                          No rows match this filter. Choose &quot;All&quot; to see every invoice and payment.
+                        </div>
                       ) : (
-                        <table className="w-full min-w-[720px] text-left text-sm">
-                          <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800/95 dark:text-slate-400">
-                            <tr>
-                              <th className="px-6 py-3">Date</th>
-                              <th className="px-4 py-3">Type</th>
-                              <th className="px-4 py-3">Status</th>
-                              <th className="px-4 py-3">Reference</th>
-                              <th className="px-4 py-3 text-right">Amount</th>
-                              <th className="w-[1%] whitespace-nowrap px-6 py-3 text-right">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {ledger.map((entry) => {
-                              const badge = entryStatusBadge(entry, debitLineStatus);
-                              const ref = referenceLabel(entry);
-                              const inv = khataEntrySaleInvoice(entry);
-                              const typ = rowDisplayType(entry);
-                              return (
-                                <tr key={entry.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[720px] text-left text-sm">
+                            <thead className="sticky top-0 z-10 border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              <tr>
+                                <th className="px-6 py-3">Date</th>
+                                <th className="px-4 py-3">Type</th>
+                                <th className="px-4 py-3">Status</th>
+                                <th className="px-4 py-3">Reference</th>
+                                <th className="px-4 py-3 text-right">Amount</th>
+                                <th className="w-[1%] whitespace-nowrap px-6 py-3 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {displayedLedger.map((entry) => {
+                                const badge = entryStatusBadge(entry, debitLineStatus);
+                                const ref = referenceLabel(entry);
+                                const inv = khataEntrySaleInvoice(entry);
+                                const typ = rowDisplayType(entry);
+                                return (
+                                  <tr key={entry.id} className="hover:bg-muted/50">
                                   <td className="whitespace-nowrap px-6 py-3 text-slate-600 dark:text-slate-400">
                                     {new Date(entry.created_at).toLocaleDateString(undefined, {
                                       day: 'numeric',
@@ -941,6 +1188,7 @@ const KhataPage: React.FC = () => {
                             })}
                           </tbody>
                         </table>
+                        </div>
                       )}
                     </div>
 
@@ -1007,7 +1255,8 @@ const KhataPage: React.FC = () => {
                     </div>
                   </>
                 )}
-              </section>
+                </div>
+              </div>
             </>
           )}
         </div>

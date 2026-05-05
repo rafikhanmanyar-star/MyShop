@@ -13,6 +13,19 @@ function twoLineAddress(addr: string) {
   return `${t.slice(0, 70)}…`;
 }
 
+function formatDeliverBy(iso: string | null | undefined): string | null {
+  if (iso == null || String(iso).trim() === '') return null;
+  const d = new Date(String(iso));
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString('en-PK', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function OrderCard({ order, tab, onAccept, onView }: Props) {
   const dist =
     order.distance_km != null && Number.isFinite(Number(order.distance_km))
@@ -50,6 +63,14 @@ export function OrderCard({ order, tab, onAccept, onView }: Props) {
         <div>
           <div className="obo-order-card__name">{order.customer_name || 'Customer'}</div>
           <div className="obo-order-card__addr">{twoLineAddress(order.delivery_address || '')}</div>
+          {(() => {
+            const sched = formatDeliverBy(order.estimated_delivery_at);
+            return sched ? (
+            <div className="obo-order-card__sched" style={{ fontSize: 12, fontWeight: 700, color: '#5b21b6', marginTop: 6 }}>
+              Deliver by {sched}
+            </div>
+            ) : null;
+          })()}
           <div className="obo-order-card__pkr">{pkrStr}</div>
         </div>
       </div>

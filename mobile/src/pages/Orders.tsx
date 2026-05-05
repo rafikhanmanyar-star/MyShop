@@ -82,7 +82,9 @@ export default function Orders() {
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {orders.map((order: any) => (
+                    {orders.map((order: any) => {
+                        const isPickupRow = order.payment_method === 'SelfCollection';
+                        return (
                         <Link key={order.id} to={`/${shopSlug}/orders/${order.id}`} className="card" style={{ padding: 16 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                                 <div>
@@ -91,6 +93,11 @@ export default function Orders() {
                                 </div>
                                 <span className={`status-badge status-${order.status}`}>{statusLabel(order.status)}</span>
                             </div>
+                            {!isPickupRow && order.estimated_delivery_at && (
+                                <div style={{ fontSize: 12, fontWeight: 600, color: '#5b21b6', marginBottom: 8 }}>
+                                    📅 Requested: {formatDate(order.estimated_delivery_at)}
+                                </div>
+                            )}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{formatOrderPaymentMethod(order.payment_method)}</span>
                                 <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--primary)' }}>{formatPrice(order.grand_total)}</span>
@@ -103,7 +110,8 @@ export default function Orders() {
                                 </div>
                             )}
                         </Link>
-                    ))}
+                        );
+                    })}
 
                     {hasMore && (
                         <button className="btn btn-outline btn-sm" onClick={() => loadOrders(cursor!)}>

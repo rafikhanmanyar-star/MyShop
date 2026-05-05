@@ -24,6 +24,7 @@ type Detail = {
   customer_phone?: string | null;
   payment_method?: string | null;
   items: Array<{ product_name: string; product_sku: string; quantity: number; subtotal: number }>;
+  estimated_delivery_at?: string | null;
 };
 
 function deliveryProgress(ds: string, accepted: boolean): number {
@@ -206,6 +207,35 @@ export default function OrderDetailScreen() {
           <span className="obo-sheet__addr-ico" aria-hidden />
           {d.delivery_address || '—'}
         </p>
+        {(() => {
+          if (d.estimated_delivery_at == null || String(d.estimated_delivery_at).trim() === '') return null;
+          const t = new Date(String(d.estimated_delivery_at));
+          if (Number.isNaN(t.getTime())) return null;
+          const label = t.toLocaleString('en-PK', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          return (
+            <div
+              className="obo-sheet__sched-banner"
+              style={{
+                marginTop: 10,
+                padding: '10px 12px',
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)',
+                border: '1px solid #7c3aed',
+                fontSize: 14,
+                fontWeight: 700,
+                color: '#4c1d95',
+              }}
+            >
+              Deliver by {label}
+            </div>
+          );
+        })()}
         {d.delivery_notes ? <p className="muted small">Note: {d.delivery_notes}</p> : null}
 
         <div className="obo-sheet__mini-grid">

@@ -262,9 +262,9 @@ export default function VendorDirectorySection() {
         {vendorsLoading ? (
           <div className="p-12 text-center text-muted-foreground">Loading...</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="custom-scrollbar max-h-[min(70vh,28rem)] overflow-auto [scrollbar-gutter:stable]">
             <table className="w-full text-left">
-              <thead className="bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <thead className="sticky top-0 z-10 bg-muted/95 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-sm supports-[backdrop-filter]:bg-muted/75">
                 <tr>
                   <th className="px-6 py-3">Vendor Name</th>
                   <th className="px-6 py-3">Company</th>

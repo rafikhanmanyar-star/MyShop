@@ -147,6 +147,38 @@ export interface PlaceOrderInput {
     deliveryNotes?: string;
     paymentMethod?: string;
     idempotencyKey?: string;
+    /** ISO 8601; home delivery only; persisted as `estimated_delivery_at` */
+    scheduledDeliveryAt?: string;
+}
+
+/** Customer-requested delivery time; stored in `mobile_orders.estimated_delivery_at`. */
+function parseCustomerScheduledDelivery(
+    raw: unknown,
+    paymentMethod: 'COD' | 'SelfCollection' | 'EasypaisaJazzcashOnline'
+): Date | null {
+    if (paymentMethod === 'SelfCollection') {
+        if (raw != null && String(raw).trim() !== '') {
+            throw new Error('Scheduled delivery is not available for self collection.');
+        }
+        return null;
+    }
+    if (raw == null || raw === '') return null;
+    const s = String(raw).trim();
+    if (!s) return null;
+    const d = new Date(s);
+    if (Number.isNaN(d.getTime())) {
+        throw new Error('Invalid scheduled delivery date or time.');
+    }
+    const now = Date.now();
+    const minMs = 15 * 60 * 1000;
+    const maxMs = 14 * 24 * 60 * 60 * 1000;
+    if (d.getTime() < now + minMs) {
+        throw new Error('Please choose a delivery time at least 15 minutes from now.');
+    }
+    if (d.getTime() > now + maxMs) {
+        throw new Error('Scheduled delivery cannot be more than 14 days ahead.');
+    }
+    return d;
 }
 
 export class MobileOrderService {
@@ -642,7 +674,7 @@ export class MobileOrderService {
         // Idempotency check
         if (input.idempotencyKey) {
             const existing = await this.db.query(
-                'SELECT id, order_number, status, grand_total FROM mobile_orders WHERE tenant_id = $1 AND idempotency_key = $2',
+                'SELECT id, order_number, status, grand_total, estimated_delivery_at FROM mobile_orders WHERE tenant_id = $1 AND idempotency_key = $2',
                 [tenantId, input.idempotencyKey]
             );
             if (existing.length > 0) {
@@ -826,6 +858,12 @@ export class MobileOrderService {
                 deliveryFee = 0;
             }
 
+            const scheduledAt = parseCustomerScheduledDelivery(
+                input.scheduledDeliveryAt,
+                paymentMethod
+            );
+            const scheduledAtIso = scheduledAt ? scheduledAt.toISOString() : null;
+
             subtotalGross = Math.round(subtotalGross * 100) / 100;
             discountTotal = Math.round(discountTotal * 100) / 100;
             taxTotal = Math.round(taxTotal * 100) / 100;
@@ -841,8 +879,9 @@ export class MobileOrderService {
           payment_method, payment_status,
           delivery_address, delivery_lat, delivery_lng, delivery_notes,
           assigned_branch_id, distance_km,
+          estimated_delivery_at,
           idempotency_key, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,'Pending',$6,$7,$8,$9,$10,$11,'Unpaid',$12,$13,$14,$15,$16,$17,$18,NOW(),NOW())`,
+        ) VALUES ($1,$2,$3,$4,$5,'Pending',$6,$7,$8,$9,$10,$11,'Unpaid',$12,$13,$14,$15,$16,$17,$18,$19,NOW(),NOW())`,
                 [
                     orderId, tenantId, input.customerId, effectiveBranchId,
                     orderNumber, subtotalGross, taxTotal, discountTotal, deliveryFee, grandTotal,
@@ -851,6 +890,7 @@ export class MobileOrderService {
                     input.deliveryLng || null, input.deliveryNotes || null,
                     assignedBranchId,
                     distanceKm != null && Number.isFinite(distanceKm) ? Math.round(distanceKm * 10000) / 10000 : null,
+                    scheduledAtIso,
                     input.idempotencyKey || null,
                 ]
             );
@@ -938,6 +978,7 @@ export class MobileOrderService {
                     branch_id: effectiveBranchId,
                     assigned_branch_id: assignedBranchId,
                     distance_km: distanceKm != null && Number.isFinite(distanceKm) ? Math.round(distanceKm * 10000) / 10000 : null,
+                    estimated_delivery_at: scheduledAtIso,
                     ...(deliveryAssign
                         ? {
                               rider_id: deliveryAssign.riderId,
@@ -1005,6 +1046,7 @@ export class MobileOrderService {
         const rows = await this.db.query(
             `SELECT o.id, o.order_number, o.status, o.grand_total, o.payment_method,
               o.payment_status, o.delivery_address, o.created_at, o.updated_at,
+              o.estimated_delivery_at,
               d.id AS delivery_order_id, d.status AS delivery_status,
               r.name AS rider_name
        FROM mobile_orders o

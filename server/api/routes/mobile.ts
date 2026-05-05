@@ -1006,6 +1006,7 @@ router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
             deliveryNotes: req.body.deliveryNotes,
             paymentMethod: req.body.paymentMethod,
             idempotencyKey: req.body.idempotencyKey,
+            scheduledDeliveryAt: req.body.scheduledDeliveryAt,
         });
 
         if (result.duplicate) {

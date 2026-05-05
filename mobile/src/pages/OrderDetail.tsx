@@ -193,6 +193,21 @@ export default function OrderDetail() {
                 </span>
             </div>
 
+            {!isPickup && order.estimated_delivery_at && (
+                <div style={{
+                    background: 'linear-gradient(135deg, #ede9fe 0%, #e9d5ff 100%)',
+                    borderRadius: 'var(--radius-lg)',
+                    border: '1px solid #a78bfa',
+                    padding: 14,
+                    marginBottom: 16,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: '#4c1d95',
+                }}>
+                    📅 Requested delivery: {formatDate(order.estimated_delivery_at)}
+                </div>
+            )}
+
             {/* Status Timeline */}
             {order.status !== 'Cancelled' && (
                 <div style={{

@@ -306,6 +306,21 @@ export default function AppHeader({ className = '' }: { className?: string }) {
     );
   }
 
+  if (pathname === '/expenses') {
+    return (
+      <header
+        className={`mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] pb-3 dark:border-gray-700 ${className}`}
+      >
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100 md:text-2xl">
+            Expenses
+          </h1>
+        </div>
+        <AppHeaderToolbar className="flex-shrink-0" />
+      </header>
+    );
+  }
+
   return (
     <header
       className={`mb-6 flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-gray-200 pb-4 dark:border-gray-700 sm:gap-3 ${className}`}

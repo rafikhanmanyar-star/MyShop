@@ -62,6 +62,8 @@ export type RiderOrderRow = {
   distance_km?: number | null;
   accepted_at?: string | null;
   created_at: string;
+  /** Customer-requested delivery time (ISO) */
+  estimated_delivery_at?: string | null;
 };
 
 export type RiderOrdersResponse = {

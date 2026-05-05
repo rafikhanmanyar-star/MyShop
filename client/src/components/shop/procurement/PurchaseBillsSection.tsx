@@ -24,6 +24,7 @@ import {
   generatePurchaseOrderPdfBlob,
   sharePurchaseOrderPdfToWhatsApp,
   openWhatsAppTextMessage,
+  normalizeWhatsAppPhone,
   type PurchaseOrderPdfInput,
 } from '../../../services/procurement/purchaseOrderPdf';
 import AddVendorModal from './AddVendorModal';
@@ -266,10 +267,10 @@ type QuickPayShareInfo = {
   synced: boolean;
   paymentId?: string;
   localId?: string;
+  supplierId: string;
   billId: string;
   billNumber: string;
   vendorName: string;
-  vendorPhone?: string;
   amount: number;
   paymentDate: string;
   paymentMethod: 'Bank' | 'Cash';
@@ -283,51 +284,98 @@ function isUuidString(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
 }
 
-function buildQuickPayWhatsAppMessage(info: QuickPayShareInfo, currency: string): string {
-  const lines = [
-    '*Supplier payment*',
-    '',
-    `Bill: #${info.billNumber || info.billId}`,
-    `Vendor: ${info.vendorName}`,
-    `${currency} ${info.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    `Payment date: ${info.paymentDate}`,
-    `Method: ${info.paymentMethod}${info.bankLabel ? ` — ${info.bankLabel}` : ''}`,
-  ];
-  if (!info.synced) {
-    lines.push('', '(Queued offline — will sync when online)');
+function paymentConfirmationDisplayDate(ymd: string): string {
+  const t = String(ymd ?? '').trim().slice(0, 10);
+  if (!t) return '—';
+  const d = new Date(`${t}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return t;
+  return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/** Mobile / WhatsApp from vendor master row (Shop → vendors API). */
+function vendorRecordContactPhone(raw: Record<string, unknown> | undefined | null): string | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const keys = ['contact_no', 'contactNo', 'phone', 'mobile', 'whatsapp', 'whatsapp_no', 'whatsappNo'] as const;
+  for (const k of keys) {
+    const val = raw[k];
+    if (typeof val === 'string' && val.trim()) return val.trim();
   }
-  const refTrim = String(info.reference ?? '').trim();
-  if (refTrim) lines.push(`Reference: ${refTrim}`);
-  if (info.notes) lines.push(`Notes: ${info.notes}`);
-  if (info.paymentId && !isUuidString(info.paymentId)) lines.push(`Payment ID: ${info.paymentId}`);
-  if (info.localId) lines.push(`Pending ref: ${info.localId}`);
+  return undefined;
+}
+
+function resolveVendorWhatsAppPhone(supplierId: string, vendorsFromApi: any[]): string | undefined {
+  if (!supplierId) return undefined;
+  const row = vendorsFromApi.find((x: any) => String(x?.id) === supplierId);
+  return vendorRecordContactPhone(row as Record<string, unknown>);
+}
+
+/**
+ * Pre-written confirmation sent to the vendor’s configured WhatsApp / mobile number.
+ */
+function buildSupplierPaymentConfirmationMessage(opts: {
+  vendorName: string;
+  currency: string;
+  amount: number;
+  paymentDateYmd: string;
+  paymentMethod: string;
+  bankLabel?: string;
+  reference?: string;
+  appliedToBills?: string;
+  notes?: string;
+  shopName?: string;
+  pendingOfflineNote?: boolean;
+  localSyncRef?: string;
+  externalPaymentRef?: string;
+}): string {
+  const vendor = String(opts.vendorName || 'Supplier').trim();
+  const amountStr = opts.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const dateStr = paymentConfirmationDisplayDate(opts.paymentDateYmd);
+  const methodLine = `${opts.paymentMethod}${opts.bankLabel ? ` — ${opts.bankLabel}` : ''}`.trim();
+
+  const lines: string[] = [
+    '*Payment confirmation*',
+    '',
+    `Dear ${vendor},`,
+    '',
+    'We confirm the following supplier payment has been recorded on our side:',
+    '',
+    `• Amount: ${opts.currency} ${amountStr}`,
+    `• Payment date: ${dateStr}`,
+    `• Method: ${methodLine || '—'}`,
+  ];
+
+  if (opts.reference?.trim()) lines.push(`• Our reference: ${opts.reference.trim()}`);
+  if (opts.appliedToBills?.trim()) lines.push(`• Applied to: ${opts.appliedToBills.trim()}`);
+  if (opts.notes?.trim()) lines.push(`• Notes: ${opts.notes.trim()}`);
+  if (opts.externalPaymentRef?.trim()) lines.push(`• Payment ref: ${opts.externalPaymentRef.trim()}`);
+
+  lines.push('', 'Please let us know if this does not match your records.');
+
+  const shop = String(opts.shopName ?? '').trim();
+  lines.push('', shop ? `Kind regards,\n${shop}` : 'Kind regards');
+
+  if (opts.pendingOfflineNote) {
+    lines.push(
+      '',
+      '_Note: This payment was saved on our device first; if you do not see it in your system yet, it should appear once our records have fully synced._'
+    );
+  }
+  if (opts.localSyncRef?.trim()) {
+    lines.push('', `Pending sync ref: ${opts.localSyncRef.trim()}`);
+  }
+
   return lines.join('\n');
 }
 
-function buildLedgerPaymentWhatsAppMessage(
-  p: any,
-  opts: { vendorName: string; bankLabel?: string; currency: string }
-): string {
-  const paidOn = String(p.payment_date ?? p.paymentDate ?? '').slice(0, 10);
-  const payAmt = Number(p.amount) || 0;
-  const refTrim = String(p.reference ?? '').trim();
-  const allocBills = String(p.allocated_bill_numbers ?? '').trim();
-  const method = String(p.payment_method ?? '').trim() || '—';
-  const notes = String(p.notes ?? '').trim();
-  const lines = [
-    '*Supplier payment*',
-    '',
-    `Vendor: ${opts.vendorName}`,
-    `${opts.currency} ${payAmt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    `Payment date: ${paidOn}`,
-    `Method: ${method}${opts.bankLabel ? ` — ${opts.bankLabel}` : ''}`,
-  ];
-  if (refTrim) lines.push(`Reference: ${refTrim}`);
-  if (allocBills) lines.push(`Applied to bills: ${allocBills}`);
-  if (notes) lines.push(`Notes: ${notes}`);
-  const pid = p.id != null ? String(p.id).trim() : '';
-  if (pid && !isUuidString(pid) && pid !== refTrim) lines.push(`Payment ID: ${pid}`);
-  return lines.join('\n');
+function openSupplierPaymentConfirmationWhatsApp(message: string, phoneRaw: string | undefined): void {
+  if (!normalizeWhatsAppPhone(phoneRaw)) {
+    showProcurementToast(
+      'This vendor has no valid mobile or WhatsApp number on file. Add one in the vendor directory, then try again.',
+      'error'
+    );
+    return;
+  }
+  openWhatsAppTextMessage(message, phoneRaw);
 }
 
 interface PurchaseBillsSectionProps {}
@@ -719,11 +767,9 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       const billNum = String(quickPayBill.bill_number ?? quickPayBill.billNumber ?? '');
       const reference = `Pay-${billNum || quickPayBill.id}`;
       const vopt = vendors.find((v) => v.id === supplierId);
-      const rawVendor = vendorsFromApi.find((x: any) => String(x.id) === supplierId);
       const vendorName = String(
         vopt?.company_name || vopt?.companyName || quickPayBill.supplier_name || vopt?.name || 'Supplier'
       ).trim();
-      const vendorPhone = rawVendor?.contact_no ?? rawVendor?.contactNo ?? undefined;
       const bankLabel =
         quickPayForm.paymentMethod === 'Bank'
           ? bankAccounts.find((x) => x.id === quickPayForm.bankAccountId)?.name
@@ -756,10 +802,10 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           synced: !!result.synced,
           paymentId,
           localId: result.localId,
+          supplierId,
           billId: quickPayBill.id,
           billNumber: billNum,
           vendorName,
-          vendorPhone,
           amount: amt,
           paymentDate: quickPayForm.paymentDate,
           paymentMethod: quickPayForm.paymentMethod,
@@ -2150,9 +2196,9 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                         const paidOn = String(p.payment_date ?? p.paymentDate ?? '').slice(0, 10);
                         const allocBills = String(p.allocated_bill_numbers ?? '').trim();
                         const payAmt = Number(p.amount) || 0;
-                        const refLabel = String(p.reference ?? '').trim() || String(p.id ?? '').slice(0, 10);
-                        const rawVendorPay = vendorsFromApi.find((x: any) => String(x.id) === psid);
-                        const vendorPhonePay = rawVendorPay?.contact_no ?? rawVendorPay?.contactNo ?? undefined;
+                        const refTrim = String(p.reference ?? '').trim();
+                        const refLabel = refTrim || String(p.id ?? '').slice(0, 10);
+                        const payNotes = String(p.notes ?? '').trim();
                         const payMethod = String(p.payment_method ?? '').trim();
                         const bankLabelPay =
                           payMethod === 'Bank'
@@ -2225,18 +2271,29 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    openWhatsAppTextMessage(
-                                      buildLedgerPaymentWhatsAppMessage(p, {
+                                  onClick={() => {
+                                    const phone = resolveVendorWhatsAppPhone(psid, vendorsFromApi);
+                                    const pidStr = p.id != null ? String(p.id).trim() : '';
+                                    openSupplierPaymentConfirmationWhatsApp(
+                                      buildSupplierPaymentConfirmationMessage({
                                         vendorName: pVendorTitle || String(p.supplier_name ?? 'Supplier').trim(),
-                                        bankLabel: bankLabelPay,
                                         currency: CURRENCY,
+                                        amount: payAmt,
+                                        paymentDateYmd: paidOn,
+                                        paymentMethod: payMethod || '—',
+                                        bankLabel: bankLabelPay,
+                                        reference: refTrim || undefined,
+                                        appliedToBills: allocBills ? `Bill(s): ${allocBills}` : undefined,
+                                        notes: payNotes || undefined,
+                                        shopName: receiptShop.name,
+                                        externalPaymentRef:
+                                          pidStr && !isUuidString(pidStr) && pidStr !== refTrim ? pidStr : undefined,
                                       }),
-                                      vendorPhonePay
-                                    )
-                                  }
+                                      phone
+                                    );
+                                  }}
                                   className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-                                  title="Share payment details on WhatsApp"
+                                  title="Send payment confirmation on WhatsApp (vendor contact)"
                                 >
                                   <Share2 className="h-4 w-4" aria-hidden />
                                 </button>
@@ -2665,8 +2722,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           {quickPaySuccess && (
             <div className="space-y-4 text-sm">
               <p className="text-muted-foreground">
-                Payment saved and the bill has been updated. Share the purchase bill (PDF) or a payment summary with the vendor on
-                WhatsApp.
+                Payment saved and the bill has been updated. You can share the purchase bill as a PDF or send a payment
+                confirmation message to the vendor on WhatsApp (uses the mobile number saved on the vendor record).
               </p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <button
@@ -2680,16 +2737,34 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    openWhatsAppTextMessage(
-                      buildQuickPayWhatsAppMessage(quickPaySuccess, CURRENCY),
-                      quickPaySuccess.vendorPhone
-                    )
-                  }
+                  onClick={() => {
+                    const phone = resolveVendorWhatsAppPhone(quickPaySuccess.supplierId, vendorsFromApi);
+                    openSupplierPaymentConfirmationWhatsApp(
+                      buildSupplierPaymentConfirmationMessage({
+                        vendorName: quickPaySuccess.vendorName,
+                        currency: CURRENCY,
+                        amount: quickPaySuccess.amount,
+                        paymentDateYmd: quickPaySuccess.paymentDate,
+                        paymentMethod: quickPaySuccess.paymentMethod,
+                        bankLabel: quickPaySuccess.bankLabel,
+                        reference: quickPaySuccess.reference,
+                        appliedToBills: quickPaySuccess.billNumber ? `Bill #${quickPaySuccess.billNumber}` : undefined,
+                        notes: quickPaySuccess.notes || undefined,
+                        shopName: receiptShop.name,
+                        pendingOfflineNote: !quickPaySuccess.synced,
+                        localSyncRef: quickPaySuccess.localId,
+                        externalPaymentRef:
+                          quickPaySuccess.paymentId && !isUuidString(quickPaySuccess.paymentId)
+                            ? quickPaySuccess.paymentId
+                            : undefined,
+                      }),
+                      phone
+                    );
+                  }}
                   className="btn-secondary inline-flex flex-1 items-center justify-center gap-2 rounded-xl border-primary/30 px-4 py-2.5 text-sm font-semibold text-primary"
                 >
                   <Share2 className="h-4 w-4" />
-                  Share payment details
+                  Send payment confirmation (WhatsApp)
                 </button>
               </div>
               <button

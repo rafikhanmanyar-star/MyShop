@@ -36,7 +36,7 @@ const ProcurementPage: React.FC = () => {
   useRegisterProcurementPageHeader(procurementHeaderPayload);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 w-full flex-1 flex-col px-4 py-4 sm:px-6 lg:px-8">
+    <div className="custom-scrollbar flex h-full min-h-0 min-w-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 lg:px-8 [scrollbar-gutter:stable]">
       {activeTab === 'bills' && (
         <InventoryProvider>
           <PurchaseBillsSection ref={purchaseRef} />

@@ -30,7 +30,15 @@ export default function ShopLoader() {
     const { shopSlug } = useParams<{ shopSlug: string }>();
     const { pathname } = useLocation();
     const { state, dispatch, cartCount } = useApp();
-    const hideFloatingCart = pathname.includes('/budget/create');
+    // Hide over Utilities flows so list actions (e.g. My Menu) aren’t covered above the tab bar.
+    const base = shopSlug ? `/${shopSlug}` : '';
+    const hideFloatingCart =
+        !!shopSlug &&
+        (pathname === `${base}/utilities` ||
+            pathname.startsWith(`${base}/budget`) ||
+            pathname.startsWith(`${base}/recipes`) ||
+            pathname.startsWith(`${base}/my-menu`) ||
+            pathname.startsWith(`${base}/menu-planner`));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
