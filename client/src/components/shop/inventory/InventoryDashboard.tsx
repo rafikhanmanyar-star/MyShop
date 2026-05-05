@@ -182,6 +182,17 @@ const InventoryDashboard: React.FC = () => {
         return [...set].sort((a, b) => a.localeCompare(b));
     }, [expiryRows]);
 
+    const inventoryLookup = useMemo(() => {
+        const byProductId = new Map<string, InventoryItem>();
+        const bySku = new Map<string, InventoryItem>();
+        for (const i of items) {
+            byProductId.set(String(i.id), i);
+            const skuKey = (i.sku || '').trim();
+            if (skuKey) bySku.set(skuKey, i);
+        }
+        return { byProductId, bySku };
+    }, [items]);
+
     const expiryFilteredRows = useMemo(() => {
         let rows = expiryRows;
         const q = expirySearchQuery.trim().toLowerCase();
@@ -197,8 +208,66 @@ const InventoryDashboard: React.FC = () => {
         if (expiryWarehouseFilter) {
             rows = rows.filter((r) => r.warehouse_name === expiryWarehouseFilter);
         }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const resolveItem = (r: ExpiryRow): InventoryItem | undefined => {
+            const pid = String(
+                (r as { product_id?: string; productId?: string }).product_id ??
+                    (r as { productId?: string }).productId ??
+                    ''
+            ).trim();
+            if (pid && inventoryLookup.byProductId.has(pid)) {
+                return inventoryLookup.byProductId.get(pid);
+            }
+            const skuKey = (r.sku || '').trim();
+            return skuKey ? inventoryLookup.bySku.get(skuKey) : undefined;
+        };
+
+        rows = rows.filter((r) => {
+            const inv = resolveItem(r);
+            const batchQty = Number(r.quantity_remaining ?? 0);
+
+            switch (summaryFilter) {
+                case 'critical':
+                    return inv ? inv.onHand <= inv.reorderPoint : false;
+                case 'total_skus':
+                case 'stock_value':
+                    return true;
+                case 'low_stock':
+                    return inv ? inv.onHand > 0 && inv.onHand <= inv.reorderPoint : false;
+                case 'out_of_stock':
+                    return batchQty <= 0 || (inv ? inv.onHand <= 0 : false);
+                case 'expired': {
+                    const expRaw = r.expiry_date != null ? String(r.expiry_date).slice(0, 10) : '';
+                    if (!expRaw) return false;
+                    const d = new Date(`${expRaw}T12:00:00`);
+                    return !Number.isNaN(d.getTime()) && d < today;
+                }
+                case 'expiring_7': {
+                    const expRaw = r.expiry_date != null ? String(r.expiry_date).slice(0, 10) : '';
+                    if (!expRaw) return false;
+                    const d = new Date(`${expRaw}T12:00:00`);
+                    if (Number.isNaN(d.getTime()) || d < today) return false;
+                    const days = (d.getTime() - today.getTime()) / 86400000;
+                    return days <= 7;
+                }
+                case 'expiring_30': {
+                    const expRaw = r.expiry_date != null ? String(r.expiry_date).slice(0, 10) : '';
+                    if (!expRaw) return false;
+                    const d = new Date(`${expRaw}T12:00:00`);
+                    if (Number.isNaN(d.getTime()) || d < today) return false;
+                    const days = (d.getTime() - today.getTime()) / 86400000;
+                    return days <= 30;
+                }
+                default:
+                    return true;
+            }
+        });
+
         return rows;
-    }, [expiryRows, expirySearchQuery, expiryWarehouseFilter]);
+    }, [expiryRows, expirySearchQuery, expiryWarehouseFilter, summaryFilter, inventoryLookup]);
 
     /** Product IDs with batch expiry in each bucket (from expiry-summary rows). */
     const expiryProductIdSets = useMemo(() => {
@@ -662,7 +731,7 @@ const InventoryDashboard: React.FC = () => {
                         <button
                             type="button"
                             key={stat.key}
-                            title={`Filter alerts: ${stat.label}. ${selected ? 'Click again to reset to critical.' : ''}`}
+                            title={`Filter expiry monitoring & alerts: ${stat.label}. ${selected ? 'Click again to reset to critical.' : ''}`}
                             onClick={() => toggleSummaryFilter(stat.key)}
                             className={`relative flex min-w-[7.25rem] max-w-[200px] shrink-0 flex-col justify-center rounded-xl border border-[#E5E7EB] bg-white py-3 pl-4 pr-3 text-left shadow-sm transition-colors dark:border-slate-600 dark:bg-slate-900 sm:min-w-[8rem] ${
                                 selected ? 'ring-2 ring-[#0047AB] ring-offset-2 ring-offset-white dark:ring-[#5b8cff] dark:ring-offset-slate-900' : 'hover:bg-gray-50 dark:hover:bg-slate-800/80'
@@ -805,7 +874,7 @@ const InventoryDashboard: React.FC = () => {
                             ) : (
                                 <p className="px-6 py-14 text-center text-sm italic text-gray-500 dark:text-gray-400">
                                     {expiryRows.length > 0
-                                        ? 'No rows match your search or filters.'
+                                        ? 'No rows match your search, warehouse filter, or selected summary card.'
                                         : 'No batch expiry rows yet. When batches with expiry dates exist, they will appear here.'}
                                 </p>
                             )}

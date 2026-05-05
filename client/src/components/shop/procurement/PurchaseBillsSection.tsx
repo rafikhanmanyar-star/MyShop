@@ -1448,9 +1448,9 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           }
           size="full"
           disableScroll
-          className="!mx-0 w-full !max-w-none sm:!mx-auto sm:!max-w-[min(100vw-1rem,72rem)]"
+          className="!mx-0 h-[calc(100dvh-0.5rem)] min-h-0 w-full !max-h-[calc(100dvh-0.5rem)] !max-w-none sm:!mx-auto sm:h-[calc(100dvh-1rem)] sm:!max-h-[calc(100dvh-1rem)] sm:!max-w-[min(100vw-0.5rem,min(92rem,100vw))]"
         >
-          <div className="flex h-full min-h-0 flex-1 flex-col p-3 sm:p-4 md:p-5">
+          <div className="flex min-h-0 flex-1 flex-col p-2 sm:p-3 md:p-4">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -1458,18 +1458,18 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                   void handleUpdatePostedBill();
                 }
               }}
-              className="flex min-h-0 flex-1 flex-col gap-2"
+              className="flex min-h-0 flex-1 flex-col gap-1.5"
             >
               {autoBillMode && !editBillId && (
                 <div
-                  className="shrink-0 rounded-lg border border-amber-200/80 bg-amber-50/40 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/25"
+                  className="shrink-0 rounded-lg border border-amber-200/80 bg-amber-50/40 px-2.5 py-1.5 dark:border-amber-900/40 dark:bg-amber-950/25"
                   role="region"
                   aria-label="Smart purchase suggestions"
                 >
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <span className="text-sm font-semibold text-foreground">Suggested lines</span>
-                    <label className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                      Order for the next
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-xs font-semibold text-foreground sm:text-sm">Suggested lines</span>
+                    <label className="inline-flex items-center gap-1 text-xs text-muted-foreground sm:text-sm">
+                      Next
                       <input
                         type="number"
                         min={1}
@@ -1479,7 +1479,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                           const n = parseInt(e.target.value, 10);
                           setAutoBillCoverDays(Number.isFinite(n) ? Math.max(1, Math.min(90, n)) : 1);
                         }}
-                        className="input input-text w-16 py-1 text-center text-sm font-semibold tabular-nums"
+                        className="input input-text w-14 py-0.5 text-center text-xs font-semibold tabular-nums sm:w-16 sm:text-sm"
                         disabled={autoBillLoading}
                         aria-label="Days of demand to cover from sales trend"
                       />
@@ -1492,17 +1492,22 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                         const d = Math.max(1, Math.min(90, Math.floor(autoBillCoverDays) || 1));
                         void applyVendorAutoLines(form.supplierId, d);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                      className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-semibold text-foreground shadow-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:px-2.5 sm:text-xs"
                     >
-                      {autoBillLoading ? 'Computing…' : 'Refresh recommendations'}
+                      {autoBillLoading ? 'Computing…' : 'Refresh'}
                     </button>
                   </div>
-                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                    Products are limited to items on past bills from this vendor. Quantities use a 30-day sales average: suggested order ≈ max(0, daily sales × days minus current stock). Adjust lines or add products as needed.
-                  </p>
+                  <details className="mt-1 border-t border-amber-200/50 pt-1 dark:border-amber-900/40">
+                    <summary className="cursor-pointer list-none text-[11px] text-muted-foreground marker:content-none [&::-webkit-details-marker]:hidden hover:text-foreground">
+                      How quantities are calculated
+                    </summary>
+                    <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                      Products are limited to items on past bills from this vendor. Quantities use a 30-day sales average: suggested order ≈ max(0, daily sales × days minus current stock). Adjust lines or add products as needed.
+                    </p>
+                  </details>
                 </div>
               )}
-              <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4 xl:items-end">
+              <div className="grid shrink-0 grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-2 xl:grid-cols-4 xl:items-end">
                 <div ref={vendorDropdownRef} className="min-w-0 sm:col-span-2 xl:col-span-1">
                   <SupplierSelect
                     vendors={vendors}
@@ -1571,6 +1576,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                   dropdownOpen={productDropdownOpen}
                   products={productsForDropdown}
                   loadingData={loadingData || loadingCatalog}
+                  hideCatalogHint
                   onSearchChange={setProductSearch}
                   onOpenChange={setProductDropdownOpen}
                   onSelectProduct={(p) => addItem(p)}
@@ -1582,7 +1588,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
 
               {form.items.length > 0 && (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
-                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain [scrollbar-gutter:stable] max-h-[min(60vh,calc(100dvh-18rem))] sm:max-h-[min(65vh,calc(100dvh-16rem))]">
+                  <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain [scrollbar-gutter:stable]">
                     <table className="table-modern min-w-[1080px]">
                       <thead className="sticky top-0 z-10 hidden border-b border-border bg-card shadow-erp md:table-header-group">
                         <tr>
@@ -1630,7 +1636,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                       </tbody>
                     </table>
                   </div>
-                  <div className="shrink-0 border-t border-border p-4">
+                  <div className="shrink-0 border-t border-border px-3 py-2.5 sm:p-4">
                     <TotalSummaryCard
                       currencyLabel={CURRENCY}
                       subtotal={subtotal}

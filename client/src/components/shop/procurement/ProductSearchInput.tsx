@@ -24,6 +24,8 @@ export interface ProductSearchInputProps {
   onSelectProduct: (p: ProductOption) => void;
   onAddSku: () => void;
   onEnterAdd?: (p: ProductOption) => void;
+  /** Hide the “Same catalog as Stock Master…” helper (e.g. dense purchase bill modal). */
+  hideCatalogHint?: boolean;
 }
 
 export default function ProductSearchInput({
@@ -37,6 +39,7 @@ export default function ProductSearchInput({
   onSelectProduct,
   onAddSku,
   onEnterAdd,
+  hideCatalogHint = false,
 }: ProductSearchInputProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -87,9 +90,11 @@ export default function ProductSearchInput({
           className="input input-text py-2 pl-9 pr-3 transition-all duration-200 placeholder:text-muted-foreground"
         />
       </div>
-      <p className="hidden text-xs leading-snug text-muted-foreground md:block">
-        Same catalog as Stock Master. Press Enter when one product matches or barcode scans.
-      </p>
+      {!hideCatalogHint && (
+        <p className="hidden text-xs leading-snug text-muted-foreground md:block">
+          Same catalog as Stock Master. Press Enter when one product matches or barcode scans.
+        </p>
+      )}
       {!loadingData && products.length === 0 && (
         <p className="text-xs text-warning">No products yet. Add SKUs in Inventory first.</p>
       )}
