@@ -45,6 +45,25 @@ function newLineId(): string {
     : `ln-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** Money from API/UI (string, number, snake or camel); commas stripped; NaN → 0. */
+function parseMoney(value: unknown): number {
+  if (value === null || value === undefined || value === '') return 0;
+  const n = typeof value === 'number' ? value : parseFloat(String(value).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Prefer a finite value from `primary` (e.g. inventory row); otherwise parseMoney(fallback).
+ * Avoids losing catalog prices when stock payload has NaN or missing fields.
+ */
+function coalesceMoney(primary: unknown, fallback: unknown): number {
+  if (primary !== null && primary !== undefined && primary !== '') {
+    const n = typeof primary === 'number' ? primary : parseFloat(String(primary).replace(/,/g, ''));
+    if (Number.isFinite(n)) return n;
+  }
+  return parseMoney(fallback);
+}
+
 /** Default expiry for new lines: same calendar day, one year ahead (YYYY-MM-DD). */
 function defaultExpiryDate(): string {
   const d = new Date();
@@ -630,16 +649,18 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       }
       for (const item of inventoryItems) {
         const prev = byId.get(item.id);
+        const costVal = coalesceMoney(item.costPrice, prev?.cost_price ?? prev?.costPrice ?? 0);
+        const retailVal = coalesceMoney(item.retailPrice, prev?.retail_price ?? prev?.retailPrice ?? 0);
         byId.set(item.id, {
           id: item.id,
           name: item.name,
           sku: item.sku,
           barcode: item.barcode ?? '',
-          cost_price: item.costPrice,
-          costPrice: item.costPrice,
+          cost_price: costVal,
+          costPrice: costVal,
           average_cost: prev?.average_cost,
-          retail_price: item.retailPrice,
-          retailPrice: item.retailPrice,
+          retail_price: retailVal,
+          retailPrice: retailVal,
         });
       }
       return Array.from(byId.values());
@@ -932,8 +953,10 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     }, [form.paymentStatus, totalAmount]);
 
     const addItem = (p: ProductOption) => {
-      const unitCost = Number(p.cost_price ?? p.costPrice ?? p.average_cost) || 0;
-      const retailPrice = Number(p.retail_price ?? p.retailPrice ?? 0) || 0;
+      const unitCost =
+        parseMoney(p.cost_price ?? p.costPrice) ||
+        parseMoney((p as ProductOption & { average_cost?: unknown }).average_cost);
+      const retailPrice = parseMoney(p.retail_price ?? p.retailPrice);
       setForm((f) => ({
         ...f,
         items: [
@@ -1003,19 +1026,37 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       const days = Math.max(1, Math.min(90, Math.floor(coverDays) || 1));
       setAutoBillLoading(true);
       try {
-        const res = await procurementDemandApi.vendorAutoBill({
-          supplierId: sid,
-          coverDays: days,
-          salesWindowDays: 30,
-        });
+        const [res, plist] = await Promise.all([
+          procurementDemandApi.vendorAutoBill({
+            supplierId: sid,
+            coverDays: days,
+            salesWindowDays: 30,
+          }),
+          shopApi.getProducts().catch(() => []),
+        ]);
+        const productsList = Array.isArray(plist) ? plist : [];
+        const priceByProductId = new Map<string, { cost: number; retail: number }>();
+        for (const p of productsList) {
+          if (p == null || p.id == null) continue;
+          priceByProductId.set(String(p.id), {
+            cost: parseMoney((p as { cost_price?: unknown }).cost_price),
+            retail: parseMoney((p as { retail_price?: unknown }).retail_price),
+          });
+        }
         const lines = Array.isArray(res?.lines) ? res.lines : [];
         const items: LineItem[] = lines.map((row: any) => {
           const qty = Math.max(1, Math.floor(Number(row.suggested_order_qty) || 1));
-          const unitCost = Number(row.cost_price) || 0;
-          const retailPrice = Number(row.retail_price) || 0;
+          const pid = String(row.product_id ?? row.productId ?? '').trim();
+          const cat = pid ? priceByProductId.get(pid) : undefined;
+          let unitCost = parseMoney(row.cost_price ?? row.unitCost ?? row.unit_cost);
+          let retailPrice = parseMoney(row.retail_price ?? row.retailPrice);
+          if (cat) {
+            if (unitCost <= 0 && cat.cost > 0) unitCost = cat.cost;
+            if (retailPrice <= 0 && cat.retail > 0) retailPrice = cat.retail;
+          }
           return {
             lineId: newLineId(),
-            productId: String(row.product_id),
+            productId: pid || String(row.product_id ?? row.productId ?? ''),
             quantity: qty,
             unitCost,
             retailPrice,
@@ -1490,7 +1531,13 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
             if (!loading) closeForm();
           }}
           title={
-            editBillId ? (editingIsDraft ? 'Edit draft purchase bill' : 'Edit purchase bill') : 'Create purchase bill'
+            editBillId
+              ? editingIsDraft
+                ? 'Edit draft purchase bill'
+                : 'Edit purchase bill'
+              : autoBillMode
+                ? 'Create purchase bill (suggested lines)'
+                : 'Create purchase bill'
           }
           size="full"
           disableScroll
@@ -1635,7 +1682,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               {form.items.length > 0 && (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
                   <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto overscroll-contain [scrollbar-gutter:stable]">
-                    <table className="table-modern min-w-[1080px]">
+                    <table className="table-modern min-w-[1160px]">
                       <thead className="sticky top-0 z-10 hidden border-b border-border bg-card shadow-erp md:table-header-group">
                         <tr>
                           <th className="table-header w-12 whitespace-nowrap text-center" title="Serial number">
@@ -1646,6 +1693,12 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                           <th className="table-header whitespace-nowrap">Quantity</th>
                           <th className="table-header whitespace-nowrap text-right">Unit cost</th>
                           <th className="table-header whitespace-nowrap text-right">Retail price</th>
+                          <th
+                            className="table-header whitespace-nowrap text-right"
+                            title="Gross margin on retail: (retail price − unit cost) ÷ retail price"
+                          >
+                            Profit margin
+                          </th>
                           <th className="table-header whitespace-nowrap">Expiry *</th>
                           <th className="table-header whitespace-nowrap">Batch</th>
                           <th className="table-header whitespace-nowrap text-right">Subtotal</th>

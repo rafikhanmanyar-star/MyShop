@@ -4,11 +4,13 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useOnline } from '../hooks/useOnline';
 import { getSyncMeta, countPendingSyncJobs } from '../offline/localDb';
-import { isBrowserOnline, processUnifiedOutbox, runPullRestoreOrDeltaInBackground } from '../offline/syncEngine';
+import { isBrowserOnline } from '../offline/syncEngine';
+import { runOnlineSyncPipeline } from '../offline/runOnlineSyncPipeline';
 
 export type ConnectivityUiStatus = 'online' | 'offline' | 'syncing';
 
@@ -59,6 +61,14 @@ export function ConnectivityProvider({ children }: { children: React.ReactNode }
     setStatus('online');
   }, [isOnline]);
 
+  const prevOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    if (isOnline && !prevOnlineRef.current) {
+      void runOnlineSyncPipeline();
+    }
+    prevOnlineRef.current = isOnline;
+  }, [isOnline]);
+
   useEffect(() => {
     const onStart = () => {
       setStatus((s) => (s === 'offline' ? 'offline' : 'syncing'));
@@ -92,19 +102,4 @@ export function useConnectivity() {
   const ctx = useContext(ConnectivityContext);
   if (!ctx) throw new Error('useConnectivity must be used within ConnectivityProvider');
   return ctx;
-}
-
-/**
- * Flush outbox first (fast — writes queued sales to PostgreSQL), then end "Syncing" UI.
- * Catalog bootstrap/delta can take a long time; it runs after without blocking the banner.
- */
-export async function runBackgroundSync(): Promise<void> {
-  if (!isBrowserOnline()) return;
-  window.dispatchEvent(new CustomEvent('myshop:sync:start'));
-  try {
-    await processUnifiedOutbox().catch(() => {});
-  } finally {
-    window.dispatchEvent(new CustomEvent('myshop:sync:done'));
-  }
-  void runPullRestoreOrDeltaInBackground().catch(() => {});
 }

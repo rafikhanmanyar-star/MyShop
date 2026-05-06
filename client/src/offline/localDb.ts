@@ -389,6 +389,33 @@ export async function updateSyncJob(localId: string, patch: Partial<SyncQueueIte
   );
 }
 
+/** Jobs left in SYNCING (e.g. tab closed mid-request) never retry; reset so outbox can drain. */
+export async function resetAbandonedSyncingJobs(): Promise<void> {
+  let changed = false;
+  await withDb(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const t = db.transaction('sync_queue', 'readwrite');
+        const s = t.objectStore('sync_queue');
+        const r = s.getAll();
+        r.onsuccess = () => {
+          const all = (r.result as SyncQueueItem[]) || [];
+          for (const j of all) {
+            if (j.syncStatus === 'SYNCING') {
+              s.put({ ...j, syncStatus: 'PENDING' as const });
+              changed = true;
+            }
+          }
+          txDone(t).then(resolve).catch(reject);
+        };
+        r.onerror = () => reject(r.error);
+      })
+  );
+  if (changed && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('myshop:pending-changed'));
+  }
+}
+
 export async function getPendingSyncJobs(): Promise<SyncQueueItem[]> {
   return withDb(
     (db) =>
@@ -419,7 +446,14 @@ export async function removeSyncJob(localId: string): Promise<void> {
       new Promise((resolve, reject) => {
         const t = db.transaction('sync_queue', 'readwrite');
         t.objectStore('sync_queue').delete(localId);
-        txDone(t).then(resolve).catch(reject);
+        txDone(t)
+          .then(() => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('myshop:pending-changed'));
+            }
+            resolve();
+          })
+          .catch(reject);
       })
   );
 }

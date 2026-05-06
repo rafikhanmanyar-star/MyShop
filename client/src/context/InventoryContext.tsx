@@ -204,6 +204,8 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
                   const n = typeof w === 'number' ? w : parseFloat(String(w));
                   return Number.isFinite(n) ? n : undefined;
               })();
+    const costParsed = parseFloat(r.cost_price || '0');
+    const retailParsed = parseFloat(r.retail_price || '0');
     return {
         id: r.id,
         sku: r.sku,
@@ -227,8 +229,8 @@ function mapSkuRowToInventoryItem(r: any): InventoryItem {
         sellableOnHand: available,
         inTransit: 0,
         damaged: 0,
-        costPrice: parseFloat(r.cost_price || '0'),
-        retailPrice: parseFloat(r.retail_price || '0'),
+        costPrice: Number.isFinite(costParsed) ? costParsed : 0,
+        retailPrice: Number.isFinite(retailParsed) ? retailParsed : 0,
         reorderPoint: r.reorder_point ?? 10,
         imageUrl: getFullImageUrl(r.image_url) || undefined,
         description: r.mobile_description || undefined,

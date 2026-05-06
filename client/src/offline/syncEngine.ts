@@ -10,6 +10,7 @@ import {
   getAllLocalSkus,
   getSyncMeta,
   getPendingSyncJobs,
+  resetAbandonedSyncingJobs,
   updateSyncJob,
   removeSyncJob,
   type SyncBootstrapPayload,
@@ -92,52 +93,65 @@ export async function processUnifiedOutbox(): Promise<{
   succeeded: number;
   failed: number;
 }> {
-  const pending = await getPendingSyncJobs();
+  await resetAbandonedSyncingJobs();
+  const initial = await getPendingSyncJobs();
   let succeeded = 0;
   let failed = 0;
   const completed = new Set<string>();
 
-  for (const job of pending) {
+  for (let safety = 0; safety < 64; safety++) {
     if (!isBrowserOnline()) break;
-    if (!jobDependsMet(job, completed)) continue;
+    const wave = await getPendingSyncJobs();
+    if (wave.length === 0) break;
 
-    await updateSyncJob(job.localId, { syncStatus: 'SYNCING' });
-    try {
-      if (job.entityType === 'sale') {
-        const body = JSON.parse(job.payloadJson) as Record<string, unknown>;
-        const res = (await apiClient.post('/shop/sales', body)) as {
-          id?: string;
-          barcode_value?: string;
-          duplicate?: boolean;
-        };
-        const id = res?.id;
-        if (!id) {
-          throw new Error('Sale sync rejected: no id');
+    let progressed = false;
+    for (const job of wave) {
+      if (!isBrowserOnline()) break;
+      if (!jobDependsMet(job, completed)) continue;
+
+      await updateSyncJob(job.localId, { syncStatus: 'SYNCING' });
+      try {
+        if (job.entityType === 'sale') {
+          const body = JSON.parse(job.payloadJson) as Record<string, unknown>;
+          const res = (await apiClient.post('/shop/sales', body)) as {
+            id?: string;
+            barcode_value?: string;
+            duplicate?: boolean;
+          };
+          const id = res?.id;
+          if (!id) {
+            throw new Error('Sale sync rejected: no id');
+          }
+          await removeSyncJob(job.localId);
+          completed.add(job.localId);
+          succeeded++;
+          progressed = true;
+          continue;
         }
-        await removeSyncJob(job.localId);
-        completed.add(job.localId);
-        succeeded++;
-        continue;
-      }
 
-      await updateSyncJob(job.localId, {
-        syncStatus: 'FAILED',
-        lastError: `Unknown entity: ${job.entityType}`,
-        retryCount: job.retryCount + 1,
-      });
-      failed++;
-    } catch (err: any) {
-      const message = err?.error ?? err?.message ?? 'Sync failed';
-      await updateSyncJob(job.localId, {
-        syncStatus: 'FAILED',
-        lastError: String(message),
-        retryCount: job.retryCount + 1,
-      });
-      failed++;
+        await updateSyncJob(job.localId, {
+          syncStatus: 'FAILED',
+          lastError: `Unknown entity: ${job.entityType}`,
+          retryCount: job.retryCount + 1,
+        });
+        failed++;
+        progressed = true;
+      } catch (err: any) {
+        const message = err?.error ?? err?.message ?? 'Sync failed';
+        await updateSyncJob(job.localId, {
+          syncStatus: 'FAILED',
+          lastError: String(message),
+          retryCount: job.retryCount + 1,
+        });
+        failed++;
+        progressed = true;
+      }
     }
+
+    if (!progressed) break;
   }
 
-  return { processed: pending.length, succeeded, failed };
+  return { processed: initial.length, succeeded, failed };
 }
 
 /**
@@ -164,4 +178,34 @@ export async function runPullRestoreOrDeltaInBackground(): Promise<void> {
   } finally {
     dispatchCatalogSyncFinished();
   }
+}
+
+let backgroundSyncInFlight: Promise<void> | null = null;
+
+/**
+ * Flush outbox first (fast — writes queued sales to PostgreSQL), then end "Syncing" UI.
+ * Catalog bootstrap/delta can take a long time; it runs after without blocking the banner.
+ * Concurrent callers await the same run so intervals and focus handlers do not double-sync.
+ */
+export async function runBackgroundSync(): Promise<void> {
+  if (!isBrowserOnline()) return;
+  if (backgroundSyncInFlight) return backgroundSyncInFlight;
+
+  backgroundSyncInFlight = (async () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('myshop:sync:start'));
+    }
+    try {
+      await processUnifiedOutbox().catch(() => {});
+    } finally {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('myshop:sync:done'));
+      }
+    }
+    void runPullRestoreOrDeltaInBackground().catch(() => {});
+  })().finally(() => {
+    backgroundSyncInFlight = null;
+  });
+
+  return backgroundSyncInFlight;
 }

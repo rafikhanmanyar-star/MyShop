@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useInventory } from '../../../context/InventoryContext';
 import { InventoryItem } from '../../../types/inventory';
 import Modal from '../../ui/Modal';
@@ -108,6 +108,176 @@ function parseNonNegativeNumber(raw: string): number {
     if (!Number.isFinite(n) || n < 0) return 0;
     return n;
 }
+
+type SkuComboOption = { value: string; label: string };
+
+/** Searchable dropdown for category rows (replaces long native selects). */
+const SkuSearchableCombo: React.FC<{
+    id: string;
+    ariaDescribedBy?: string;
+    disabled?: boolean;
+    /** When disabled, static text shown in the field. */
+    disabledDisplay?: string;
+    value: string;
+    options: SkuComboOption[];
+    onValueChange: (next: string) => void;
+    /** Shown when the list is open and the query is empty. */
+    searchPlaceholder?: string;
+}> = ({ id, ariaDescribedBy, disabled, disabledDisplay, value, options, onValueChange, searchPlaceholder }) => {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const [highlight, setHighlight] = useState(0);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const listboxId = `${id}-listbox`;
+
+    const selectedLabel = useMemo(
+        () => options.find((o) => o.value === value)?.label ?? '',
+        [options, value]
+    );
+
+    const qNorm = query.trim().toLowerCase();
+    const filtered = useMemo(() => {
+        if (!qNorm) return options;
+        return options.filter((o) => o.label.toLowerCase().includes(qNorm));
+    }, [options, qNorm]);
+
+    useEffect(() => {
+        setHighlight(0);
+    }, [qNorm, open, filtered.length]);
+
+    useEffect(() => {
+        if (!open) return;
+        const onDoc = (e: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setOpen(false);
+                setQuery('');
+            }
+        };
+        document.addEventListener('mousedown', onDoc);
+        return () => document.removeEventListener('mousedown', onDoc);
+    }, [open]);
+
+    if (disabled) {
+        return (
+            <input
+                id={id}
+                type="text"
+                readOnly
+                disabled
+                aria-describedby={ariaDescribedBy}
+                value={disabledDisplay ?? ''}
+                className="block w-full cursor-not-allowed rounded-md border border-slate-200 bg-slate-100 py-1.5 px-2 text-xs text-slate-500 shadow-sm"
+            />
+        );
+    }
+
+    const selectAt = (idx: number) => {
+        const opt = filtered[idx];
+        if (!opt) return;
+        onValueChange(opt.value);
+        setOpen(false);
+        setQuery('');
+    };
+
+    return (
+        <div ref={containerRef} className="relative">
+            <input
+                id={id}
+                type="text"
+                autoComplete="off"
+                role="combobox"
+                aria-expanded={open ? 'true' : 'false'}
+                aria-controls={open && filtered.length > 0 ? listboxId : undefined}
+                aria-activedescendant={
+                    open && filtered[highlight] ? `${id}-opt-${highlight}` : undefined
+                }
+                aria-describedby={ariaDescribedBy}
+                placeholder={searchPlaceholder}
+                value={open ? query : selectedLabel}
+                onChange={(e) => {
+                    setQuery(e.target.value);
+                    setOpen(true);
+                }}
+                onFocus={() => {
+                    setOpen(true);
+                    setQuery('');
+                }}
+                onKeyDown={(e) => {
+                    if (!open && (e.key === 'ArrowDown' || e.key === 'Enter')) {
+                        setOpen(true);
+                        setQuery('');
+                        e.preventDefault();
+                        return;
+                    }
+                    if (!open) return;
+                    if (e.key === 'Escape') {
+                        setOpen(false);
+                        setQuery('');
+                        e.preventDefault();
+                        return;
+                    }
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setHighlight((h) => (filtered.length ? (h + 1) % filtered.length : 0));
+                        return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setHighlight((h) =>
+                            filtered.length ? (h - 1 + filtered.length) % filtered.length : 0
+                        );
+                        return;
+                    }
+                    if (e.key === 'Enter' && filtered[highlight]) {
+                        e.preventDefault();
+                        selectAt(highlight);
+                    }
+                }}
+                className="block w-full rounded-md border border-slate-200 bg-white py-1.5 px-2 pr-7 text-xs text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500/25"
+            />
+            <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-slate-400">
+                <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                    <path
+                        fillRule="evenodd"
+                        d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.94a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z"
+                        clipRule="evenodd"
+                    />
+                </svg>
+            </div>
+            {open &&
+                (filtered.length === 0 ? (
+                    <div className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-500 shadow-lg">
+                        No matching options.
+                    </div>
+                ) : (
+                    <ul
+                        id={listboxId}
+                        role="listbox"
+                        className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-slate-200 bg-white py-0.5 text-xs shadow-lg"
+                    >
+                        {filtered.map((opt, idx) => (
+                            <li
+                                key={`${opt.value}-${idx}`}
+                                id={`${id}-opt-${idx}`}
+                                role="option"
+                                aria-selected={idx === highlight ? 'true' : 'false'}
+                                className={`cursor-pointer px-2 py-1.5 ${
+                                    idx === highlight ? 'bg-violet-50 text-violet-900' : 'text-slate-800'
+                                }`}
+                                onMouseEnter={() => setHighlight(idx)}
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    selectAt(idx);
+                                }}
+                            >
+                                {opt.label}
+                            </li>
+                        ))}
+                    </ul>
+                ))}
+        </div>
+    );
+};
 
 function deriveCategoryFormFromItem(
     item: InventoryItem,
@@ -372,6 +542,29 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
 
     const subcategorySelectDisabled =
         formData.category === 'General' || subcategoriesForParent.length === 0;
+
+    const mainCategoryComboOptions = useMemo(
+        (): SkuComboOption[] => [
+            { value: 'General', label: 'General (uncategorized)' },
+            ...rootCategories.map((c) => ({ value: c.id, label: c.name }))
+        ],
+        [rootCategories]
+    );
+
+    const subCategoryComboOptions = useMemo((): SkuComboOption[] => {
+        if (subcategoriesForParent.length === 0) return [];
+        return [
+            { value: '', label: 'Main category only' },
+            ...subcategoriesForParent.map((c) => ({ value: c.id, label: c.name }))
+        ];
+    }, [subcategoriesForParent]);
+
+    const subcategoryDisabledDisplay =
+        formData.category === 'General'
+            ? 'Select a main category first…'
+            : subcategoriesForParent.length === 0
+              ? '— No subcategories'
+              : '';
 
     React.useEffect(() => {
         if (formData.category !== 'General' && subcategoriesForParent.length === 0 && formData.subcategoryId) {
@@ -1076,26 +1269,19 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                     >
                                                         Category
                                                     </label>
-                                                    <select
+                                                    <SkuSearchableCombo
                                                         id="pos-add-edit-sku-main-category"
-                                                        className="block w-full rounded-md border border-slate-200 bg-white py-1.5 px-2 text-xs text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500/25"
                                                         value={formData.category}
-                                                        onChange={(e) => {
-                                                            const next = e.target.value;
+                                                        options={mainCategoryComboOptions}
+                                                        searchPlaceholder="Search categories…"
+                                                        onValueChange={(next) => {
                                                             setFormData({
                                                                 ...formData,
                                                                 category: next,
                                                                 subcategoryId: ''
                                                             });
                                                         }}
-                                                    >
-                                                        <option value="General">General (uncategorized)</option>
-                                                        {rootCategories.map((c) => (
-                                                            <option key={c.id} value={c.id}>
-                                                                {c.name}
-                                                            </option>
-                                                        ))}
-                                                    </select>
+                                                    />
                                                 </div>
                                                 <div className="space-y-1.5">
                                                     <label
@@ -1104,27 +1290,18 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                                     >
                                                         Subcategory
                                                     </label>
-                                                    <select
+                                                    <SkuSearchableCombo
                                                         id="pos-add-edit-sku-subcategory"
-                                                        aria-describedby="pos-add-edit-sku-subcategory-help"
+                                                        ariaDescribedBy="pos-add-edit-sku-subcategory-help"
                                                         disabled={subcategorySelectDisabled}
-                                                        className="block w-full rounded-md border border-slate-200 bg-white py-1.5 px-2 text-xs text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500/25 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                                                        disabledDisplay={subcategoryDisabledDisplay}
                                                         value={formData.subcategoryId}
-                                                        onChange={(e) => setFormData({ ...formData, subcategoryId: e.target.value })}
-                                                    >
-                                                        <option value="">
-                                                            {formData.category === 'General'
-                                                                ? 'Select a main category first…'
-                                                                : subcategoriesForParent.length === 0
-                                                                  ? '— No subcategories'
-                                                                  : 'Main category only'}
-                                                        </option>
-                                                        {subcategoriesForParent.map((c) => (
-                                                            <option key={c.id} value={c.id}>
-                                                                {c.name}
-                                                            </option>
-                                                        ))}
-                                                    </select>
+                                                        options={subCategoryComboOptions}
+                                                        searchPlaceholder="Search subcategories…"
+                                                        onValueChange={(next) =>
+                                                            setFormData({ ...formData, subcategoryId: next })
+                                                        }
+                                                    />
                                                     <p
                                                         id="pos-add-edit-sku-subcategory-help"
                                                         className="line-clamp-1 text-[9px] leading-tight text-slate-500"

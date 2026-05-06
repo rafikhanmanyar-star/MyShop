@@ -1,6 +1,17 @@
 import React from 'react';
 import { Minus, Plus, Trash2 } from 'lucide-react';
 
+/** Gross margin on retail: (retail − cost) / retail × 100. Read-only display for purchase lines. */
+export function formatLineProfitMarginPct(unitCost: number, retailPrice: number): string {
+  const retail = Number(retailPrice);
+  if (!Number.isFinite(retail) || retail <= 0) return '—';
+  const cost = Number(unitCost);
+  if (!Number.isFinite(cost)) return '—';
+  const pct = ((retail - cost) / retail) * 100;
+  const rounded = Math.round(pct * 10) / 10;
+  return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1)}%`;
+}
+
 export interface LineItem {
   lineId: string;
   productId: string;
@@ -52,7 +63,9 @@ export default function PurchaseItemRow({
   onRemove,
   zebra,
 }: PurchaseItemRowProps) {
-  const qty = Math.max(1, Math.floor(line.quantity));
+  const qty = Math.max(1, Math.floor(Number.isFinite(line.quantity) ? line.quantity : 0));
+  const unitCostSafe = Number.isFinite(line.unitCost) ? line.unitCost : 0;
+  const retailSafe = Number.isFinite(line.retailPrice) ? line.retailPrice : 0;
   const low = stock != null && stock <= reorderPoint;
   const good = stock != null && stock > reorderPoint;
 
@@ -114,9 +127,9 @@ export default function PurchaseItemRow({
             type="number"
             min={0}
             step={0.01}
-            value={line.unitCost}
+            value={unitCostSafe}
             onChange={(e) => onUnitCostChange(parseFloat(e.target.value) || 0)}
-            onBlur={() => onSkuPricesCommit(line.productId, line.unitCost, line.retailPrice)}
+            onBlur={() => onSkuPricesCommit(line.productId, unitCostSafe, retailSafe)}
             className="input input-text w-28 rounded-lg px-2 py-1.5 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
         </td>
@@ -125,12 +138,18 @@ export default function PurchaseItemRow({
             type="number"
             min={0}
             step={0.01}
-            value={line.retailPrice}
+            value={retailSafe}
             onChange={(e) => onRetailPriceChange(parseFloat(e.target.value) || 0)}
-            onBlur={() => onSkuPricesCommit(line.productId, line.unitCost, line.retailPrice)}
+            onBlur={() => onSkuPricesCommit(line.productId, unitCostSafe, retailSafe)}
             aria-label="Retail price"
             className="input input-text w-28 rounded-lg px-2 py-1.5 text-right tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
+        </td>
+        <td
+          className="numeric-data px-4 py-3 text-right text-sm tabular-nums text-foreground"
+          title="Gross margin on retail: (retail price − unit cost) ÷ retail price"
+        >
+          {formatLineProfitMarginPct(unitCostSafe, retailSafe)}
         </td>
         <td className="px-4 py-3">
           <input
@@ -170,7 +189,7 @@ export default function PurchaseItemRow({
       </tr>
 
       <tr className="md:hidden">
-        <td colSpan={10} className="border-b border-border p-0">
+        <td colSpan={11} className="border-b border-border p-0">
           <div
             className={`rounded-xl border border-border bg-card p-4 shadow-erp ${zebra ? 'bg-table-zebra' : ''}`}
           >
@@ -212,13 +231,11 @@ export default function PurchaseItemRow({
                   >
                     <Minus className="h-4 w-4" />
                   </button>
-                  <input
-                    type="number"
-                    min={1}
-                    className="w-12 border-x border-border bg-transparent py-1 text-center text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                    value={qty}
-                    onChange={(e) => onQuantityChange(Math.max(1, Math.floor(parseFloat(e.target.value) || 0)))}
-                  />
+                <input
+                  type="number"
+                  min={1}
+                  onChange={(e) => onQuantityChange(Math.max(1, Math.floor(parseFloat(e.target.value) || 0)))}
+                />
                   <button
                     type="button"
                     onClick={() => onQuantityChange(qty + 1)}
@@ -234,9 +251,9 @@ export default function PurchaseItemRow({
                   type="number"
                   min={0}
                   step={0.01}
-                  value={line.unitCost}
+                  value={unitCostSafe}
                   onChange={(e) => onUnitCostChange(parseFloat(e.target.value) || 0)}
-                  onBlur={() => onSkuPricesCommit(line.productId, line.unitCost, line.retailPrice)}
+                  onBlur={() => onSkuPricesCommit(line.productId, unitCostSafe, retailSafe)}
                   className="input input-text mt-1 w-full rounded-lg px-2 py-1.5 tabular-nums"
                 />
               </div>
@@ -246,12 +263,21 @@ export default function PurchaseItemRow({
                   type="number"
                   min={0}
                   step={0.01}
-                  value={line.retailPrice}
+                  value={retailSafe}
                   onChange={(e) => onRetailPriceChange(parseFloat(e.target.value) || 0)}
-                  onBlur={() => onSkuPricesCommit(line.productId, line.unitCost, line.retailPrice)}
+                  onBlur={() => onSkuPricesCommit(line.productId, unitCostSafe, retailSafe)}
                   aria-label="Retail price"
                   className="input input-text mt-1 w-full rounded-lg px-2 py-1.5 tabular-nums"
                 />
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">Profit margin</span>
+                <p
+                  className="mt-1 rounded-lg border border-transparent bg-muted/40 px-2 py-1.5 text-right text-sm font-medium tabular-nums text-foreground"
+                  title="Gross margin on retail: (retail price − unit cost) ÷ retail price"
+                >
+                  {formatLineProfitMarginPct(unitCostSafe, retailSafe)}
+                </p>
               </div>
               <div className="col-span-2">
                 <span className="text-xs text-muted-foreground">Expiry date *</span>
