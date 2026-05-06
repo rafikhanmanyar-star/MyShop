@@ -214,7 +214,12 @@ export class ForecastService {
         `, [forecastId, tenantId]);
 
         const inventoryRisks = await this.db.query(`
-            SELECT pf.*, p.name as product_name
+            SELECT pf.*, p.name as product_name,
+              COALESCE((
+                SELECT SUM(i.quantity_on_hand)
+                FROM shop_inventory i
+                WHERE i.product_id = p.id AND i.tenant_id = $2
+              ), 0) as current_stock
             FROM product_forecasts pf
             JOIN shop_products p ON pf.product_id = p.id AND p.tenant_id = $2
             WHERE pf.forecast_id = $1 AND pf.tenant_id = $2 AND pf.stock_risk_level != 'Normal'

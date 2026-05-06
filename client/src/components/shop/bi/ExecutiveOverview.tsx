@@ -1,10 +1,24 @@
-
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, Rocket } from 'lucide-react';
 import { useBI } from '../../../context/BIContext';
 import { CURRENCY } from '../../../constants';
 import Card from '../../ui/Card';
+
+function formatUptime(seconds: number): string {
+    const s = Math.max(0, Math.floor(seconds));
+    const d = Math.floor(s / 86_400);
+    const h = Math.floor((s % 86_400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+}
+
+function estimatedCoverDays(forecastQty: number, stock: number): number | null {
+    if (!(forecastQty > 0)) return null;
+    return Math.max(0, Math.floor((stock / forecastQty) * 30));
+}
 
 const KPI_ACCENTS = [
     'border-l-[#0047AB]',
@@ -25,13 +39,8 @@ const BAR_SHADES = [
     'bg-[#0047AB]',
 ];
 
-const STOCK_OUT_ITEMS = [
-    { name: 'Premium Leather Jacket', days: 2, urgency: 'critical' as const },
-    { name: 'Ceramic Cookware Set', days: 5, urgency: 'warn' as const },
-];
-
 const ExecutiveOverview: React.FC = () => {
-    const { kpis, storeRankings, salesTrend } = useBI();
+    const { kpis, storeRankings, salesTrend, stockOutRisks, forecastNeedsRun, systemHealth, loading } = useBI();
     const navigate = useNavigate();
     const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -44,19 +53,45 @@ const ExecutiveOverview: React.FC = () => {
     }, [salesTrend]);
 
     const displayTrend = (kpi: { trend: number; status: string }) => {
+        if (kpi.status === 'flat' || kpi.trend === 0) {
+            return (
+                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">Flat vs prior</span>
+            );
+        }
         const isUp = kpi.status === 'up';
         const pct = kpi.trend;
         const arrow = isUp ? '↗' : '↘';
-        const signed = isUp ? `${pct}%` : `-${pct}%`;
+        const signed = isUp ? `${pct}%` : `−${pct}%`;
+        const cls = isUp
+            ? 'text-emerald-600 dark:text-emerald-400'
+            : 'text-rose-600 dark:text-rose-400';
         return (
-            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <span className={`text-xs font-semibold ${cls}`}>
                 {arrow} {signed}
             </span>
         );
     };
 
+    const stockBadge = useMemo(() => {
+        if (forecastNeedsRun) return { label: 'NO FORECAST', className: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' };
+        if (!stockOutRisks.length)
+            return { label: 'CLEAR', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400' };
+        const critical = stockOutRisks.some(
+            (r) => r.stock_risk_level === 'Stock-Out' && r.stock_out_risk_percent >= 40
+        );
+        if (critical)
+            return { label: 'CRITICAL', className: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-400' };
+        return { label: 'WARNING', className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' };
+    }, [forecastNeedsRun, stockOutRisks]);
+
+    const uptimeBars = useMemo(() => {
+        const tail = salesTrend.slice(-10);
+        const mx = Math.max(...tail.map((d) => d.revenue || 0), 1);
+        return tail.map((d) => Math.max(8, ((d.revenue || 0) / mx) * 100));
+    }, [salesTrend]);
+
     return (
-        <div className="animate-in fade-in space-y-6 duration-500 sm:space-y-8">
+        <div className={`animate-in fade-in space-y-6 duration-500 sm:space-y-8 ${loading ? 'opacity-75' : ''}`}>
             <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 xl:grid-cols-5">
                 {kpis.map((kpi, i) => {
                     const accent = KPI_ACCENTS[i] ?? KPI_ACCENTS[0];
@@ -97,16 +132,10 @@ const ExecutiveOverview: React.FC = () => {
                                 </p>
                             )}
                         </div>
-                        <div className="flex gap-5">
-                            <span className="flex items-center gap-2 text-xs font-bold text-[#0B2A5B] dark:text-[#7eb8ff]">
-                                <span className="h-2 w-2 rounded-full bg-[#0047AB]" />
-                                Revenue
-                            </span>
-                            <span className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                                <span className="h-2 w-2 rounded-full bg-slate-300 dark:bg-slate-500" />
-                                Target
-                            </span>
-                        </div>
+                        <span className="flex items-center gap-2 text-xs font-bold text-[#0B2A5B] dark:text-[#7eb8ff]">
+                            <span className="h-2 w-2 rounded-full bg-[#0047AB]" />
+                            Revenue (POS net of returns + mobile)
+                        </span>
                     </div>
 
                     <div className="relative flex h-64 items-end gap-1.5 border-b border-slate-200 pb-1 sm:gap-2 dark:border-slate-600">
@@ -155,7 +184,12 @@ const ExecutiveOverview: React.FC = () => {
                         </button>
                     </div>
                     <div className="flex flex-1 flex-col gap-3">
-                        {storeRankings.slice(0, 3).map((store, i) => (
+                        {storeRankings.length === 0 ? (
+                            <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-600 dark:bg-slate-800/40 dark:text-slate-400">
+                                No branch revenue recorded for this period.
+                            </p>
+                        ) : (
+                            storeRankings.slice(0, 3).map((store, i) => (
                             <div
                                 key={`${store.storeName}-${i}`}
                                 className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-3 dark:border-slate-600 dark:bg-slate-800/50"
@@ -167,8 +201,15 @@ const ExecutiveOverview: React.FC = () => {
                                     <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">
                                         {store.storeName}
                                     </p>
-                                    <p className="mt-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                                        +{store.growth}% Growth
+                                    <p
+                                        className={`mt-0.5 text-xs font-semibold ${
+                                            store.growth >= 0
+                                                ? 'text-emerald-600 dark:text-emerald-400'
+                                                : 'text-rose-600 dark:text-rose-400'
+                                        }`}
+                                    >
+                                        {store.growth >= 0 ? '+' : ''}
+                                        {store.growth}% vs prior period
                                     </p>
                                 </div>
                                 <div className="shrink-0 text-right">
@@ -180,7 +221,8 @@ const ExecutiveOverview: React.FC = () => {
                                     </p>
                                 </div>
                             </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                     <button
                         type="button"
@@ -199,47 +241,98 @@ const ExecutiveOverview: React.FC = () => {
                         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                             Predictive Stock Out Risk
                         </h3>
-                        <span className="rounded bg-red-100 px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide text-red-700 dark:bg-red-950/60 dark:text-red-400">
-                            Critical
+                        <span
+                            className={`rounded px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wide ${stockBadge.className}`}
+                        >
+                            {stockBadge.label}
                         </span>
                     </div>
-                    <ul className="space-y-5">
-                        {STOCK_OUT_ITEMS.map((item) => (
-                            <li key={item.name}>
-                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{item.name}</p>
-                                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                                    <div
-                                        className={`h-full rounded-full ${
-                                            item.urgency === 'critical'
-                                                ? 'bg-[#7f1d1d] dark:bg-red-900'
-                                                : 'bg-orange-500 dark:bg-orange-600'
-                                        }`}
-                                        style={{
-                                            width: item.urgency === 'critical' ? '92%' : '58%',
-                                        }}
-                                    />
-                                </div>
-                                <p className="mt-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                                    {item.days} Days Remaining
-                                </p>
-                            </li>
-                        ))}
-                    </ul>
+                    {forecastNeedsRun ? (
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                            Run a forecast for this month to populate inventory risk from budgets and sales history.
+                            <button
+                                type="button"
+                                onClick={() => navigate('/forecast')}
+                                className="mt-3 block text-sm font-bold text-[#0047AB] hover:underline dark:text-[#5b8cff]"
+                            >
+                                Open Forecasting
+                            </button>
+                        </p>
+                    ) : stockOutRisks.length === 0 ? (
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                            No stock-out or overstock flags on the latest forecast run.
+                        </p>
+                    ) : (
+                        <ul className="space-y-5">
+                            {stockOutRisks.slice(0, 5).map((item) => {
+                                const cover = estimatedCoverDays(item.forecast_quantity, item.current_stock);
+                                const isOverstock = item.stock_risk_level === 'Overstock';
+                                const pct = Math.min(
+                                    100,
+                                    Math.max(
+                                        0,
+                                        isOverstock
+                                            ? item.overstock_risk_percent || 0
+                                            : item.stock_out_risk_percent || 0
+                                    )
+                                );
+                                const critical =
+                                    item.stock_risk_level === 'Stock-Out' && item.stock_out_risk_percent >= 40;
+                                return (
+                                    <li key={item.product_name}>
+                                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                            {item.product_name}
+                                        </p>
+                                        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                                            <div
+                                                className={`h-full rounded-full ${
+                                                    isOverstock
+                                                        ? 'bg-sky-600 dark:bg-sky-500'
+                                                        : critical
+                                                          ? 'bg-[#7f1d1d] dark:bg-red-900'
+                                                          : 'bg-orange-500 dark:bg-orange-600'
+                                                }`}
+                                                style={{ width: `${pct}%` }}
+                                            />
+                                        </div>
+                                        <p className="mt-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                            {cover !== null ? `~${cover} days cover (forecast month)` : 'Demand signal unclear'}
+                                            {' · '}
+                                            {item.stock_risk_level === 'Overstock' ? 'Overstock' : 'Stock-out pressure'}
+                                        </p>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
                 </Card>
 
                 <div className="flex flex-col justify-between rounded-xl border border-[#0B2A5B]/30 bg-[#0B2A5B] p-6 text-white shadow-md dark:border-slate-700">
                     <div>
-                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-white/80">System Uptime</h3>
-                        <p className="mt-3 text-4xl font-bold tracking-tight">99.98%</p>
+                        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-white/80">System status</h3>
+                        <p className="mt-3 text-4xl font-bold tracking-tight capitalize">
+                            {systemHealth?.status === 'healthy' ? 'Operational' : systemHealth?.status ?? 'Unknown'}
+                        </p>
+                        <p className="mt-2 text-sm font-medium text-white/85">
+                            Database {systemHealth?.database ?? '…'}
+                            {typeof systemHealth?.uptimeSeconds === 'number' && systemHealth.uptimeSeconds > 0
+                                ? ` · API up ${formatUptime(systemHealth.uptimeSeconds)}`
+                                : ''}
+                        </p>
                     </div>
                     <div className="mt-6 flex h-10 items-end gap-1">
-                        {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95].map((h, i) => (
-                            <div
-                                key={i}
-                                className="flex-1 rounded-t-sm bg-white/25"
-                                style={{ height: `${h}%` }}
-                            />
-                        ))}
+                        {uptimeBars.length > 0 ? (
+                            uptimeBars.map((h, i) => (
+                                <div
+                                    key={i}
+                                    className="flex-1 rounded-t-sm bg-white/25 transition-[height]"
+                                    style={{ height: `${h}%` }}
+                                    title="Daily revenue in selected period (relative)"
+                                />
+                            ))
+                        ) : (
+                            <span className="text-xs text-white/70">No activity in range yet</span>
+                        )}
                     </div>
                 </div>
 

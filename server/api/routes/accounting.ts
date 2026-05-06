@@ -159,7 +159,10 @@ router.get('/bank-balances', checkRole(['admin', 'accountant']), async (req: any
 // --- Sales by Source (POS vs Mobile) ---
 router.get('/sales-by-source', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const data = await getAccountingService().getSalesBySource(req.tenantId);
+        const from = (req.query.from as string) || '';
+        const to = (req.query.to as string) || '';
+        const range = from && to ? { from, to } : null;
+        const data = await getAccountingService().getSalesBySource(req.tenantId, range);
         res.json(data);
     } catch (error: any) {
         console.error('❌ Error fetching sales by source:', error);
@@ -170,11 +173,34 @@ router.get('/sales-by-source', checkRole(['admin', 'accountant']), async (req: a
 // --- Daily Revenue Trend ---
 router.get('/daily-trend', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const days = parseInt(req.query.days as string) || 30;
-        const trend = await getAccountingService().getDailyRevenueTrend(req.tenantId, days);
+        const from = (req.query.from as string) || '';
+        const to = (req.query.to as string) || '';
+        let trend;
+        if (from && to) {
+            trend = await getAccountingService().getDailyRevenueTrend(req.tenantId, { from, to });
+        } else {
+            const days = parseInt(req.query.days as string) || 30;
+            trend = await getAccountingService().getDailyRevenueTrend(req.tenantId, days);
+        }
         res.json(trend);
     } catch (error: any) {
         console.error('❌ Error fetching daily trend:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// --- Branch revenue breakdown (Executive Overview node rankings) ---
+router.get('/branch-revenue', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const from = (req.query.from as string) || '';
+        const to = (req.query.to as string) || '';
+        if (!from || !to) {
+            return res.status(400).json({ error: 'from and to (ISO) query params are required' });
+        }
+        const rows = await getAccountingService().getBranchRevenueTotals(req.tenantId, { from, to });
+        res.json(rows);
+    } catch (error: any) {
+        console.error('❌ Error fetching branch revenue:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -215,7 +241,10 @@ router.get('/inventory-intelligence', checkRole(['admin', 'accountant']), async 
 router.get('/transactions', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
         const limit = parseInt(req.query.limit as string) || 50;
-        const data = await getAccountingService().getRecentTransactions(req.tenantId, limit);
+        const from = (req.query.from as string) || '';
+        const to = (req.query.to as string) || '';
+        const range = from && to ? { from, to } : null;
+        const data = await getAccountingService().getRecentTransactions(req.tenantId, limit, range);
         res.json(data);
     } catch (error: any) {
         console.error('❌ Error fetching transactions:', error);

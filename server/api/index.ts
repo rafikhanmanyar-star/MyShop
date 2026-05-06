@@ -72,10 +72,12 @@ console.log('📂 Serving uploads from:', uploadsPath);
 app.get('/api/health', async (_req, res) => {
   try {
     const dbHealthy = await getDatabaseService().healthCheck();
+    const uptimeSeconds = Math.floor(process.uptime());
     res.json({
       status: dbHealthy ? 'healthy' : 'degraded',
       database: dbHealthy ? 'connected' : 'disconnected',
       timestamp: new Date().toISOString(),
+      uptimeSeconds,
     });
   } catch (error) {
     res.status(503).json({ status: 'unhealthy', database: 'error' });

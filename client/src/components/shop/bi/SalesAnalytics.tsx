@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Area,
     AreaChart,
@@ -11,6 +11,7 @@ import {
 import { MoreVertical, ShoppingCart, TrendingUp, RefreshCw, Activity } from 'lucide-react';
 import { useBI } from '../../../context/BIContext';
 import { CURRENCY } from '../../../constants';
+import { shopApi } from '../../../services/shopApi';
 
 const NAVY = '#1A237E';
 const TEAL = '#26A69A';
@@ -48,10 +49,17 @@ function periodPctChange(values: number[]): number {
 }
 
 function sortTrendPoints(
-    points: { timestamp: string; posRevenue: number; mobileRevenue: number; revenue: number }[]
+    points: {
+        timestamp: string;
+        iso?: string;
+        posRevenue: number;
+        mobileRevenue: number;
+        revenue: number;
+    }[]
 ) {
-    const y = new Date().getFullYear();
     return [...points].sort((p, q) => {
+        if (p.iso && q.iso) return p.iso.localeCompare(q.iso);
+        const y = new Date().getFullYear();
         const ap = new Date(`${p.timestamp}, ${y}`).getTime();
         const aq = new Date(`${q.timestamp}, ${y}`).getTime();
         const na = Number.isNaN(ap) ? 0 : ap;
@@ -100,9 +108,30 @@ function KpiPill({ label, trend }: { label: string; trend: TrendPill }) {
 
 const SalesAnalytics: React.FC = () => {
     const { categoryPerformance, salesTrend, salesBySource, recentTransactions, loading } = useBI();
-    const [trendDays, setTrendDays] = useState<TrendDays>(8);
+    const [trendDays, setTrendDays] = useState<TrendDays>(14);
     const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
     const [terminalFilter, setTerminalFilter] = useState<TerminalFilter>('all');
+    const [terminalStats, setTerminalStats] = useState<{ active: number; total: number } | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        shopApi
+            .getTerminals()
+            .then((rows) => {
+                if (cancelled || !Array.isArray(rows)) return;
+                const total = rows.length;
+                const active = rows.filter((t: { status?: string }) =>
+                    String(t.status || '').toLowerCase().includes('online')
+                ).length;
+                setTerminalStats({ active, total });
+            })
+            .catch(() => {
+                if (!cancelled) setTerminalStats(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const posRevenue = salesBySource?.pos?.netRevenue ?? salesBySource?.pos?.totalRevenue ?? 0;
     const mobileRevenue = salesBySource?.mobile?.totalRevenue || 0;
@@ -154,7 +183,7 @@ const SalesAnalytics: React.FC = () => {
         return rows.slice(0, 12);
     }, [recentTransactions, sourceFilter, terminalFilter]);
 
-    const terminalDisplay = { active: 14, total: 16 };
+    const terminalDisplay = terminalStats ?? { active: 0, total: 0 };
 
     const maxChart = useMemo(() => {
         const m = Math.max(1, ...chartData.flatMap((d) => [d.pos, d.mobile]));
@@ -256,7 +285,9 @@ const SalesAnalytics: React.FC = () => {
                         <KpiPill label="Stable" trend="stable" />
                     </div>
                     <p className="mt-1 pl-1 font-sans text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-                        {terminalDisplay.active} / {terminalDisplay.total}
+                        {terminalDisplay.total > 0
+                            ? `${terminalDisplay.active} / ${terminalDisplay.total}`
+                            : '—'}
                     </p>
                     <div className="mt-3 flex items-center gap-2 pl-1 text-xs text-slate-500 dark:text-slate-400">
                         <RefreshCw className="h-4 w-4 shrink-0 text-slate-500" strokeWidth={2} />

@@ -961,6 +961,9 @@ export class ShopService {
       search?: string;
       /** all | low | out | in | near_expiry */
       stockFilter?: string;
+      /** Whitelisted column/expression key for ORDER BY (see INVENTORY_SKU_SORT_SQL). */
+      sortBy?: string;
+      sortDir?: 'asc' | 'desc';
       skipCache?: boolean;
       /** When set, only rows whose product or related inventory row changed after this ISO timestamp (for incremental sync). */
       updatedSince?: string;
@@ -978,7 +981,36 @@ export class ShopService {
         ? options.updatedSince
         : '';
 
-    const cacheKey = `${tenantId}:${page}:${limit}:${searchRaw}:${stockFilter}:${updatedSince || '—'}`;
+    /** Keys → SQL fragments on counted row (filtered product aggregate). Only whitelist entries here. */
+    const INVENTORY_SKU_SORT_SQL: Record<string, string> = {
+      name: 'name',
+      sku: 'sku',
+      barcode: "COALESCE(barcode, '')",
+      category_id: 'category_id',
+      subcategory_id: 'subcategory_id',
+      unit: 'unit',
+      brand: "COALESCE(brand, '')",
+      cost_price: 'cost_price',
+      retail_price: 'retail_price',
+      margin_pct: `(CASE WHEN COALESCE(retail_price::numeric, 0) > 0 THEN (COALESCE(retail_price::numeric, 0) - COALESCE(cost_price::numeric, 0)) / NULLIF(retail_price::numeric, 0) ELSE NULL END)`,
+      margin_amount: '(COALESCE(retail_price::numeric, 0) - COALESCE(cost_price::numeric, 0))',
+      on_hand: 'on_hand',
+      available: 'available',
+      reserved_total: 'reserved_total',
+      reorder_point: 'reorder_point',
+      nearest_expiry: 'nearest_expiry',
+      sales_deactivated: 'sales_deactivated',
+      weight: 'COALESCE(weight::numeric, 0)',
+    };
+
+    const rawSortKey = String(options.sortBy ?? 'name')
+      .trim()
+      .toLowerCase();
+    const sortKey = INVENTORY_SKU_SORT_SQL[rawSortKey] ? rawSortKey : 'name';
+    const orderExpr = INVENTORY_SKU_SORT_SQL[sortKey];
+    const sortDirSql = options.sortDir === 'desc' ? 'DESC' : 'ASC';
+
+    const cacheKey = `${tenantId}:${page}:${limit}:${searchRaw}:${stockFilter}:${updatedSince || '—'}:${sortKey}:${sortDirSql}`;
     if (!skipCache && !updatedSince) {
       const hit = inventorySkuListCache.get(cacheKey);
       if (hit && hit.expiresAt > Date.now()) {
@@ -1140,7 +1172,7 @@ export class ShopService {
         FROM filtered f
       )
       SELECT * FROM counted
-      ORDER BY name ASC NULLS LAST
+      ORDER BY ${orderExpr} ${sortDirSql} NULLS LAST, sku ASC NULLS LAST
       LIMIT $${p} OFFSET $${p + 1}
     `;
     params.push(limit, offset);

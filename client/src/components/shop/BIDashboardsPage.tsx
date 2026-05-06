@@ -9,8 +9,9 @@ import ProfitabilityAnalysis from './bi/ProfitabilityAnalysis';
 import { ICONS } from '../../constants';
 
 const ProcurementDemand = lazy(() => import('./bi/ProcurementDemand'));
+const HighMarginProducts = lazy(() => import('./bi/HighMarginProducts'));
 
-const BI_TAB_IDS = ['overview', 'sales', 'inventory', 'profit', 'procurement'] as const;
+const BI_TAB_IDS = ['overview', 'sales', 'inventory', 'profit', 'procurement', 'margins'] as const;
 type BITabId = (typeof BI_TAB_IDS)[number];
 
 const PERIOD_OPTIONS = ['Today', 'MTD', 'QTD', 'YTD'] as const;
@@ -55,6 +56,7 @@ const BIContent: React.FC = () => {
         { id: 'inventory' as const, label: 'Inventory Intelligence' },
         { id: 'profit' as const, label: 'Profitability Analysis' },
         { id: 'procurement' as const, label: 'Procurement Demand' },
+        { id: 'margins' as const, label: 'High Margin Products' },
     ];
 
     return (
@@ -143,6 +145,17 @@ const BIContent: React.FC = () => {
                         }
                     >
                         <ProcurementDemand />
+                    </Suspense>
+                )}
+                {activeTab === 'margins' && (
+                    <Suspense
+                        fallback={
+                            <div className="flex items-center justify-center py-20">
+                                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#0047AB] border-t-transparent" />
+                            </div>
+                        }
+                    >
+                        <HighMarginProducts />
                     </Suspense>
                 )}
             </div>

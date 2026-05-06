@@ -534,11 +534,16 @@ router.get('/inventory/skus', async (req: any, res) => {
     const limit = Math.min(5000, Math.max(1, parseInt(String(req.query.limit || '50'), 10) || 50));
     const search = typeof req.query.search === 'string' ? req.query.search : '';
     const stockFilter = typeof req.query.stockFilter === 'string' ? req.query.stockFilter : 'all';
+    const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined;
+    const sortDirRaw = typeof req.query.sortDir === 'string' ? req.query.sortDir.toLowerCase() : '';
+    const sortDir = sortDirRaw === 'desc' ? 'desc' : 'asc';
     const result = await getShopService().listInventorySkus(req.tenantId, {
       page,
       limit,
       search,
       stockFilter,
+      sortBy,
+      sortDir,
     });
     res.setHeader('X-Response-Time-Ms', String(Date.now() - t0));
     res.json({ ...result, routeMs: Date.now() - t0 });

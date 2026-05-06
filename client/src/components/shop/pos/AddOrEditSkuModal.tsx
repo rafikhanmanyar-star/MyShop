@@ -726,54 +726,6 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
         }
     }, [editingItem, closeOnBackFromAdd, handleClose]);
 
-    const handleDiscardForm = useCallback(() => {
-        if (editingItem) {
-            setFormData({
-                sku: editingItem.sku,
-                barcode: editingItem.barcode || '',
-                name: editingItem.name,
-                description: editingItem.description || '',
-                category: editingItem.category || 'General',
-                subcategoryId: editingItem.subcategoryId || '',
-                retailPrice: Math.max(0, editingItem.retailPrice ?? 0),
-                costPrice: Math.max(0, editingItem.costPrice ?? 0),
-                retailPriceMode: 'fixed',
-                retailMarkupPercent: 0,
-                reorderPoint: editingItem.reorderPoint ?? 10,
-                unit: editingItem.unit || 'pcs',
-                imageUrl: editingItem.imageUrl || '',
-                salesDeactivated: editingItem.salesDeactivated === true,
-                brand: editingItem.brand || '',
-                brandId: editingItem.brandId || '',
-                weight:
-                    editingItem.weight != null && Number.isFinite(editingItem.weight)
-                        ? String(editingItem.weight)
-                        : '',
-                weightUnit: editingItem.weightUnit || 'g',
-                size: editingItem.size || '',
-                color: editingItem.color || '',
-                material: editingItem.material || '',
-                originCountry: editingItem.originCountry || '',
-                customAttrRows: attrsToRows(editingItem.attributes ?? undefined)
-            });
-            setSelectedImage(null);
-            setImagePreview(editingItem.imageUrl || null);
-        } else {
-            const skuOrBarcode = (initialSkuOrBarcode || '').trim();
-            setFormData({
-                ...defaultForm,
-                sku: skuOrBarcode,
-                barcode: /^\d+$/.test(skuOrBarcode) ? skuOrBarcode : '',
-                retailPriceMode: 'fixed',
-                retailMarkupPercent: 0,
-                subcategoryId: '',
-                customAttrRows: []
-            });
-            setSelectedImage(null);
-            setImagePreview(null);
-        }
-    }, [editingItem, initialSkuOrBarcode]);
-
     const handleCreateNew = useCallback(async () => {
         if (hasBlockingConflict || hasSkuConflict || weightInvalid) return;
         setSaving(true);
@@ -1729,7 +1681,7 @@ const AddOrEditSkuModal: React.FC<AddOrEditSkuModalProps> = ({
                                 <div className="order-1 flex flex-wrap items-center justify-end gap-2 sm:order-2 sm:ml-auto">
                                     <button
                                         type="button"
-                                        onClick={handleDiscardForm}
+                                        onClick={handleClose}
                                         disabled={saving || deleting}
                                         className="text-xs font-medium text-slate-500 transition-colors hover:text-slate-800 disabled:opacity-50"
                                     >

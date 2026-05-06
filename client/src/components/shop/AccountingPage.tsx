@@ -131,10 +131,10 @@ const AccountingContent: React.FC = () => {
     ];
 
     return (
-        <div className="flex w-full min-w-0 flex-col h-full bg-muted/80 dark:bg-slate-800">
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-muted/80 dark:bg-slate-800">
             {/* Header / Tab Navigation */}
-            <div className="bg-card dark:bg-slate-900 border-b border-border dark:border-slate-700 px-8 pt-6 shadow-sm z-10">
-                <div className="flex justify-between items-center mb-6">
+            <div className="z-10 shrink-0 border-b border-border bg-card px-4 pt-4 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:px-6 lg:px-8 lg:pt-6">
+                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Financial Engine</h1>
                         <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">POS source-of-truth automated accounting.</p>
@@ -149,12 +149,12 @@ const AccountingContent: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="flex gap-8">
+                <div className="-mx-1 flex gap-4 overflow-x-auto pb-1 sm:gap-8">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setTab(tab.id as AcctTabId)}
-                            className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${activeTab === tab.id
+                            className={`relative flex shrink-0 items-center gap-2 whitespace-nowrap pb-4 text-sm font-bold transition-all ${activeTab === tab.id
                                 ? 'text-indigo-600 dark:text-indigo-400'
                                 : 'text-muted-foreground dark:text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
                                 }`}
@@ -169,8 +169,8 @@ const AccountingContent: React.FC = () => {
                 </div>
             </div>
 
-            {/* Scrollable Content Area */}
-            <div className="flex-1 overflow-y-auto p-8">
+            {/* Scrollable Content Area — min-h-0 lets nested flex children shrink; single scroll fixes sticky table overlap */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6 lg:p-8">
                 {activeTab === 'dashboard' && <AccountingDashboard />}
                 {activeTab === 'ledger' && <GeneralLedger />}
                 {activeTab === 'statements' && <FinancialStatements />}

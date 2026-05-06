@@ -297,8 +297,14 @@ export class AccountingService {
    * for analytics dashboard.
    * Mobile: includes all completed orders (Confirmed, Packed, OutForDelivery, Delivered)
    * so count and revenue stay in sync; uses order-level totals with fallback from line items.
+   *
+   * When `range` is set, aggregates are limited to `[range.from, range.to]` (inclusive on both ends).
    */
-  async getSalesBySource(tenantId: string) {
+  async getSalesBySource(tenantId: string, range?: { from: string; to: string } | null) {
+    const mobileStatusList = ['Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
+    const posDateClause = range ? 'AND created_at >= $2 AND created_at <= $3' : '';
+    const posParams: unknown[] = range ? [tenantId, range.from, range.to] : [tenantId];
+
     // POS sales (completed only)
     const posSales = await this.db.query(`
       SELECT
@@ -308,17 +314,21 @@ export class AccountingService {
         'POS' as source
       FROM shop_sales
       WHERE tenant_id = $1 AND status IN ('Completed', 'Refunded')
-    `, [tenantId]);
+      ${posDateClause}
+    `, posParams);
 
+    const returnsDateClause = range ? 'AND return_date >= $2 AND return_date <= $3' : '';
+    const returnsParams: unknown[] = range ? [tenantId, range.from, range.to] : [tenantId];
     const posReturnsAgg = await this.db.query(
-      `SELECT COALESCE(SUM(total_return_amount), 0) as total_returns FROM shop_sales_returns WHERE tenant_id = $1`,
-      [tenantId]
+      `SELECT COALESCE(SUM(total_return_amount), 0) as total_returns FROM shop_sales_returns WHERE tenant_id = $1 ${returnsDateClause}`,
+      returnsParams
     );
 
-    // Mobile: all completed statuses (not Pending/Cancelled) so dashboard count matches revenue set
-    const mobileStatusList = ['Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
     const mobilePlaceholders = mobileStatusList.map((_, i) => `$${i + 2}`).join(', ');
-    const mobileParams = [tenantId, ...mobileStatusList];
+    const mobileDateClause = range ? `AND created_at >= $${mobileStatusList.length + 2} AND created_at <= $${mobileStatusList.length + 3}` : '';
+    const mobileParams: unknown[] = range
+      ? [tenantId, ...mobileStatusList, range.from, range.to]
+      : [tenantId, ...mobileStatusList];
 
     // Order-level aggregates: grand_total first, then (subtotal - discount + tax + delivery)
     const mobileSales = await this.db.query(`
@@ -337,6 +347,7 @@ export class AccountingService {
         'Mobile' as source
       FROM mobile_orders
       WHERE tenant_id = $1 AND status IN (${mobilePlaceholders})
+      ${mobileDateClause}
     `, mobileParams);
 
     const toNum = (v: unknown): number => (v === null || v === undefined) ? 0 : Number(v);
@@ -350,6 +361,9 @@ export class AccountingService {
 
     // If order-level revenue is still 0 but we have orders, derive from mobile_order_items
     if (mobileOrders > 0 && mobileRevenue === 0) {
+      const itemsDateClause = range
+        ? `AND o.created_at >= $${mobileStatusList.length + 2} AND o.created_at <= $${mobileStatusList.length + 3}`
+        : '';
       const fromItems = await this.db.query(`
         SELECT
           COALESCE(SUM(t.order_total), 0) as total_revenue,
@@ -359,6 +373,7 @@ export class AccountingService {
           FROM mobile_order_items mi
           INNER JOIN mobile_orders o ON o.id = mi.order_id AND o.tenant_id = $1 AND o.status IN (${mobilePlaceholders})
           WHERE mi.tenant_id = $1
+          ${itemsDateClause}
           GROUP BY mi.order_id
         ) t
       `, mobileParams);
@@ -402,13 +417,26 @@ export class AccountingService {
   }
 
   /**
-   * Daily revenue trend for the last N days, broken down by source.
+   * Daily revenue trend (POS net of returns + mobile), either rolling window or explicit `[from, to]` inclusive.
    */
-  async getDailyRevenueTrend(tenantId: string, days = 30) {
+  async getDailyRevenueTrend(
+    tenantId: string,
+    opts?: number | { from: string; to: string }
+  ): Promise<{ pos: unknown[]; mobile: unknown[] }> {
     const toNum = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-    const cutoffStr = cutoffDate.toISOString();
+    let fromIso: string;
+    let toIso: string;
+    if (opts !== undefined && typeof opts === 'object' && opts.from && opts.to) {
+      fromIso = opts.from;
+      toIso = opts.to;
+    } else {
+      const days = typeof opts === 'number' ? opts : 30;
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - days);
+      fromIso = start.toISOString();
+      toIso = end.toISOString();
+    }
 
     const posTrend = await this.db.query(`
       SELECT
@@ -417,17 +445,17 @@ export class AccountingService {
         COALESCE(SUM(grand_total), 0) as revenue
       FROM shop_sales
       WHERE tenant_id = $1 AND status IN ('Completed', 'Refunded')
-        AND created_at >= $2
+        AND created_at >= $2 AND created_at <= $3
       GROUP BY DATE(created_at)
       ORDER BY day ASC
-    `, [tenantId, cutoffStr]);
+    `, [tenantId, fromIso, toIso]);
 
     const returnsByDay = await this.db.query(`
       SELECT DATE(return_date) as day, COALESCE(SUM(total_return_amount), 0) as returns_amt
       FROM shop_sales_returns
-      WHERE tenant_id = $1 AND return_date >= $2
+      WHERE tenant_id = $1 AND return_date >= $2 AND return_date <= $3
       GROUP BY DATE(return_date)
-    `, [tenantId, cutoffStr]);
+    `, [tenantId, fromIso, toIso]);
     const retMap = new Map<string, number>();
     for (const r of returnsByDay as any[]) {
       const k = r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10);
@@ -440,19 +468,69 @@ export class AccountingService {
     }
 
     const mobileStatusList = ['Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
-    const mobileTrendPlaceholders = mobileStatusList.map((_, i) => `$${i + 3}`).join(', ');
+    const mobileTrendPlaceholders = mobileStatusList.map((_, i) => `$${i + 2}`).join(', ');
     const mobileTrend = await this.db.query(`
       SELECT
         DATE(created_at) as day,
         COUNT(*) as order_count,
         COALESCE(SUM(grand_total), 0) as revenue
       FROM mobile_orders
-      WHERE tenant_id = $1 AND status IN (${mobileTrendPlaceholders}) AND created_at >= $2
+      WHERE tenant_id = $1 AND status IN (${mobileTrendPlaceholders})
+        AND created_at >= $${mobileStatusList.length + 2} AND created_at <= $${mobileStatusList.length + 3}
       GROUP BY DATE(created_at)
       ORDER BY day ASC
-    `, [tenantId, cutoffStr, ...mobileStatusList]);
+    `, [tenantId, ...mobileStatusList, fromIso, toIso]);
 
     return { pos: posTrend, mobile: mobileTrend };
+  }
+
+  /**
+   * POS + mobile revenue grouped by branch name for the Executive Overview node rankings.
+   */
+  async getBranchRevenueTotals(tenantId: string, range: { from: string; to: string }) {
+    const mobileStatusList = ['Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
+    const mobilePh = mobileStatusList.map((_, i) => `$${i + 4}`).join(', ');
+    const posRows = await this.db.query(
+      `
+      SELECT COALESCE(b.name, 'Unassigned') as branch_name,
+        COALESCE(SUM(s.grand_total), 0)::float as revenue
+      FROM shop_sales s
+      LEFT JOIN shop_branches b ON s.branch_id = b.id AND b.tenant_id = $1
+      WHERE s.tenant_id = $1 AND s.status IN ('Completed', 'Refunded')
+        AND s.created_at >= $2 AND s.created_at <= $3
+      GROUP BY COALESCE(b.name, 'Unassigned')
+      `,
+      [tenantId, range.from, range.to]
+    );
+    const mobileRows = await this.db.query(
+      `
+      SELECT COALESCE(b.name, 'Unassigned') as branch_name,
+        COALESCE(
+          SUM(COALESCE(NULLIF(o.grand_total, 0), o.subtotal - o.discount_total + o.tax_total + o.delivery_fee)),
+          0
+        ) as revenue
+      FROM mobile_orders o
+      LEFT JOIN shop_branches b ON o.branch_id = b.id AND b.tenant_id = $1
+      WHERE o.tenant_id = $1 AND o.status IN (${mobilePh})
+        AND o.created_at >= $2 AND o.created_at <= $3
+      GROUP BY COALESCE(b.name, 'Unassigned')
+      `,
+      [tenantId, range.from, range.to, ...mobileStatusList]
+    );
+    const merged = new Map<string, number>();
+    const add = (name: string, rev: number) => {
+      const k = name || 'Unassigned';
+      merged.set(k, (merged.get(k) || 0) + rev);
+    };
+    for (const r of posRows as any[]) {
+      add(String(r.branch_name ?? 'Unassigned'), parseFloat(String(r.revenue)) || 0);
+    }
+    for (const r of mobileRows as any[]) {
+      add(String(r.branch_name ?? 'Unassigned'), parseFloat(String(r.revenue)) || 0);
+    }
+    return Array.from(merged.entries())
+      .map(([branch_name, revenue]) => ({ branch_name, revenue }))
+      .sort((a, b) => b.revenue - a.revenue);
   }
 
   /**
@@ -611,25 +689,34 @@ export class AccountingService {
   }
 
   /**
-   * Recent transactions list (combined POS + Mobile)
+   * Recent transactions list (combined POS + Mobile). Optional inclusive `[from, to]` ISO bounds filter.
    */
-  async getRecentTransactions(tenantId: string, limit = 50) {
-    return this.db.query(`
-      SELECT id, sale_number as reference, grand_total as amount,
-        payment_method, 'POS' as source, created_at, status
-      FROM shop_sales
-      WHERE tenant_id = $1
-      
-      UNION ALL
-      
-      SELECT id, order_number as reference, grand_total as amount,
-        payment_method, 'Mobile' as source, created_at, status
-      FROM mobile_orders
-      WHERE tenant_id = $1 AND status IN ('Confirmed', 'Packed', 'OutForDelivery', 'Delivered')
-      
+  async getRecentTransactions(
+    tenantId: string,
+    limit = 50,
+    range?: { from: string; to: string } | null
+  ) {
+    const mobStatuses = `('Confirmed', 'Packed', 'OutForDelivery', 'Delivered')`;
+    const dateClause = range ? 'AND created_at >= $3 AND created_at <= $4' : '';
+    return this.db.query(
+      `
+      SELECT * FROM (
+        SELECT id, sale_number as reference, grand_total as amount,
+          payment_method, 'POS' as source, created_at, status
+        FROM shop_sales
+        WHERE tenant_id = $1 ${range ? dateClause : ''}
+        UNION ALL
+        SELECT id, order_number as reference, grand_total as amount,
+          payment_method, 'Mobile' as source, created_at, status
+        FROM mobile_orders
+        WHERE tenant_id = $1 AND status IN ${mobStatuses}
+          ${range ? dateClause : ''}
+      ) q
       ORDER BY created_at DESC
       LIMIT $2
-    `, [tenantId, limit]);
+    `,
+      range ? [tenantId, limit, range.from, range.to] : [tenantId, limit]
+    );
   }
 
   /**

@@ -150,12 +150,21 @@ export const shopApi = {
 
   getInventory: () => apiClient.get<any[]>('/shop/inventory'),
   /** Paginated SKU + stock (single round-trip; use for inventory UI). */
-  getInventorySkus: (params?: { page?: number; limit?: number; search?: string; stockFilter?: string }) => {
+  getInventorySkus: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    stockFilter?: string;
+    sortBy?: string;
+    sortDir?: 'asc' | 'desc';
+  }) => {
     const q = new URLSearchParams();
     if (params?.page != null) q.set('page', String(params.page));
     if (params?.limit != null) q.set('limit', String(params.limit));
     if (params?.search) q.set('search', params.search);
     if (params?.stockFilter) q.set('stockFilter', params.stockFilter);
+    if (params?.sortBy) q.set('sortBy', params.sortBy);
+    if (params?.sortDir) q.set('sortDir', params.sortDir);
     const qs = q.toString();
     return apiClient.get<{
       items: any[];
@@ -403,8 +412,30 @@ export const accountingApi = {
   deleteJournalEntry: (id: string) => apiClient.delete(`/shop/accounting/journal-entries/${id}`),
   getFinancialSummary: () => apiClient.get<any>('/shop/accounting/summary'),
   getBankBalances: () => apiClient.get<any[]>('/shop/accounting/bank-balances'),
-  getSalesBySource: () => apiClient.get<any>('/shop/accounting/sales-by-source'),
-  getDailyTrend: (days = 30) => apiClient.get<any>(`/shop/accounting/daily-trend?days=${days}`),
+  getSalesBySource: (from?: string, to?: string) => {
+    const q = new URLSearchParams();
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    const s = q.toString();
+    return apiClient.get<any>(`/shop/accounting/sales-by-source${s ? `?${s}` : ''}`);
+  },
+  getDailyTrend: (opts?: number | { days?: number; from?: string; to?: string }) => {
+    const q = new URLSearchParams();
+    if (opts && typeof opts === 'object' && opts.from && opts.to) {
+      q.set('from', opts.from);
+      q.set('to', opts.to);
+    } else {
+      const days = typeof opts === 'number' ? opts : opts?.days ?? 30;
+      q.set('days', String(days));
+    }
+    return apiClient.get<any>(`/shop/accounting/daily-trend?${q.toString()}`);
+  },
+  getBranchRevenue: (from: string, to: string) => {
+    const q = new URLSearchParams();
+    q.set('from', from);
+    q.set('to', to);
+    return apiClient.get<Array<{ branch_name: string; revenue: number }>>(`/shop/accounting/branch-revenue?${q.toString()}`);
+  },
   getCategoryPerformance: (from?: string, to?: string) => {
     const q = new URLSearchParams();
     if (from) q.set('from', from);
@@ -426,7 +457,13 @@ export const accountingApi = {
       warehouses: { name: string; status: 'warning' | 'optimized'; totalOnHand: number; skusOut: number }[];
     }>(`/shop/accounting/inventory-intelligence?${q.toString()}`);
   },
-  getTransactions: (limit = 50) => apiClient.get<any[]>(`/shop/accounting/transactions?limit=${limit}`),
+  getTransactions: (limit = 50, from?: string, to?: string) => {
+    const q = new URLSearchParams();
+    q.set('limit', String(limit));
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    return apiClient.get<any[]>(`/shop/accounting/transactions?${q.toString()}`);
+  },
   clearAllTransactions: () => apiClient.post<{ success: boolean; message: string }>('/shop/accounting/clear-transactions'),
 
   dailyReportSummary: (date: string, branchId?: string | null) => {
