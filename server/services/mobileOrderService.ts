@@ -80,7 +80,12 @@ function parseAttributesJson(val: any): Record<string, unknown> | null {
     return null;
 }
 
-/** Sellable qty expression for mobile catalog (tenant param is always $1). */
+/**
+ * Sellable qty expression for mobile catalog (tenant param is always $1).
+ * IMPORTANT: This sums sellable units across every warehouse row for the product (tenant-wide).
+ * Checkout / `resolveBranchWarehouseForPlaceOrder` require the full cart to be fulfillable from
+ * a single branch warehouse within delivery radius—so catalog totals can exceed what one nearby branch can ship.
+ */
 export function mobileProductSellableStockSql(): string {
     return `COALESCE((
           SELECT SUM(
@@ -669,6 +674,54 @@ export class MobileOrderService {
     }
 
     // ─── Place Order (with stock reservation) ──────────────────────────
+
+    /**
+     * Lightweight checkout validation: builds the same inventory demand as `placeOrder` and runs branch routing
+     * (+ scheduled delivery rules) without locking stock or inserting orders. Use before submitting `placeOrder`.
+     */
+    async preflightCheckout(tenantId: string, input: PlaceOrderInput) {
+        await this.db.transaction(async (client: any) => {
+            const regularItems = input.items || [];
+            const { merged: offerMerged, flatLines: offerLines } = await prepareOfferBundlesForOrder(
+                client,
+                tenantId,
+                input.customerId,
+                input.offerBundles
+            );
+
+            const aggOffer = aggregateQuantitiesFromOfferLines(offerLines);
+            for (const it of regularItems) {
+                if (aggOffer.has(it.productId)) {
+                    throw new Error(
+                        'A product cannot be in your cart both as a regular item and inside a promotion. Remove one or the other.'
+                    );
+                }
+            }
+
+            const demand = new Map<string, number>();
+            for (const it of regularItems) {
+                demand.set(it.productId, (demand.get(it.productId) || 0) + Number(it.quantity));
+            }
+            for (const [pid, q] of aggOffer) {
+                demand.set(pid, (demand.get(pid) || 0) + q);
+            }
+            if (demand.size === 0) {
+                throw new Error('Cart is empty');
+            }
+
+            const rawPm = (input.paymentMethod || 'COD').trim();
+            const paymentMethod =
+                rawPm === 'SelfCollection'
+                    ? 'SelfCollection'
+                    : rawPm === 'EasypaisaJazzcashOnline'
+                      ? 'EasypaisaJazzcashOnline'
+                      : 'COD';
+            parseCustomerScheduledDelivery(input.scheduledDeliveryAt, paymentMethod);
+
+            await resolveBranchWarehouseForPlaceOrder(client, tenantId, input, demand);
+        });
+        return { ok: true as const };
+    }
 
     async placeOrder(tenantId: string, input: PlaceOrderInput) {
         // Idempotency check

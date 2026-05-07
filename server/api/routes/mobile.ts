@@ -1019,6 +1019,27 @@ router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     }
 });
 
+/** Validates cart + branch routing + schedule rules without reserving inventory (same demand as POST /orders). */
+router.post('/orders/checkout-preflight', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        await getMobileOrderService().preflightCheckout(req.tenantId, {
+            customerId: req.customerId,
+            branchId: req.body.branchId,
+            items: req.body.items,
+            offerBundles: req.body.offerBundles,
+            deliveryAddress: req.body.deliveryAddress,
+            deliveryLat: req.body.deliveryLat,
+            deliveryLng: req.body.deliveryLng,
+            deliveryNotes: req.body.deliveryNotes,
+            paymentMethod: req.body.paymentMethod,
+            scheduledDeliveryAt: req.body.scheduledDeliveryAt,
+        });
+        res.json({ ok: true });
+    } catch (error: any) {
+        res.json({ ok: false, error: error.message || 'Checkout validation failed' });
+    }
+});
+
 // ─── Stages 10–11: SSE — customer stream; Stage 11 also feeds POS + rider streams (same NOTIFY) ───
 router.get('/orders/:id/stream', mobileAuthMiddleware(db), async (req: any, res) => {
     const orderId = req.params.id;

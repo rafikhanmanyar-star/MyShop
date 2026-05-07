@@ -178,6 +178,24 @@ export const customerApi = {
     },
     placeOrder: (data: any) =>
         request(`${API_BASE}/orders`, { method: 'POST', body: JSON.stringify(data) }),
+    /** Same branch/stock/schedule rules as placeOrder; does not reserve inventory. Always HTTP 200 — check `ok`. */
+    checkoutPreflight: async (data: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> => {
+        const token = localStorage.getItem('mobile_token');
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const res = await fetch(`${API_BASE}/orders/checkout-preflight`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(data),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error((body as { error?: string }).error || `Preflight failed (${res.status})`);
+        }
+        return body as { ok: boolean; error?: string };
+    },
     getOrders: (cursor?: string) =>
         request(`${API_BASE}/orders${cursor ? `?cursor=${cursor}` : ''}`),
     getOrder: (id: string) => request(`${API_BASE}/orders/${id}`),

@@ -44,11 +44,89 @@ async function canFulfillAtWarehouse(
     demand: Demand,
     warehouseId: string
 ): Promise<boolean> {
+    return (await getDemandShortfallsAtWarehouse(client, tenantId, demand, warehouseId)).length === 0;
+}
+
+async function getDemandShortfallsAtWarehouse(
+    client: any,
+    tenantId: string,
+    demand: Demand,
+    warehouseId: string
+): Promise<Array<{ productId: string; needed: number; available: number }>> {
+    const out: Array<{ productId: string; needed: number; available: number }> = [];
     for (const [productId, qty] of demand) {
         const sellable = await getSellableQuantityForWarehouse(client, tenantId, productId, warehouseId);
-        if (sellable < qty) return false;
+        if (sellable < qty) {
+            out.push({
+                productId,
+                needed: qty,
+                available: Math.max(0, sellable),
+            });
+        }
     }
-    return true;
+    return out;
+}
+
+async function productNamesForIds(client: any, tenantId: string, ids: string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const rows = await client.query(
+        `SELECT id, name FROM shop_products WHERE tenant_id = $1 AND id = ANY($2::text[])`,
+        [tenantId, ids]
+    );
+    const m = new Map<string, string>();
+    for (const r of rows) {
+        m.set(String(r.id), String(r.name ?? 'item'));
+    }
+    return m;
+}
+
+/** User-facing detail when no in-range branch can fulfill the full cart (delivery auto-route). */
+async function buildInsufficientNearbyStockMessage(
+    client: any,
+    tenantId: string,
+    demand: Demand,
+    ranked: Array<{ row: any; id: string; d: number }>,
+    tenantDefaultKm: number
+): Promise<string> {
+    let nearestWh: { warehouseId: string } | null = null;
+    for (const { row, id, d } of ranked) {
+        const maxKm = maxKmForBranch(row, tenantDefaultKm);
+        if (d > maxKm) continue;
+        const wh = await warehouseIdForBranch(client, tenantId, id);
+        if (!wh) continue;
+        nearestWh = { warehouseId: wh };
+        break;
+    }
+
+    if (!nearestWh) {
+        return (
+            'Insufficient stock at nearby branches for this cart. ' +
+            'A branch may be missing its warehouse link—contact the shop.'
+        );
+    }
+
+    const shortfalls = await getDemandShortfallsAtWarehouse(client, tenantId, demand, nearestWh.warehouseId);
+    const nameMap = await productNamesForIds(
+        client,
+        tenantId,
+        shortfalls.map(s => s.productId)
+    );
+
+    const fmt = (n: number) => {
+        const x = Math.round(n * 100) / 100;
+        return Number.isInteger(x) ? String(x) : x.toFixed(2).replace(/\.?0+$/, '');
+    };
+
+    const parts = shortfalls.map(s => {
+        const label = nameMap.get(s.productId) || 'item';
+        return `${label}: need ${fmt(s.needed)}, ~${fmt(s.available)} sellable at nearest delivering branch`;
+    });
+
+    return (
+        `Insufficient stock at nearby branches for this cart (${parts.join('; ')}). ` +
+        'The catalog shows stock across all locations; delivery ships from one nearby branch. ' +
+        'Try fewer items or contact the shop.'
+    );
 }
 
 async function getTenantDefaultRadiusKm(client: any, tenantId: string): Promise<number> {
@@ -275,9 +353,14 @@ export async function resolveBranchWarehouseForPlaceOrder(
     }
 
     if (inRangeButNoStock) {
-        throw new Error(
-            'Insufficient stock at nearby branches for this cart. Try fewer items or different products.'
+        const detail = await buildInsufficientNearbyStockMessage(
+            client,
+            tenantId,
+            demand,
+            ranked,
+            tenantDefaultKm
         );
+        throw new Error(detail);
     }
     if (!sawInRange) {
         throw new Error('Delivery not available in your area');

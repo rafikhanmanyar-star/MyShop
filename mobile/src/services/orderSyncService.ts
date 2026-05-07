@@ -23,6 +23,21 @@ export async function placeOrderOfflineFirst(
 ): Promise<{ synced: boolean; localId?: string; orderId?: string; error?: string }> {
     if (isOnline()) {
         try {
+            const preflightBody = {
+                items: payload.items,
+                offerBundles: payload.offerBundles,
+                branchId: payload.branchId,
+                deliveryAddress: payload.deliveryAddress,
+                deliveryLat: payload.deliveryLat,
+                deliveryLng: payload.deliveryLng,
+                deliveryNotes: payload.deliveryNotes,
+                paymentMethod: payload.paymentMethod,
+                scheduledDeliveryAt: payload.scheduledDeliveryAt,
+            };
+            const pf = await customerApi.checkoutPreflight(preflightBody);
+            if (!pf.ok) {
+                return { synced: false, error: pf.error || 'Checkout validation failed' };
+            }
             const result = await customerApi.placeOrder(payload as any);
             const orderId = result?.id ?? (result as any)?.order_number;
             return { synced: true, orderId };

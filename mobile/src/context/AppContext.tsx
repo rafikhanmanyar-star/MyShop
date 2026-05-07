@@ -2,7 +2,8 @@ import React, { createContext, useContext, useReducer, useCallback, useRef } fro
 import { customerApi } from '../api';
 
 // ─── Types ─────────────────────────────────────────────────
-// Shop and branch are the same entity in the mobile app: one shop (tenant) = one default branch for orders.
+// Customer-visible branch may come from QR; delivery otherwise auto-routes to nearest fulfillable branch.
+// `available_stock` from the catalog is tenant-wide (summed warehouses); checkout requires one nearby branch to cover the cart.
 export interface CartItem {
     productId: string;
     name: string;

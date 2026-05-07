@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { usePOS } from '../../context/POSContext';
 import POSHeader from './pos/POSHeader';
@@ -36,6 +36,10 @@ const DEFAULT_RIGHT_W = 260;
 
 /** Two vertical resize handles between the three columns (see POSColumnResizeHandle). */
 const HANDLES_TOTAL_PX = 12;
+/** `gap-4` on the layout row: five flex children → four gaps (1rem each in Tailwind default). */
+const LAYOUT_ROW_GAP_PX = 16;
+const LAYOUT_ROW_GAP_COUNT = 4;
+const LAYOUT_ROW_GAPS_TOTAL_PX = LAYOUT_ROW_GAP_PX * LAYOUT_ROW_GAP_COUNT;
 /** Minimum width reserved for the center (line items) column before we stack or clamp sides. */
 const CENTER_MIN_PX = 100;
 /**
@@ -60,7 +64,8 @@ function loadCategoryTreeOpenFromStorage(): boolean {
 }
 
 function clampSideWidths(rowWidth: number, left: number, right: number): { left: number; right: number } {
-    const budget = rowWidth - HANDLES_TOTAL_PX - CENTER_MIN_PX;
+    const budget =
+        rowWidth - HANDLES_TOTAL_PX - LAYOUT_ROW_GAPS_TOTAL_PX - CENTER_MIN_PX;
     if (budget <= MIN_LEFT_W + MIN_RIGHT_W) {
         return { left: MIN_LEFT_W, right: MIN_RIGHT_W };
     }
@@ -130,6 +135,8 @@ const POSSalesContent: React.FC = () => {
         loadStoredWidth(STORAGE_POS_RIGHT_W, DEFAULT_RIGHT_W, MIN_RIGHT_W, MAX_RIGHT_W)
     );
 
+    const [isFullScreen, setIsFullScreen] = useState(false);
+
     const persistLeft = useCallback((w: number) => {
         const clamped = Math.min(MAX_LEFT_W, Math.max(MIN_LEFT_W, Math.round(w)));
         setLeftColWidthPx(clamped);
@@ -161,6 +168,15 @@ const POSSalesContent: React.FC = () => {
         return () => ro.disconnect();
     }, []);
 
+    useLayoutEffect(() => {
+        const row = layoutRowRef.current;
+        if (!row) return;
+        const w = row.getBoundingClientRect().width;
+        if (typeof w === 'number' && Number.isFinite(w) && w > 0) {
+            setLayoutRowWidth(w);
+        }
+    }, [isFullScreen]);
+
     useEffect(() => {
         const onCategoryTreeVisibility = (e: Event) => {
             const ce = e as CustomEvent<{ visible?: boolean; treeWidthPx?: number }>;
@@ -191,8 +207,11 @@ const POSSalesContent: React.FC = () => {
     const useStackedLayout = layoutRowWidth > 0 && layoutRowWidth < STACK_LAYOUT_BELOW_PX;
 
     const { displayLeftW, displayRightW } = useMemo(() => {
-        if (useStackedLayout || layoutRowWidth === 0) {
+        if (useStackedLayout) {
             return { displayLeftW: leftColWidthPx, displayRightW: rightColWidthPx };
+        }
+        if (layoutRowWidth === 0) {
+            return { displayLeftW: MIN_LEFT_W, displayRightW: MIN_RIGHT_W };
         }
         // Category tree + inner handle replace the collapsed strip; add (tree + handle − strip) to the
         // catalog column so product grid width stays ~unchanged while the cart (flex center) narrows.
@@ -262,8 +281,6 @@ const POSSalesContent: React.FC = () => {
 
     const isActive = (state as any).currentPage === 'posSales' || true; // Fallback to true if not managed by AppContext
 
-    const [isFullScreen, setIsFullScreen] = useState(false);
-
     const setFullScreenEnabled = useCallback((enabled: boolean) => {
         setIsFullScreen(enabled);
         window.dispatchEvent(new CustomEvent('pos:fullscreen', { detail: { enabled } }));
@@ -297,9 +314,13 @@ const POSSalesContent: React.FC = () => {
 
     return (
         <div
-            className={`pos-page-root flex flex-col overflow-hidden pos-font select-none animate-fade-in relative bg-[var(--pos-bg)] dark:bg-[#020617] ${isFullScreen ? 'fixed inset-0 z-[9999] h-screen w-screen' : 'h-full min-h-0 w-full'}`}
+            className={`pos-page-root flex flex-col overflow-hidden pos-font select-none animate-fade-in relative bg-[var(--pos-bg)] dark:bg-[#020617] ${isFullScreen ? 'fixed inset-0 z-[9999] max-h-[100dvh] min-h-0' : 'h-full min-h-0 w-full max-w-full'}`}
             ref={mainRef}
-            style={isFullScreen ? { height: '100vh', width: '100vw' } : { minHeight: 0, flex: 1 } as React.CSSProperties}
+            style={
+                isFullScreen
+                    ? ({ height: '100dvh', maxHeight: '100dvh', width: '100%', maxWidth: '100%' } as React.CSSProperties)
+                    : ({ minHeight: 0, flex: 1 } as React.CSSProperties)
+            }
         >
             <div className="absolute inset-0 pointer-events-none z-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgba(255,255,255,0.9),transparent)] dark:opacity-30" aria-hidden />
 

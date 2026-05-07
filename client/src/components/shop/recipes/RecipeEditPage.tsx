@@ -63,18 +63,45 @@ function RecipeIngredientProductCombo({
 
   useLayoutEffect(() => {
     if (!open || !wrapRef.current) return;
-    const r = wrapRef.current.getBoundingClientRect();
-    const pad = 8;
-    const spaceBelow = window.innerHeight - r.bottom - pad;
-    const maxListH = Math.max(120, Math.min(12 * 16, spaceBelow - 40));
-    setPanelStyle({
-      position: 'fixed',
-      left: Math.max(pad, Math.min(r.left, window.innerWidth - r.width - pad)),
-      top: r.bottom + 4,
-      width: Math.min(Math.max(r.width, 220), window.innerWidth - pad * 2),
-      maxHeight: maxListH + 42,
-      zIndex: 50,
-    });
+
+    const sync = () => {
+      const el = wrapRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const pad = 8;
+      const gap = 4;
+      const spaceBelow = window.innerHeight - r.bottom - pad;
+      const spaceAbove = r.top - pad;
+      const preferredCap = Math.min(window.innerHeight * 0.55, 384);
+      const openBelow = spaceBelow >= 96 || spaceBelow >= spaceAbove;
+      const maxPanelH = Math.min(
+        Math.max(0, openBelow ? spaceBelow - gap : spaceAbove - gap),
+        preferredCap
+      );
+
+      const next: React.CSSProperties = {
+        position: 'fixed',
+        left: Math.max(pad, Math.min(r.left, window.innerWidth - r.width - pad)),
+        width: Math.min(Math.max(r.width, 220), window.innerWidth - pad * 2),
+        maxHeight: maxPanelH,
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 50,
+      };
+      if (openBelow) {
+        next.top = r.bottom + gap;
+        next.bottom = 'auto';
+      } else {
+        next.top = 'auto';
+        /** Anchor panel above the trigger (fixed from viewport bottom). */
+        next.bottom = Math.max(pad, window.innerHeight - r.top + gap);
+      }
+      setPanelStyle(next);
+    };
+
+    sync();
+    window.addEventListener('resize', sync);
+    return () => window.removeEventListener('resize', sync);
   }, [open]);
 
   useEffect(() => {
@@ -87,13 +114,6 @@ function RecipeIngredientProductCombo({
     };
     document.addEventListener('pointerdown', outside, true);
     return () => document.removeEventListener('pointerdown', outside, true);
-  }, [open, close]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onScroll = () => close();
-    window.addEventListener('scroll', onScroll, true);
-    return () => window.removeEventListener('scroll', onScroll, true);
   }, [open, close]);
 
   const selected = useMemo(() => products.find((p) => p.id === value), [products, value]);
@@ -117,10 +137,11 @@ function RecipeIngredientProductCombo({
       <div
         ref={panelRef}
         style={panelStyle}
-        className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-900"
+        className="min-h-0 overflow-hidden overscroll-contain rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-900"
         aria-label={ariaLabel}
+        onWheel={(e) => e.stopPropagation()}
       >
-        <div className="border-b border-slate-100 p-1 dark:border-slate-800">
+        <div className="shrink-0 border-b border-slate-100 p-1 dark:border-slate-800">
           <input
             type="search"
             className="h-8 w-full rounded border border-slate-200 px-2 text-xs dark:border-slate-600 dark:bg-slate-950"
@@ -137,7 +158,7 @@ function RecipeIngredientProductCombo({
             }}
           />
         </div>
-        <ul className="max-h-48 list-none overflow-y-auto py-1 text-xs">
+        <ul className="min-h-0 flex-1 list-none overflow-y-auto overflow-x-hidden overscroll-contain py-1 text-xs [touch-action:pan-y]">
           <li>
             <button
               type="button"
