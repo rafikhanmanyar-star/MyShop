@@ -197,24 +197,26 @@ export default function RecipeHome() {
                 </button>
             </form>
 
-            <div className="recipe-cat-rail" aria-label="Recipe categories">
-                <button
-                    type="button"
-                    className={`recipe-cat-chip${!catFilter ? ' recipe-cat-chip--on' : ''}`}
-                    onClick={() => setCatFilter('')}
-                >
-                    All
-                </button>
-                {categories.map((c) => (
+            <div className="recipe-cat-rail-wrap">
+                <div className="recipe-cat-rail" aria-label="Recipe categories">
                     <button
-                        key={c.id}
                         type="button"
-                        className={`recipe-cat-chip${catFilter === c.id ? ' recipe-cat-chip--on' : ''}`}
-                        onClick={() => setCatFilter(c.id === catFilter ? '' : c.id)}
+                        className={`recipe-cat-chip${!catFilter ? ' recipe-cat-chip--on' : ''}`}
+                        onClick={() => setCatFilter('')}
                     >
-                        {c.name}
+                        All
                     </button>
-                ))}
+                    {categories.map((c) => (
+                        <button
+                            key={c.id}
+                            type="button"
+                            className={`recipe-cat-chip${catFilter === c.id ? ' recipe-cat-chip--on' : ''}`}
+                            onClick={() => setCatFilter(c.id === catFilter ? '' : c.id)}
+                        >
+                            {c.name}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {q && (

@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { shopApi } from '../../../services/shopApi';
-import { ArrowLeft, Plus, Trash2, GripVertical, Upload, ChefHat, Pencil, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, GripVertical, Upload, ChefHat, Pencil, Search, ChevronDown } from 'lucide-react';
 import { Table, TableHeaderRow, TableHead, TableBody, TableRow, TableCell } from '../../ui/Table';
 import {
   clearRecipeDraft,
@@ -34,6 +35,173 @@ function genKey() {
 const fieldSm =
   'h-8 w-full rounded-md border border-slate-200 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-950';
 const labelXs = 'text-[11px] font-medium leading-tight text-slate-600 dark:text-slate-400';
+
+/** Per-row searchable product picker (native `<select>` is not keyboard-filterable). */
+function RecipeIngredientProductCombo({
+  products,
+  value,
+  onChange,
+  buttonClassName,
+  ariaLabel,
+}: {
+  products: ProductOpt[];
+  value: string;
+  onChange: (productId: string) => void;
+  buttonClassName: string;
+  ariaLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery('');
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open || !wrapRef.current) return;
+    const r = wrapRef.current.getBoundingClientRect();
+    const pad = 8;
+    const spaceBelow = window.innerHeight - r.bottom - pad;
+    const maxListH = Math.max(120, Math.min(12 * 16, spaceBelow - 40));
+    setPanelStyle({
+      position: 'fixed',
+      left: Math.max(pad, Math.min(r.left, window.innerWidth - r.width - pad)),
+      top: r.bottom + 4,
+      width: Math.min(Math.max(r.width, 220), window.innerWidth - pad * 2),
+      maxHeight: maxListH + 42,
+      zIndex: 50,
+    });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t)) return;
+      if (panelRef.current?.contains(t)) return;
+      close();
+    };
+    document.addEventListener('pointerdown', outside, true);
+    return () => document.removeEventListener('pointerdown', outside, true);
+  }, [open, close]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = () => close();
+    window.addEventListener('scroll', onScroll, true);
+    return () => window.removeEventListener('scroll', onScroll, true);
+  }, [open, close]);
+
+  const selected = useMemo(() => products.find((p) => p.id === value), [products, value]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let list = !q
+      ? products.slice(0, 120)
+      : products
+          .filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
+          .slice(0, 120);
+    if (value && selected && !list.some((p) => p.id === value)) {
+      list = [selected, ...list];
+    }
+    return list;
+  }, [products, query, value, selected]);
+
+  const panel =
+    open &&
+    createPortal(
+      <div
+        ref={panelRef}
+        style={panelStyle}
+        className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-600 dark:bg-slate-900"
+        aria-label={ariaLabel}
+      >
+        <div className="border-b border-slate-100 p-1 dark:border-slate-800">
+          <input
+            type="search"
+            className="h-8 w-full rounded border border-slate-200 px-2 text-xs dark:border-slate-600 dark:bg-slate-950"
+            placeholder="Search name or SKU…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            autoComplete="off"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                close();
+              }
+            }}
+          />
+        </div>
+        <ul className="max-h-48 list-none overflow-y-auto py-1 text-xs">
+          <li>
+            <button
+              type="button"
+              className="w-full px-2.5 py-1.5 text-left text-slate-500 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange('');
+                close();
+              }}
+            >
+              Product…
+            </button>
+          </li>
+            {filtered.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  className={`w-full px-2.5 py-1.5 text-left hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                    value === p.id ? 'bg-violet-50 dark:bg-violet-950/50' : ''
+                  }`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onChange(p.id);
+                  close();
+                }}
+              >
+                <span className="block truncate font-medium text-slate-800 dark:text-slate-100">{p.name}</span>
+                <span className="block truncate text-[10px] text-slate-500">{p.sku}</span>
+              </button>
+            </li>
+          ))}
+          {filtered.length === 0 && query.trim() ? (
+            <li className="px-2.5 py-3 text-center text-[11px] text-slate-500">No matches</li>
+          ) : null}
+        </ul>
+      </div>,
+      document.body
+    );
+
+  return (
+    <div ref={wrapRef} className="relative w-full max-w-md">
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className={`${buttonClassName} flex w-full items-center justify-between gap-1 text-left`}
+        onClick={() => {
+          if (open) close();
+          else {
+            setOpen(true);
+            setQuery('');
+          }
+        }}
+      >
+        <span className={`min-w-0 flex-1 truncate ${!selected ? 'text-slate-400 dark:text-slate-500' : ''}`}>
+          {selected ? `${selected.name} (${selected.sku})` : 'Product…'}
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
+      </button>
+      {panel}
+    </div>
+  );
+}
 
 export default function RecipeEditPage() {
   const { id } = useParams();
@@ -97,23 +265,6 @@ export default function RecipeEditPage() {
     if (!prodSearch.trim()) return [];
     return filteredProducts.slice(0, 10);
   }, [filteredProducts, prodSearch]);
-
-  const productOptionsForRow = useCallback(
-    (ing: IngDraft): ProductOpt[] => {
-      const q = prodSearch.trim().toLowerCase();
-      const base = !q
-        ? products.slice(0, 120)
-        : products
-            .filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
-            .slice(0, 120);
-      if (ing.product_id) {
-        const cur = products.find((p) => p.id === ing.product_id);
-        if (cur && !base.some((p) => p.id === cur.id)) return [cur, ...base];
-      }
-      return base;
-    },
-    [products, prodSearch]
-  );
 
   const loadBase = useCallback(async () => {
     const [c, p] = await Promise.all([shopApi.getRecipeCategories(), shopApi.getProducts()]);
@@ -867,7 +1018,6 @@ export default function RecipeEditPage() {
                 </thead>
                 <TableBody>
                   {ingredients.map((ing, idx) => {
-                    const opts = productOptionsForRow(ing);
                     const cellIn = 'h-8 rounded border border-slate-200 px-1.5 text-xs dark:border-slate-600 dark:bg-slate-950';
                     return (
                       <TableRow key={ing.key} className="align-middle">
@@ -905,19 +1055,13 @@ export default function RecipeEditPage() {
                           />
                         </TableCell>
                         <TableCell className="py-1.5">
-                          <select
-                            aria-label={`Ingredient ${idx + 1} mapped product`}
-                            className={`${cellIn} w-full max-w-md`}
+                          <RecipeIngredientProductCombo
+                            products={products}
                             value={ing.product_id}
-                            onChange={(e) => patchIng(ing.key, { product_id: e.target.value })}
-                          >
-                            <option value="">Product…</option>
-                            {opts.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} ({p.sku})
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(productId) => patchIng(ing.key, { product_id: productId })}
+                            buttonClassName={cellIn}
+                            ariaLabel={`Ingredient ${idx + 1} mapped product`}
+                          />
                         </TableCell>
                         <TableCell className="py-1.5 text-center">
                           <input
@@ -958,7 +1102,7 @@ export default function RecipeEditPage() {
             )}
           </div>
           <p className="shrink-0 border-t border-slate-100 px-2.5 py-1 text-[10px] text-slate-500 dark:border-slate-800">
-            Search narrows product dropdowns. Each row always includes its current selection.
+            Open Product in each row to search by name or SKU. Catalog search above is for quick-add chips.
           </p>
         </section>
       </div>
