@@ -96,7 +96,7 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState<LedgerSourceFilter>('all');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(50);
+  const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(100);
   const [ledgerItems, setLedgerItems] = useState<LedgerJournalEntry[]>([]);
   const [ledgerTotal, setLedgerTotal] = useState(0);
   const [ledgerLoading, setLedgerLoading] = useState(true);
@@ -143,7 +143,7 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, sourceFilter, pageSize]);
+  }, [debouncedSearch, sourceFilter, pageSize, dateFrom, dateTo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +155,8 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
           limit: pageSize,
           search: debouncedSearch || undefined,
           sourceModule: sourceFilter,
+          dateFrom: dateFrom?.trim() || undefined,
+          dateTo: dateTo?.trim() || undefined,
         });
         if (cancelled) return;
         const total = res.total ?? 0;
@@ -179,20 +181,12 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize, debouncedSearch, sourceFilter, ledgerRefreshTick]);
+  }, [page, pageSize, debouncedSearch, sourceFilter, dateFrom, dateTo, ledgerRefreshTick]);
 
   const processedItems = useMemo(() => {
     let rows = ledgerItems.slice();
     if (accountFilter && rows.length) {
       rows = rows.filter((e) => (e.lines || []).some((l) => l.accountId === accountFilter));
-    }
-    if ((dateFrom || dateTo) && rows.length) {
-      rows = rows.filter((e) => {
-        const day = entryDay(e.date);
-        if (dateFrom && day < dateFrom) return false;
-        if (dateTo && day > dateTo) return false;
-        return true;
-      });
     }
     const sorted = [...rows];
     sorted.sort((a, b) => {
@@ -215,12 +209,11 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
       }
     });
     return sorted;
-  }, [ledgerItems, accountFilter, dateFrom, dateTo, sort]);
+  }, [ledgerItems, accountFilter, sort]);
 
-  const clientFilterNotice =
-    accountFilter || dateFrom || dateTo
-      ? 'Date and account filters apply only to journal entries loaded on this page. Server paging and server search/source filters still apply.'
-      : null;
+  const clientFilterNotice = accountFilter
+    ? 'Account filter narrows entries on this page only. Clearing it shows all rows returned for the selected date range and server filters.'
+    : null;
 
   const exportCsvNow = useCallback(() => {
     const rows = buildLedgerCsv(processedItems);
@@ -338,7 +331,7 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
   const accountPicker = useMemo(() => accounts.map((a: { id: string; code: string; name: string }) => ({ id: a.id, code: a.code, name: a.name })), [accounts]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <LedgerToolbar
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
@@ -361,7 +354,7 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="space-y-3 pb-10" aria-label="Journal entries">
+        <div aria-label="Journal entries" className="space-y-2 pb-6">
           {ledgerLoading ? (
             <LedgerSkeleton />
           ) : processedItems.length === 0 ? (

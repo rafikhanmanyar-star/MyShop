@@ -102,6 +102,10 @@ export class AccountingService {
       offset: number;
       search?: string;
       sourceModule?: string;
+      /** Inclusive ISO date YYYY-MM-DD (compared against journal posting date portion). */
+      dateFrom?: string;
+      /** Inclusive ISO date YYYY-MM-DD */
+      dateTo?: string;
     }
   ): Promise<{ items: any[]; total: number }> {
     const limit = Math.max(1, Math.min(opts.limit, 500));
@@ -127,6 +131,18 @@ export class AccountingService {
     if (opts.sourceModule && ['POS', 'MobileApp', 'Manual'].includes(opts.sourceModule)) {
       conditions.push(`je.source_module = $${next}`);
       params.push(opts.sourceModule);
+      next++;
+    }
+
+    const isoDay = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
+    if (opts.dateFrom && isoDay.test(opts.dateFrom)) {
+      conditions.push(`substr(cast(je.date as text), 1, 10) >= $${next}`);
+      params.push(opts.dateFrom);
+      next++;
+    }
+    if (opts.dateTo && isoDay.test(opts.dateTo)) {
+      conditions.push(`substr(cast(je.date as text), 1, 10) <= $${next}`);
+      params.push(opts.dateTo);
       next++;
     }
 

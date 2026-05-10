@@ -7,6 +7,8 @@ export interface LoginResponse {
   username: string;
   role: string;
   name: string;
+  /** Desktop POS only: `shop_terminals.id` reserved for this login. */
+  posTerminalId?: string | null;
 }
 
 export interface RegisterResponse extends LoginResponse {}
@@ -39,7 +41,7 @@ export const authApi = {
     return apiClient.get<PublicOrganizationInfo>(`/auth/organization?${q.toString()}`);
   },
 
-  login: (data: { username: string; password: string; org_id?: string }) =>
+  login: (data: { username: string; password: string; org_id?: string; pos_client?: boolean }) =>
     apiClient.post<LoginResponse>('/auth/login', data),
 
   register: (data: { name: string; email: string; username: string; password: string; companyName?: string }) =>

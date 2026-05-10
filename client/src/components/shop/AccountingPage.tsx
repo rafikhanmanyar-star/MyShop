@@ -1,50 +1,24 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { BarChart3, ClipboardList, FileText, DollarSign, Receipt, Landmark, Layers } from 'lucide-react';
+import { BarChart3, ClipboardList, FileText } from 'lucide-react';
 import { AccountingProvider, useAccounting } from '../../context/AccountingContext';
 import AccountingDashboard from './accounting/AccountingDashboard';
 import GeneralLedger from './accounting/GeneralLedger';
 import FinancialStatements from './accounting/FinancialStatements';
-import { ICONS, CURRENCY } from '../../constants';
-import { accountingApi } from '../../services/shopApi';
+import { ICONS } from '../../constants';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
 import { FinancialHeader } from './accounting/ledger/FinancialHeader';
-import { KPIStatCard } from './accounting/ledger/KPIStatCard';
 import { FinancialTabs } from './accounting/ledger/FinancialTabs';
 
 const ACCT_TAB_IDS = ['dashboard', 'ledger', 'statements'] as const;
 type AcctTabId = (typeof ACCT_TAB_IDS)[number];
 
 const AccountingContent: React.FC = () => {
-    const { accounts, postJournalEntry, totalRevenue, totalExpenses, netProfit, loading, journalEntries } = useAccounting();
+    const { accounts, postJournalEntry } = useAccounting();
     const ledgerCsvExportRef = useRef<(() => void) | null>(null);
-    const [journalEntryTotal, setJournalEntryTotal] = useState<number | null>(null);
-
-    const fmtPk = useCallback((n: number) => {
-        try {
-            return new Intl.NumberFormat(undefined, { style: 'currency', currency: CURRENCY }).format(n);
-        } catch {
-            return `${CURRENCY} ${Number(n || 0).toLocaleString()}`;
-        }
-    }, []);
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                const res = await accountingApi.getJournalEntriesPage({ page: 1, limit: 1 });
-                if (!cancelled) setJournalEntryTotal(res.total ?? 0);
-            } catch {
-                if (!cancelled) setJournalEntryTotal(null);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [journalEntries.length]);
     const [searchParams, setSearchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<AcctTabId>(() => {
         try {
@@ -162,49 +136,14 @@ const AccountingContent: React.FC = () => {
 
     return (
         <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-[#F6F8FC] text-foreground dark:bg-[#0F172A] dark:text-[#E5E7EB]">
-            <header className="sticky top-0 z-20 shrink-0 border-b border-black/[0.06] bg-white/80 px-4 py-6 shadow-[0_1px_0_0_rgba(15,23,42,0.05)] backdrop-blur-xl backdrop-saturate-[1.35] dark:border-white/[0.08] dark:bg-slate-900/72 sm:px-6 lg:px-8">
+            <header className="sticky top-0 z-20 shrink-0 border-b border-black/[0.06] bg-white/80 px-4 py-4 shadow-[0_1px_0_0_rgba(15,23,42,0.05)] backdrop-blur-xl backdrop-saturate-[1.35] dark:border-white/[0.08] dark:bg-slate-900/72 sm:px-6 lg:px-8">
                 <FinancialHeader
                     exportDisabled={activeTab !== 'ledger'}
                     onExportCsv={() => ledgerCsvExportRef.current?.()}
                     onManualJournal={() => setIsJournalModalOpen(true)}
                 />
 
-                <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <KPIStatCard
-                        label="Total Revenue"
-                        value={fmtPk(totalRevenue)}
-                        helper="Rolling chart-of-accounts totals"
-                        icon={DollarSign}
-                        trend={totalRevenue > 0 ? 'up' : 'flat'}
-                        loading={loading}
-                    />
-                    <KPIStatCard
-                        label="Total Expenses"
-                        value={fmtPk(totalExpenses)}
-                        helper="Operating & COGS-linked lines"
-                        icon={Receipt}
-                        trend="flat"
-                        loading={loading}
-                    />
-                    <KPIStatCard
-                        label="Net Profit"
-                        value={fmtPk(netProfit)}
-                        helper={netProfit >= 0 ? 'Healthy margin corridor' : 'Review cost drivers'}
-                        icon={Landmark}
-                        trend={netProfit >= 0 ? 'up' : 'down'}
-                        loading={loading}
-                    />
-                    <KPIStatCard
-                        label="Journal Entries"
-                        value={journalEntryTotal !== null ? journalEntryTotal.toLocaleString() : '—'}
-                        helper="Distinct journal headers in tenant"
-                        icon={Layers}
-                        trend="flat"
-                        loading={journalEntryTotal === null}
-                    />
-                </div>
-
-                <div className="mt-10 border-t border-black/[0.05] pt-5 dark:border-white/[0.08]">
+                <div className="mt-5 border-t border-black/[0.05] pt-4 dark:border-white/[0.08]">
                     <FinancialTabs
                         tabs={tabItems}
                         activeId={activeTab}
@@ -229,7 +168,7 @@ const AccountingContent: React.FC = () => {
                         id="financial-tabpanel-ledger"
                         role="tabpanel"
                         aria-labelledby="financial-tab-ledger"
-                        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-6 sm:px-6 lg:px-8"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 sm:py-5 lg:px-8"
                     >
                         <GeneralLedger
                             onExportCsvReady={(fn) => {

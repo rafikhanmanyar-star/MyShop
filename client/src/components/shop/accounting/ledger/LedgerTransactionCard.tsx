@@ -56,13 +56,13 @@ export const LedgerTransactionCard: React.FC<LedgerTransactionCardProps> = ({
         boxShadow: '0 14px 40px -14px rgba(15,23,42,0.18)',
       }}
       transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-      className={`relative grid cursor-pointer grid-cols-1 gap-4 rounded-2xl border bg-white p-5 shadow-[0_6px_20px_-8px_rgba(15,23,42,0.1)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-[#111827] lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center ${
+      className={`relative grid cursor-pointer grid-cols-1 gap-3 rounded-2xl border bg-white px-4 py-3 shadow-[0_6px_20px_-8px_rgba(15,23,42,0.1)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-[#111827] lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center lg:gap-4 ${
         selected
           ? 'border-indigo-400 ring-2 ring-indigo-500/20 dark:border-indigo-500/60'
           : 'border-[#E5E7EB] hover:border-indigo-300/70 dark:border-[#1F2937] dark:hover:border-indigo-600/45'
       }`}
     >
-      <div className="flex min-w-0 gap-4">
+      <div className="flex min-w-0 gap-3">
         <div className={`mt-1 flex shrink-0 text-muted-foreground transition-transform duration-200 ${selected ? 'rotate-90' : ''}`}>
           <ChevronRight className="h-5 w-5" aria-hidden />
         </div>

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, typ
 import { apiClient } from '../services/apiClient';
 import { authApi, type LoginResponse } from '../services/authApi';
 import { getAppContext, setAppContext } from '../services/appContext';
+import { isPosDesktopClient } from '../utils/isPosDesktopClient';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -62,8 +63,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (username: string, password: string, orgId?: string) => {
-    const result: LoginResponse = await authApi.login({ username, password, org_id: orgId });
+    const result: LoginResponse = await authApi.login({
+      username,
+      password,
+      org_id: orgId,
+      pos_client: isPosDesktopClient(),
+    });
     apiClient.setAuth(result.token, result.tenantId);
+
+    if (result.posTerminalId) {
+      try {
+        localStorage.setItem('pos_assigned_terminal_id', result.posTerminalId);
+      } catch {
+        /* ignore quota / private mode */
+      }
+    } else {
+      try {
+        localStorage.removeItem('pos_assigned_terminal_id');
+      } catch {
+        /* ignore */
+      }
+    }
 
     // Persist branch context: if we had QR branch for this org, keep it and set API client
     const ctx = getAppContext();
@@ -113,6 +133,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authApi.logout().catch(() => {});
     apiClient.clearAuth();
     apiClient.setBranchId(null);
+    try {
+      localStorage.removeItem('pos_assigned_terminal_id');
+    } catch {
+      /* ignore */
+    }
     setState({ isAuthenticated: false, isLoading: false, user: null, tenant: null });
   }, []);
 

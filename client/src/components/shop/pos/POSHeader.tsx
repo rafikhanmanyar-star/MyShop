@@ -17,15 +17,28 @@ const POSHeader: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
-    // Auto-set single branch and terminal when available so admin/terminal are set without going to Dashboard
+    // Auto-set assigned desktop terminal, or single branch/terminal when available
     useEffect(() => {
         if (currentShift || !branches?.length || !terminals?.length) return;
+        let assignedId: string | null = null;
+        try {
+            assignedId = localStorage.getItem('pos_assigned_terminal_id');
+        } catch {
+            assignedId = null;
+        }
+        const assignedTerminal = assignedId
+            ? terminals.find((t: any) => String(t.id) === String(assignedId))
+            : null;
+
         const singleBranch = branches.length === 1 ? branches[0] : null;
         const singleTerminal = terminals.length === 1 ? terminals[0] : null;
         setStartForm((prev) => {
             let branchId = prev.branchId;
             let terminalId = prev.terminalId;
-            if (singleTerminal) {
+            if (assignedTerminal) {
+                terminalId = assignedTerminal.id;
+                branchId = branchId || (assignedTerminal.branch_id ?? assignedTerminal.branchId ?? '');
+            } else if (singleTerminal) {
                 terminalId = singleTerminal.id;
                 branchId = branchId || (singleTerminal.branch_id ?? singleTerminal.branchId ?? '');
             }

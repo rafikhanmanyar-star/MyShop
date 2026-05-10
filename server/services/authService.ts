@@ -5,8 +5,18 @@ import { getCoaSeedService } from './coaSeedService.js';
 
 const JWT_EXPIRY = '30d';
 
+/** Sessions without API activity longer than this do not occupy a POS terminal slot (abandoned clients). */
+const POS_TERMINAL_IDLE_MS = 45 * 60 * 1000;
+
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  const anyErr = err as { code?: string; message?: string };
+  if (anyErr?.code === '23505') return true;
+  const msg = (anyErr?.message || '').toLowerCase();
+  return msg.includes('unique constraint failed') || msg.includes('unique violation');
 }
 
 export class AuthService {
@@ -40,7 +50,7 @@ export class AuthService {
     );
 
     const token = this.generateToken(userId, tenantId, data.username, 'admin');
-    await this.createSession(userId, tenantId, token);
+    await this.createSession(userId, tenantId, token, null);
 
     // Seed enterprise Chart of Accounts for new tenant
     try {
@@ -52,7 +62,7 @@ export class AuthService {
     return { token, tenantId, userId, username: data.username, role: 'admin', name: data.name };
   }
 
-  async login(data: { username: string; password: string; orgId?: string }) {
+  async login(data: { username: string; password: string; orgId?: string; posClient?: boolean }) {
     const users = await this.db.query(
       `SELECT u.id, u.tenant_id, u.username, u.name, u.role, u.password, u.is_active
        FROM users u WHERE u.username = $1`,
@@ -90,23 +100,104 @@ export class AuthService {
       throw new Error('Invalid username or password');
     }
 
-    // Single session per user: replace any existing session so re-login works even if
-    // logout failed (e.g. expired token, network error) or user closed the app without logging out
-    await this.db.execute('DELETE FROM user_sessions WHERE user_id = $1 AND tenant_id = $2', [matchedUser.id, matchedUser.tenant_id]);
+    const posClient = Boolean(data.posClient);
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        return await this.completeLoginAfterPasswordOk(matchedUser, posClient);
+      } catch (e) {
+        lastErr = e;
+        if (posClient && isUniqueViolation(e) && attempt < 3) continue;
+        throw e;
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error('Login failed');
+  }
 
-    const token = this.generateToken(matchedUser.id, matchedUser.tenant_id, matchedUser.username, matchedUser.role);
-    await this.createSession(matchedUser.id, matchedUser.tenant_id, token);
+  /**
+   * Creates session after password verified. For desktop POS (`posClient`), reserves a free
+   * `shop_terminals` row or rejects when all terminals are active or none exist.
+   */
+  private async completeLoginAfterPasswordOk(
+    matchedUser: { id: string; tenant_id: string; username: string; name: string; role: string },
+    posClient: boolean
+  ) {
+    return this.db.transaction(async (client) => {
+      await client.execute('DELETE FROM user_sessions WHERE user_id = $1 AND tenant_id = $2', [
+        matchedUser.id,
+        matchedUser.tenant_id,
+      ]);
 
-    await this.db.execute('UPDATE users SET login_status = TRUE WHERE id = $1 AND tenant_id = $2', [matchedUser.id, matchedUser.tenant_id]);
+      let posTerminalId: string | null = null;
+      if (posClient) {
+        posTerminalId = await this.assignNextAvailablePosTerminal(client, matchedUser.tenant_id);
+        if (!posTerminalId) {
+          const rows = await client.query(
+            `SELECT COUNT(*) AS c FROM shop_terminals WHERE tenant_id = $1`,
+            [matchedUser.tenant_id]
+          );
+          const n = Number((rows[0] as { c?: number | string })?.c ?? 0);
+          if (n === 0) {
+            throw new Error(
+              'No POS terminals are configured for this store. Add terminals under Multi-Store → Terminals before signing in on the desktop POS.'
+            );
+          }
+          throw new Error(
+            'All POS terminals are in use. Ask another cashier to sign out, wait for an inactive session to time out, or add a terminal in Multi-Store.'
+          );
+        }
+      }
 
-    return {
-      token,
-      tenantId: matchedUser.tenant_id,
-      userId: matchedUser.id,
-      username: matchedUser.username,
-      role: matchedUser.role,
-      name: matchedUser.name,
-    };
+      const token = this.generateToken(matchedUser.id, matchedUser.tenant_id, matchedUser.username, matchedUser.role);
+      await this.createSessionWithClient(client, matchedUser.id, matchedUser.tenant_id, token, posTerminalId);
+
+      await client.execute('UPDATE users SET login_status = TRUE WHERE id = $1 AND tenant_id = $2', [
+        matchedUser.id,
+        matchedUser.tenant_id,
+      ]);
+
+      return {
+        token,
+        tenantId: matchedUser.tenant_id,
+        userId: matchedUser.id,
+        username: matchedUser.username,
+        role: matchedUser.role,
+        name: matchedUser.name,
+        posTerminalId,
+      };
+    });
+  }
+
+  /**
+   * Picks a terminal not held by another non-idle POS session (same tenant).
+   */
+  private async assignNextAvailablePosTerminal(
+    client: { query: (sql: string, params?: any[]) => Promise<any[]> },
+    tenantId: string
+  ): Promise<string | null> {
+    const terminals = await client.query(
+      `SELECT id FROM shop_terminals WHERE tenant_id = $1 ORDER BY name ASC`,
+      [tenantId]
+    );
+    if (terminals.length === 0) return null;
+
+    const nowIso = new Date().toISOString();
+    const idleCutoffIso = new Date(Date.now() - POS_TERMINAL_IDLE_MS).toISOString();
+
+    const busyRows = await client.query(
+      `SELECT pos_terminal_id FROM user_sessions
+       WHERE tenant_id = $1 AND pos_terminal_id IS NOT NULL
+         AND expires_at > $2 AND last_activity > $3`,
+      [tenantId, nowIso, idleCutoffIso]
+    );
+    const taken = new Set(
+      (busyRows as { pos_terminal_id: string }[]).map((r) => r.pos_terminal_id).filter(Boolean)
+    );
+
+    for (const t of terminals as { id: string }[]) {
+      if (!taken.has(t.id)) return t.id;
+    }
+    return null;
   }
 
   async logout(userId: string, tenantId: string) {
@@ -176,17 +267,39 @@ export class AuthService {
     );
   }
 
-  private async createSession(userId: string, tenantId: string, token: string) {
+  private async createSession(userId: string, tenantId: string, token: string, posTerminalId: string | null) {
     const sessionId = generateId('session');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
     await this.db.execute(
-      `INSERT INTO user_sessions (id, user_id, tenant_id, token, expires_at, last_activity)
-       VALUES ($1, $2, $3, $4, $5, NOW())
+      `INSERT INTO user_sessions (id, user_id, tenant_id, token, expires_at, last_activity, pos_terminal_id)
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6)
        ON CONFLICT (user_id, tenant_id)
-       DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, last_activity = NOW()`,
-      [sessionId, userId, tenantId, token, expiresAt]
+       DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, last_activity = NOW(),
+         pos_terminal_id = EXCLUDED.pos_terminal_id`,
+      [sessionId, userId, tenantId, token, expiresAt, posTerminalId]
+    );
+  }
+
+  private async createSessionWithClient(
+    client: { execute: (sql: string, params?: any[]) => Promise<void> },
+    userId: string,
+    tenantId: string,
+    token: string,
+    posTerminalId: string | null
+  ) {
+    const sessionId = generateId('session');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    await client.execute(
+      `INSERT INTO user_sessions (id, user_id, tenant_id, token, expires_at, last_activity, pos_terminal_id)
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+       ON CONFLICT (user_id, tenant_id)
+       DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, last_activity = NOW(),
+         pos_terminal_id = EXCLUDED.pos_terminal_id`,
+      [sessionId, userId, tenantId, token, expiresAt, posTerminalId]
     );
   }
 }

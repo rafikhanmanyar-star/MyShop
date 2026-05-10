@@ -412,6 +412,9 @@ export const accountingApi = {
     limit?: number;
     search?: string;
     sourceModule?: 'all' | 'POS' | 'MobileApp' | 'Manual';
+    /** Inclusive YYYY-MM-DD — sent to API for filtered paging */
+    dateFrom?: string;
+    dateTo?: string;
   }) => {
     const q = new URLSearchParams();
     q.set('page', String(params.page));
@@ -420,6 +423,8 @@ export const accountingApi = {
     if (params.sourceModule && params.sourceModule !== 'all') {
       q.set('sourceModule', params.sourceModule);
     }
+    if (params.dateFrom?.trim()) q.set('dateFrom', params.dateFrom.trim());
+    if (params.dateTo?.trim()) q.set('dateTo', params.dateTo.trim());
     return apiClient.get<{ items: any[]; total: number; page: number; limit: number }>(
       `/shop/accounting/journal-entries?${q.toString()}`
     );

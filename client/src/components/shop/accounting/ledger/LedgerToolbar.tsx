@@ -65,7 +65,7 @@ export const LedgerToolbar: React.FC<LedgerToolbarProps> = ({
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   return (
-    <div className="rounded-2xl border border-[#E5E7EB] bg-white/90 p-4 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] backdrop-blur-md dark:border-[#1F2937] dark:bg-[#111827]/95">
+    <div className="rounded-2xl border border-[#E5E7EB] bg-white/90 p-3 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)] backdrop-blur-md dark:border-[#1F2937] dark:bg-[#111827]/95">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">

@@ -62,18 +62,23 @@ router.post('/register', async (req, res) => {
 
 router.post('/login', async (req, res) => {
   try {
-    const { username, password, org_id: orgId } = req.body;
+    const { username, password, org_id: orgId, pos_client: posClientRaw } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const result = await getAuthService().login({ username, password, orgId });
+    const posClient = posClientRaw === true || posClientRaw === 'true' || posClientRaw === 1;
+    const result = await getAuthService().login({ username, password, orgId, posClient });
     res.json(result);
   } catch (error: any) {
     console.error('[Auth] Login error:', error.message);
-    const isAlreadyLoggedIn = error.message && error.message.includes('Already logged in');
-    res.status(isAlreadyLoggedIn ? 409 : 401).json({ error: error.message });
+    const msg = error?.message || '';
+    const isAlreadyLoggedIn = msg.includes('Already logged in');
+    const isPosTerminalLimit =
+      msg.includes('No POS terminals are configured') || msg.includes('All POS terminals are in use');
+    const status = isPosTerminalLimit ? 403 : isAlreadyLoggedIn ? 409 : 401;
+    res.status(status).json({ error: msg });
   }
 });
 

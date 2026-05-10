@@ -87,10 +87,11 @@ export function tenantMiddleware(db: IDatabaseService) {
           const expiresAt = new Date();
           expiresAt.setDate(expiresAt.getDate() + 30);
           await db.execute(
-            `INSERT INTO user_sessions (id, user_id, tenant_id, token, expires_at, last_activity)
-             VALUES ($1, $2, $3, $4, $5, NOW())
+            `INSERT INTO user_sessions (id, user_id, tenant_id, token, expires_at, last_activity, pos_terminal_id)
+             VALUES ($1, $2, $3, $4, $5, NOW(), NULL)
              ON CONFLICT (user_id, tenant_id) DO UPDATE 
-             SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, last_activity = NOW()`,
+             SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, last_activity = NOW(),
+                 pos_terminal_id = COALESCE(pos_terminal_id, EXCLUDED.pos_terminal_id)`,
             [sessionId, decoded.userId, decoded.tenantId, token, expiresAt]
           );
         }

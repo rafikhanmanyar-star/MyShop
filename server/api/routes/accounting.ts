@@ -97,11 +97,18 @@ router.get('/journal-entries', checkRole(['admin', 'accountant']), async (req: a
             const search = typeof req.query.search === 'string' ? req.query.search : undefined;
             const sm = typeof req.query.sourceModule === 'string' ? req.query.sourceModule : undefined;
             const sourceModule = sm && SOURCE_MODULES.has(sm) ? sm : undefined;
+            const isoDay = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/;
+            const df = typeof req.query.dateFrom === 'string' ? req.query.dateFrom.trim() : '';
+            const dt = typeof req.query.dateTo === 'string' ? req.query.dateTo.trim() : '';
+            const dateFrom = df && isoDay.test(df) ? df : undefined;
+            const dateTo = dt && isoDay.test(dt) ? dt : undefined;
             const { items, total } = await getAccountingService().getJournalEntriesPage(req.tenantId, {
                 limit,
                 offset,
                 search,
                 sourceModule,
+                dateFrom,
+                dateTo,
             });
             return res.json({ items, total, page, limit });
         }
