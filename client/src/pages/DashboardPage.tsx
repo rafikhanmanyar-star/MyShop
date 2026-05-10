@@ -390,7 +390,7 @@ export default function DashboardPage() {
               Daily report
             </h2>
             <p className="text-xs text-[#6C757D] dark:text-muted-foreground">
-              POS, mobile, inventory movement, expenses, khata, and net profit for the date you select.
+              POS, mobile, inventory movement, vendor payments, expenses, khata, and net profit for the date you select.
             </p>
           </div>
           <div className="rounded-[10px] border border-gray-200 bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card sm:p-4">

@@ -138,7 +138,18 @@ const ExecutiveOverview: React.FC = () => {
                         </span>
                     </div>
 
-                    <div className="relative flex h-64 items-end gap-1.5 border-b border-slate-200 pb-1 sm:gap-2 dark:border-slate-600">
+                    <div
+                        className="min-w-0 w-full overflow-x-auto pb-2 overscroll-x-contain"
+                        style={{ WebkitOverflowScrolling: 'touch' }}
+                    >
+                        <div
+                            className="relative flex h-64 min-h-64 items-end gap-1.5 border-b border-slate-200 pb-1 sm:gap-2 dark:border-slate-600"
+                            style={{
+                                minWidth: salesTrend.length
+                                    ? `max(100%, ${salesTrend.length * 44}px)`
+                                    : '100%',
+                            }}
+                        >
                         {salesTrend.map((data, idx) => {
                             const maxRevenue = Math.max(...salesTrend.map((d: { revenue?: number }) => d.revenue || 0), 1);
                             const h = `${Math.max(6, (data.revenue / maxRevenue) * 100)}%`;
@@ -167,6 +178,7 @@ const ExecutiveOverview: React.FC = () => {
                                 </div>
                             );
                         })}
+                        </div>
                     </div>
                 </Card>
 

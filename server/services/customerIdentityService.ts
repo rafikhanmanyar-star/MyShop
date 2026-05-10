@@ -158,9 +158,14 @@ export class CustomerIdentityService {
   async setCustomerPasswordHash(customerId: string, tenantId: string, passwordPlain: string): Promise<void> {
     assertMobilePasswordValid(passwordPlain);
     const hashed = await bcrypt.hash(passwordPlain, 10);
+    await this.applyCustomerPasswordBcrypt(customerId, tenantId, hashed);
+  }
+
+  /** Store an existing bcrypt hash (e.g. after OTP signup); does not re-hash. */
+  async applyCustomerPasswordBcrypt(customerId: string, tenantId: string, passwordBcrypt: string): Promise<void> {
     await this.db.execute(
       `UPDATE customers SET password = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`,
-      [hashed, customerId, tenantId]
+      [passwordBcrypt, customerId, tenantId]
     );
   }
 

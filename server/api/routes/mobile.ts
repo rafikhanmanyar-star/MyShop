@@ -573,6 +573,16 @@ router.post(
     }
 );
 
+// Public: whether mobile signup requires SMS OTP (for app UX)
+router.get('/:shopSlug/signup-otp-config', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const signup_otp_required = await getMobileCustomerService().signupOtpEnabledForTenant(req.tenantId);
+        res.json({ signup_otp_required });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Shop info (branding, hours, settings)
 router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) => {
     try {
@@ -797,9 +807,15 @@ router.post('/auth/register', async (req: any, res) => {
             return res.status(400).json({ error: 'Phone, password, name, address, and shop are required' });
         }
 
-        // Resolve tenant from slug
         const shop = await getMobileCustomerService().resolveShopBySlug(shopSlug);
         if (!shop) return res.status(404).json({ error: 'Shop not found' });
+
+        if (await getMobileCustomerService().signupOtpEnabledForTenant(shop.id)) {
+            return res.status(400).json({
+                error: 'This shop verifies new registrations by SMS. Request a code first, then enter it to complete signup.',
+                code: 'SIGNUP_OTP_REQUIRED',
+            });
+        }
 
         const result = await getMobileCustomerService().register(shop.id, phone, name, addressLine1, password);
         res.json(result);
@@ -812,6 +828,76 @@ router.post('/auth/register', async (req: any, res) => {
             return res.status(400).json({ error: msg });
         }
         res.status(400).json({ error: error.message });
+    }
+});
+
+router.post('/auth/register-request', async (req: any, res) => {
+    try {
+        const { phone, password, name, addressLine1, shopSlug } = req.body;
+        if (!phone || !password || !name || !addressLine1 || !shopSlug) {
+            return res.status(400).json({ error: 'Phone, password, name, address, and shop are required' });
+        }
+
+        const shop = await getMobileCustomerService().resolveShopBySlug(shopSlug);
+        if (!shop) return res.status(404).json({ error: 'Shop not found' });
+
+        const label = shop.company_name || shop.name || 'Shop';
+        const out = await getMobileCustomerService().requestSignupOtp(shop.id, phone, name, addressLine1, password, label);
+        res.json(out);
+    } catch (error: any) {
+        if (error.message === 'PHONE_ALREADY_REGISTERED') {
+            return res.status(409).json({ error: 'This mobile number is already registered. Please login instead.' });
+        }
+        const msg = String(error?.message || '');
+        if (msg === 'SIGNUP_OTP_NOT_CONFIGURED') {
+            return res.status(400).json({
+                error: 'SMS signup is not configured for this shop. Ask the shop to enable it in POS settings.',
+                code: 'SIGNUP_OTP_NOT_CONFIGURED',
+            });
+        }
+        if (msg === 'OTP_RATE_LIMIT') {
+            return res.status(429).json({ error: 'Please wait about a minute before requesting another code.' });
+        }
+        if (msg.includes('Password must') || msg.includes('letters and digits')) {
+            return res.status(400).json({ error: msg });
+        }
+        if (msg.includes('Twilio SMS failed')) {
+            return res.status(502).json({ error: msg });
+        }
+        res.status(400).json({ error: msg || 'Could not send verification code.' });
+    }
+});
+
+router.post('/auth/register-verify', async (req: any, res) => {
+    try {
+        const { phone, shopSlug, otp } = req.body;
+        if (!phone || !shopSlug || otp === undefined || otp === null || String(otp).trim() === '') {
+            return res.status(400).json({ error: 'Phone, shop, and OTP code are required' });
+        }
+
+        const shop = await getMobileCustomerService().resolveShopBySlug(shopSlug);
+        if (!shop) return res.status(404).json({ error: 'Shop not found' });
+
+        const result = await getMobileCustomerService().verifySignupOtpAndRegister(shop.id, phone, String(otp));
+        res.json(result);
+    } catch (error: any) {
+        const msg = String(error?.message || '');
+        if (msg === 'INVALID_OTP') {
+            return res.status(400).json({ error: 'Invalid verification code. Try again.' });
+        }
+        if (msg === 'OTP_EXPIRED') {
+            return res.status(400).json({ error: 'Code expired. Request a new one.' });
+        }
+        if (msg === 'NO_PENDING_SIGNUP') {
+            return res.status(400).json({ error: 'No pending signup for this number. Request a new code.' });
+        }
+        if (msg === 'OTP_TOO_MANY_ATTEMPTS') {
+            return res.status(429).json({ error: 'Too many attempts. Request a new code.' });
+        }
+        if (msg === 'PHONE_ALREADY_REGISTERED') {
+            return res.status(409).json({ error: 'This mobile number is already registered. Please login instead.' });
+        }
+        res.status(400).json({ error: msg || 'Verification failed.' });
     }
 });
 

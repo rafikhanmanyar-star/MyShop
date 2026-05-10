@@ -92,27 +92,76 @@ export class AccountingService {
   }
 
   /**
-   * Get journal entries with their ledger lines.
-   * Includes source_module to distinguish POS vs Mobile.
+   * Paginated journal entries with ledger lines and total count.
+   * Optional search (reference/description) and source_module filter.
    */
-  async getJournalEntries(tenantId: string, limit = 200) {
-    const entries = await this.db.query(`
+  async getJournalEntriesPage(
+    tenantId: string,
+    opts: {
+      limit: number;
+      offset: number;
+      search?: string;
+      sourceModule?: string;
+    }
+  ): Promise<{ items: any[]; total: number }> {
+    const limit = Math.max(1, Math.min(opts.limit, 500));
+    const offset = Math.max(0, opts.offset);
+
+    const conditions: string[] = ['je.tenant_id = $1'];
+    const params: any[] = [tenantId];
+    let next = 2;
+
+    const rawSearch = opts.search?.trim();
+    if (rawSearch) {
+      const safe = rawSearch.replace(/[%_\\]/g, '');
+      if (safe) {
+        const pattern = `%${safe}%`;
+        conditions.push(
+          `(LOWER(je.reference) LIKE LOWER($${next}) OR LOWER(COALESCE(je.description, '')) LIKE LOWER($${next}))`
+        );
+        params.push(pattern);
+        next++;
+      }
+    }
+
+    if (opts.sourceModule && ['POS', 'MobileApp', 'Manual'].includes(opts.sourceModule)) {
+      conditions.push(`je.source_module = $${next}`);
+      params.push(opts.sourceModule);
+      next++;
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const countRows = await this.db.query(
+      `SELECT COUNT(*) as c FROM journal_entries je WHERE ${whereClause}`,
+      params
+    );
+    const total = Number((countRows[0] as any)?.c ?? 0);
+
+    const limIdx = next;
+    const offIdx = next + 1;
+    const dataParams = [...params, limit, offset];
+    const entries = await this.db.query(
+      `
       SELECT
         je.id, je.date, je.reference, je.description,
         je.status, je.source_module, je.source_id,
         je.created_at
       FROM journal_entries je
-      WHERE je.tenant_id = $1
+      WHERE ${whereClause}
       ORDER BY je.date DESC, je.created_at DESC
-      LIMIT $2
-    `, [tenantId, limit]);
+      LIMIT $${limIdx} OFFSET $${offIdx}
+    `,
+      dataParams
+    );
 
-    // Fetch ledger lines for all entries in one query
-    if (entries.length === 0) return [];
+    if (entries.length === 0) {
+      return { items: [], total };
+    }
 
-    // Fetch all ledger lines for this tenant (filtering in memory for SQLite compat)
     const entryIdSet = new Set(entries.map((e: any) => e.id));
-    const lines = await this.db.query(`
+    const lines = await this.db.query(
+      `
       SELECT
         le.id, le.journal_entry_id, le.account_id,
         a.name as account_name, a.code as account_code, a.type as account_type,
@@ -121,9 +170,10 @@ export class AccountingService {
       JOIN accounts a ON le.account_id = a.id AND a.tenant_id = $1
       WHERE le.tenant_id = $1
       ORDER BY le.created_at ASC
-    `, [tenantId]);
+    `,
+      [tenantId]
+    );
 
-    // Group lines by journal entry
     const linesByEntry: Record<string, any[]> = {};
     for (const line of lines) {
       if (!entryIdSet.has(line.journal_entry_id)) continue;
@@ -141,7 +191,7 @@ export class AccountingService {
       });
     }
 
-    return entries.map((e: any) => ({
+    const items = entries.map((e: any) => ({
       id: e.id,
       date: e.date,
       reference: e.reference,
@@ -152,6 +202,17 @@ export class AccountingService {
       createdAt: e.created_at,
       lines: linesByEntry[e.id] || [],
     }));
+
+    return { items, total };
+  }
+
+  /**
+   * Get journal entries with their ledger lines (first page / cap for cache & legacy callers).
+   * Includes source_module to distinguish POS vs Mobile.
+   */
+  async getJournalEntries(tenantId: string, limit = 200) {
+    const { items } = await this.getJournalEntriesPage(tenantId, { limit, offset: 0 });
+    return items;
   }
 
   /**

@@ -95,8 +95,10 @@ router.get('/stream', checkRole(['admin', 'pos_cashier']), async (req: any, res)
 // ─── Mobile Ordering Settings (Admin) ───────────────────────────────
 router.get('/settings', checkRole(['admin']), async (req: any, res) => {
     try {
-        const settings = await getMobileCustomerService().getMobileSettings(req.tenantId);
-        res.json(settings);
+        const raw = await getMobileCustomerService().getMobileSettings(req.tenantId);
+        const { twilio_auth_token: _tok, ...rest } = raw as Record<string, unknown>;
+        const tokenSet = !!(_tok != null && String(_tok).trim() !== '');
+        res.json({ ...rest, twilio_auth_token_set: tokenSet });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }

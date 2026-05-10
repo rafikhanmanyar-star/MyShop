@@ -79,10 +79,33 @@ router.delete('/accounts/:id', checkRole(['admin', 'accountant']), async (req: a
     }
 });
 
+const SOURCE_MODULES = new Set(['POS', 'MobileApp', 'Manual']);
+
 // --- Journal Entries with Ledger Lines ---
+// Without `page`: returns a plain array (legacy; cache/offline sync).
+// With `page`: returns { items, total, page, limit } for General Ledger pagination.
 router.get('/journal-entries', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const limit = parseInt(req.query.limit as string) || 200;
+        const rawLimit = parseInt(String(req.query.limit || ''), 10);
+        const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 200, 1), 500);
+        const pageRaw = req.query.page;
+        const hasPage = pageRaw !== undefined && pageRaw !== '' && pageRaw !== null;
+
+        if (hasPage) {
+            const page = Math.max(1, parseInt(String(pageRaw), 10) || 1);
+            const offset = (page - 1) * limit;
+            const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+            const sm = typeof req.query.sourceModule === 'string' ? req.query.sourceModule : undefined;
+            const sourceModule = sm && SOURCE_MODULES.has(sm) ? sm : undefined;
+            const { items, total } = await getAccountingService().getJournalEntriesPage(req.tenantId, {
+                limit,
+                offset,
+                search,
+                sourceModule,
+            });
+            return res.json({ items, total, page, limit });
+        }
+
         const entries = await getAccountingService().getJournalEntries(req.tenantId, limit);
         res.json(entries);
     } catch (error: any) {

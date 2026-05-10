@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMobileOrders } from '../../context/MobileOrdersContext';
-import { mobileOrdersApi, MobileOrder, PosRidersOverview, MobileOnlineUser, MobileUsersStats, MobileReservedStockReport, MobileActiveTodayUser } from '../../services/mobileOrdersApi';
+import { mobileOrdersApi, MobileOrder, PosRidersOverview, MobileOnlineUser, MobileUsersStats, MobileReservedStockReport, MobileActiveTodayUser, MobileOrderingSettings } from '../../services/mobileOrdersApi';
 import Modal from '../ui/Modal';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -11,7 +11,7 @@ import {
     Printer, Copy, CheckCircle, Store, Map,
     Banknote, Building2, Wallet, ExternalLink, Navigation, Users,
     ShoppingCart, Activity, UserCheck, Globe, CircleDot, BookOpen, BadgeCheck,
-    Mail, History, Lock,
+    Mail, History, Lock, MessageSquare,
 } from 'lucide-react';
 import { shopApi } from '../../services/shopApi';
 import { getFullImageUrl } from '../../config/apiUrl';
@@ -2372,6 +2372,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
     const [localSettings, setLocalSettings] = useState<any>(null);
     const [localBranding, setLocalBranding] = useState<any>(null);
     const [copied, setCopied] = useState(false);
+    const [twilioAuthDraft, setTwilioAuthDraft] = useState('');
     const qrRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -2384,7 +2385,10 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
     }, []);
 
     useEffect(() => {
-        if (settings) setLocalSettings({ ...settings });
+        if (settings) {
+            setLocalSettings({ ...settings });
+            setTwilioAuthDraft('');
+        }
     }, [settings]);
 
     useEffect(() => {
@@ -2420,7 +2424,12 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
         setSaving(true);
         try {
             if (localSettings) {
-                await updateSettings(localSettings);
+                const payload: Record<string, unknown> = { ...localSettings };
+                delete payload.twilio_auth_token_set;
+                if (twilioAuthDraft.trim()) {
+                    payload.twilio_auth_token = twilioAuthDraft.trim();
+                }
+                await updateSettings(payload as Partial<MobileOrderingSettings>);
             }
             if (localBranding) {
                 const payload = { ...localBranding };
@@ -2975,6 +2984,105 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                 ))}
                             </div>
                         </div>
+                    </div>
+
+                    <div className="mt-8 rounded-2xl border border-slate-200/90 bg-card p-5 sm:p-6 shadow-sm dark:border-slate-600 dark:bg-slate-900/50">
+                        <div className="flex flex-wrap items-start gap-3">
+                            <MessageSquare className="w-6 h-6 shrink-0 text-[#004494]" />
+                            <div className="min-w-0 flex-1">
+                                <h3 className="text-lg font-bold text-foreground">SMS signup verification (Twilio)</h3>
+                                <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
+                                    Sends a one-time code when customers tap Register in the mobile app. Requires a Twilio account (trial works if recipient numbers are verified in Twilio).
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                className="flex items-center gap-3 shrink-0"
+                                onClick={() => setLocalSettings({ ...localSettings, signup_otp_enabled: !localSettings.signup_otp_enabled })}
+                                aria-pressed={!!localSettings.signup_otp_enabled}
+                                aria-label="Require SMS code for new registrations"
+                            >
+                                <div className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${localSettings.signup_otp_enabled ? 'bg-[#004494]' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                    <span
+                                        className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${localSettings.signup_otp_enabled ? 'left-7' : 'left-1'}`}
+                                    />
+                                </div>
+                                <span className="text-sm font-semibold text-foreground whitespace-nowrap">Require OTP</span>
+                            </button>
+                        </div>
+
+                        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="twilio-account-sid" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Account SID</label>
+                                <input
+                                    id="twilio-account-sid"
+                                    type="text"
+                                    autoComplete="off"
+                                    value={localSettings.twilio_account_sid ?? ''}
+                                    onChange={e => setLocalSettings({ ...localSettings, twilio_account_sid: e.target.value })}
+                                    placeholder="ACxxxxxxxx…"
+                                    className="w-full rounded-xl border-0 bg-[#F4F4F9] px-3.5 py-2.5 text-sm font-mono shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-800 dark:ring-slate-600"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="twilio-auth-token" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                                    Auth token
+                                    {localSettings.twilio_auth_token_set ? (
+                                        <span className="ml-2 font-normal normal-case text-emerald-600 dark:text-emerald-400">(saved)</span>
+                                    ) : null}
+                                </label>
+                                <input
+                                    id="twilio-auth-token"
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={twilioAuthDraft}
+                                    onChange={e => setTwilioAuthDraft(e.target.value)}
+                                    placeholder={localSettings.twilio_auth_token_set ? 'Leave blank to keep existing token' : 'Paste auth token'}
+                                    className="w-full rounded-xl border-0 bg-[#F4F4F9] px-3.5 py-2.5 text-sm font-mono shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-800 dark:ring-slate-600"
+                                />
+                                <button
+                                    type="button"
+                                    className="mt-2 text-xs font-semibold text-red-600 hover:underline dark:text-red-400"
+                                    onClick={() => {
+                                        setTwilioAuthDraft('');
+                                        setLocalSettings({ ...localSettings, twilio_auth_token: '' });
+                                    }}
+                                >
+                                    Clear stored auth token
+                                </button>
+                            </div>
+                            <div>
+                                <label htmlFor="twilio-ms-sid" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Messaging Service SID (optional)</label>
+                                <input
+                                    id="twilio-ms-sid"
+                                    type="text"
+                                    value={localSettings.twilio_messaging_service_sid ?? ''}
+                                    onChange={e => setLocalSettings({ ...localSettings, twilio_messaging_service_sid: e.target.value })}
+                                    placeholder="MGxxxxxxxx…"
+                                    className="w-full rounded-xl border-0 bg-[#F4F4F9] px-3.5 py-2.5 text-sm font-mono shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-800 dark:ring-slate-600"
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="twilio-from" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">From number E.164 (if no Messaging Service)</label>
+                                <input
+                                    id="twilio-from"
+                                    type="text"
+                                    value={localSettings.twilio_from_number ?? ''}
+                                    onChange={e => setLocalSettings({ ...localSettings, twilio_from_number: e.target.value })}
+                                    placeholder="+923001234567"
+                                    className="w-full rounded-xl border-0 bg-[#F4F4F9] px-3.5 py-2.5 text-sm font-mono shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-800 dark:ring-slate-600"
+                                />
+                            </div>
+                        </div>
+
+                        <p className="mt-4 text-xs text-muted-foreground leading-relaxed">
+                            OTP applies only when <strong className="font-semibold text-foreground">Require OTP</strong> is on and Account SID, Auth Token, and either Messaging Service SID or From number are set.
+                            Trial accounts must{' '}
+                            <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/verified" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#004494] hover:underline">
+                                verify destination numbers
+                            </a>{' '}
+                            in Twilio before SMS delivers.
+                        </p>
                     </div>
                 </section>
             )}

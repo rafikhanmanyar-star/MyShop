@@ -13,6 +13,7 @@ import {
   Tag,
   BookMarked,
   ChevronRight,
+  CreditCard,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { accountingApi } from '../../../services/shopApi';
@@ -362,7 +363,7 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
           <span className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-muted-foreground">Operations</span>
           <span className="h-px min-w-[2rem] flex-1 bg-border dark:bg-slate-700" />
         </div>
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-5">
           <MetricCard
             icon={Package}
             iconBg="bg-amber-500/12 dark:bg-amber-400/10"
@@ -382,6 +383,16 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
             hint="Procurement & sale returns"
             loading={loading}
             onClick={() => navigate(`/accounting/reports/daily/inventory-in?${q}`)}
+          />
+          <MetricCard
+            icon={CreditCard}
+            iconBg="bg-blue-500/12 dark:bg-blue-400/10"
+            iconColor="text-blue-700 dark:text-blue-400"
+            label="Vendor payments"
+            value={`${CURRENCY} ${formatMoney(summary?.vendorPaymentsTotal ?? 0)}`}
+            hint="Supplier settlements · all locations"
+            loading={loading}
+            onClick={() => navigate('/procurement')}
           />
           <MetricCard
             icon={Banknote}

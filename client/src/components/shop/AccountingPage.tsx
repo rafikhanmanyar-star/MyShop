@@ -1,20 +1,50 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { BarChart3, ClipboardList, FileText, DollarSign, Receipt, Landmark, Layers } from 'lucide-react';
 import { AccountingProvider, useAccounting } from '../../context/AccountingContext';
 import AccountingDashboard from './accounting/AccountingDashboard';
 import GeneralLedger from './accounting/GeneralLedger';
 import FinancialStatements from './accounting/FinancialStatements';
 import { ICONS, CURRENCY } from '../../constants';
+import { accountingApi } from '../../services/shopApi';
 import Modal from '../ui/Modal';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Button from '../ui/Button';
+import { FinancialHeader } from './accounting/ledger/FinancialHeader';
+import { KPIStatCard } from './accounting/ledger/KPIStatCard';
+import { FinancialTabs } from './accounting/ledger/FinancialTabs';
 
 const ACCT_TAB_IDS = ['dashboard', 'ledger', 'statements'] as const;
 type AcctTabId = (typeof ACCT_TAB_IDS)[number];
 
 const AccountingContent: React.FC = () => {
-    const { accounts, postJournalEntry } = useAccounting();
+    const { accounts, postJournalEntry, totalRevenue, totalExpenses, netProfit, loading, journalEntries } = useAccounting();
+    const ledgerCsvExportRef = useRef<(() => void) | null>(null);
+    const [journalEntryTotal, setJournalEntryTotal] = useState<number | null>(null);
+
+    const fmtPk = useCallback((n: number) => {
+        try {
+            return new Intl.NumberFormat(undefined, { style: 'currency', currency: CURRENCY }).format(n);
+        } catch {
+            return `${CURRENCY} ${Number(n || 0).toLocaleString()}`;
+        }
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await accountingApi.getJournalEntriesPage({ page: 1, limit: 1 });
+                if (!cancelled) setJournalEntryTotal(res.total ?? 0);
+            } catch {
+                if (!cancelled) setJournalEntryTotal(null);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [journalEntries.length]);
     const [searchParams, setSearchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<AcctTabId>(() => {
         try {
@@ -124,56 +154,101 @@ const AccountingContent: React.FC = () => {
         }
     }, [searchParams]);
 
-    const tabs = [
-        { id: 'dashboard', label: 'Finance Dashboard', icon: ICONS.barChart },
-        { id: 'ledger', label: 'General Ledger', icon: ICONS.clipboard },
-        { id: 'statements', label: 'Financial Statements', icon: ICONS.fileText },
+    const tabItems = [
+        { id: 'dashboard', label: 'Finance Dashboard', icon: <BarChart3 className="h-[1.125rem] w-[1.125rem]" aria-hidden /> },
+        { id: 'ledger', label: 'General Ledger', icon: <ClipboardList className="h-[1.125rem] w-[1.125rem]" aria-hidden /> },
+        { id: 'statements', label: 'Financial Statements', icon: <FileText className="h-[1.125rem] w-[1.125rem]" aria-hidden /> },
     ];
 
     return (
-        <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-muted/80 dark:bg-slate-800">
-            {/* Header / Tab Navigation */}
-            <div className="z-10 shrink-0 border-b border-border bg-card px-4 pt-4 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:px-6 lg:px-8 lg:pt-6">
-                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold text-foreground dark:text-slate-200 tracking-tight">Financial Engine</h1>
-                        <p className="text-muted-foreground dark:text-muted-foreground text-sm font-medium">POS source-of-truth automated accounting.</p>
-                    </div>
-                    <div className="flex gap-3 flex-wrap">
-                        <button
-                            onClick={() => setIsJournalModalOpen(true)}
-                            className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-slate-200 dark:shadow-slate-900 hover:bg-black dark:hover:bg-indigo-700 transition-all flex items-center gap-2 uppercase tracking-widest text-xs"
-                        >
-                            {ICONS.plus} Manual Journal
-                        </button>
-                    </div>
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-[#F6F8FC] text-foreground dark:bg-[#0F172A] dark:text-[#E5E7EB]">
+            <header className="sticky top-0 z-20 shrink-0 border-b border-black/[0.06] bg-white/80 px-4 py-6 shadow-[0_1px_0_0_rgba(15,23,42,0.05)] backdrop-blur-xl backdrop-saturate-[1.35] dark:border-white/[0.08] dark:bg-slate-900/72 sm:px-6 lg:px-8">
+                <FinancialHeader
+                    exportDisabled={activeTab !== 'ledger'}
+                    onExportCsv={() => ledgerCsvExportRef.current?.()}
+                    onManualJournal={() => setIsJournalModalOpen(true)}
+                />
+
+                <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <KPIStatCard
+                        label="Total Revenue"
+                        value={fmtPk(totalRevenue)}
+                        helper="Rolling chart-of-accounts totals"
+                        icon={DollarSign}
+                        trend={totalRevenue > 0 ? 'up' : 'flat'}
+                        loading={loading}
+                    />
+                    <KPIStatCard
+                        label="Total Expenses"
+                        value={fmtPk(totalExpenses)}
+                        helper="Operating & COGS-linked lines"
+                        icon={Receipt}
+                        trend="flat"
+                        loading={loading}
+                    />
+                    <KPIStatCard
+                        label="Net Profit"
+                        value={fmtPk(netProfit)}
+                        helper={netProfit >= 0 ? 'Healthy margin corridor' : 'Review cost drivers'}
+                        icon={Landmark}
+                        trend={netProfit >= 0 ? 'up' : 'down'}
+                        loading={loading}
+                    />
+                    <KPIStatCard
+                        label="Journal Entries"
+                        value={journalEntryTotal !== null ? journalEntryTotal.toLocaleString() : '—'}
+                        helper="Distinct journal headers in tenant"
+                        icon={Layers}
+                        trend="flat"
+                        loading={journalEntryTotal === null}
+                    />
                 </div>
 
-                <div className="-mx-1 flex gap-4 overflow-x-auto pb-1 sm:gap-8">
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setTab(tab.id as AcctTabId)}
-                            className={`relative flex shrink-0 items-center gap-2 whitespace-nowrap pb-4 text-sm font-bold transition-all ${activeTab === tab.id
-                                ? 'text-indigo-600 dark:text-indigo-400'
-                                : 'text-muted-foreground dark:text-muted-foreground hover:text-muted-foreground dark:hover:text-slate-300'
-                                }`}
-                        >
-                            {React.cloneElement(tab.icon as React.ReactElement<any>, { width: 18, height: 18 })}
-                            {tab.label}
-                            {activeTab === tab.id && (
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-600 dark:bg-indigo-500 rounded-t-full"></div>
-                            )}
-                        </button>
-                    ))}
+                <div className="mt-10 border-t border-black/[0.05] pt-5 dark:border-white/[0.08]">
+                    <FinancialTabs
+                        tabs={tabItems}
+                        activeId={activeTab}
+                        onChange={(id) => setTab(id as AcctTabId)}
+                    />
                 </div>
-            </div>
+            </header>
 
-            {/* Scrollable Content Area — min-h-0 lets nested flex children shrink; single scroll fixes sticky table overlap */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6 lg:p-8">
-                {activeTab === 'dashboard' && <AccountingDashboard />}
-                {activeTab === 'ledger' && <GeneralLedger />}
-                {activeTab === 'statements' && <FinancialStatements />}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {activeTab === 'dashboard' && (
+                    <section
+                        id="financial-tabpanel-dashboard"
+                        role="tabpanel"
+                        aria-labelledby="financial-tab-dashboard"
+                        className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6 lg:p-8"
+                    >
+                        <AccountingDashboard />
+                    </section>
+                )}
+                {activeTab === 'ledger' && (
+                    <section
+                        id="financial-tabpanel-ledger"
+                        role="tabpanel"
+                        aria-labelledby="financial-tab-ledger"
+                        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-6 sm:px-6 lg:px-8"
+                    >
+                        <GeneralLedger
+                            onExportCsvReady={(fn) => {
+                                ledgerCsvExportRef.current = fn;
+                            }}
+                            onRequestManualJournal={() => setIsJournalModalOpen(true)}
+                        />
+                    </section>
+                )}
+                {activeTab === 'statements' && (
+                    <section
+                        id="financial-tabpanel-statements"
+                        role="tabpanel"
+                        aria-labelledby="financial-tab-statements"
+                        className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6 lg:p-8"
+                    >
+                        <FinancialStatements />
+                    </section>
+                )}
             </div>
 
             <Modal

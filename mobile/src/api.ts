@@ -125,6 +125,8 @@ export const publicApi = {
         }),
     getBrands: (slug: string) => request(`${API_BASE}/${slug}/brands`),
     getBranding: (slug: string) => request(`${API_BASE}/${slug}/branding`),
+    getSignupOtpConfig: (slug: string) =>
+        request(`${API_BASE}/${encodeURIComponent(slug)}/signup-otp-config`),
     /** Create product/SKU (used when syncing offline-created products; requires backend POST /api/mobile/:shopSlug/products) */
     createProduct: (slug: string, data: Record<string, unknown>) =>
         request(`${API_BASE}/${slug}/products`, { method: 'POST', body: JSON.stringify(data) }),
@@ -148,6 +150,16 @@ export const authApi = {
         request(`${API_BASE}/auth/register`, {
             method: 'POST',
             body: JSON.stringify({ phone, password, name, addressLine1, shopSlug }),
+        }),
+    registerRequestOtp: (phone: string, password: string, name: string, addressLine1: string, shopSlug: string) =>
+        request(`${API_BASE}/auth/register-request`, {
+            method: 'POST',
+            body: JSON.stringify({ phone, password, name, addressLine1, shopSlug }),
+        }),
+    registerVerifyOtp: (phone: string, shopSlug: string, otp: string) =>
+        request(`${API_BASE}/auth/register-verify`, {
+            method: 'POST',
+            body: JSON.stringify({ phone, shopSlug, otp }),
         }),
     login: (phone: string, password: string, shopSlug: string) =>
         request(`${API_BASE}/auth/login`, {

@@ -18,6 +18,8 @@ export interface DailyReportSummary {
   inventoryOutQty: number;
   inventoryInQty: number;
   totalExpenses: number;
+  /** Procurement supplier settlements for the day — tenant-wide (no branch on payments). */
+  vendorPaymentsTotal: number;
   newProductsCount: number;
   /** Khata (customer credit) — tenant-wide; not filtered by branch */
   khataDebitTotal: number;
@@ -101,6 +103,13 @@ export class DailyReportService {
       branchId ? [tenantId, dateStr, branchId] : [tenantId, dateStr]
     );
 
+    const vendorPay = await db.query<{ s: string }>(
+      `SELECT COALESCE(SUM(amount::numeric), 0)::text AS s
+       FROM supplier_payments
+       WHERE tenant_id = $1 AND payment_date >= $2::timestamptz AND payment_date < $3::timestamptz`,
+      [tenantId, start, end]
+    );
+
     const prodC = await db.query<{ c: string }>(
       `SELECT COUNT(*)::text AS c FROM shop_products
        WHERE tenant_id = $1 AND created_at >= $2::timestamptz AND created_at < $3::timestamptz`,
@@ -127,6 +136,7 @@ export class DailyReportService {
     const inventoryOutQty = parseFloat(outQ[0]?.s || '0') || 0;
     const inventoryInQty = parseFloat(inQ[0]?.s || '0') || 0;
     const totalExpenses = parseFloat(exp[0]?.s || '0') || 0;
+    const vendorPaymentsTotal = parseFloat(vendorPay[0]?.s || '0') || 0;
     const newProductsCount = parseInt(prodC[0]?.c || '0', 10) || 0;
     const khataDebitTotal = parseFloat(khata[0]?.d || '0') || 0;
     const khataCreditTotal = parseFloat(khata[0]?.c || '0') || 0;
@@ -212,6 +222,7 @@ export class DailyReportService {
       inventoryOutQty,
       inventoryInQty,
       totalExpenses,
+      vendorPaymentsTotal,
       newProductsCount,
       khataDebitTotal,
       khataCreditTotal,

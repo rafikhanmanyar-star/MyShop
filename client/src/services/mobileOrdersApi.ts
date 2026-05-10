@@ -86,6 +86,17 @@ export interface MobileOrderingSettings {
     /** Minutes a Pending order may hold stock before auto-cancel (server clamps 5–10080). */
     pending_reservation_ttl_minutes?: number;
     rider_assignment_mode: 'auto' | 'manual' | 'third_party';
+    /** When true and Twilio credentials + sender are set, mobile signup requires SMS OTP. */
+    signup_otp_enabled?: boolean;
+    twilio_account_sid?: string | null;
+    /** Returned only from GET; omit or leave empty on PUT to keep stored token. */
+    twilio_auth_token?: string | null;
+    /** True when a Twilio Auth Token is stored server-side (GET only). */
+    twilio_auth_token_set?: boolean;
+    /** Twilio Messaging Service SID (MG…). Preferred over From number if both set. */
+    twilio_messaging_service_sid?: string | null;
+    /** Twilio sender phone in E.164 if not using a Messaging Service. */
+    twilio_from_number?: string | null;
 }
 
 /** POS Mobile Orders — rider roster + aggregate availability (from GET /shop/mobile-orders/riders-overview). */

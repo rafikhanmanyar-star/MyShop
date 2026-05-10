@@ -187,7 +187,7 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
       </div>
 
       {/* Navigation with section groups */}
-      <nav className="custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-[#0056b3] px-3 pt-1 pb-2">
+      <nav className="custom-scrollbar min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-[#0066CC] via-[#0056b3] to-[#004699] px-3 pt-1 pb-2">
         {filteredSections.map((section, idx) => (
           <div key={section.section} className={idx > 0 ? 'mt-5' : ''}>
             {!collapsed && (
@@ -206,19 +206,16 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
                   end={item.path === '/'}
                   title={item.title ?? item.label}
                   className={({ isActive }) =>
-                    `nav-sidebar-link group relative flex items-center gap-3 rounded-lg px-3 py-2 transition-colors duration-200
+                    `nav-sidebar-link group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200
                     ${isActive
-                      ? 'bg-white/20 font-semibold text-white shadow-sm'
-                      : 'font-medium text-blue-100 hover:bg-white/10 hover:text-white'}`
+                      ? 'mx-2 bg-white/22 font-semibold text-white shadow-md ring-1 ring-white/10 before:pointer-events-none before:absolute before:inset-y-2 before:left-0 before:w-1 before:-translate-x-px before:rounded-full before:bg-indigo-300 before:shadow-[0_0_12px_rgba(165,180,252,0.6)]'
+                      : 'mx-2 font-medium text-blue-50/95 hover:bg-white/14 hover:text-white'}`
                   }
                 >
                   {({ isActive }) => (
                     <>
-                      {isActive && (
-                        <div className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-white" />
-                      )}
                       <item.icon
-                        className={`h-[1.125rem] w-[1.125rem] flex-shrink-0 ${collapsed ? 'mx-auto' : ''} ${isActive ? 'text-white' : 'text-blue-200'}`}
+                        className={`h-[1.125rem] w-[1.125rem] shrink-0 transition-transform duration-200 group-hover:scale-105 ${collapsed ? 'mx-auto' : ''} ${isActive ? 'text-white' : 'text-blue-100/95'}`}
                       />
                       {!collapsed && <span>{item.label}</span>}
                     </>

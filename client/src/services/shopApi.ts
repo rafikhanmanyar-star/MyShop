@@ -407,6 +407,23 @@ export const accountingApi = {
   updateAccount: (id: string, data: any) => apiClient.put(`/shop/accounting/accounts/${id}`, data),
   deleteAccount: (id: string) => apiClient.delete(`/shop/accounting/accounts/${id}`),
   getJournalEntries: (limit = 200) => apiClient.get<any[]>(`/shop/accounting/journal-entries?limit=${limit}`),
+  getJournalEntriesPage: (params: {
+    page: number;
+    limit?: number;
+    search?: string;
+    sourceModule?: 'all' | 'POS' | 'MobileApp' | 'Manual';
+  }) => {
+    const q = new URLSearchParams();
+    q.set('page', String(params.page));
+    q.set('limit', String(params.limit ?? 50));
+    if (params.search?.trim()) q.set('search', params.search.trim());
+    if (params.sourceModule && params.sourceModule !== 'all') {
+      q.set('sourceModule', params.sourceModule);
+    }
+    return apiClient.get<{ items: any[]; total: number; page: number; limit: number }>(
+      `/shop/accounting/journal-entries?${q.toString()}`
+    );
+  },
   postJournalEntry: (data: any) => apiClient.post('/shop/accounting/journal-entries', data),
   updateJournalEntry: (id: string, data: any) => apiClient.put(`/shop/accounting/journal-entries/${id}`, data),
   deleteJournalEntry: (id: string) => apiClient.delete(`/shop/accounting/journal-entries/${id}`),
@@ -483,6 +500,7 @@ export const accountingApi = {
       inventoryOutQty: number;
       inventoryInQty: number;
       totalExpenses: number;
+      vendorPaymentsTotal: number;
       newProductsCount: number;
       khataDebitTotal: number;
       khataCreditTotal: number;

@@ -1,7 +1,7 @@
 {
   "name": "myshop-client",
   "private": true,
-  "version": "1.0.182",
+  "version": "1.0.183",
   "type": "module",
   "scripts": {
     "check:typography": "node scripts/check-typography.mjs",
@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",
+    "@tanstack/react-table": "^8.21.3",
     "@types/lodash-es": "^4.17.12",
     "@types/react-window": "^1.8.8",
+    "framer-motion": "^12.38.0",
     "fuse.js": "^7.1.0",
     "jsbarcode": "^3.12.3",
     "jspdf": "^4.2.1",
