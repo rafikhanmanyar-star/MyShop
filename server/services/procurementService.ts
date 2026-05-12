@@ -965,7 +965,7 @@ export class ProcurementService {
    * Record supplier payment: allocations to bills + journal (Debit AP, Credit Cash/Bank).
    */
   async recordSupplierPayment(tenantId: string, data: SupplierPaymentInput): Promise<string> {
-    return this.db.transaction(async (client) => {
+    const paymentId = await this.db.transaction(async (client) => {
       const payRes = await client.query(
         `INSERT INTO supplier_payments (tenant_id, supplier_id, amount, payment_method, bank_account_id, payment_date, reference, notes)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
@@ -1066,6 +1066,9 @@ export class ProcurementService {
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
       return paymentId;
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
+    return paymentId;
   }
 
   /**
@@ -1142,7 +1145,7 @@ export class ProcurementService {
     paymentId: string,
     data: SupplierPaymentInput
   ): Promise<void> {
-    return this.db.transaction(async (client) => {
+    await this.db.transaction(async (client) => {
       const payRows = await client.query(
         `SELECT id, amount, bank_account_id FROM supplier_payments WHERE tenant_id = $1 AND id = $2`,
         [tenantId, paymentId]
@@ -1273,13 +1276,15 @@ export class ProcurementService {
 
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
   }
 
   /**
    * Delete supplier payment. Reverses accounting and un-applies all allocations from bills.
    */
   async deleteSupplierPayment(tenantId: string, paymentId: string): Promise<void> {
-    return this.db.transaction(async (client) => {
+    await this.db.transaction(async (client) => {
       const payRows = await client.query(
         `SELECT id, amount, bank_account_id FROM supplier_payments WHERE tenant_id = $1 AND id = $2`,
         [tenantId, paymentId]
@@ -1311,6 +1316,8 @@ export class ProcurementService {
       await client.query('DELETE FROM supplier_payments WHERE tenant_id = $1 AND id = $2', [tenantId, paymentId]);
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
     });
+    const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
+    notifyDailyReportUpdated(tenantId).catch(() => {});
   }
 
   async getPurchaseBills(tenantId: string, supplierId?: string) {

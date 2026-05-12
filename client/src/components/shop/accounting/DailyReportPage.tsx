@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-rou
 import { ArrowLeft } from 'lucide-react';
 import { accountingApi } from '../../../services/shopApi';
 import { CURRENCY } from '../../../constants';
+import { todayLocalYmd } from '../../../utils/calendarDate';
 import DailyReportSummaryPanel from './DailyReportSummaryPanel';
 
 function formatMoney(n: number) {
@@ -36,7 +37,7 @@ const DailyReportDashboard: React.FC = () => (
 const InventoryOutDrill: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+  const date = searchParams.get('date') || todayLocalYmd();
   const branchId =
     searchParams.get('branchId') === '' || searchParams.get('branchId') === 'all'
       ? null
@@ -125,7 +126,7 @@ const InventoryOutDrill: React.FC = () => {
 const InventoryInDrill: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+  const date = searchParams.get('date') || todayLocalYmd();
   const branchId =
     searchParams.get('branchId') === '' || searchParams.get('branchId') === 'all'
       ? null
@@ -207,7 +208,7 @@ const InventoryInDrill: React.FC = () => {
 const ExpensesDrill: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+  const date = searchParams.get('date') || todayLocalYmd();
   const branchId =
     searchParams.get('branchId') === '' || searchParams.get('branchId') === 'all'
       ? null
@@ -293,7 +294,7 @@ const ExpensesDrill: React.FC = () => {
 const ProductsCreatedDrill: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+  const date = searchParams.get('date') || todayLocalYmd();
 
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -371,7 +372,7 @@ const ProductsCreatedDrill: React.FC = () => {
 const KhataDrill: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const date = searchParams.get('date') || new Date().toISOString().slice(0, 10);
+  const date = searchParams.get('date') || todayLocalYmd();
 
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

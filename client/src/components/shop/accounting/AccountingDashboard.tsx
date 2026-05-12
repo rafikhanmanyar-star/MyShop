@@ -7,6 +7,56 @@ import { CURRENCY, ICONS } from '../../../constants';
 
 type RevenueView = 'monthly' | 'weekly';
 
+/** Enterprise + legacy codes used on the finance dashboard (aligned with server COA / posting). */
+const DASH_COA = {
+  TRADE_RECEIVABLES: '11201',
+  LEGACY_AR: 'AST-120',
+  MERCHANDISE_LEGACY: 'AST-110',
+  TRADE_PAYABLES: '21101',
+  LEGACY_AP: 'LIA-200',
+} as const;
+
+function sumAccountBalance(accounts: any[], predicate: (a: any) => boolean): number {
+  return accounts.reduce((s, a) => (predicate(a) ? s + (Number(a.balance) || 0) : 0), 0);
+}
+
+/** Trade receivables only — avoids lumping rental/loan receivables via broad name match. */
+function tradeReceivablesBalance(accounts: any[], receivablesKpi: number): number {
+  const explicit = accounts.find((a) => a.code === DASH_COA.TRADE_RECEIVABLES || a.code === DASH_COA.LEGACY_AR);
+  if (explicit) return Number(explicit.balance) || 0;
+  const byName = accounts.find((a) => a.type === 'Asset' && /^trade\s+receivable/i.test(String(a.name || '')));
+  if (byName) return Number(byName.balance) || 0;
+  return receivablesKpi;
+}
+
+/** All inventory-class asset accounts (113xx + legacy merchandise). */
+function inventoryAssetBalance(accounts: any[]): number {
+  return sumAccountBalance(accounts, (a) => {
+    if (a.type !== 'Asset') return false;
+    const c = String(a.code || '');
+    if (/^113\d{2}$/.test(c)) return true;
+    return c === DASH_COA.MERCHANDISE_LEGACY;
+  });
+}
+
+/** Prepaid bucket: 114xx prepaid assets. */
+function prepaidExpensesBalance(accounts: any[]): number {
+  return sumAccountBalance(accounts, (a) => a.type === 'Asset' && /^114\d{2}$/.test(String(a.code || '')));
+}
+
+/** Supplier AP — Trade Payables only (not salary/utility/tax payables). */
+function tradePayablesBalance(accounts: any[]): number {
+  const explicit = accounts.find((a) => a.code === DASH_COA.TRADE_PAYABLES || a.code === DASH_COA.LEGACY_AP);
+  if (explicit) return Number(explicit.balance) || 0;
+  const byName = accounts.find(
+    (a) =>
+      a.type === 'Liability' &&
+      /trade\s+payable/i.test(String(a.name || '')) &&
+      !/(utility|salary|tax|accrued|loan|lease)/i.test(String(a.name || ''))
+  );
+  return byName ? Number(byName.balance) || 0 : 0;
+}
+
 function dayKey(d: unknown): string {
     if (d instanceof Date) return d.toISOString().slice(0, 10);
     const s = String(d ?? '');
@@ -270,34 +320,31 @@ const AccountingDashboard: React.FC = () => {
     const activeUsersLabel =
         mobileOrders >= 1000 ? `${(mobileOrders / 1000).toFixed(1)}k orders` : `${mobileOrders} orders`;
 
-    const ledgerRows = useMemo(() => {
-        const findBal = (pred: (a: any) => boolean) => {
-            const a = accounts.find(pred);
-            return a ? (Number(a.balance) || 0) : null;
-        };
-        const rows: { name: string; balance: number }[] = [];
-        const arAcc = findBal((a) => a.code === '11201' || a.code === 'AST-120' || /receivable/i.test(a.name));
-        rows.push({ name: 'Accounts Receivable', balance: arAcc != null ? arAcc : receivablesTotal });
-        const prepaid =
-            findBal((a) => String(a.code).startsWith('114') || /prepaid/i.test(a.name)) ??
-            findBal((a) => a.type === 'Asset' && /prepaid/i.test(a.name)) ??
-            0;
-        rows.push({ name: 'Prepaid Expenses', balance: prepaid || 0 });
-        const inv =
-            findBal((a) => String(a.code).startsWith('113') || /inventory/i.test(a.name)) ??
-            findBal((a) => a.type === 'Asset' && /inventory|merchandise/i.test(a.name)) ??
-            0;
-        rows.push({ name: 'Inventory Asset', balance: inv || 0 });
-        const apRaw =
-            findBal((a) => a.code === '21101' || /trade payable|accounts payable/i.test(a.name)) ??
-            findBal((a) => a.type === 'Liability' && /payable/i.test(a.name)) ??
-            0;
+    const ledgerData = useMemo(() => {
+        const arBal = tradeReceivablesBalance(accounts, receivablesTotal);
+        const prepaidBal = prepaidExpensesBalance(accounts);
+        const invBal = inventoryAssetBalance(accounts);
+        const apRaw = tradePayablesBalance(accounts);
+        const listedAssetsSum = arBal + prepaidBal + invBal;
+        const otherAssets = totalAssets - listedAssetsSum;
+
+        const rows: { name: string; balance: number }[] = [
+            { name: 'Accounts Receivable', balance: arBal },
+            { name: 'Prepaid Expenses', balance: prepaidBal },
+            { name: 'Inventory Asset', balance: invBal },
+        ];
+        if (Math.abs(otherAssets) > 0.005) {
+            rows.push({
+                name: 'Other assets (cash, bank, fixed, etc.)',
+                balance: otherAssets,
+            });
+        }
         rows.push({
             name: 'Accounts Payable',
-            balance: apRaw ? -Math.abs(Number(apRaw)) : 0,
+            balance: apRaw > 0 ? -Math.abs(apRaw) : apRaw,
         });
-        return rows;
-    }, [accounts, receivablesTotal]);
+        return { rows };
+    }, [accounts, receivablesTotal, totalAssets]);
 
     const fmtMoney = (n: number) => `${CURRENCY} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -481,7 +528,7 @@ const AccountingDashboard: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="font-mono">
-                                {ledgerRows.map((r) => (
+                                {ledgerData.rows.map((r) => (
                                     <tr key={r.name} className="border-b border-slate-100 dark:border-slate-800">
                                         <td className="py-2 pr-2 font-sans text-[11px] font-semibold text-slate-700 dark:text-slate-300">{r.name}</td>
                                         <td
@@ -498,8 +545,12 @@ const AccountingDashboard: React.FC = () => {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td className="pt-3 text-[11px] font-bold text-[#0f172a] dark:text-white">Total Assets</td>
-                                    <td className="pt-3 text-right font-mono text-[11px] font-bold text-[#0f172a] dark:text-white">{fmtMoney(totalAssets)}</td>
+                                    <td className="pt-3 text-[11px] font-bold text-[#0f172a] dark:text-white">
+                                        Total assets (full ledger)
+                                    </td>
+                                    <td className="pt-3 text-right font-mono text-[11px] font-bold text-[#0f172a] dark:text-white">
+                                        {fmtMoney(totalAssets)}
+                                    </td>
                                 </tr>
                             </tfoot>
                         </table>

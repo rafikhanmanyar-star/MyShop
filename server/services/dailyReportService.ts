@@ -18,7 +18,7 @@ export interface DailyReportSummary {
   inventoryOutQty: number;
   inventoryInQty: number;
   totalExpenses: number;
-  /** Procurement supplier settlements for the day — tenant-wide (no branch on payments). */
+  /** Procurement supplier settlements for the calendar day (payment_date), tenant-wide (no branch on payments). */
   vendorPaymentsTotal: number;
   newProductsCount: number;
   /** Khata (customer credit) — tenant-wide; not filtered by branch */
@@ -103,11 +103,12 @@ export class DailyReportService {
       branchId ? [tenantId, dateStr, branchId] : [tenantId, dateStr]
     );
 
+    // Match calendar day like expenses (expense_date), not UTC [start,end). payment_date comes from date-picker YYYY-MM-DD.
     const vendorPay = await db.query<{ s: string }>(
       `SELECT COALESCE(SUM(amount::numeric), 0)::text AS s
        FROM supplier_payments
-       WHERE tenant_id = $1 AND payment_date >= $2::timestamptz AND payment_date < $3::timestamptz`,
-      [tenantId, start, end]
+       WHERE tenant_id = $1 AND payment_date::date = $2::date`,
+      [tenantId, dateStr]
     );
 
     const prodC = await db.query<{ c: string }>(
