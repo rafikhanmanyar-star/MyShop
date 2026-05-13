@@ -6,10 +6,11 @@ import { useAuth } from '../../context/AuthContext';
 import { useBranch } from '../../context/BranchContext';
 import { useReportFilters } from '../../hooks/useReportFilters';
 import { roleHasReportPermission } from '../../lib/reportPermissions';
+import { shopApi, shopUserApi } from '../../services/shopApi';
 import { reportsApi } from '../../services/reportsApi';
 import { exportReportTable } from '../../utils/reportExport';
 import type { ReportFilterState } from '../../types/reports';
-import { isReportCategoryId } from '../../types/reports';
+import { isReportCategoryId, sanitizeReportFilters } from '../../types/reports';
 import Button from '../ui/Button';
 import Select from '../ui/Select';
 import ReportFilters from './report-filters';
@@ -47,6 +48,12 @@ const ReportsPage: React.FC = () => {
       ? detailMatch.params.reportCategory
       : category;
 
+  const [savedItems, setSavedItems] = useState<{ id: string; name: string; categorySlug: string }[]>([]);
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
     const apply = () => setSidebarCollapsed(!mq.matches);
@@ -54,7 +61,39 @@ const ReportsPage: React.FC = () => {
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
   }, []);
-  const [savedItems, setSavedItems] = useState<{ id: string; name: string; categorySlug: string }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [w, cat, br, u] = await Promise.all([
+          shopApi.getWarehouses(),
+          shopApi.getShopCategories(),
+          shopApi.getShopBrands(),
+          shopUserApi.getUsers(),
+        ]);
+        if (cancelled) return;
+        setWarehouses((w || []).map((x: { id: string; name?: string; code?: string }) => ({ id: x.id, name: x.name || x.code || x.id })));
+        setCategories((cat || []).map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })));
+        setBrands(
+          (br || [])
+            .filter((x: { is_active?: boolean }) => x.is_active !== false)
+            .map((x: { id: string; name: string }) => ({ id: x.id, name: x.name }))
+        );
+        setUsers((u || []).map((x: { id: string; name?: string; username?: string }) => ({ id: x.id, name: x.name || x.username || x.id })));
+      } catch {
+        if (!cancelled) {
+          setWarehouses([]);
+          setCategories([]);
+          setBrands([]);
+          setUsers([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const canExport = roleHasReportPermission(user?.role, 'reports.export');
   const canAudit = roleHasReportPermission(user?.role, 'reports.audit');
@@ -117,10 +156,9 @@ const ReportsPage: React.FC = () => {
     const res = await reportsApi.listFilterPresets();
     const row = (res.items as any[]).find((r) => r.id === id);
     if (!row?.filters) return null;
-    const f = row.filters as Partial<ReportFilterState>;
     const merged: ReportFilterState = {
       ...filters,
-      ...f,
+      ...sanitizeReportFilters(row.filters as Record<string, unknown>),
     };
     return merged;
   };
@@ -137,7 +175,7 @@ const ReportsPage: React.FC = () => {
   const main = () => {
     switch (category) {
       case 'executive':
-        return <ExecutiveDashboardPanel dateFrom={range.from} dateTo={range.to} branchId={filters.branchId} />;
+        return <ExecutiveDashboardPanel filters={filters} range={range} />;
       case 'sales':
         return <SalesReportsPanel userRole={user?.role} />;
       case 'inventory':
@@ -335,6 +373,10 @@ const ReportsPage: React.FC = () => {
             commitFiltersToUrl={commitFiltersToUrl}
             setSearchDebounced={setSearchDebounced}
             branches={branchOptions}
+            warehouses={warehouses}
+            categories={categories}
+            brands={brands}
+            users={users}
             onSavePreset={onSaveFilterPreset}
             onLoadPresets={onLoadPresets}
             onApplyPreset={onApplyPreset}

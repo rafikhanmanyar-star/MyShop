@@ -20,6 +20,10 @@ export interface ReportFiltersProps {
   commitFiltersToUrl: (full: ReportFilterState) => void;
   setSearchDebounced: (q: string) => void;
   branches: { id: string; name: string }[];
+  warehouses: { id: string; name: string }[];
+  categories: { id: string; name: string }[];
+  brands: { id: string; name: string }[];
+  users: { id: string; name: string }[];
   onSavePreset: (name: string) => Promise<void>;
   onLoadPresets: () => Promise<{ id: string; name: string }[]>;
   onApplyPreset: (id: string) => Promise<ReportFilterState | null>;
@@ -31,6 +35,10 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
   commitFiltersToUrl,
   setSearchDebounced,
   branches,
+  warehouses,
+  categories,
+  brands,
+  users,
   onSavePreset,
   onLoadPresets,
   onApplyPreset,
@@ -134,6 +142,11 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
           onChange={(e) => setFilters((prev) => ({ ...prev, warehouseId: e.target.value }))}
         >
           <option value="">All warehouses</option>
+          {warehouses.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
         </Select>
         <Input
           label="Customer ID"
@@ -155,6 +168,11 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
           onChange={(e) => setFilters((prev) => ({ ...prev, categoryId: e.target.value }))}
         >
           <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
         </Select>
         <Select
           label="Brand"
@@ -162,6 +180,11 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
           onChange={(e) => setFilters((prev) => ({ ...prev, brandId: e.target.value }))}
         >
           <option value="">All brands</option>
+          {brands.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
         </Select>
         <Input
           label="Product ID"
@@ -175,6 +198,11 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
           onChange={(e) => setFilters((prev) => ({ ...prev, userId: e.target.value }))}
         >
           <option value="">All users</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
         </Select>
         <Select
           label="Payment method"
@@ -191,19 +219,10 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
           value={filters.status}
           onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
         >
-          <option value="">Any</option>
+          <option value="all">Any</option>
           <option value="Completed">Completed</option>
           <option value="Void">Void</option>
         </Select>
-        <Input
-          label="Project"
-          compact
-          value={filters.projectId}
-          onChange={(e) => setFilters((prev) => ({ ...prev, projectId: e.target.value }))}
-        />
-        <Input label="Unit" compact value={filters.unitId} onChange={(e) => setFilters((prev) => ({ ...prev, unitId: e.target.value }))} />
-        <Input label="Broker" compact value={filters.brokerId} onChange={(e) => setFilters((prev) => ({ ...prev, brokerId: e.target.value }))} />
-        <Input label="Owner" compact value={filters.ownerId} onChange={(e) => setFilters((prev) => ({ ...prev, ownerId: e.target.value }))} />
         <Input
           label="Search (debounced)"
           compact

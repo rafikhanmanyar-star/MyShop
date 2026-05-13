@@ -57,11 +57,36 @@ router.get('/executive-summary', ...analyst, requireReportPermission('reports.fi
     const dateFrom = String(req.query.from || '').slice(0, 10);
     const dateTo = String(req.query.to || '').slice(0, 10);
     const branchId = req.query.branchId ? String(req.query.branchId) : null;
+    const warehouseId = req.query.warehouseId ? String(req.query.warehouseId) : null;
+    const customerId = req.query.customerId ? String(req.query.customerId) : null;
+    const supplierId = req.query.supplierId ? String(req.query.supplierId) : null;
+    const categoryId = req.query.categoryId ? String(req.query.categoryId) : null;
+    const brandId = req.query.brandId ? String(req.query.brandId) : null;
+    const productId = req.query.productId ? String(req.query.productId) : null;
+    const userId = req.query.userId ? String(req.query.userId) : null;
+    const paymentMethod = req.query.paymentMethod ? String(req.query.paymentMethod) : null;
+    const status = req.query.status != null ? String(req.query.status) : 'Completed';
+    const search = req.query.search ? String(req.query.search) : null;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
       return res.status(400).json({ error: 'Invalid date range', code: 'BAD_RANGE' });
     }
     const svc = getReportingAnalyticsService();
-    const data = await svc.getExecutiveSummary({ tenantId, dateFrom, dateTo, branchId });
+    const data = await svc.getExecutiveSummary({
+      tenantId,
+      dateFrom,
+      dateTo,
+      branchId,
+      warehouseId,
+      customerId,
+      supplierId,
+      categoryId,
+      brandId,
+      productId,
+      userId,
+      paymentMethod,
+      status,
+      search,
+    });
     res.json(data);
   } catch (e: any) {
     console.error('[reports] executive-summary', e);

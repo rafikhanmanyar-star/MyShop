@@ -98,9 +98,40 @@ export const reportsApi = {
   downloadExportBlob(id: string) {
     return apiClient.getBlob(`/shop/reports/exports/${encodeURIComponent(id)}/download`);
   },
-  executiveSummary(params: { from: string; to: string; branchId?: string | null }) {
-    const q = new URLSearchParams({ from: params.from, to: params.to });
-    if (params.branchId) q.set('branchId', params.branchId);
+  executiveSummary(params: {
+    from: string;
+    to: string;
+    branchId?: string | null;
+    warehouseId?: string | null;
+    customerId?: string | null;
+    supplierId?: string | null;
+    categoryId?: string | null;
+    brandId?: string | null;
+    productId?: string | null;
+    userId?: string | null;
+    paymentMethod?: string | null;
+    status: string;
+    search?: string | null;
+  }) {
+    const q = new URLSearchParams({
+      from: params.from,
+      to: params.to,
+      status: params.status || 'Completed',
+    });
+    const add = (key: string, val: string | null | undefined) => {
+      const v = typeof val === 'string' ? val.trim() : '';
+      if (v) q.set(key, v);
+    };
+    add('branchId', params.branchId ?? undefined);
+    add('warehouseId', params.warehouseId ?? undefined);
+    add('customerId', params.customerId ?? undefined);
+    add('supplierId', params.supplierId ?? undefined);
+    add('categoryId', params.categoryId ?? undefined);
+    add('brandId', params.brandId ?? undefined);
+    add('productId', params.productId ?? undefined);
+    add('userId', params.userId ?? undefined);
+    add('paymentMethod', params.paymentMethod ?? undefined);
+    add('search', params.search ?? undefined);
     return apiClient.get<ExecutiveSummaryResponse>(`/shop/reports/executive-summary?${q.toString()}`);
   },
   listSaved() {

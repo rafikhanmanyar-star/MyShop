@@ -37,11 +37,8 @@ export function useReportFilters() {
     next.productId = searchParams.get('prod') || '';
     next.userId = searchParams.get('usr') || '';
     next.paymentMethod = searchParams.get('pay') || '';
-    next.status = searchParams.get('st') || '';
-    next.projectId = searchParams.get('proj') || '';
-    next.unitId = searchParams.get('unit') || '';
-    next.brokerId = searchParams.get('brk') || '';
-    next.ownerId = searchParams.get('own') || '';
+    const st = searchParams.get('st');
+    next.status = st === 'all' || st === 'Void' ? st : 'Completed';
     next.search = searchParams.get('q') || '';
     setFilters(next);
   }, [searchParams]);
@@ -88,11 +85,11 @@ export function useReportFilters() {
           setIf('prod', full.productId);
           setIf('usr', full.userId);
           setIf('pay', full.paymentMethod);
-          setIf('st', full.status);
-          setIf('proj', full.projectId);
-          setIf('unit', full.unitId);
-          setIf('brk', full.brokerId);
-          setIf('own', full.ownerId);
+          if (full.status === 'all' || full.status === 'Void') {
+            n.set('st', full.status);
+          } else {
+            n.delete('st');
+          }
           setIf('q', full.search);
           return n;
         },

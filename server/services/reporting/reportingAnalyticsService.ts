@@ -1,7 +1,14 @@
 import { getDatabaseService } from '../databaseService.js';
 import { getReportingCache, reportingCacheKey, setReportingCache } from './reportingCache.js';
+import {
+  buildSaleFilterSql,
+  buildSaleTailParams,
+  executiveSummaryNeedsRawSales,
+  strParam,
+  type ExecutiveSummaryFilterInput,
+} from './executiveSummaryFilters.js';
 
-export interface ExecutiveSummaryRange {
+export interface ExecutiveSummaryRange extends ExecutiveSummaryFilterInput {
   tenantId: string;
   dateFrom: string;
   dateTo: string;
@@ -22,17 +29,47 @@ function addDaysUtc(isoDate: string, days: number): string {
 export class ReportingAnalyticsService {
   async getExecutiveSummary(input: ExecutiveSummaryRange) {
     const db = getDatabaseService();
-    const branchKey = input.branchId?.trim() || '';
-    const cacheKey = reportingCacheKey(['exec', input.tenantId, input.dateFrom, input.dateTo, branchKey]);
+    const branchKey = strParam(input.branchId);
+    const filters: ExecutiveSummaryFilterInput = {
+      warehouseId: input.warehouseId,
+      customerId: input.customerId,
+      supplierId: input.supplierId,
+      categoryId: input.categoryId,
+      brandId: input.brandId,
+      productId: input.productId,
+      userId: input.userId,
+      paymentMethod: input.paymentMethod,
+      status: input.status,
+      search: input.search,
+    };
+    const tailParams = buildSaleTailParams(filters);
+    const useRawOnly = executiveSummaryNeedsRawSales(filters);
+    const cacheKey = reportingCacheKey([
+      'exec',
+      input.tenantId,
+      input.dateFrom,
+      input.dateTo,
+      branchKey,
+      ...tailParams,
+      strParam(input.supplierId),
+    ]);
     const cached = getReportingCache<unknown>(cacheKey);
     if (cached) return cached;
 
     const start = toUtcStartDay(input.dateFrom);
     const endExclusive = toUtcStartDay(addDaysUtc(input.dateTo, 1));
-    const branchParam = branchKey || null;
+    const branchParam = branchKey;
+    const isPg = db.getType() === 'postgres';
+    const branchClause = (branchColumn: string) =>
+      isPg
+        ? `AND (($4::text = '') OR (${branchColumn}::text = $4::text))`
+        : `AND (($4 = '') OR (CAST(${branchColumn} AS TEXT) = $4))`;
+
+    const saleExtra = buildSaleFilterSql(isPg).sql;
+    const saleBaseParams = [input.tenantId, start, endExclusive, branchParam, ...tailParams];
 
     let salesFromMv: any = null;
-    if (db.getType() === 'postgres') {
+    if (isPg && !useRawOnly) {
       try {
         const mvRows = await db.query(
           `SELECT
@@ -44,7 +81,7 @@ export class ReportingAnalyticsService {
            WHERE tenant_id = $1
              AND sale_day >= $2
              AND sale_day <= $3
-             AND ($4 IS NULL OR $4 = '' OR branch_id = $4)`,
+             ${branchClause('branch_id')}`,
           [input.tenantId, input.dateFrom, input.dateTo, branchParam]
         );
         if (mvRows.length) salesFromMv = mvRows[0];
@@ -62,16 +99,16 @@ export class ReportingAnalyticsService {
       const saleRows = await db.query(
         `SELECT
            COUNT(*) AS orders,
-           COALESCE(SUM(grand_total), 0) AS gross_revenue,
-           COALESCE(SUM(discount_total), 0) AS discounts,
-           COALESCE(SUM(tax_total), 0) AS taxes
-         FROM shop_sales
-         WHERE tenant_id = $1
-           AND status = 'Completed'
-           AND created_at >= $2
-           AND created_at < $3
-           AND ($4 IS NULL OR $4 = '' OR branch_id = $4)`,
-        [input.tenantId, start, endExclusive, branchParam]
+           COALESCE(SUM(s.grand_total), 0) AS gross_revenue,
+           COALESCE(SUM(s.discount_total), 0) AS discounts,
+           COALESCE(SUM(s.tax_total), 0) AS taxes
+         FROM shop_sales s
+         WHERE s.tenant_id = $1
+           AND s.created_at >= $2
+           AND s.created_at < $3
+           ${branchClause('s.branch_id')}
+           ${saleExtra}`,
+        saleBaseParams
       );
       const r = saleRows[0] || {};
       orders = Number(r.orders ?? 0);
@@ -80,14 +117,24 @@ export class ReportingAnalyticsService {
       taxes = Number(r.taxes ?? 0);
     }
 
+    const supplierParam = strParam(input.supplierId);
     const expRows = await db.query(
-      `SELECT COALESCE(SUM(amount), 0) AS expenses
-       FROM expenses
-       WHERE tenant_id = $1
-         AND expense_date >= $2
-         AND expense_date <= $3
-         AND ($4 IS NULL OR $4 = '' OR branch_id = $4)`,
-      [input.tenantId, input.dateFrom, input.dateTo, branchParam]
+      isPg
+        ? `SELECT COALESCE(SUM(e.amount), 0) AS expenses
+           FROM expenses e
+           WHERE e.tenant_id = $1
+             AND e.expense_date >= $2
+             AND e.expense_date <= $3
+             AND (($4::text = '') OR (e.branch_id::text = $4::text))
+             AND (($5::text = '') OR (e.vendor_id::text = $5::text))`
+        : `SELECT COALESCE(SUM(e.amount), 0) AS expenses
+           FROM expenses e
+           WHERE e.tenant_id = $1
+             AND e.expense_date >= $2
+             AND e.expense_date <= $3
+             AND (($4 = '') OR (CAST(e.branch_id AS TEXT) = $4))
+             AND (($5 = '') OR (CAST(e.vendor_id AS TEXT) = $5))`,
+      [input.tenantId, input.dateFrom, input.dateTo, branchParam, supplierParam]
     );
     const expenses = Number(expRows[0]?.expenses ?? 0);
 
@@ -97,14 +144,14 @@ export class ReportingAnalyticsService {
        INNER JOIN shop_sales s ON s.id = si.sale_id AND s.tenant_id = si.tenant_id
        INNER JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
        WHERE si.tenant_id = $1
-         AND s.status = 'Completed'
          AND s.created_at >= $2
          AND s.created_at < $3
-         AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+         ${branchClause('s.branch_id')}
+         ${saleExtra}
        GROUP BY p.id, p.name
        ORDER BY value DESC
        LIMIT 8`,
-      [input.tenantId, start, endExclusive, branchParam]
+      saleBaseParams
     );
 
     const topBranches = await db.query(
@@ -112,29 +159,30 @@ export class ReportingAnalyticsService {
        FROM shop_sales s
        LEFT JOIN shop_branches b ON b.id = s.branch_id AND b.tenant_id = s.tenant_id
        WHERE s.tenant_id = $1
-         AND s.status = 'Completed'
          AND s.created_at >= $2
          AND s.created_at < $3
+         ${branchClause('s.branch_id')}
+         ${saleExtra}
        GROUP BY b.id, b.name
        ORDER BY value DESC
        LIMIT 8`,
-      [input.tenantId, start, endExclusive]
+      saleBaseParams
     );
 
     let revenueTrend: any[];
-    if (db.getType() === 'postgres') {
+    if (isPg) {
       revenueTrend = await db.query(
         `SELECT TO_CHAR((s.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day_label,
                 COALESCE(SUM(s.grand_total), 0) AS amount
          FROM shop_sales s
          WHERE s.tenant_id = $1
-           AND s.status = 'Completed'
            AND s.created_at >= $2
            AND s.created_at < $3
-           AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+           ${branchClause('s.branch_id')}
+           ${saleExtra}
          GROUP BY 1
          ORDER BY 1 ASC`,
-        [input.tenantId, start, endExclusive, branchParam]
+        saleBaseParams
       );
     } else {
       revenueTrend = await db.query(
@@ -142,13 +190,13 @@ export class ReportingAnalyticsService {
                 COALESCE(SUM(s.grand_total), 0) AS amount
          FROM shop_sales s
          WHERE s.tenant_id = $1
-           AND s.status = 'Completed'
            AND s.created_at >= $2
            AND s.created_at < $3
-           AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+           ${branchClause('s.branch_id')}
+           ${saleExtra}
          GROUP BY strftime('%Y-%m-%d', s.created_at)
          ORDER BY day_label ASC`,
-        [input.tenantId, start, endExclusive, branchParam]
+        saleBaseParams
       );
     }
 

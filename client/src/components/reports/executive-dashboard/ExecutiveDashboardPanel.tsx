@@ -18,6 +18,7 @@ import {
 } from 'recharts';
 import Card from '../../ui/Card';
 import { reportsApi, type ExecutiveSummaryResponse } from '../../../services/reportsApi';
+import type { ReportFilterState } from '../../../types/reports';
 
 const COLORS = ['#0047AB', '#2563eb', '#38bdf8', '#a78bfa', '#f472b6', '#fb923c', '#34d399', '#facc15'];
 
@@ -32,15 +33,24 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
 }
 
 export interface ExecutiveDashboardPanelProps {
-  dateFrom: string;
-  dateTo: string;
-  branchId: string;
+  filters: ReportFilterState;
+  range: { from: string; to: string };
 }
 
-const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ dateFrom, dateTo, branchId }) => {
+const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ filters, range }) => {
   const [data, setData] = useState<ExecutiveSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const queryKey = useMemo(
+    () =>
+      JSON.stringify({
+        from: range.from,
+        to: range.to,
+        ...filters,
+      }),
+    [range.from, range.to, filters]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -49,9 +59,19 @@ const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ dateF
       setError(null);
       try {
         const res = await reportsApi.executiveSummary({
-          from: dateFrom,
-          to: dateTo,
-          branchId: branchId || null,
+          from: range.from,
+          to: range.to,
+          branchId: filters.branchId.trim() || null,
+          warehouseId: filters.warehouseId.trim() || null,
+          customerId: filters.customerId.trim() || null,
+          supplierId: filters.supplierId.trim() || null,
+          categoryId: filters.categoryId.trim() || null,
+          brandId: filters.brandId.trim() || null,
+          productId: filters.productId.trim() || null,
+          userId: filters.userId.trim() || null,
+          paymentMethod: filters.paymentMethod.trim() || null,
+          status: filters.status,
+          search: filters.search.trim() || null,
         });
         if (!cancelled) setData(res);
       } catch (e: any) {
@@ -63,7 +83,7 @@ const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ dateF
     return () => {
       cancelled = true;
     };
-  }, [dateFrom, dateTo, branchId]);
+  }, [queryKey]);
 
   const pieExpense = useMemo(() => {
     if (!data) return [];
@@ -109,7 +129,8 @@ const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ dateF
       <div>
         <h2 className="text-xl font-bold tracking-tight text-[#0B2A5B] dark:text-slate-100">Executive dashboard</h2>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Consolidated KPIs with live aggregates from POS, expenses, and optional materialized views (PostgreSQL).
+          KPIs respect the filter bar (branch, warehouse via product inventory, customer, product/category/brand, cashier,
+          payment, status, search, and supplier for expenses). Apply filters to refresh.
         </p>
       </div>
 
@@ -159,7 +180,7 @@ const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ dateF
               <LineChart
                 data={series.revenueTrend.map((d) => ({
                   day: d.day,
-                  profit: Math.max(0, d.revenue - (kpis.expenses / Math.max(series.revenueTrend.length, 1))),
+                  profit: Math.max(0, d.revenue - kpis.expenses / Math.max(series.revenueTrend.length, 1)),
                 }))}
               >
                 <CartesianGrid strokeDasharray="3 3" className="stroke-slate-200 dark:stroke-slate-700" />
