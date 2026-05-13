@@ -36,7 +36,25 @@ Apply SQL migrations in `server/migrations/` (e.g. new indexes, schema changes).
 
 ---
 
-## 3. Installable app
+## 3. Delete product & related transactions (DB cleanup)
+
+One-off script to remove a product and its **POS sales**, **sales returns**, **mobile orders** (lines referencing the product), **purchase bills** (lines referencing the product), **inventory movements / batches**, and **procurement demand draft lines**, then the **`shop_products`** row. Uses the same `DATABASE_URL` as the API (`server/.env`).
+
+| Step | Where to run | Command |
+|------|----------------|---------|
+| Dry run (counts only, no deletes) | **`server/`** | `$env:TENANT_COMPANY_HINT="obo"; $env:PRODUCT_HINT="your-product-name"; npx tsx scripts/delete-product-by-name.ts --dry` |
+| Execute (after backup) | **`server/`** | `$env:TENANT_COMPANY_HINT="obo"; $env:PRODUCT_HINT="your-product-name"; npx tsx scripts/delete-product-by-name.ts --execute` |
+
+**Environment variables (optional):**
+
+- `TENANT_COMPANY_HINT` — substring match on `tenants.company_name` or `tenants.name` (default: `obo`). If more than one tenant matches, the script exits and lists them.
+- `PRODUCT_HINT` — substring match on product **name**, **sku**, or **barcode** (default: `erasdf`). If more than one product matches, narrow the hint or use an exact sku.
+
+**What it does:** Connects to PostgreSQL, resolves a single tenant and a single product, prints related row counts, then (with `--execute`) deletes in one transaction: sales returns and journals → mobile orders → purchase bills → POS sales → remaining movements/batches for that product → product. Omit both env vars to use the defaults.
+
+---
+
+## 4. Installable app
 
 Build the Windows desktop app and optionally bump version, commit, push, and create a GitHub release.
 
@@ -85,5 +103,6 @@ One command runs the PowerShell script that does all steps: bump version, build,
 | **Local test** | `npm run electron:dev` | — (run-only; use installable release when ready to ship) |
 | **POS vs cloud API** | `npm run dev:pos:cloud` | — |
 | **Database migrations** | `npm run migrate` (from repo root or `server/`) | — |
+| **Delete test product (DB)** | From `server/`: set `TENANT_COMPANY_HINT` / `PRODUCT_HINT`, then `npx tsx scripts/delete-product-by-name.ts --dry` or `--execute` | — |
 | **Installable (local stack)** | `npm run dist:local` or `npm run dist:win:local` | — (use `release` for cloud + push) |
 | **Installable (cloud, Windows)** | `npm run dist:win` | `npm run release` (patch), `npm run release:minor`, `npm run release:major` |

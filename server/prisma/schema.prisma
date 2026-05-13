@@ -1,0 +1,117 @@
+// Reference Prisma models for the enterprise reporting module (MyShop).
+// Authoritative schema changes: server/migrations/*.sql
+// Wire to your existing Tenant/User models when adopting Prisma fully.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SavedReport {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  userId        String   @map("user_id")
+  name          String
+  categorySlug  String   @map("category_slug")
+  definition    Json     @default("{}")
+  isShared      Boolean  @default(false) @map("is_shared")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  schedules ReportSchedule[] @relation("ScheduleSavedReport")
+  exports   ReportExport[]
+
+  @@index([tenantId])
+  @@index([tenantId, userId])
+  @@index([tenantId, categorySlug])
+  @@map("saved_reports")
+}
+
+model ReportTemplate {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  userId     String?  @map("user_id")
+  name       String
+  moduleKey  String   @map("module_key")
+  definition Json     @default("{}")
+  isSystem   Boolean  @default(false) @map("is_system")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  schedules ReportSchedule[]
+
+  @@index([tenantId])
+  @@index([tenantId, moduleKey])
+  @@map("report_templates")
+}
+
+model ReportSchedule {
+  id             String    @id @default(uuid())
+  tenantId       String    @map("tenant_id")
+  userId         String    @map("user_id")
+  templateId     String?   @map("template_id")
+  savedReportId  String?   @map("saved_report_id")
+  cronExpression String    @map("cron_expression")
+  timezone       String    @default("UTC")
+  exportFormat   String    @default("pdf") @map("export_format")
+  isActive       Boolean   @default(true) @map("is_active")
+  lastRunAt      DateTime? @map("last_run_at")
+  nextRunAt      DateTime? @map("next_run_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  template    ReportTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  savedReport SavedReport?    @relation("ScheduleSavedReport", fields: [savedReportId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, isActive, nextRunAt])
+  @@map("report_schedules")
+}
+
+model ReportExport {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  userId        String    @map("user_id")
+  savedReportId String?   @map("saved_report_id")
+  format        String
+  status        String    @default("pending")
+  filePath      String?   @map("file_path")
+  errorMessage  String?   @map("error_message")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  savedReport SavedReport? @relation(fields: [savedReportId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, status, createdAt(sort: Desc)])
+  @@map("report_exports")
+}
+
+model DashboardWidgetLayout {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  layout    Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, userId])
+  @@map("dashboard_widgets")
+}
+
+model ReportFilterPreset {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  name      String
+  filters   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, userId])
+  @@map("report_filter_presets")
+}

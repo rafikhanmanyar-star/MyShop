@@ -187,6 +187,36 @@ class ApiClient {
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
+
+  /** Authenticated GET returning a binary body (e.g. CSV export download). */
+  async getBlob(endpoint: string): Promise<Blob> {
+    this.loadAuth();
+    const url = `${this.baseUrl}${endpoint}`;
+    const headers: HeadersInit = {};
+    if (this.token) {
+      (headers as Record<string, string>)['Authorization'] = `Bearer ${this.token}`;
+    }
+    if (this.tenantId) {
+      (headers as Record<string, string>)['x-org-id'] = this.tenantId;
+    }
+    if (this.branchId) {
+      (headers as Record<string, string>)['x-branch-id'] = this.branchId;
+    }
+    const response = await fetch(url, { method: 'GET', headers });
+    const contentType = response.headers.get('content-type') || '';
+    if (!response.ok) {
+      if (contentType.includes('application/json')) {
+        const responseData = await response.json();
+        throw {
+          error: responseData.error || 'Request failed',
+          message: responseData.message || responseData.error,
+          status: response.status,
+        };
+      }
+      throw { error: 'Download failed', message: `HTTP ${response.status}`, status: response.status };
+    }
+    return response.blob();
+  }
 }
 
 export const apiClient = new ApiClient();

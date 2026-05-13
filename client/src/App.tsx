@@ -10,7 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User, ChefHat
+  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User, ChefHat, FileSpreadsheet
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
 import { ConnectivityProvider } from './context/ConnectivityContext';
@@ -36,6 +36,7 @@ const OffersPage = lazy(() => import('./components/shop/OffersPage'));
 const RecipesListPage = lazy(() => import('./components/shop/recipes/RecipesListPage'));
 const RecipeEditPage = lazy(() => import('./components/shop/recipes/RecipeEditPage'));
 const ForecastPage = lazy(() => import('./components/shop/ForecastPage'));
+const ReportsPage = lazy(() => import('./app/dashboard/reports/page'));
 const CashierDashboardPage = lazy(() => import('./components/shop/cashier/CashierDashboardPage'));
 const ShiftsAdminPage = lazy(() => import('./components/shop/cashier/ShiftsAdminPage'));
 const KhataPage = lazy(() => import('./components/shop/khata/KhataPage'));
@@ -99,6 +100,13 @@ const navSections: NavSection[] = [
       { path: '/multi-store', label: 'Multi-Store', icon: Building2, roles: ['admin'] },
       { path: '/shifts', label: 'Shifts', icon: Clock, roles: ['admin', 'accountant'] },
       { path: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin', 'accountant'] },
+      {
+        path: '/dashboard/reports',
+        label: 'Reporting',
+        title: 'Enterprise reporting hub — POS, inventory, finance, audit, and custom builder',
+        icon: FileSpreadsheet,
+        roles: ['admin', 'accountant'],
+      },
       { path: '/accounting', label: 'Accounting', icon: BookOpen, roles: ['admin', 'accountant'] },
       { path: '/expenses', label: 'Expenses', icon: Wallet, roles: ['admin', 'accountant'] },
       { path: '/forecast', label: 'Forecasting', icon: Brain, roles: ['admin', 'accountant'] },
@@ -390,6 +398,18 @@ function AppLayout() {
               <Route path="/multi-store" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MultiStorePage /></div> : <Navigate to="/" replace />} />
               <Route path="/shifts" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><ShiftsAdminPage /></div> : <Navigate to="/" replace />} />
               <Route path="/analytics" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><BIDashboardsPage /></div> : <Navigate to="/" replace />} />
+              <Route
+                path="/dashboard/reports/*"
+                element={
+                  ['admin', 'accountant'].includes(role) ? (
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                      <ReportsPage />
+                    </div>
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
               <Route path="/accounting" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><AccountingPage /></div> : <Navigate to="/" replace />} />
               <Route
                 path="/accounting/reports/daily/*"

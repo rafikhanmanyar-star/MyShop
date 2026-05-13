@@ -14,6 +14,7 @@ export type SystemLogInput = {
 export async function insertSystemLog(input: SystemLogInput): Promise<void> {
   try {
     const db = getDatabaseService();
+    const payloadSql = db.getType() === 'postgres' ? '$3::jsonb' : '$3';
     let payloadJson: string | null = null;
     if (input.payload !== undefined) {
       try {
@@ -23,7 +24,7 @@ export async function insertSystemLog(input: SystemLogInput): Promise<void> {
       }
     }
     await db.query(
-      `INSERT INTO system_logs (tenant_id, module, payload, error) VALUES ($1, $2, $3::jsonb, $4)`,
+      `INSERT INTO system_logs (tenant_id, module, payload, error) VALUES ($1, $2, ${payloadSql}, $4)`,
       [input.tenantId, input.module, payloadJson, input.error]
     );
   } catch (e) {

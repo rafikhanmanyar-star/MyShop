@@ -18,6 +18,8 @@ import procurementDemandRoutes from './routes/procurementDemand.js';
 import shiftsRoutes from './routes/shifts.js';
 import khataRoutes from './routes/khata.js';
 import dataRoutes from './routes/data.js';
+import reportsRoutes from './routes/reports.js';
+import { startReportExportWorker } from '../services/reporting/reportExportWorker.js';
 import platformTenantsRoutes from './routes/platformTenants.js';
 import platformAuthRoutes from './routes/platformAuth.js';
 import { platformAdminMiddleware } from '../middleware/platformAdminMiddleware.js';
@@ -114,6 +116,7 @@ app.use('/api/shop/procurement', tenantMiddleware(dbService), procurementRoutes)
 app.use('/api/shop/shifts', tenantMiddleware(dbService), shiftsRoutes);
 app.use('/api/shop/khata', tenantMiddleware(dbService), khataRoutes);
 app.use('/api/shop/data', tenantMiddleware(dbService), dataRoutes);
+app.use('/api/shop/reports', tenantMiddleware(dbService), reportsRoutes);
 app.use('/api/shop', tenantMiddleware(dbService), shopRoutes);
 
 // Platform admin UI (static HTML). Serve index without 308 redirect — avoids ERR_TOO_MANY_REDIRECTS
@@ -191,6 +194,8 @@ async function start() {
       console.log(`✅ MyShop API running at http://${HOST}:${PORT}`);
       console.log(`📡 CORS origins: ${corsOrigins.join(', ')}`);
     });
+
+    startReportExportWorker();
 
     // Release quantity_reserved on stale Pending mobile orders (TTL in mobile_ordering_settings).
     if (process.env.DISABLE_MOBILE_PENDING_RESERVATION_SWEEP !== 'true') {
