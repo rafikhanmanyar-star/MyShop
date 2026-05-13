@@ -128,6 +128,18 @@ export class AuthService {
         matchedUser.tenant_id,
       ]);
 
+      // Release terminal slots held by idle or expired sessions. assignNextAvailable ignores idle
+      // holders for "busy" detection, but idx_user_sessions_pos_terminal_unique still blocks INSERT
+      // until those rows clear pos_terminal_id (otherwise a "free" terminal re-assignment hits 23505).
+      const nowIso = new Date().toISOString();
+      const idleCutoffIso = new Date(Date.now() - POS_TERMINAL_IDLE_MS).toISOString();
+      await client.execute(
+        `UPDATE user_sessions SET pos_terminal_id = NULL
+         WHERE tenant_id = $1 AND pos_terminal_id IS NOT NULL
+           AND (expires_at <= $2 OR last_activity <= $3)`,
+        [matchedUser.tenant_id, nowIso, idleCutoffIso]
+      );
+
       let posTerminalId: string | null = null;
       if (posClient) {
         posTerminalId = await this.assignNextAvailablePosTerminal(client, matchedUser.tenant_id);
