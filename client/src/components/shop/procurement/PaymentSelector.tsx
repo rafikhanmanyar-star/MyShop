@@ -63,7 +63,7 @@ export default function PaymentSelector({
       </div>
 
       {value === 'Partial' && (
-        <div>
+        <div data-procurement-barcode-ignore>
           <label className="label mb-0.5 block">Amount paid</label>
           <input
             type="number"

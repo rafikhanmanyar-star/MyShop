@@ -42,12 +42,17 @@ function normalizeCategoryFilters(
     };
 }
 
-/** Primary sort choices shown in the filter drawer (matches product browse reference). */
+/** Primary sort choices in the filter drawer. */
 const FILTER_SORT_PILLS: { value: string; label: string }[] = [
+    { value: 'relevance', label: 'Relevance' },
     { value: 'newest', label: 'Newest' },
+    { value: 'best_selling', label: 'Best selling' },
+    { value: 'top_rated', label: 'Top rated' },
     { value: 'popularity', label: 'Popular' },
     { value: 'price_low_high', label: 'Price: Low to High' },
     { value: 'price_high_low', label: 'Price: High to Low' },
+    { value: 'biggest_discount', label: 'Biggest discount' },
+    { value: 'fastest_delivery', label: 'Fast delivery' },
 ];
 
 type ComboOption = { value: string; label: string };

@@ -213,6 +213,12 @@ export class MobileOrderService {
         filterLowPrice?: boolean;
         /** Upper bound for "Low Price" chip (default 500). */
         lowPriceMax?: number;
+        /** 1-based page for search-driven lists (preferred over cursor when paging text search). */
+        searchPage?: number;
+        color?: string;
+        size?: string;
+        minDiscount?: number;
+        maxDiscount?: number;
     } = {}) {
         const LOW_STOCK_THRESHOLD = 5;
         const DEFAULT_LOW_PRICE_MAX = 500;
@@ -255,8 +261,56 @@ export class MobileOrderService {
         }
 
         if (opts.search) {
-            where += ` AND (p.name ILIKE $${paramIdx} OR p.sku ILIKE $${paramIdx} OR p.mobile_description ILIKE $${paramIdx})`;
-            params.push(`%${opts.search}%`);
+            const raw = String(opts.search).trim();
+            const tokens = raw
+                .split(/\s+/)
+                .map((t) => t.replace(/%/g, '').replace(/_/g, ''))
+                .filter((t) => t.length > 0)
+                .slice(0, 8);
+            const isPg = this.db.getType() === 'postgres';
+            const cmp = isPg ? 'ILIKE' : 'LIKE';
+            const attrField = isPg ? 'COALESCE(p.attributes::text, \'\')' : 'COALESCE(p.attributes, \'\')';
+            if (tokens.length > 0) {
+                for (const tok of tokens) {
+                    const pat = `%${tok}%`;
+                    where += ` AND (
+                        p.name ${cmp} $${paramIdx}
+                        OR p.sku ${cmp} $${paramIdx}
+                        OR COALESCE(p.mobile_description, '') ${cmp} $${paramIdx}
+                        OR COALESCE(p.barcode, '') ${cmp} $${paramIdx}
+                        OR COALESCE(c.name, '') ${cmp} $${paramIdx}
+                        OR COALESCE(sc.name, '') ${cmp} $${paramIdx}
+                        OR COALESCE(b.name, '') ${cmp} $${paramIdx}
+                        OR COALESCE(NULLIF(TRIM(p.brand), ''), '') ${cmp} $${paramIdx}
+                        OR ${attrField} ${cmp} $${paramIdx}
+                    )`;
+                    params.push(pat);
+                    paramIdx++;
+                }
+            }
+        }
+
+        if (opts.color?.trim()) {
+            where += ` AND LOWER(TRIM(COALESCE(p.color, ''))) = LOWER(TRIM($${paramIdx}))`;
+            params.push(opts.color.trim());
+            paramIdx++;
+        }
+
+        if (opts.size?.trim()) {
+            where += ` AND LOWER(TRIM(COALESCE(p.size, ''))) = LOWER(TRIM($${paramIdx}))`;
+            params.push(opts.size.trim());
+            paramIdx++;
+        }
+
+        if (opts.minDiscount != null && Number.isFinite(opts.minDiscount)) {
+            where += ` AND COALESCE(p.discount_percentage, 0) >= $${paramIdx}`;
+            params.push(opts.minDiscount);
+            paramIdx++;
+        }
+
+        if (opts.maxDiscount != null && Number.isFinite(opts.maxDiscount)) {
+            where += ` AND COALESCE(p.discount_percentage, 0) <= $${paramIdx}`;
+            params.push(opts.maxDiscount);
             paramIdx++;
         }
 
@@ -345,6 +399,26 @@ export class MobileOrderService {
                 case 'z_a':
                     orderBy = `p.name DESC, p.id DESC`;
                     break;
+                case 'biggest_discount':
+                    orderBy = `COALESCE(p.discount_percentage, 0) DESC, p.total_sales DESC NULLS LAST, p.id DESC`;
+                    break;
+                case 'fastest_delivery':
+                    orderBy = `(${stockSubquery}) DESC, COALESCE(p.popularity_score, 0) DESC, p.total_sales DESC NULLS LAST, p.id DESC`;
+                    break;
+                case 'relevance':
+                    if (opts.search?.trim()) {
+                        const rp = paramIdx;
+                        params.push(opts.search.trim());
+                        paramIdx++;
+                        orderBy = `(CASE WHEN LOWER(TRIM(p.name)) = LOWER(TRIM($${rp})) THEN 0 ELSE 1 END),
+                            (CASE WHEN (${stockSubquery}) > 0 OR COALESCE(p.is_pre_order, FALSE) THEN 0 ELSE 1 END),
+                            COALESCE(p.total_sales, 0) DESC NULLS LAST,
+                            COALESCE(p.rating_avg, 0) DESC NULLS LAST,
+                            p.id DESC`;
+                    } else {
+                        orderBy = `p.created_at DESC, p.id DESC`;
+                    }
+                    break;
             }
         }
 
@@ -353,7 +427,8 @@ export class MobileOrderService {
             orderBy = `${oosOrderExpr} ASC, ${orderBy}`;
         }
 
-        const usePage = opts.page != null && opts.page > 0;
+        const effectivePage = opts.searchPage ?? opts.page;
+        const usePage = effectivePage != null && effectivePage > 0;
         const useCursor = !usePage && Boolean(opts.cursor) && !showUnavailable;
 
         if (useCursor && opts.cursor) {
@@ -377,7 +452,7 @@ export class MobileOrderService {
 
         if (usePage) {
             limitSql += ` OFFSET $${paramIdx}`;
-            params.push((opts.page! - 1) * limit);
+            params.push((effectivePage! - 1) * limit);
             paramIdx++;
         }
 
@@ -386,11 +461,13 @@ export class MobileOrderService {
              p.unit, p.retail_price, p.tax_rate, p.image_url, p.created_at,
              p.mobile_price, p.mobile_description, p.mobile_sort_order,
              p.rating_avg, p.rating_count, p.is_on_sale, p.is_pre_order, p.discount_percentage,
+             p.total_sales,
              c.name as category_name,
              b.name as brand_name,
              ${stockSubquery} as available_stock
       FROM shop_products p
       LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
+      LEFT JOIN categories sc ON p.subcategory_id = sc.id AND sc.tenant_id = $1
       LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
       ${where}
       ORDER BY ${orderBy}
@@ -402,15 +479,21 @@ export class MobileOrderService {
         const items = rows.slice(0, limit).map((r: any) => {
             const stock = parseFloat(r.available_stock) || 0;
             const isPre = Boolean(r.is_pre_order);
+            const retail = parseFloat(r.retail_price) || 0;
+            const price = r.mobile_price != null ? (parseFloat(r.mobile_price) || 0) : retail;
             return {
                 ...r,
-                price: r.mobile_price != null ? (parseFloat(r.mobile_price) || 0) : (parseFloat(r.retail_price) || 0),
+                price,
                 available_stock: stock,
                 stock,
                 image: r.image_url,
                 is_low_stock: stock > 0 && stock <= LOW_STOCK_THRESHOLD,
                 is_out_of_stock: stock <= 0 && !isPre,
                 rating_avg: parseFloat(r.rating_avg) || 0,
+                rating_count: parseInt(String(r.rating_count ?? 0), 10) || 0,
+                total_sales: safeNum(r.total_sales),
+                list_price: retail,
+                original_price: r.is_on_sale && retail > price ? retail : undefined,
             };
         });
 
@@ -427,8 +510,8 @@ export class MobileOrderService {
             items,
             nextCursor,
             hasMore,
-            page: usePage ? opts.page : undefined,
-            nextPage: usePage && hasMore ? (opts.page! + 1) : undefined,
+            page: usePage ? effectivePage : undefined,
+            nextPage: usePage && hasMore ? (effectivePage! + 1) : undefined,
         };
     }
 

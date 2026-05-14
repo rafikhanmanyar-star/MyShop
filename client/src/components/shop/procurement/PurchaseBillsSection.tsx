@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
+import { flushSync } from 'react-dom';
 import { procurementApi, procurementDemandApi, shopApi } from '../../../services/shopApi';
 import { createPurchaseBillOfflineFirst, recordSupplierPaymentOfflineFirst, setProcurementCache } from '../../../services/procurementSyncService';
 import { getProcurementCache, getTenantId } from '../../../services/procurementOfflineCache';
@@ -423,6 +424,9 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     const [productSearch, setProductSearch] = useState('');
     const [productDropdownOpen, setProductDropdownOpen] = useState(false);
     const productSearchRef = useRef<HTMLDivElement>(null);
+    const procurementProductSearchInputRef = useRef<HTMLInputElement>(null);
+    const procurementWedgePrevTsRef = useRef(0);
+    const procurementWedgeChainRef = useRef(false);
     const [vendorSearch, setVendorSearch] = useState('');
     const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
     const vendorDropdownRef = useRef<HTMLDivElement>(null);
@@ -934,6 +938,113 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         cancelled = true;
       };
     }, [showForm]);
+
+    /** Keyboard-wedge scanners: route rapid digit/alnum bursts to Add products (timing-based; avoids line-item and notes fields). */
+    useEffect(() => {
+      if (!showForm || showAddVendorModal || showAddSkuModal || quickPayBill) {
+        procurementWedgeChainRef.current = false;
+        procurementWedgePrevTsRef.current = 0;
+        return;
+      }
+
+      const ignoreClosest = (el: Element | null) => {
+        if (!el) return false;
+        if (el.closest('[data-procurement-barcode-ignore]')) return true;
+        if (el instanceof HTMLSelectElement) return true;
+        return false;
+      };
+
+      const onKeyDownCapture = (e: KeyboardEvent) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key === 'Escape' || e.key === 'Tab') return;
+
+        const active = document.activeElement;
+        if (active instanceof HTMLInputElement && active.id === 'procurement-bill-product-search') {
+          procurementWedgeChainRef.current = false;
+          procurementWedgePrevTsRef.current = 0;
+          return;
+        }
+
+        if (ignoreClosest(active)) {
+          procurementWedgeChainRef.current = false;
+          procurementWedgePrevTsRef.current = 0;
+          return;
+        }
+
+        const now = performance.now();
+        const prevTs = procurementWedgePrevTsRef.current;
+        const gap = prevTs ? now - prevTs : 9999;
+        procurementWedgePrevTsRef.current = now;
+
+        if (gap > 280) {
+          procurementWedgeChainRef.current = false;
+        }
+
+        const isDigit = /^[0-9]$/.test(e.key);
+        const isBodyChar = /^[0-9A-Za-z\-_]$/.test(e.key);
+        const isEnter = e.key === 'Enter';
+
+        if (isEnter && procurementWedgeChainRef.current && gap < 130) {
+          e.preventDefault();
+          procurementWedgeChainRef.current = false;
+          procurementWedgePrevTsRef.current = 0;
+          const input = procurementProductSearchInputRef.current;
+          input?.focus({ preventScroll: true });
+          queueMicrotask(() => {
+            input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+          });
+          return;
+        }
+
+        if (procurementWedgeChainRef.current && isBodyChar && gap < 100) {
+          e.preventDefault();
+          flushSync(() => {
+            setProductSearch((q) => q + e.key);
+            setProductDropdownOpen(true);
+          });
+          procurementProductSearchInputRef.current?.focus({ preventScroll: true });
+          return;
+        }
+
+        if (!procurementWedgeChainRef.current && isDigit && gap < 65 && gap > 0) {
+          e.preventDefault();
+          procurementWedgeChainRef.current = true;
+          const inputEl = active instanceof HTMLInputElement ? active : null;
+
+          if (
+            inputEl &&
+            inputEl.type === 'text' &&
+            !inputEl.readOnly &&
+            inputEl.id !== 'procurement-bill-product-search' &&
+            vendorDropdownRef.current?.contains(inputEl)
+          ) {
+            const val = inputEl.value;
+            const last = val.slice(-1);
+            if (/^\d$/.test(last)) {
+              flushSync(() => {
+                setVendorSearch(val.slice(0, -1));
+                setProductSearch(last + e.key);
+                setProductDropdownOpen(true);
+              });
+            } else {
+              flushSync(() => {
+                setProductSearch((q) => q + e.key);
+                setProductDropdownOpen(true);
+              });
+            }
+          } else {
+            flushSync(() => {
+              setProductSearch((q) => q + e.key);
+              setProductDropdownOpen(true);
+            });
+          }
+          procurementProductSearchInputRef.current?.focus({ preventScroll: true });
+        }
+      };
+
+      window.addEventListener('keydown', onKeyDownCapture, true);
+      return () => window.removeEventListener('keydown', onKeyDownCapture, true);
+    }, [showForm, showAddVendorModal, showAddSkuModal, quickPayBill]);
 
     useClickOutside(
       vendorDropdownRef,
@@ -1561,7 +1672,10 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                 >
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-xs font-semibold text-foreground sm:text-sm">Suggested lines</span>
-                    <label className="inline-flex items-center gap-1 text-xs text-muted-foreground sm:text-sm">
+                    <label
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground sm:text-sm"
+                      data-procurement-barcode-ignore
+                    >
                       Next
                       <input
                         type="number"
@@ -1628,7 +1742,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                   />
                   {formErrors.supplier && <p className="mt-1 text-xs font-medium text-destructive">{formErrors.supplier}</p>}
                 </div>
-                <div>
+                <div data-procurement-barcode-ignore>
                   <label className="label mb-0.5 block">Bill date *</label>
                   <input
                     type="date"
@@ -1639,7 +1753,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                     required
                   />
                 </div>
-                <div>
+                <div data-procurement-barcode-ignore>
                   <label className="label mb-0.5 block">Due date</label>
                   <input
                     type="date"
@@ -1670,6 +1784,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                   products={productsForDropdown}
                   loadingData={loadingData || loadingCatalog}
                   hideCatalogHint
+                  inputRef={procurementProductSearchInputRef}
                   onSearchChange={setProductSearch}
                   onOpenChange={setProductDropdownOpen}
                   onSelectProduct={(p) => addItem(p)}
@@ -1766,7 +1881,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                   <span className="text-muted-foreground">Notes</span>
                   <span className="ml-2 text-xs font-normal text-muted-foreground">(optional — click to expand)</span>
                 </summary>
-                <div className="border-t border-border px-2.5 pb-2 pt-1.5">
+                <div className="border-t border-border px-2.5 pb-2 pt-1.5" data-procurement-barcode-ignore>
                   <textarea
                     value={form.notes}
                     onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}

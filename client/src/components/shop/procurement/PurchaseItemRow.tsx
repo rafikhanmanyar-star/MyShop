@@ -72,6 +72,7 @@ export default function PurchaseItemRow({
   return (
     <>
       <tr
+        data-procurement-barcode-ignore
         className={`hidden border-b border-border transition-all duration-200 md:table-row ${
           zebra ? 'bg-table-zebra' : ''
         } hover:bg-table-row-hover`}
@@ -188,7 +189,7 @@ export default function PurchaseItemRow({
         </td>
       </tr>
 
-      <tr className="md:hidden">
+      <tr data-procurement-barcode-ignore className="md:hidden">
         <td colSpan={11} className="border-b border-border p-0">
           <div
             className={`rounded-xl border border-border bg-card p-4 shadow-erp ${zebra ? 'bg-table-zebra' : ''}`}

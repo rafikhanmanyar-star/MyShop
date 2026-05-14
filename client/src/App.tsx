@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
 import { ConnectivityProvider } from './context/ConnectivityContext';
+import { InventoryProvider } from './context/InventoryContext';
+import { LoyaltyProvider } from './context/LoyaltyContext';
+import { POSProvider } from './context/POSContext';
 import { MobileOrdersProvider } from './context/MobileOrdersContext';
 import { SyncOnOnline } from './components/SyncOnOnline';
 import OfflineBanner from './components/OfflineBanner';
@@ -356,6 +359,9 @@ function AppLayout() {
             </div>
           }>
             <div className="flex-1 min-h-0 flex flex-col">
+            <InventoryProvider>
+              <LoyaltyProvider>
+                <POSProvider>
             <Routes>
               {/* Redirect pos_cashier to Cashier Dashboard if they try to access / */}
               <Route path="/" element={role === 'pos_cashier' ? <Navigate to="/cashier-dashboard" replace /> : <DashboardPage />} />
@@ -421,6 +427,9 @@ function AppLayout() {
 
               <Route path="*" element={<Navigate to={role === 'pos_cashier' ? '/cashier-dashboard' : '/'} replace />} />
             </Routes>
+                </POSProvider>
+              </LoyaltyProvider>
+            </InventoryProvider>
             </div>
           </Suspense>
           </div>

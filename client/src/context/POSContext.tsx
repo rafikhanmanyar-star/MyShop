@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import {
     POSCartItem,
     POSProduct,
@@ -35,7 +35,59 @@ import {
 import { isBrowserOnline } from '../offline/syncEngine';
 import type { InventoryItem } from '../types/inventory';
 
+const HELD_SALES_STORAGE_PREFIX = 'myshop_pos_held_sales_v1:';
 
+function heldSalesStorageKey(userId: string): string {
+    return `${HELD_SALES_STORAGE_PREFIX}${userId}`;
+}
+
+function isCartLineForHeldRestore(x: unknown): x is POSCartItem {
+    if (!x || typeof x !== 'object') return false;
+    const o = x as Record<string, unknown>;
+    return (
+        typeof o.id === 'string' &&
+        typeof o.productId === 'string' &&
+        typeof o.name === 'string' &&
+        typeof o.sku === 'string' &&
+        typeof o.quantity === 'number' &&
+        typeof o.unitPrice === 'number'
+    );
+}
+
+function isHeldSaleRow(x: unknown): x is POSHeldSale {
+    if (!x || typeof x !== 'object') return false;
+    const o = x as Record<string, unknown>;
+    if (typeof o.id !== 'string' || typeof o.reference !== 'string' || typeof o.heldAt !== 'string' || typeof o.cashierId !== 'string')
+        return false;
+    if (!Array.isArray(o.cart) || !o.cart.every(isCartLineForHeldRestore)) return false;
+    const total = typeof o.total === 'number' ? o.total : Number(o.total);
+    if (!Number.isFinite(total)) return false;
+    return true;
+}
+
+function parseHeldSalesFromStorage(raw: string | null): POSHeldSale[] {
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (!Array.isArray(parsed)) return [];
+        const rows = parsed.filter(isHeldSaleRow);
+        return rows.map((row) => ({
+            ...row,
+            total: Number(row.total) || 0,
+            loyaltyMemberId: row.loyaltyMemberId === undefined ? undefined : row.loyaltyMemberId === null ? null : String(row.loyaltyMemberId),
+            customerId: typeof row.customerId === 'string' ? row.customerId : undefined,
+            cart: row.cart.map((line) => ({
+                ...line,
+                discountAmount: Number(line.discountAmount) || 0,
+                discountPercentage: Number(line.discountPercentage) || 0,
+                taxAmount: Number(line.taxAmount) || 0,
+                taxRate: Number(line.taxRate) || 0,
+            })),
+        }));
+    } catch {
+        return [];
+    }
+}
 
 interface POSContextType {
     cart: POSCartItem[];
@@ -106,6 +158,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const [customer, setCustomer] = useState<POSCustomer | null>(null);
     const [payments, setPayments] = useState<POSPayment[]>([]);
     const [heldSales, setHeldSales] = useState<POSHeldSale[]>([]);
+    const heldSalesRef = useRef<POSHeldSale[]>([]);
+    heldSalesRef.current = heldSales;
+    const heldSalesHydratedFromStorageRef = useRef(false);
+
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isHeldSalesModalOpen, setIsHeldSalesModalOpen] = useState(false);
     const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -130,6 +186,31 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { currentShift } = useShifts();
     const { refreshItems: refreshInventory, items: inventoryItems } = useInventory();
     const currentUserId = authUser?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('user_id') : null) ?? null;
+
+    /** Restore held sales after navigation or full reload (session-scoped, per logged-in user). */
+    useLayoutEffect(() => {
+        heldSalesHydratedFromStorageRef.current = false;
+        if (!authUser?.id) {
+            setHeldSales([]);
+            heldSalesHydratedFromStorageRef.current = true;
+            return;
+        }
+        const loaded = parseHeldSalesFromStorage(
+            typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(heldSalesStorageKey(authUser.id)) : null
+        );
+        setHeldSales(loaded);
+        heldSalesHydratedFromStorageRef.current = true;
+    }, [authUser?.id]);
+
+    useEffect(() => {
+        if (!authUser?.id || !heldSalesHydratedFromStorageRef.current) return;
+        if (typeof sessionStorage === 'undefined') return;
+        try {
+            sessionStorage.setItem(heldSalesStorageKey(authUser.id), JSON.stringify(heldSales));
+        } catch {
+            /* quota / private mode */
+        }
+    }, [heldSales, authUser?.id]);
 
     useEffect(() => {
         const onRealtime = () => {
@@ -535,7 +616,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [cart, customer, totals.grandTotal, clearCart, currentUserId]);
 
     const recallSale = useCallback(async (heldSaleId: string) => {
-        const heldSale = heldSales.find(s => s.id === heldSaleId);
+        const heldSale = heldSalesRef.current.find((s) => s.id === heldSaleId);
         if (heldSale) {
             setCart(heldSale.cart);
             setPayments([]); // Clear any previous payments so summary reflects recalled sale only
@@ -595,7 +676,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             setHeldSales(prev => prev.filter(s => s.id !== heldSaleId));
         }
-    }, [heldSales]);
+    }, []);
 
     const completeSale = useCallback(async (directPayment?: any) => {
         try {

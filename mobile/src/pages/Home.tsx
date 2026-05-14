@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, type FormEvent } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi, getProductImagePath } from '../api';
@@ -6,6 +6,8 @@ import ProductListCard, { type ProductListProduct } from '../components/ProductL
 import CategoryRailIcon from '../components/CategoryRailIcon';
 import { filterCategoriesWithListedProducts } from '../utils/catalogCategories';
 import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
+import GlobalSearchBar from '../features/search/GlobalSearchBar';
+import { addRecentSearch } from '../features/search/recentSearchesStorage';
 
 export default function Home() {
     const { shopSlug } = useParams();
@@ -112,10 +114,10 @@ export default function Home() {
         addToCart(product as ProductListProduct, quantity - cur);
     };
 
-    const submitSearch = (e: FormEvent) => {
-        e.preventDefault();
+    const submitSearch = () => {
         const q = searchDraft.trim();
         if (!shopSlug) return;
+        if (q) addRecentSearch(shopSlug, q);
         if (q) navigate(`/${shopSlug}/products?search=${encodeURIComponent(q)}`);
         else navigate(`/${shopSlug}/products`);
     };
@@ -167,28 +169,14 @@ export default function Home() {
             </div>
 
             <div className="home-sticky">
-                <form className="home-sticky-search" onSubmit={submitSearch}>
-                    <svg
-                        className="search-icon"
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                    >
-                        <circle cx="11" cy="11" r="8" />
-                        <path d="m21 21-4.3-4.3" />
-                    </svg>
-                    <input
-                        type="search"
-                        placeholder="Search products..."
+                <div className="home-sticky-search">
+                    <GlobalSearchBar
+                        variant="home"
                         value={searchDraft}
-                        onChange={(e) => setSearchDraft(e.target.value)}
-                        autoComplete="off"
+                        onChange={setSearchDraft}
+                        onSubmit={submitSearch}
                     />
-                </form>
+                </div>
 
                 <div className="home-recipes-banner">
                     <Link to={`/${shopSlug}/recipes`}>

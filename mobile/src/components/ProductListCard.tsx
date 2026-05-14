@@ -19,6 +19,11 @@ export type ProductListProduct = {
     is_out_of_stock?: boolean;
     tax_rate?: number | string;
     sku?: string;
+    rating_avg?: number;
+    rating_count?: number;
+    total_sales?: number;
+    list_price?: number;
+    original_price?: number;
 };
 
 type Props = {
@@ -30,6 +35,8 @@ type Props = {
     unavailableStyle?: boolean;
     onAddOne: (product: ProductListProduct) => void;
     onChangeQty: (productId: string, quantity: number) => void;
+    isFavorite?: boolean;
+    onToggleFavorite?: (productId: string) => void;
 };
 
 function getStock(p: ProductListProduct): number {
@@ -45,6 +52,8 @@ export default function ProductListCard({
     unavailableStyle = false,
     onAddOne,
     onChangeQty,
+    isFavorite = false,
+    onToggleFavorite,
 }: Props) {
     const navigate = useNavigate();
     const suppressClick = useRef(false);
@@ -82,6 +91,13 @@ export default function ProductListCard({
         return 'In Stock';
     };
 
+    const orig =
+        p.original_price != null && p.original_price > p.price
+            ? p.original_price
+            : p.is_on_sale && (p.list_price ?? 0) > p.price
+              ? p.list_price
+              : undefined;
+
     return (
         <div
             className={`product-card product-card--list ${unavailableStyle ? 'product-card--unavailable' : ''}`}
@@ -95,6 +111,19 @@ export default function ProductListCard({
                 }
             }}
         >
+            {onToggleFavorite ? (
+                <button
+                    type="button"
+                    className={`product-card__fav ${isFavorite ? 'product-card__fav--on' : ''}`}
+                    aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleFavorite(p.id);
+                    }}
+                >
+                    {isFavorite ? '♥' : '♡'}
+                </button>
+            ) : null}
             {p.is_on_sale && (p.discount_percentage ?? 0) > 0 && (
                 <div className="discount-badge">-{Math.round(Number(p.discount_percentage))}%</div>
             )}
@@ -103,7 +132,25 @@ export default function ProductListCard({
             </div>
             <div className="info">
                 <div className="name">{p.name}</div>
-                <div className="price price--dominant">{formatPrice(p.price)}</div>
+                <div className="price-row">
+                    {orig != null && orig > p.price ? (
+                        <span className="price price--was">{formatPrice(orig)}</span>
+                    ) : null}
+                    <span className="price price--dominant">{formatPrice(p.price)}</span>
+                </div>
+                {(Number(p.rating_avg) > 0 || Number(p.rating_count) > 0 || Number(p.total_sales) > 0) && (
+                    <div className="product-card__meta">
+                        {Number(p.rating_avg) > 0 ? (
+                            <span>
+                                ★ {Number(p.rating_avg).toFixed(1)}
+                                {Number(p.rating_count) > 0 ? ` (${Number(p.rating_count).toLocaleString()})` : ''}
+                            </span>
+                        ) : null}
+                        {Number(p.total_sales) > 0 ? (
+                            <span>{Number(p.total_sales) >= 1000 ? `${(Number(p.total_sales) / 1000).toFixed(1)}k` : Number(p.total_sales)} sold</span>
+                        ) : null}
+                    </div>
+                )}
                 <div
                     className={`stock-line ${stock <= 0 && !p.is_pre_order ? 'out' : ''}`}
                 >

@@ -124,6 +124,22 @@ export const publicApi = {
             body: JSON.stringify(body || {}),
         }),
     getBrands: (slug: string) => request(`${API_BASE}/${slug}/brands`),
+    getSearchSuggestions: (slug: string, params: { q: string; recent?: string[] }) => {
+        const q = new URLSearchParams();
+        q.set('q', params.q);
+        if (params.recent?.length) q.set('recent', JSON.stringify(params.recent));
+        return request(`${API_BASE}/${slug}/search/suggestions?${q.toString()}`);
+    },
+    getSearchTrending: (slug: string) => request(`${API_BASE}/${slug}/search/trending`),
+    postSearchAnalytics: (slug: string, body: Record<string, unknown>) =>
+        request(`${API_BASE}/${slug}/search/analytics`, { method: 'POST', body: JSON.stringify(body) }),
+    getSearchRecommendations: (slug: string, params?: { q?: string; limit?: number }) => {
+        const q = new URLSearchParams();
+        if (params?.q) q.set('q', params.q);
+        if (params?.limit != null) q.set('limit', String(params.limit));
+        const qs = q.toString();
+        return request(`${API_BASE}/${slug}/search/recommendations${qs ? `?${qs}` : ''}`);
+    },
     getBranding: (slug: string) => request(`${API_BASE}/${slug}/branding`),
     getSignupOtpConfig: (slug: string) =>
         request(`${API_BASE}/${encodeURIComponent(slug)}/signup-otp-config`),

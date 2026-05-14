@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useApp } from '../context/AppContext';
 import { publicApi, getProductImagePath } from '../api';
 import FilterPanel from '../components/FilterPanel';
@@ -10,12 +11,18 @@ import { useOnline } from '../hooks/useOnline';
 import { getProducts as getCachedProducts, getCategories as getCachedCategories, getBrands as getCachedBrands } from '../services/offlineCache';
 import { filterCategoriesWithListedProducts, countListedProductsByCategoryId } from '../utils/catalogCategories';
 import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
+import GlobalSearchBar from '../features/search/GlobalSearchBar';
+import { SearchSuggestionsPanel, type SuggestionPick } from '../features/search/SearchSuggestionsPanel';
+import { addRecentSearch, getRecentSearches } from '../features/search/recentSearchesStorage';
+import { getSearchSessionId } from '../features/search/searchSession';
+import { getFavoriteIds, toggleFavoriteId } from '../features/search/favoritesStorage';
 
 const LIST_LIMIT = 12;
 const DEFAULT_LOW_PRICE_MAX = '500';
 
 export default function Products() {
     const { shopSlug } = useParams();
+    const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const { dispatch, showToast, state } = useApp();
     const online = useOnline();
@@ -30,7 +37,10 @@ export default function Products() {
     const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [offlineCatalogMissing, setOfflineCatalogMissing] = useState(false);
+    const [searchFocused, setSearchFocused] = useState(false);
+    const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
 
+    const searchPageRef = useRef(1);
     const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
     /** Next page for API when showUnavailable=true (server returns nextPage). */
@@ -61,13 +71,29 @@ export default function Products() {
         filterDeals: searchParams.get('filterDeals') === 'true' || searchParams.get('onSale') === 'true',
     };
 
-    /** Explicit `sortBy` in the URL (e.g. low→high) wins over browse rail presets. */
+    /** Explicit `sortBy` in the URL wins; with an active text search default to relevance when unset. */
     const effectiveSortBy = useMemo(() => {
         if (sortFromUrl) return sortFromUrl;
+        const hasSearch = Boolean((searchParams.get('search') || '').trim());
+        if (hasSearch && !browse) return 'relevance';
         if (browse === 'popular') return 'popularity';
         if (browse === 'new') return 'newest';
         return 'newest';
-    }, [sortFromUrl, browse]);
+    }, [sortFromUrl, browse, searchParams]);
+
+    useEffect(() => {
+        if (!shopSlug) return;
+        setFavoriteIds(getFavoriteIds(shopSlug));
+    }, [shopSlug]);
+
+    useEffect(() => {
+        searchPageRef.current = 1;
+    }, [shopSlug, browse, showUnavailable, JSON.stringify(filters), effectiveSortBy]);
+
+    const qUrl = searchParams.get('search') || '';
+    useEffect(() => {
+        setSearchTerm(qUrl);
+    }, [qUrl]);
 
     // Legacy: "Low price" used to be a max-price filter; migrate old links to price sort.
     useEffect(() => {
@@ -118,6 +144,9 @@ export default function Products() {
             if (showUnavailable) {
                 const pageToRequest = reset ? 1 : nextUnavailablePageRef.current ?? 1;
                 params.page = String(pageToRequest);
+            } else if (searchTerm.trim() && online) {
+                if (reset) searchPageRef.current = 1;
+                params.page = String(searchPageRef.current);
             } else if (!reset && cursor) {
                 params.cursor = cursor;
             }
@@ -137,6 +166,15 @@ export default function Products() {
                         data.nextPage !== undefined && data.nextPage !== null
                             ? data.nextPage
                             : null;
+                } else if (searchTerm.trim() && online && data.nextPage != null) {
+                    searchPageRef.current = data.nextPage;
+                }
+                if (online && reset && searchTerm.trim() && items.length === 0) {
+                    void publicApi.postSearchAnalytics(shopSlug, {
+                        eventType: 'no_results',
+                        keyword: searchTerm.trim(),
+                        sessionId: getSearchSessionId(),
+                    });
                 }
             } catch (err: any) {
                 if (!online) {
@@ -356,6 +394,36 @@ export default function Products() {
         else if (sortBy === 'z_a') list.sort((a: any, b: any) => (b.name || '').localeCompare(a.name || ''));
         else if (sortBy === 'best_selling') {
             list.sort((a: any, b: any) => (Number(b.total_sales) || 0) - (Number(a.total_sales) || 0));
+        }         else if (sortBy === 'top_rated') {
+            list.sort((a: any, b: any) => {
+                const ra = (Number(b.rating_avg) || 0) - (Number(a.rating_avg) || 0);
+                if (ra !== 0) return ra;
+                return (Number(b.rating_count) || 0) - (Number(a.rating_count) || 0);
+            });
+        } else if (sortBy === 'biggest_discount') {
+            list.sort(
+                (a: any, b: any) =>
+                    (Number(b.discount_percentage) || 0) - (Number(a.discount_percentage) || 0)
+            );
+        } else if (sortBy === 'fastest_delivery') {
+            list.sort(
+                (a: any, b: any) =>
+                    (Number(b.stock ?? b.available_stock) || 0) -
+                    (Number(a.stock ?? a.available_stock) || 0)
+            );
+        } else if (sortBy === 'relevance' && searchTerm.trim()) {
+            const q = searchTerm.trim().toLowerCase();
+            list.sort((a: any, b: any) => {
+                const an = (a.name || '').toLowerCase();
+                const bn = (b.name || '').toLowerCase();
+                const ae = an === q ? 1 : 0;
+                const be = bn === q ? 1 : 0;
+                if (be !== ae) return be - ae;
+                const as = Number(a.stock ?? a.available_stock) > 0 || a.is_pre_order ? 1 : 0;
+                const bs = Number(b.stock ?? b.available_stock) > 0 || b.is_pre_order ? 1 : 0;
+                if (bs !== as) return bs - as;
+                return (Number(b.total_sales) || 0) - (Number(a.total_sales) || 0);
+            });
         } else {
             list.sort((a: any, b: any) => {
                 const ta = new Date(a.created_at).getTime();
@@ -391,8 +459,74 @@ export default function Products() {
                 else prev.delete('search');
                 return prev;
             });
-        }, 300);
+        }, 250);
     };
+
+    const commitSearchFromBar = () => {
+        if (searchTimeout.current) clearTimeout(searchTimeout.current);
+        const q = searchTerm.trim();
+        setSearchParams((prev) => {
+            if (q) prev.set('search', q);
+            else prev.delete('search');
+            return prev;
+        });
+        if (shopSlug && q) {
+            addRecentSearch(shopSlug, q);
+            void publicApi.postSearchAnalytics(shopSlug, {
+                eventType: 'keyword_search',
+                keyword: q,
+                sessionId: getSearchSessionId(),
+            });
+        }
+    };
+
+    const onSearchPick = useCallback(
+        (pick: SuggestionPick) => {
+            if (!shopSlug) return;
+            setSearchFocused(false);
+            if (pick.kind === 'product') {
+                navigate(`/${shopSlug}/products/${pick.id}`);
+                void publicApi.postSearchAnalytics(shopSlug, {
+                    eventType: 'product_click',
+                    productId: pick.id,
+                    keyword: searchTerm.trim() || undefined,
+                    sessionId: getSearchSessionId(),
+                });
+                return;
+            }
+            if (pick.kind === 'brand') {
+                setSearchParams((prev) => {
+                    prev.delete('brandIds[]');
+                    prev.append('brandIds[]', pick.id);
+                    prev.delete('search');
+                    prev.delete('category');
+                    prev.delete('categoryIds[]');
+                    return prev;
+                });
+                setSearchTerm('');
+                return;
+            }
+            if (pick.kind === 'category') {
+                setSearchParams((prev) => {
+                    prev.delete('categoryIds[]');
+                    prev.delete('category');
+                    prev.set('category', pick.id);
+                    prev.delete('search');
+                    return prev;
+                });
+                setSearchTerm('');
+                return;
+            }
+            const text = pick.label.trim();
+            setSearchTerm(text);
+            setSearchParams((prev) => {
+                prev.set('search', text);
+                return prev;
+            });
+            addRecentSearch(shopSlug, text);
+        },
+        [shopSlug, navigate, setSearchParams, searchTerm]
+    );
 
     const applyFilters = (newFilters: Record<string, unknown>) => {
         setSearchParams((prev) => {
@@ -561,19 +695,26 @@ export default function Products() {
         if (filters.filterInStock) n += 1;
         if (filters.filterPopular) n += 1;
         if (filters.availability) n += 1;
-        const sortIsDefault = filters.sortBy === 'newest' || !searchParams.get('sortBy');
+        const sortIsDefault =
+            effectiveSortBy === 'newest' ||
+            (effectiveSortBy === 'relevance' && !sortFromUrl) ||
+            (browse === 'popular' && effectiveSortBy === 'popularity') ||
+            (browse === 'new' && effectiveSortBy === 'newest');
         if (!sortIsDefault && !browse) n += 1;
         return n;
-    }, [filters, browse, searchParams]);
+    }, [filters, browse, searchParams, effectiveSortBy, sortFromUrl]);
 
     const sortChipLabel = (sort: string): string => {
         const map: Record<string, string> = {
+            relevance: 'Relevance',
             price_low_high: 'Price ↑',
             price_high_low: 'Price ↓',
             newest: 'Newest',
             popularity: 'Popular',
             best_selling: 'Best selling',
             top_rated: 'Top rated',
+            biggest_discount: 'Biggest discount',
+            fastest_delivery: 'Fast delivery',
             a_z: 'A–Z',
             z_a: 'Z–A',
         };
@@ -588,6 +729,20 @@ export default function Products() {
         if (id === 'new') return browse === 'new' && !selectedCategoryId;
         return selectedCategoryId === id;
     };
+
+    const emptyDiscovery = useQuery({
+        queryKey: ['emptyDiscovery', shopSlug, searchTerm],
+        queryFn: () =>
+            publicApi.getSearchRecommendations(shopSlug!, {
+                q: searchTerm.trim() || undefined,
+                limit: 12,
+            }),
+        enabled: Boolean(online && shopSlug && !loading && displayedProducts.length === 0 && !offlineCatalogMissing),
+    });
+
+    const disc = emptyDiscovery.data as
+        | { similar?: any[]; recommended?: any[]; categories?: any[] }
+        | undefined;
 
     return (
         <div className="page page--browse fade-in">
@@ -616,27 +771,26 @@ export default function Products() {
                         </svg>
                         <span>Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
                     </button>
-                    <div className="search-bar search-bar--browse">
-                        <svg
-                            className="search-icon"
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="20"
-                            height="20"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                        >
-                            <circle cx="11" cy="11" r="8" />
-                            <path d="m21 21-4.3-4.3" />
-                        </svg>
-                        <input
-                            type="search"
-                            placeholder="Search products..."
-                            value={searchTerm}
-                            onChange={(e) => handleSearchChange(e.target.value)}
-                            autoComplete="off"
-                        />
+                    <div className="browse-search-wrap">
+                        {shopSlug ? (
+                            <GlobalSearchBar
+                                variant="browse"
+                                value={searchTerm}
+                                onChange={handleSearchChange}
+                                onSubmit={commitSearchFromBar}
+                                focused={searchFocused}
+                                onFocusChange={setSearchFocused}
+                                overlay={
+                                    <SearchSuggestionsPanel
+                                        shopSlug={shopSlug}
+                                        query={searchTerm}
+                                        open={searchFocused}
+                                        recent={getRecentSearches(shopSlug)}
+                                        onPick={onSearchPick}
+                                    />
+                                }
+                            />
+                        ) : null}
                     </div>
                 </div>
 
@@ -856,9 +1010,9 @@ export default function Products() {
                             </button>
                         </div>
                     )}
-                    {!browse && filters.sortBy && filters.sortBy !== 'newest' && (
+                    {!browse && sortFromUrl && (
                         <div className="filter-chip">
-                            {sortChipLabel(filters.sortBy)}
+                            {sortChipLabel(effectiveSortBy)}
                             <button type="button" onClick={() => removeFilter('sortBy')}>
                                 ×
                             </button>
@@ -894,12 +1048,82 @@ export default function Products() {
                     <p>Connect to load products for this shop.</p>
                 </div>
             ) : displayedProducts.length === 0 ? (
-                <div className="empty-state">
-                    <h3>No products found</h3>
-                    <p>Try adjusting search or filters</p>
+                <div className="empty-state empty-state--discovery">
+                    <h3>We could not match that exactly</h3>
+                    <p>Here are picks you might like instead — adjust filters or try a shorter keyword.</p>
                     <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 12 }} onClick={clearFilters}>
                         Clear filters
                     </button>
+                    {emptyDiscovery.isFetching ? (
+                        <p className="empty-state__loading" style={{ marginTop: 16 }}>
+                            Loading suggestions…
+                        </p>
+                    ) : null}
+                    {disc?.similar && disc.similar.length > 0 ? (
+                        <section className="empty-discovery-section">
+                            <h4>Close matches</h4>
+                            <div className="product-grid product-grid--browse">
+                                {disc.similar.slice(0, 6).map((p: any) => (
+                                    <ProductListCard
+                                        key={p.id}
+                                        product={p}
+                                        shopSlug={shopSlug!}
+                                        cartQty={cartQtyMap.get(p.id) ?? 0}
+                                        formatPrice={formatPrice}
+                                        unavailableStyle={false}
+                                        onAddOne={handleAddOne}
+                                        onChangeQty={handleChangeQty}
+                                        isFavorite={favoriteIds.has(p.id)}
+                                        onToggleFavorite={(id) => setFavoriteIds(toggleFavoriteId(shopSlug!, id))}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
+                    {disc?.recommended && disc.recommended.length > 0 ? (
+                        <section className="empty-discovery-section">
+                            <h4>Recommended for you</h4>
+                            <div className="product-grid product-grid--browse">
+                                {disc.recommended.slice(0, 6).map((p: any) => (
+                                    <ProductListCard
+                                        key={p.id}
+                                        product={p}
+                                        shopSlug={shopSlug!}
+                                        cartQty={cartQtyMap.get(p.id) ?? 0}
+                                        formatPrice={formatPrice}
+                                        unavailableStyle={false}
+                                        onAddOne={handleAddOne}
+                                        onChangeQty={handleChangeQty}
+                                        isFavorite={favoriteIds.has(p.id)}
+                                        onToggleFavorite={(id) => setFavoriteIds(toggleFavoriteId(shopSlug!, id))}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
+                    {disc?.categories && disc.categories.length > 0 ? (
+                        <section className="empty-discovery-section">
+                            <h4>Browse categories</h4>
+                            <div className="empty-discovery-cats">
+                                {disc.categories.map((c: any) => (
+                                    <button
+                                        key={c.id}
+                                        type="button"
+                                        className="empty-discovery-cat-chip"
+                                        onClick={() =>
+                                            setSearchParams((prev) => {
+                                                prev.set('category', c.id);
+                                                prev.delete('search');
+                                                return prev;
+                                            })
+                                        }
+                                    >
+                                        {c.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
                 </div>
             ) : (
                 <>
@@ -920,6 +1144,8 @@ export default function Products() {
                                     unavailableStyle={unavailable}
                                     onAddOne={handleAddOne}
                                     onChangeQty={handleChangeQty}
+                                    isFavorite={favoriteIds.has(p.id)}
+                                    onToggleFavorite={(id) => setFavoriteIds(toggleFavoriteId(shopSlug!, id))}
                                 />
                             );
                         }}

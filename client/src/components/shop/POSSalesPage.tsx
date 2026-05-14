@@ -1,19 +1,11 @@
 import React from 'react';
-import { POSProvider } from '../../context/POSContext';
-import { InventoryProvider } from '../../context/InventoryContext';
-import { LoyaltyProvider } from '../../context/LoyaltyContext';
 import POSSalesContent from './POSSalesContent';
 
+/** POS cart/customer/payments state lives in `POSProvider` at `AppLayout` so it survives route changes. */
 function POSSalesPage() {
     return (
         <div className="h-full min-h-0 flex flex-col overflow-hidden">
-            <InventoryProvider>
-                <LoyaltyProvider>
-                    <POSProvider>
-                        <POSSalesContent />
-                    </POSProvider>
-                </LoyaltyProvider>
-            </InventoryProvider>
+            <POSSalesContent />
         </div>
     );
 }

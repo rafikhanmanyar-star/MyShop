@@ -26,6 +26,8 @@ export interface ProductSearchInputProps {
   onEnterAdd?: (p: ProductOption) => void;
   /** Hide the “Same catalog as Stock Master…” helper (e.g. dense purchase bill modal). */
   hideCatalogHint?: boolean;
+  /** Ref to the search input (focus after global barcode wedge redirect). */
+  inputRef?: React.Ref<HTMLInputElement>;
 }
 
 export default function ProductSearchInput({
@@ -40,6 +42,7 @@ export default function ProductSearchInput({
   onAddSku,
   onEnterAdd,
   hideCatalogHint = false,
+  inputRef,
 }: ProductSearchInputProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -63,6 +66,8 @@ export default function ProductSearchInput({
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
+          ref={inputRef}
+          id="procurement-bill-product-search"
           type="text"
           value={productSearch}
           onChange={(e) => {

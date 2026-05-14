@@ -14,6 +14,7 @@ import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/m
 import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
 import { getRecipeService } from '../../services/recipeService.js';
 import { getWeeklyMenuPlannerService } from '../../services/weeklyMenuPlannerService.js';
+import { getMobileSearchService } from '../../services/mobileSearchService.js';
 import jwt from 'jsonwebtoken';
 
 const router = express.Router();
@@ -696,6 +697,91 @@ router.get('/:shopSlug/brands', publicTenantMiddleware(db), async (req: any, res
     }
 });
 
+// ─── Search (suggestions, trending, analytics, discovery) — before /products for clarity ───
+router.get('/:shopSlug/search/suggestions', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const q = String(req.query.q || '');
+        let recentList: string[] = [];
+        const recentParam = req.query.recent;
+        if (typeof recentParam === 'string' && recentParam.trim().startsWith('[')) {
+            try {
+                const parsed = JSON.parse(recentParam) as unknown;
+                if (Array.isArray(parsed)) recentList = parsed.map(String).filter(Boolean);
+            } catch {
+                recentList = [];
+            }
+        } else {
+            const rp = recentParam;
+            recentList = Array.isArray(rp) ? rp.map(String) : rp ? [String(rp)] : [];
+        }
+        const out = await getMobileSearchService().getSuggestions(req.tenantId, q, recentList);
+        res.json(out);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/:shopSlug/search/trending', publicTenantMiddleware(db), async (_req: any, res) => {
+    try {
+        const keywords = await getMobileSearchService().getTrendingTerms(_req.tenantId);
+        res.json({ keywords });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:shopSlug/search/analytics', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const { eventType, keyword, productId, meta, sessionId } = req.body || {};
+        if (!eventType || typeof eventType !== 'string') {
+            return res.status(400).json({ error: 'eventType is required' });
+        }
+        await getMobileSearchService().recordSearchEvent({
+            tenantId: req.tenantId,
+            customerId: null,
+            sessionId: sessionId != null ? String(sessionId) : null,
+            eventType: String(eventType),
+            keyword: keyword != null ? String(keyword) : null,
+            productId: productId != null ? String(productId) : null,
+            meta: meta && typeof meta === 'object' ? meta : {},
+        });
+        res.json({ ok: true });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/:shopSlug/search/recommendations', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const q = String(req.query.q || '').trim();
+        const limit = Math.min(parseInt(String(req.query.limit || '12'), 10) || 12, 24);
+        const [similar, best, categories] = await Promise.all([
+            q
+                ? getMobileOrderService().getProductsForMobile(req.tenantId, {
+                      limit,
+                      search: q,
+                      sortBy: 'best_selling',
+                  })
+                : Promise.resolve({ items: [] as any[] }),
+            getMobileOrderService().getProductsForMobile(req.tenantId, {
+                limit: Math.max(limit, 8),
+                sortBy: 'best_selling',
+            }),
+            getMobileOrderService().getCategoriesForMobile(req.tenantId),
+        ]);
+        const catList = Array.isArray(categories) ? categories : (categories as any)?.categories ?? [];
+        const mains = (catList as any[]).filter((c) => !c.parent_id).slice(0, 8);
+        res.json({
+            similar: similar.items || [],
+            recommended: best.items || [],
+            categories: mains,
+            spellSuggestions: [],
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Products (paginated)
 router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, res) => {
     try {
@@ -704,13 +790,15 @@ router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, r
             categoryIds, subcategoryIds, brandIds,
             minPrice, maxPrice, availability,
             onSale, minRating, sortBy,
-            page,
+            page, searchPage,
             showUnavailable,
             filterInStock,
             filterPopular,
             filterLowPrice,
             lowPriceMax,
             deals,
+            color, size,
+            minDiscount, maxDiscount,
         } = req.query;
 
         // Support both single 'category' and multiple 'categoryIds'
@@ -722,9 +810,11 @@ router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, r
         }
 
         const pageNum = page ? parseInt(page as string, 10) : undefined;
+        const searchPageNum = searchPage ? parseInt(searchPage as string, 10) : undefined;
         const result = await getMobileOrderService().getProductsForMobile(req.tenantId, {
             cursor: cursor as string,
             page: pageNum && pageNum > 0 ? pageNum : undefined,
+            searchPage: searchPageNum && searchPageNum > 0 ? searchPageNum : undefined,
             limit: parseInt(limit as string) || 20,
             search: search as string,
             categoryIds: finalCategoryIds,
@@ -741,6 +831,10 @@ router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, r
             filterPopular: filterPopular === 'true',
             filterLowPrice: filterLowPrice === 'true',
             lowPriceMax: lowPriceMax ? parseFloat(lowPriceMax as string) : undefined,
+            color: color ? String(color) : undefined,
+            size: size ? String(size) : undefined,
+            minDiscount: minDiscount ? parseFloat(minDiscount as string) : undefined,
+            maxDiscount: maxDiscount ? parseFloat(maxDiscount as string) : undefined,
         });
         res.json(result);
     } catch (error: any) {

@@ -3505,3 +3505,195 @@ img {
   font-weight: 700;
   font-size: 15px;
 }
+
+/* ─── Global search (home + browse) ───────────────────────────────── */
+.global-search {
+  position: relative;
+  width: 100%;
+}
+.global-search__form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.global-search--focused .global-search__form {
+  box-shadow: 0 8px 28px rgba(79, 70, 229, 0.18);
+  border-color: rgba(79, 70, 229, 0.35);
+}
+.global-search__icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted, #64748b);
+}
+.global-search__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  outline: none;
+  color: var(--text);
+}
+.global-search__clear {
+  border: none;
+  background: rgba(15, 23, 42, 0.06);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+.global-search__mic {
+  border: none;
+  background: transparent;
+  padding: 4px;
+  border-radius: 50%;
+  color: var(--text-muted);
+}
+.global-search__mic--active {
+  color: var(--primary, #4f46e5);
+  animation: search-mic-pulse 1s ease-in-out infinite;
+}
+@keyframes search-mic-pulse {
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+}
+.browse-search-wrap {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+.search-suggestions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
+  border-radius: 16px;
+  background: var(--surface, #fff);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 8px 0;
+}
+.search-suggestions--empty {
+  padding: 12px 16px;
+}
+.search-suggestions__hint {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.search-suggestions__section-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 8px 16px 4px;
+}
+.search-suggestions__row {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.search-suggestions__row:active {
+  background: rgba(79, 70, 229, 0.08);
+}
+.search-suggestions__label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.search-suggestions__sub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.search-suggest-highlight {
+  background: rgba(250, 204, 21, 0.35);
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+.empty-state--discovery h3 {
+  margin-bottom: 8px;
+}
+.empty-discovery-section {
+  margin-top: 24px;
+  text-align: left;
+}
+.empty-discovery-section h4 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.empty-discovery-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.empty-discovery-cat-chip {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: var(--surface, #fff);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.product-card__fav {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  font-size: 18px;
+  line-height: 1;
+  color: #94a3b8;
+}
+.product-card__fav--on {
+  color: #e11d48;
+}
+.product-card--list {
+  position: relative;
+}
+.product-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.price-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+}
+.price--was {
+  font-size: 13px;
+  text-decoration: line-through;
+  color: var(--text-muted);
+  font-weight: 500;
+}

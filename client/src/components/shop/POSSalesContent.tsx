@@ -18,6 +18,7 @@ import HeldSalesModal from './pos/HeldSalesModal';
 import CustomerSelectionModal from './pos/CustomerSelectionModal';
 import SalesHistoryModal from './pos/SalesHistoryModal';
 import { useAppContext } from '../../context/AppContext';
+import { useInventory } from '../../context/InventoryContext';
 import { POSColumnResizeHandle } from './pos/POSColumnResizeHandle';
 import './pos/POSStyles.css';
 
@@ -113,6 +114,7 @@ const POSSalesContent: React.FC = () => {
         isDenseMode,
         setIsDenseMode
     } = usePOS();
+    const { refreshItems } = useInventory();
     const cartRef = useRef<CartGridHandle | null>(null);
     const checkoutRef = useRef<CheckoutPanelHandle | null>(null);
     const mainRef = useRef<HTMLDivElement>(null);
@@ -203,6 +205,11 @@ const POSSalesContent: React.FC = () => {
         setIsSalesHistoryModalOpen(true);
         navigate(location.pathname, { replace: true, state: null });
     }, [location.state, location.pathname, navigate, setSearchQuery, setIsSalesHistoryModalOpen]);
+
+    /** Refresh catalog when opening POS again (inventory may have changed on other pages). */
+    useEffect(() => {
+        void refreshItems().catch(() => {});
+    }, [refreshItems]);
 
     const useStackedLayout = layoutRowWidth > 0 && layoutRowWidth < STACK_LAYOUT_BELOW_PX;
 
