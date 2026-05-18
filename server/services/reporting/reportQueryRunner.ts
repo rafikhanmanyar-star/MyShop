@@ -79,7 +79,7 @@ export async function runReportDataQuery(
                SELECT 1 FROM shop_sales s
                WHERE s.tenant_id = $1 AND s.status = 'Completed'
                  AND s.created_at >= $2 AND s.created_at < $3
-                 AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+                 AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
                GROUP BY ${dayExpr}
              ) t`,
           [p.tenantId, start, endExclusive, br]
@@ -93,7 +93,7 @@ export async function runReportDataQuery(
            FROM shop_sales s
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY 1
            ORDER BY 1 ASC
            LIMIT $5 OFFSET $6`,
@@ -117,7 +117,7 @@ export async function runReportDataQuery(
                JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
                WHERE si.tenant_id = $1 AND s.status = 'Completed'
                  AND s.created_at >= $2 AND s.created_at < $3
-                 AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+                 AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
                GROUP BY p.id, p.name, p.sku
              ) t`,
           [p.tenantId, start, endExclusive, br]
@@ -131,7 +131,7 @@ export async function runReportDataQuery(
            JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
            WHERE si.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY p.id, p.sku, p.name
            ORDER BY revenue ${order}
            LIMIT $5 OFFSET $6`,
@@ -153,7 +153,7 @@ export async function runReportDataQuery(
                LEFT JOIN categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
                WHERE si.tenant_id = $1 AND s.status = 'Completed'
                  AND s.created_at >= $2 AND s.created_at < $3
-                 AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+                 AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
                GROUP BY COALESCE(c.name, 'Uncategorized')
              ) t`,
           [p.tenantId, start, endExclusive, br]
@@ -167,7 +167,7 @@ export async function runReportDataQuery(
            LEFT JOIN categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
            WHERE si.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY COALESCE(c.name, 'Uncategorized')
            ORDER BY revenue DESC
            LIMIT $5 OFFSET $6`,
@@ -189,7 +189,7 @@ export async function runReportDataQuery(
              LEFT JOIN shop_brands b ON b.id = p.brand_id AND b.tenant_id = p.tenant_id
              WHERE si.tenant_id = $1 AND s.status = 'Completed'
                AND s.created_at >= $2 AND s.created_at < $3
-               AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+               AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
              GROUP BY b.id, b.name
              ORDER BY revenue DESC
              LIMIT $5 OFFSET $6`,
@@ -213,7 +213,7 @@ export async function runReportDataQuery(
            LEFT JOIN contacts ct ON ct.id = s.customer_id AND ct.tenant_id = s.tenant_id
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY ct.name
            ORDER BY revenue DESC
            LIMIT $5 OFFSET $6`,
@@ -254,7 +254,7 @@ export async function runReportDataQuery(
            LEFT JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY s.user_id, u.username
            ORDER BY revenue DESC
            LIMIT $5 OFFSET $6`,
@@ -278,7 +278,7 @@ export async function runReportDataQuery(
            FROM shop_sales s
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY 1
            ORDER BY 1 ASC`,
           [p.tenantId, start, endExclusive, br]
@@ -300,7 +300,7 @@ export async function runReportDataQuery(
              LEFT JOIN categories c ON c.id = p.category_id AND c.tenant_id = p.tenant_id
              WHERE si.tenant_id = $1 AND s.status = 'Completed'
                AND s.created_at >= $2 AND s.created_at < $3
-               AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+               AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
              GROUP BY COALESCE(c.name, 'Uncategorized')
            ), tot AS (SELECT SUM(revenue) AS t FROM cat)
            SELECT category_name, revenue,
@@ -329,7 +329,7 @@ export async function runReportDataQuery(
            FROM shop_sales s
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
              AND s.discount_total > 0
            GROUP BY 1, s.payment_method
            ORDER BY 1 ASC, discounts DESC
@@ -348,7 +348,7 @@ export async function runReportDataQuery(
            FROM shop_sales_returns sr
            WHERE sr.tenant_id = $1
              AND sr.return_date >= $2 AND sr.return_date < $3
-             AND ($4 IS NULL OR $4 = '' OR sr.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR sr.branch_id = CAST($4 AS TEXT))
            ORDER BY sr.return_date DESC
            LIMIT $5 OFFSET $6`,
           [p.tenantId, start, endExclusive, br, lim, off]
@@ -370,7 +370,7 @@ export async function runReportDataQuery(
            FROM shop_sales s
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)`,
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))`,
           [p.tenantId, start, endExclusive, br]
         );
         const r = data[0] as any;
@@ -388,7 +388,7 @@ export async function runReportDataQuery(
            FROM shop_sales s
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY s.payment_method
            ORDER BY revenue DESC`,
           [p.tenantId, start, endExclusive, br]
@@ -480,7 +480,7 @@ export async function runReportDataQuery(
            JOIN expense_categories ec ON ec.id = e.category_id AND ec.tenant_id = e.tenant_id
            WHERE e.tenant_id = $1
              AND e.expense_date >= $2 AND e.expense_date <= $3
-             AND ($4 IS NULL OR $4 = '' OR e.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR e.branch_id = CAST($4 AS TEXT))
            ORDER BY e.expense_date DESC
            LIMIT $5 OFFSET $6`,
           [p.tenantId, p.dateFrom, p.dateTo, br, lim, off]
@@ -520,7 +520,7 @@ export async function runReportDataQuery(
                LEFT JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
                WHERE s.tenant_id = $1
                  AND s.created_at >= $2 AND s.created_at < $3
-                 AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+                 AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
                GROUP BY s.user_id, u.username
                ORDER BY revenue DESC
                LIMIT $5 OFFSET $6`;
@@ -532,7 +532,7 @@ export async function runReportDataQuery(
            LEFT JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
            WHERE s.tenant_id = $1
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY s.user_id, u.username
            ORDER BY revenue DESC
            LIMIT $5 OFFSET $6`;
@@ -576,7 +576,7 @@ export async function runReportDataQuery(
            LEFT JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
            WHERE s.tenant_id = $1 AND s.status = 'Void'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            ORDER BY s.created_at DESC
            LIMIT $5 OFFSET $6`,
           [p.tenantId, start, endExclusive, br, lim, off]
@@ -594,7 +594,7 @@ export async function runReportDataQuery(
            WHERE s.tenant_id = $1
              AND s.status IN ('Void', 'Refunded')
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            ORDER BY s.created_at DESC
            LIMIT $5 OFFSET $6`,
           [p.tenantId, start, endExclusive, br, lim, off]
@@ -611,7 +611,7 @@ export async function runReportDataQuery(
            FROM shop_sales s
            WHERE s.tenant_id = $1 AND s.discount_total > 0
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            ORDER BY s.discount_total DESC
            LIMIT $5 OFFSET $6`,
           [p.tenantId, start, endExclusive, br, lim, off]
@@ -631,7 +631,7 @@ export async function runReportDataQuery(
            JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
            WHERE si.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
              AND ABS(si.unit_price - p.retail_price) > 0.01
            ORDER BY ABS(si.unit_price - p.retail_price) DESC
            LIMIT $5 OFFSET $6`,
@@ -676,7 +676,7 @@ export async function runReportDataQuery(
            LEFT JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
            WHERE s.tenant_id = $1
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY s.user_id, u.username
            HAVING SUM(CASE WHEN s.status = 'Void' THEN 1 ELSE 0 END) * 1.0 / NULLIF(COUNT(*), 0) > 0.05
            ORDER BY voids DESC
@@ -779,11 +779,11 @@ export async function runReportDataQuery(
         const cashInSql = `SELECT COALESCE(SUM(grand_total), 0) AS v FROM shop_sales
           WHERE tenant_id = $1 AND status = 'Completed' AND created_at >= $2 AND created_at < $3
             AND LOWER(COALESCE(payment_method, '')) IN ('cash', 'cod')
-            AND ($4 IS NULL OR $4 = '' OR branch_id = $4)`;
+            AND (COALESCE(CAST($4 AS TEXT), '') = '' OR branch_id = CAST($4 AS TEXT))`;
         const cashOutSql = `SELECT COALESCE(SUM(amount), 0) AS v FROM expenses
           WHERE tenant_id = $1 AND expense_date >= $5 AND expense_date <= $6
             AND payment_method = 'Cash'
-            AND ($4 IS NULL OR $4 = '' OR branch_id = $4)`;
+            AND (COALESCE(CAST($4 AS TEXT), '') = '' OR branch_id = CAST($4 AS TEXT))`;
         const cashParams = [p.tenantId, start, endExclusive, br, p.dateFrom, p.dateTo];
         const [cinRows, coutRows] = await Promise.all([
           db.query(cashInSql, cashParams),
@@ -796,7 +796,7 @@ export async function runReportDataQuery(
             `SELECT COALESCE(SUM(grand_total), 0) AS v FROM shop_sales
              WHERE tenant_id = $1 AND status = 'Completed' AND created_at >= $2 AND created_at < $3
                AND LOWER(COALESCE(payment_method, '')) IN ('card', 'credit card', 'debit')
-               AND ($4 IS NULL OR $4 = '' OR branch_id = $4)`,
+               AND (COALESCE(CAST($4 AS TEXT), '') = '' OR branch_id = CAST($4 AS TEXT))`,
             [p.tenantId, start, endExclusive, br]
           )
           .catch(() => [{ v: 0 }]);
@@ -847,7 +847,7 @@ export async function runReportDataQuery(
            FROM shop_sales
            WHERE tenant_id = $1 AND status = 'Completed'
              AND created_at >= $2 AND created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR branch_id = $4)`,
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR branch_id = CAST($4 AS TEXT))`,
           [p.tenantId, start, endExclusive, br]
         );
         const r = data[0] as any;
@@ -863,7 +863,7 @@ export async function runReportDataQuery(
            FROM shop_sales
            WHERE tenant_id = $1 AND status = 'Completed'
              AND created_at >= $2 AND created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR branch_id = $4)`,
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR branch_id = CAST($4 AS TEXT))`,
           [p.tenantId, start, endExclusive, br]
         );
         const exp = await db
@@ -871,7 +871,7 @@ export async function runReportDataQuery(
             `SELECT COALESCE(SUM(tax_amount), 0) AS input_tax
              FROM expenses
              WHERE tenant_id = $1 AND expense_date >= $5 AND expense_date <= $6
-               AND ($4 IS NULL OR $4 = '' OR branch_id = $4)`,
+               AND (COALESCE(CAST($4 AS TEXT), '') = '' OR branch_id = CAST($4 AS TEXT))`,
             [p.tenantId, start, endExclusive, br, p.dateFrom, p.dateTo]
           )
           .catch(() => [{ input_tax: 0 }]);
@@ -945,7 +945,7 @@ export async function runReportDataQuery(
            JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
            WHERE si.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY p.id, p.sku
            HAVING COALESCE(SUM(si.quantity * COALESCE(si.unit_cost_at_sale, p.average_cost, p.cost_price, 0)), 0) > 0
            ORDER BY cogs DESC
@@ -1053,7 +1053,7 @@ export async function runReportDataQuery(
            LEFT JOIN contacts c ON c.id = s.customer_id AND c.tenant_id = s.tenant_id
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            ORDER BY s.created_at DESC
            LIMIT $5 OFFSET $6`,
           [p.tenantId, start, endExclusive, br, lim, off]
@@ -1073,7 +1073,7 @@ export async function runReportDataQuery(
            LEFT JOIN contacts c ON c.id = s.customer_id AND c.tenant_id = s.tenant_id
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY c.id, c.name
            ORDER BY revenue DESC
            LIMIT $5 OFFSET $6`,
@@ -1093,7 +1093,7 @@ export async function runReportDataQuery(
              WHERE s.tenant_id = $1 AND s.status = 'Completed'
                AND s.customer_id IS NOT NULL
                AND s.created_at >= $2 AND s.created_at < $3
-               AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+               AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
              GROUP BY s.customer_id
            )
            SELECT CASE WHEN orders >= 2 THEN 'Repeat (2+ orders)' ELSE 'Single purchase' END AS bucket,
@@ -1117,7 +1117,7 @@ export async function runReportDataQuery(
            LEFT JOIN contacts c ON c.id = s.customer_id AND c.tenant_id = s.tenant_id
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY c.id, c.name
            ORDER BY revenue DESC
            LIMIT $5 OFFSET $6`,
@@ -1160,7 +1160,7 @@ export async function runReportDataQuery(
            FROM shop_sales s
            WHERE s.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)`,
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))`,
           [p.tenantId, start, endExclusive, br]
         ).catch(() => [{ earned: 0, redeemed: 0, orders: 0 }]);
         const r = data[0] as any;
@@ -1186,7 +1186,7 @@ export async function runReportDataQuery(
              FROM shop_sales
              WHERE tenant_id = $1 AND status = 'Completed' AND customer_id IS NOT NULL
                AND created_at >= $2 AND created_at < $3
-               AND ($4 IS NULL OR $4 = '' OR branch_id = $4)
+               AND (COALESCE(CAST($4 AS TEXT), '') = '' OR branch_id = CAST($4 AS TEXT))
              GROUP BY customer_id
              HAVING COUNT(*) >= 2
            ) t`,
@@ -1356,7 +1356,7 @@ export async function runReportDataQuery(
                JOIN shop_sales s ON s.id = si.sale_id AND s.tenant_id = si.tenant_id
                WHERE si.product_id = p.id AND s.status = 'Completed'
                  AND s.created_at >= $2 AND s.created_at < $3
-                 AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+                 AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
              )
            GROUP BY p.id, p.sku, p.name
            HAVING COALESCE(SUM(i.quantity_on_hand), 0) > 0
@@ -1546,7 +1546,7 @@ export async function runReportDataQuery(
                JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
                WHERE si.tenant_id = $1 AND s.status = 'Completed'
                  AND s.created_at >= $2 AND s.created_at < $3
-                 AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+                 AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
              ),
              inv AS (
                SELECT COALESCE(SUM(i.quantity_on_hand * COALESCE(p.average_cost, p.cost_price, 0)), 0) AS v
@@ -1576,7 +1576,7 @@ export async function runReportDataQuery(
            JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
            WHERE si.tenant_id = $1 AND s.status = 'Completed'
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)`,
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))`,
           turnParams
         );
         const vRow = await db.query(
@@ -1697,7 +1697,7 @@ export async function runReportDataQuery(
            FROM shop_sales
            WHERE tenant_id = $1 AND status = 'Completed'
              AND created_at >= $2 AND created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR branch_id = CAST($4 AS TEXT))
            GROUP BY payment_method
            ORDER BY revenue DESC`,
           [p.tenantId, start, endExclusive, br]
@@ -1742,7 +1742,7 @@ export async function runReportDataQuery(
            LEFT JOIN shop_terminals t ON t.id = s.terminal_id AND t.tenant_id = s.tenant_id
            WHERE s.tenant_id = $1
              AND s.created_at >= $2 AND s.created_at < $3
-             AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)
+             AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))
            GROUP BY s.terminal_id, t.name
            ORDER BY tickets DESC
            LIMIT $5 OFFSET $6`,

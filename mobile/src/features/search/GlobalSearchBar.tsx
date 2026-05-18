@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { SEARCH_PLACEHOLDER_ROTATION } from './searchPlaceholders';
 
 type Props = {
@@ -8,8 +8,12 @@ type Props = {
     variant: 'home' | 'browse';
     autoFocus?: boolean;
     placeholderIndex?: number;
+    /** When set, placeholder text does not rotate (home hero layout). */
+    fixedPlaceholder?: string;
+    /** Opens browse / scan flow (shown on home next to mic). */
+    onBarcodeScan?: () => void;
     /** Renders below the field (e.g. suggestions). */
-    overlay?: React.ReactNode;
+    overlay?: ReactNode;
     focused?: boolean;
     onFocusChange?: (f: boolean) => void;
 };
@@ -20,6 +24,8 @@ export default function GlobalSearchBar({
     onSubmit,
     variant,
     autoFocus,
+    fixedPlaceholder,
+    onBarcodeScan,
     overlay,
     focused,
     onFocusChange,
@@ -29,9 +35,10 @@ export default function GlobalSearchBar({
     const [listening, setListening] = useState(false);
 
     useEffect(() => {
+        if (fixedPlaceholder) return;
         const id = setInterval(() => setPhIdx((i) => (i + 1) % SEARCH_PLACEHOLDER_ROTATION.length), 3200);
         return () => clearInterval(id);
-    }, []);
+    }, [fixedPlaceholder]);
 
     const startVoice = () => {
         const SR = (window as unknown as { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition;
@@ -81,7 +88,7 @@ export default function GlobalSearchBar({
                     spellCheck={false}
                     autoFocus={autoFocus}
                     className="global-search__input"
-                    placeholder={SEARCH_PLACEHOLDER_ROTATION[phIdx]}
+                    placeholder={fixedPlaceholder ?? SEARCH_PLACEHOLDER_ROTATION[phIdx]}
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     onFocus={() => onFocusChange?.(true)}
@@ -113,6 +120,16 @@ export default function GlobalSearchBar({
                         />
                     </svg>
                 </button>
+                {variant === 'home' && onBarcodeScan ? (
+                    <button type="button" className="global-search__scan" aria-label="Browse products" onClick={() => onBarcodeScan()}>
+                        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+                            <path
+                                fill="currentColor"
+                                d="M4 5a1 1 0 0 1 1-1h3v2H6v2H4V5zm16 0v3h-2V6h-2V4h3a1 1 0 0 1 1 1zm0 14a1 1 0 0 1-1 1h-3v-2h2v-2h2v3zM4 19v-3h2v2h2v2H5a1 1 0 0 1-1-1zm4-12h2v8H8V7zm4 0h4v2h-4V7zm0 4h6v2h-6v-2zm0 4h8v2h-8v-2z"
+                            />
+                        </svg>
+                    </button>
+                ) : null}
             </form>
             {overlay}
         </div>

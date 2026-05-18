@@ -79,6 +79,12 @@ export interface ProductApiResult {
   data?: Record<string, unknown>;
 }
 
+/** Mobile home hero carousel — edited under POS → Mobile branding */
+export interface HomePromoSlide {
+  image_url: string;
+  link_url?: string | null;
+}
+
 export interface TenantBranding {
   id: string;
   tenant_id: string;
@@ -89,6 +95,8 @@ export interface TenantBranding {
   accent_color: string;
   font_family: string;
   theme_mode: string;
+  /** Parsed JSON array from tenant_branding.home_promo_slides */
+  home_promo_slides?: HomePromoSlide[];
   created_at?: string;
   updated_at?: string;
 }

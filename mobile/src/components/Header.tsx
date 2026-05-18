@@ -66,37 +66,39 @@ export default function Header() {
 
     const shopInitial = (state.shop?.company_name || state.shop?.name || 'M').charAt(0).toUpperCase();
 
+    const deliverLabel =
+        (state.shop?.address || state.branding?.address)?.trim() ||
+        (state.shop?.company_name || state.shop?.name || 'Tap to set at checkout');
+
     return (
         <header className="main-header">
-            <div className="header-content">
-                <div className="header-brand">
-                    <div className="header-brand-main">
-                        <Link to={`/${shopSlug}`} className="shop-logo-link">
-                            {logoSrc && !logoFailed ? (
-                                <img
-                                    key={logoSrc}
-                                    src={logoSrc}
-                                    alt=""
-                                    className="header-logo"
-                                    decoding="async"
-                                    onError={() => setLogoFailed(true)}
-                                />
-                            ) : (
-                                <span className="header-logo-initial">{shopInitial}</span>
-                            )}
-                        </Link>
-                        <div className="header-shop-details">
-                            <span className="header-shop-name">{state.shop?.company_name || state.shop?.name || 'oBo stores'}</span>
-                            {(state.shop?.address || state.branding?.address) && !canInstall && (
-                                <span className="header-shop-address">{state.shop?.address || state.branding?.address}</span>
-                            )}
-                            {state.shop?.phone && (
-                                <span className="header-shop-phone">{state.shop.phone}</span>
-                            )}
-                        </div>
+            <div className="header-content header-content--home-modern">
+                <Link to={`/${shopSlug}`} className="shop-logo-link shop-logo-link--compact" aria-label="Home">
+                    {logoSrc && !logoFailed ? (
+                        <img
+                            key={logoSrc}
+                            src={logoSrc}
+                            alt=""
+                            className="header-logo header-logo--compact"
+                            decoding="async"
+                            onError={() => setLogoFailed(true)}
+                        />
+                    ) : (
+                        <span className="header-logo-initial header-logo-initial--compact">{shopInitial}</span>
+                    )}
+                </Link>
+
+                <Link to={`/${shopSlug}/checkout`} className="header-deliver-to">
+                    <div className="header-deliver-to__inner">
+                        <span className="header-deliver-to__label">Deliver to</span>
+                        <span className="header-deliver-to__row">
+                            <span className="header-deliver-to__addr">{deliverLabel}</span>
+                            <svg className="header-deliver-to__chev" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </span>
                     </div>
-                    <span className="header-version">v{__APP_VERSION__}</span>
-                </div>
+                </Link>
 
                 <div className="user-section">
                     <Link

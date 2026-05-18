@@ -10,6 +10,33 @@ import OrderAcceptanceClosedBanner from '../components/OrderAcceptanceClosedBann
 import OrderAcceptanceClosedLoginModal from '../components/OrderAcceptanceClosedLoginModal';
 import { getShop, setShop } from '../services/offlineCache';
 import { syncCatalogForShop } from '../services/catalogSync';
+import type { TenantBranding, HomePromoSlide } from '../context/AppContext';
+
+const DEFAULT_BRANDING: TenantBranding = {
+    logo_url: null,
+    logo_dark_url: null,
+    primary_color: '#4f46e5',
+    secondary_color: '#10b981',
+    accent_color: '#f59e0b',
+    font_family: 'system-ui',
+    theme_mode: 'light',
+    home_promo_slides: [],
+};
+
+function normalizeBrandingFromApi(raw: unknown): TenantBranding | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const b = { ...(raw as TenantBranding) };
+    let slides: unknown = (b as unknown as { home_promo_slides?: unknown }).home_promo_slides;
+    if (typeof slides === 'string') {
+        try {
+            slides = JSON.parse(slides);
+        } catch {
+            slides = [];
+        }
+    }
+    if (!Array.isArray(slides)) slides = [];
+    return { ...b, home_promo_slides: slides as HomePromoSlide[] };
+}
 
 function applyBranding(shopData: { shop: { company_name?: string; name: string; brand_color?: string } }, brandingData: { primary_color?: string; secondary_color?: string; accent_color?: string } | null) {
     if (brandingData?.primary_color) {
@@ -59,15 +86,16 @@ export default function ShopLoader() {
             publicApi.getBranding(shopSlug)
         ])
             .then(([shopData, brandingData]) => {
+                const branding = normalizeBrandingFromApi(brandingData) ?? DEFAULT_BRANDING;
                 dispatch({
                     type: 'SET_SHOP',
                     slug: shopSlug,
                     shop: shopData.shop,
                     settings: shopData.settings,
-                    branding: brandingData,
+                    branding,
                 });
-                setShop(shopSlug, { shop: shopData.shop, settings: shopData.settings, branding: brandingData });
-                applyBranding(shopData, brandingData);
+                setShop(shopSlug, { shop: shopData.shop, settings: shopData.settings, branding });
+                applyBranding(shopData, branding);
                 if (!isOffline) {
                     syncCatalogForShop(shopSlug).catch(() => {});
                 }
@@ -80,9 +108,9 @@ export default function ShopLoader() {
                         slug: shopSlug,
                         shop: cached.shop,
                         settings: cached.settings,
-                        branding: cached.branding,
+                        branding: normalizeBrandingFromApi(cached.branding) ?? DEFAULT_BRANDING,
                     });
-                    applyBranding({ shop: cached.shop }, cached.branding);
+                    applyBranding({ shop: cached.shop }, normalizeBrandingFromApi(cached.branding) ?? DEFAULT_BRANDING);
                     if (!isOffline) {
                         syncCatalogForShop(shopSlug).catch(() => {});
                     }

@@ -46,6 +46,11 @@ export interface ShopInfo {
     delivery_area?: ShopDeliveryArea | null;
 }
 
+export interface HomePromoSlide {
+    image_url: string;
+    link_url?: string | null;
+}
+
 export interface TenantBranding {
     logo_url: string | null;
     logo_dark_url: string | null;
@@ -55,6 +60,8 @@ export interface TenantBranding {
     font_family: string;
     theme_mode: string;
     address?: string | null;
+    /** POS-configured home promo images */
+    home_promo_slides?: HomePromoSlide[];
 }
 
 export interface ShopSettings {

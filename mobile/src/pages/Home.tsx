@@ -8,6 +8,22 @@ import { filterCategoriesWithListedProducts } from '../utils/catalogCategories';
 import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
 import GlobalSearchBar from '../features/search/GlobalSearchBar';
 import { addRecentSearch } from '../features/search/recentSearchesStorage';
+import HomePromoCarousel from '../components/HomePromoCarousel';
+import type { HomePromoSlide } from '../context/AppContext';
+
+function coercePromoSlides(raw: unknown): HomePromoSlide[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw as HomePromoSlide[];
+    if (typeof raw === 'string') {
+        try {
+            const p = JSON.parse(raw);
+            return Array.isArray(p) ? (p as HomePromoSlide[]) : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
 
 export default function Home() {
     const { shopSlug } = useParams();
@@ -127,7 +143,7 @@ export default function Home() {
             <div className="home-product-section__head">
                 <h2 className="home-section-title">{title}</h2>
                 <Link to={`/${shopSlug}/products${viewAllQuery}`} className="home-section-link">
-                    View all →
+                    View All →
                 </Link>
             </div>
             <div className="home-product-row">
@@ -148,128 +164,157 @@ export default function Home() {
         </section>
     );
 
+    const promoSlides = coercePromoSlides(state.branding?.home_promo_slides);
+    const deliveryMins = state.settings?.estimated_delivery_minutes || 30;
+
     return (
         <div className="page page--home fade-in">
-            <div
-                className="home-hero"
-                style={{
-                    background: `linear-gradient(135deg, var(--primary) 0%, ${state.shop?.brand_color || '#4F46E5'}dd 100%)`,
-                }}
-            >
-                <p className="home-hero-sub">
-                    Order online • {state.settings?.estimated_delivery_minutes || 60} min delivery
-                </p>
-                {state.settings && state.settings.delivery_fee > 0 && (
-                    <p className="home-hero-delivery">
-                        Delivery: Rs. {state.settings.delivery_fee}
-                        {state.settings.free_delivery_above &&
-                            ` (free above Rs. ${state.settings.free_delivery_above})`}
-                    </p>
-                )}
+            <div className="home-search-sticky">
+                <GlobalSearchBar
+                    variant="home"
+                    value={searchDraft}
+                    onChange={setSearchDraft}
+                    onSubmit={submitSearch}
+                    fixedPlaceholder="Search for products, brands & more"
+                    onBarcodeScan={() => navigate(`/${shopSlug}/products`)}
+                />
             </div>
 
-            <div className="home-sticky">
-                <div className="home-sticky-search">
-                    <GlobalSearchBar
-                        variant="home"
-                        value={searchDraft}
-                        onChange={setSearchDraft}
-                        onSubmit={submitSearch}
-                    />
-                </div>
-
-                <div className="home-recipes-banner">
-                    <Link to={`/${shopSlug}/recipes`}>
-                        <span>Recipe ideas — add ingredients to your cart</span>
-                        <span aria-hidden>→</span>
+            <div className="category-nav-rail category-nav-rail--home" role="navigation" aria-label="Quick categories">
+                <Link to={`/${shopSlug}/products`} className="category-nav-item category-nav-item--link category-nav-item--chip">
+                    <span className="category-nav-item__icon category-nav-item__icon--indigo" aria-hidden>
+                        📦
+                    </span>
+                    <span>All Items</span>
+                </Link>
+                <Link
+                    to={`/${shopSlug}/products?filterInStock=true`}
+                    className="category-nav-item category-nav-item--link category-nav-item--chip"
+                >
+                    <span className="category-nav-item__icon category-nav-item__icon--emerald" aria-hidden>
+                        ✓
+                    </span>
+                    <span>In Stock</span>
+                </Link>
+                <Link
+                    to={`/${shopSlug}/products?browse=popular`}
+                    className="category-nav-item category-nav-item--link category-nav-item--chip"
+                >
+                    <span className="category-nav-item__icon category-nav-item__icon--amber" aria-hidden>
+                        ⭐
+                    </span>
+                    <span>Popular</span>
+                </Link>
+                <Link
+                    to={`/${shopSlug}/products?filterDeals=true`}
+                    className="category-nav-item category-nav-item--link category-nav-item--chip"
+                >
+                    <span className="category-nav-item__icon category-nav-item__icon--rose" aria-hidden>
+                        %
+                    </span>
+                    <span>Deals</span>
+                </Link>
+                <Link
+                    to={`/${shopSlug}/products?sortBy=price_low_high`}
+                    className="category-nav-item category-nav-item--link category-nav-item--chip"
+                >
+                    <span className="category-nav-item__icon category-nav-item__icon--cyan" aria-hidden>
+                        ↓
+                    </span>
+                    <span>Low Price</span>
+                </Link>
+                <Link
+                    to={`/${shopSlug}/utilities`}
+                    className="category-nav-item category-nav-item--link category-nav-item--chip"
+                >
+                    <span className="category-nav-item__icon category-nav-item__icon--violet" aria-hidden>
+                        ↩
+                    </span>
+                    <span>Easy Return</span>
+                </Link>
+                {mainCategoriesWithProducts.map((c: any) => (
+                    <Link
+                        key={c.id}
+                        to={`/${shopSlug}/products?category=${c.id}`}
+                        className="category-nav-item category-nav-item--link category-nav-item--chip"
+                    >
+                        <CategoryRailIcon mobile_icon_url={c.mobile_icon_url} />
+                        <span>{c.name}</span>
                     </Link>
-                </div>
+                ))}
+            </div>
 
-                {state.isLoggedIn && (
-                    <div className="home-loyalty-card">
-                        <div className="home-loyalty-card__main">
-                            <span className="home-loyalty-card__icon" aria-hidden>🎁</span>
-                            <div className="home-loyalty-card__text">
-                                {loyalty.fetchFailed && loyalty.totalPoints == null ? (
-                                    <p className="home-loyalty-card__points">Points unavailable</p>
-                                ) : loyalty.totalPoints == null && !loyalty.fetchFailed ? (
-                                    <p className="home-loyalty-card__points home-loyalty-card__loading">
-                                        Loading points…
+            {state.isLoggedIn && (
+                <div className="home-loyalty-card home-loyalty-card--rich">
+                    <div className="home-loyalty-card__main">
+                        <span className="home-loyalty-card__icon" aria-hidden>
+                            🎁
+                        </span>
+                        <div className="home-loyalty-card__text">
+                            <p className="home-loyalty-card__brand-line">{state.shop?.company_name || state.shop?.name || 'Rewards'}</p>
+                            {loyalty.fetchFailed && loyalty.totalPoints == null ? (
+                                <p className="home-loyalty-card__points">Points unavailable</p>
+                            ) : loyalty.totalPoints == null && !loyalty.fetchFailed ? (
+                                <p className="home-loyalty-card__points home-loyalty-card__loading">Loading points…</p>
+                            ) : (
+                                <>
+                                    <p className="home-loyalty-card__points">
+                                        <strong>{(loyalty.totalPoints ?? 0).toLocaleString()}</strong> points
                                     </p>
-                                ) : (
-                                    <>
-                                        <p className="home-loyalty-card__points">
-                                            You have{' '}
-                                            <strong>
-                                                {(loyalty.totalPoints ?? 0).toLocaleString()} points
-                                            </strong>
+                                    {loyalty.fetchFailed && (
+                                        <p className="home-loyalty-card__hint home-loyalty-card__hint--muted">
+                                            Showing last saved balance
                                         </p>
-                                        {loyalty.fetchFailed && (
-                                            <p className="home-loyalty-card__hint home-loyalty-card__hint--muted">
-                                                Showing last saved balance
-                                            </p>
-                                        )}
-                                        {loyalty.pointsValue != null && loyalty.pointsValue > 0 && !loyalty.fetchFailed && (
-                                            <p className="home-loyalty-card__hint">
-                                                ≈ Rs. {loyalty.pointsValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} value
-                                            </p>
-                                        )}
-                                        <p className="home-loyalty-card__tagline">Keep shopping to earn more!</p>
-                                    </>
-                                )}
-                            </div>
+                                    )}
+                                    {loyalty.pointsValue != null && loyalty.pointsValue > 0 && !loyalty.fetchFailed && (
+                                        <p className="home-loyalty-card__hint">
+                                            ≈ Rs. {loyalty.pointsValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} redeemable value
+                                        </p>
+                                    )}
+                                    <div className="home-loyalty-card__progress" aria-hidden>
+                                        <span className="home-loyalty-card__progress-fill" />
+                                    </div>
+                                    <p className="home-loyalty-card__tagline">Keep shopping to unlock more perks</p>
+                                </>
+                            )}
                         </div>
-                        <Link
-                            to={`/${shopSlug}/account#loyalty`}
-                            className="home-loyalty-card__cta"
-                        >
-                            View Details →
+                    </div>
+                    <div className="home-loyalty-card__actions">
+                        <Link to={`/${shopSlug}/account#loyalty`} className="home-loyalty-card__cta home-loyalty-card__cta--ghost">
+                            View History
+                        </Link>
+                        <Link to={`/${shopSlug}/account#loyalty`} className="home-loyalty-card__cta">
+                            View Benefits →
                         </Link>
                     </div>
-                )}
+                </div>
+            )}
 
-                <div className="category-nav-rail category-nav-rail--home" role="tablist" aria-label="Categories">
-                    <Link
-                        to={`/${shopSlug}/products`}
-                        className="category-nav-item category-nav-item--link"
-                        role="tab"
-                    >
-                        <span className="category-nav-item__icon" aria-hidden>
-                            🏬
-                        </span>
-                        <span>All Products</span>
-                    </Link>
-                    <Link
-                        to={`/${shopSlug}/products?browse=popular`}
-                        className="category-nav-item category-nav-item--link"
-                        role="tab"
-                    >
-                        <span className="category-nav-item__icon" aria-hidden>
-                            ⭐
-                        </span>
-                        <span>Popular</span>
-                    </Link>
-                    <Link
-                        to={`/${shopSlug}/products?browse=new`}
-                        className="category-nav-item category-nav-item--link"
-                        role="tab"
-                    >
-                        <span className="category-nav-item__icon" aria-hidden>
-                            ✨
-                        </span>
-                        <span>New Arrivals</span>
-                    </Link>
-                    {mainCategoriesWithProducts.map((c: any) => (
-                        <Link
-                            key={c.id}
-                            to={`/${shopSlug}/products?category=${c.id}`}
-                            className="category-nav-item category-nav-item--link"
-                            role="tab"
-                        >
-                            <CategoryRailIcon mobile_icon_url={c.mobile_icon_url} />
-                            <span>{c.name}</span>
-                        </Link>
-                    ))}
+            <HomePromoCarousel slides={promoSlides} shopSlug={shopSlug!} deliveryMinutes={deliveryMins} />
+
+            <div className="home-recipes-banner">
+                <Link to={`/${shopSlug}/recipes`}>
+                    <span>Recipe ideas — add ingredients to your cart</span>
+                    <span aria-hidden>→</span>
+                </Link>
+            </div>
+
+            <div className="home-service-strip" aria-label="Service highlights">
+                <div className="home-service-strip__item">
+                    <span className="home-service-strip__ico">🚚</span>
+                    <span className="home-service-strip__txt">Free Delivery</span>
+                </div>
+                <div className="home-service-strip__item">
+                    <span className="home-service-strip__ico">🏪</span>
+                    <span className="home-service-strip__txt">Easy Return</span>
+                </div>
+                <div className="home-service-strip__item">
+                    <span className="home-service-strip__ico">🔒</span>
+                    <span className="home-service-strip__txt">Secure Pay</span>
+                </div>
+                <div className="home-service-strip__item">
+                    <span className="home-service-strip__ico">💬</span>
+                    <span className="home-service-strip__txt">24/7 Support</span>
                 </div>
             </div>
 
@@ -292,7 +337,7 @@ export default function Home() {
             ) : (
                 <>
                     {renderSection('Best Sellers', bestSellers, '?sortBy=best_selling')}
-                    {renderSection('Deals Today', deals, '?filterDeals=true')}
+                    {renderSection('Flash Deals', deals, '?filterDeals=true')}
                     {renderSection('New Arrivals', newArrivals, '?browse=new')}
                 </>
             )}

@@ -27,7 +27,7 @@ export class ReportingAuditService {
     const { start, endExclusive } = rangeBounds(input.dateFrom, input.dateTo);
     const br = input.branchId?.trim() || null;
 
-    const branchClause = `AND ($4 IS NULL OR $4 = '' OR s.branch_id = $4)`;
+    const branchClause = `AND (COALESCE(CAST($4 AS TEXT), '') = '' OR s.branch_id = CAST($4 AS TEXT))`;
     const paramsBase = [input.tenantId, start, endExclusive, br];
 
     const voidRows = await db.query(
