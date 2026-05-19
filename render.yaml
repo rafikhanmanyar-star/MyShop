@@ -48,6 +48,25 @@ services:
         sync: false
 
   - type: web
+    name: OboStores-Website
+    runtime: static
+    branch: main
+    rootDir: website
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://myshop-api-9pd4.onrender.com/api
+      - key: VITE_SHOP_SLUG
+        value: obo
+      - key: VITE_SHOP_APP_URL
+        value: https://shop.obostores.com
+      - key: VITE_RIDER_APP_URL
+        value: https://rider.obostores.com
+      - key: VITE_POS_APP_URL
+        value: https://pos.obostores.com
+
+  - type: web
     name: MyShop-Mobile
     runtime: static
     branch: main
