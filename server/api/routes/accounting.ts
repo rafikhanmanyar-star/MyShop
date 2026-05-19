@@ -360,6 +360,23 @@ router.get('/reports/daily/summary', checkRole(['admin', 'accountant']), async (
     }
 });
 
+router.get('/reports/daily/profit-summary', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const rawDates = (req.query.dates as string) || '';
+        const dates = rawDates
+            .split(',')
+            .map((d) => d.trim())
+            .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+        const raw = (req.query.branchId as string) || '';
+        const branchId = raw && raw !== 'all' ? raw : null;
+        const data = await getDailyReportService().getProfitForDates(req.tenantId, dates, branchId);
+        res.json(data);
+    } catch (error: any) {
+        console.error('❌ Error daily profit summary:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.get('/reports/daily/inventory-out', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
         const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);

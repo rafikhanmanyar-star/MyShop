@@ -31,7 +31,9 @@ import {
   Calendar,
   Smartphone,
   ArrowRight,
+  LineChart,
 } from 'lucide-react';
+import { lastLocalYmdDays } from '../utils/calendarDate';
 
 const CHART_BLUE = '#4A90E2';
 const DONUT_COLORS = ['#4A90E2', '#50C878', '#F6C23E', '#E74A3B', '#9B59B6', '#17A2B8', '#6C757D'];
@@ -110,6 +112,7 @@ export default function DashboardPage() {
   const [salesTrend, setSalesTrend] = useState<{ label: string; revenue: number }[]>([]);
   const [revenueBreakdown, setRevenueBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [chartsLoaded, setChartsLoaded] = useState(false);
+  const [profit7d, setProfit7d] = useState<{ totalProfit: number; avgProfitPerDay: number } | null>(null);
 
   useEffect(() => {
     const tenantId = getTenantId();
@@ -131,6 +134,7 @@ export default function DashboardPage() {
             salesReturns,
             trendRaw,
             categoryPerf,
+            profitSummary,
           ] = await Promise.all([
             shopApi.getProducts().catch(() => []),
             shopApi.getSales().catch(() => []),
@@ -144,6 +148,7 @@ export default function DashboardPage() {
             shopApi.getSalesReturns().catch(() => []),
             accountingApi.getDailyTrend(7).catch(() => null),
             accountingApi.getCategoryPerformance().catch(() => []),
+            accountingApi.dailyProfitSummary(lastLocalYmdDays(7)).catch(() => null),
           ]);
 
           const salesList = (sales as any[]) || [];
@@ -244,6 +249,14 @@ export default function DashboardPage() {
             .sort((a, b) => b.value - a.value)
             .slice(0, 7);
           setRevenueBreakdown(pie);
+          if (profitSummary && typeof profitSummary === 'object') {
+            setProfit7d({
+              totalProfit: Number(profitSummary.totalProfit) || 0,
+              avgProfitPerDay: Number(profitSummary.avgProfitPerDay) || 0,
+            });
+          } else {
+            setProfit7d(null);
+          }
           setChartsLoaded(true);
           return;
         }
@@ -258,6 +271,7 @@ export default function DashboardPage() {
 
         setCachedAt(null);
         setChartsLoaded(false);
+        setProfit7d(null);
       } catch (err) {
         console.error('Failed to load dashboard:', err);
         if (tenantId) {
@@ -272,6 +286,7 @@ export default function DashboardPage() {
           }
         }
         setChartsLoaded(false);
+        setProfit7d(null);
       } finally {
         setLoading(false);
       }
@@ -316,6 +331,22 @@ export default function DashboardPage() {
       icon: DollarSign,
       iconClass: 'text-emerald-700 dark:text-emerald-300',
       isString: true,
+    },
+    {
+      label: '7-day profit',
+      value:
+        profit7d != null
+          ? `${CURRENCY} ${profit7d.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+          : '—',
+      icon: LineChart,
+      iconClass: 'text-teal-600 dark:text-teal-400',
+      isString: true,
+      sub:
+        profit7d != null
+          ? `Avg ${CURRENCY} ${profit7d.avgProfitPerDay.toLocaleString(undefined, { maximumFractionDigits: 2 })}/day`
+          : chartsLoaded
+            ? 'No profit data'
+            : 'Loading…',
     },
     {
       label: "Today's Sales",

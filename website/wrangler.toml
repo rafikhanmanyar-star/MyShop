@@ -1,0 +1,10 @@
+# Cloudflare Pages — build settings for this app (monorepo: set Root directory = website in the dashboard)
+name = "obostores-website"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "dist"
+
+[vars]
+# Override in Cloudflare dashboard → Settings → Environment variables
+# VITE_API_URL = "https://api.obostores.com/api"
+# VITE_SHOP_SLUG = "obo"
+# VITE_SHOP_APP_URL = "https://shop.obostores.com"

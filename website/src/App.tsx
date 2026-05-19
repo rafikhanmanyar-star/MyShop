@@ -24,7 +24,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="flex min-h-screen flex-col bg-zinc-50 font-sans dark:bg-black">
       <Header />
       <main>
         <Hero shopName={shopName} />
@@ -35,7 +35,7 @@ export default function App() {
           subtitle="oBo stores is more than a catalog — loyalty, tracking, and smart tools for everyday shopping."
           features={orderingFeatures}
         />
-        <div className="bg-slate-50">
+        <div className="bg-zinc-100 dark:bg-zinc-900">
           <FeatureGrid
             title="Plan meals & stay on budget"
             subtitle="Optional tools built into the same app you use to order."

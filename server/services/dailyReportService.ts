@@ -103,11 +103,29 @@ export class DailyReportService {
       branchId ? [tenantId, dateStr, branchId] : [tenantId, dateStr]
     );
 
-    // Match calendar day like expenses (expense_date), not UTC [start,end). payment_date comes from date-picker YYYY-MM-DD.
+    // Supplier payments on payment_date + initial cash paid when posting a bill (no supplier_payments row).
     const vendorPay = await db.query<{ s: string }>(
-      `SELECT COALESCE(SUM(amount::numeric), 0)::text AS s
-       FROM supplier_payments
-       WHERE tenant_id = $1 AND payment_date::date = $2::date`,
+      `SELECT COALESCE(SUM(amt), 0)::text AS s
+       FROM (
+         SELECT sp.amount::numeric AS amt
+         FROM supplier_payments sp
+         WHERE sp.tenant_id = $1 AND sp.payment_date::date = $2::date
+         UNION ALL
+         SELECT GREATEST(
+           pb.paid_amount::numeric - COALESCE(alloc.paid_via_supplier_payment, 0),
+           0
+         ) AS amt
+         FROM purchase_bills pb
+         LEFT JOIN (
+           SELECT purchase_bill_id, SUM(amount::numeric) AS paid_via_supplier_payment
+           FROM purchase_bill_payments
+           WHERE tenant_id = $1
+           GROUP BY purchase_bill_id
+         ) alloc ON alloc.purchase_bill_id = pb.id
+         WHERE pb.tenant_id = $1
+           AND COALESCE(pb.is_posted, TRUE) = TRUE
+           AND pb.bill_date::date = $2::date
+       ) combined`,
       [tenantId, dateStr]
     );
 
@@ -230,6 +248,27 @@ export class DailyReportService {
       khataNetChange,
       khataEntryCount,
       netProfitDaily,
+    };
+  }
+
+  /**
+   * Sum of netProfitDaily over calendar dates (YYYY-MM-DD), e.g. last 7 local days from the client.
+   */
+  async getProfitForDates(
+    tenantId: string,
+    dates: string[],
+    branchId: string | null
+  ): Promise<{ days: number; totalProfit: number; avgProfitPerDay: number }> {
+    const unique = [...new Set(dates.map((d) => d.trim()).filter(Boolean))];
+    if (unique.length === 0) {
+      return { days: 0, totalProfit: 0, avgProfitPerDay: 0 };
+    }
+    const summaries = await Promise.all(unique.map((d) => this.getSummary(tenantId, d, branchId)));
+    const totalProfit = summaries.reduce((sum, s) => sum + (s.netProfitDaily || 0), 0);
+    return {
+      days: unique.length,
+      totalProfit,
+      avgProfitPerDay: totalProfit / unique.length,
     };
   }
 

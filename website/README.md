@@ -23,8 +23,29 @@ Output: `website/dist/`
 
 ## Deploy to Cloudflare Pages
 
-1. **Workers & Pages → Create → Connect Git** → this repo.
-2. **Root directory:** `website`
+### Fix: `Cannot find cwd: .../mobile`
+
+That error means the Pages project **Root directory** is set to `mobile` (customer PWA). This marketing site is in **`website`**, not `mobile`.
+
+**Cloudflare Dashboard → Workers & Pages → your project → Settings → Builds & deployments → Build configuration → Edit:**
+
+| Setting | Marketing site (obostores.com) | Customer PWA (shop.*) |
+|--------|-----------------------------------|------------------------|
+| **Root directory** | `website` | `mobile` |
+| **Build command** | `npm ci && npm run build` | `npm ci && npm run build` |
+| **Build output directory** | `dist` | `dist` |
+
+Use a **separate Pages project** for the marketing site and for the mobile shop app — do not reuse the mobile project’s root directory.
+
+### Which Git repo?
+
+- **MyShop monorepo** (`rafikhanmanyar-star/MyShop`): Root directory = **`website`**
+- **Standalone `Website` repo**: push the *contents* of `website/` to the repo root (so `package.json` is at the repo root), then Root directory = **empty** (`.`)
+
+### Standard setup (MyShop repo)
+
+1. **Workers & Pages → Create → Connect Git** → **MyShop** repo (or your standalone Website repo with files at root).
+2. **Root directory:** `website` (MyShop) or leave blank (standalone repo)
 3. **Build command:** `npm ci && npm run build`
 4. **Output directory:** `dist`
 5. **Environment variables** (production) — copy from `.env.production.example`:

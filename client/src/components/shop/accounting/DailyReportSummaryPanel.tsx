@@ -391,7 +391,7 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
             iconColor="text-blue-700 dark:text-blue-400"
             label="Vendor payments"
             value={`${CURRENCY} ${formatMoney(summary?.vendorPaymentsTotal ?? 0)}`}
-            hint="Supplier settlements · all locations"
+            hint="Bill payments & supplier settlements · all locations"
             loading={loading}
             onClick={() => navigate('/procurement')}
           />

@@ -496,6 +496,16 @@ export const accountingApi = {
   },
   clearAllTransactions: () => apiClient.post<{ success: boolean; message: string }>('/shop/accounting/clear-transactions'),
 
+  dailyProfitSummary: (dates: string[], branchId?: string | null) => {
+    const q = new URLSearchParams();
+    q.set('dates', dates.join(','));
+    if (branchId) q.set('branchId', branchId);
+    return apiClient.get<{
+      days: number;
+      totalProfit: number;
+      avgProfitPerDay: number;
+    }>(`/shop/accounting/reports/daily/profit-summary?${q.toString()}`);
+  },
   dailyReportSummary: (date: string, branchId?: string | null) => {
     const q = new URLSearchParams();
     q.set('date', date);

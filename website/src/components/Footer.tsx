@@ -4,15 +4,15 @@ export default function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-slate-200 bg-slate-900 text-slate-300">
+    <footer className="border-t border-zinc-800 bg-zinc-950 text-zinc-400">
       <div className="section-pad py-12">
         <div className="flex flex-col gap-8 sm:flex-row sm:justify-between">
           <div>
-            <div className="flex items-center gap-2 font-bold text-white">
+            <div className="flex items-center gap-2 font-semibold text-white">
               <img src="/icons/icon-192.png" alt="" className="h-8 w-8 rounded-lg" />
               {siteConfig.brandName}
             </div>
-            <p className="mt-2 max-w-xs text-sm text-slate-400">
+            <p className="mt-2 max-w-xs text-sm">
               Order groceries and essentials online with delivery tracking and loyalty rewards.
             </p>
           </div>
@@ -54,7 +54,7 @@ export default function Footer() {
             </div>
           </div>
         </div>
-        <p className="mt-10 border-t border-slate-800 pt-6 text-center text-xs text-slate-500">
+        <p className="mt-10 border-t border-zinc-800 pt-6 text-center text-xs text-zinc-500">
           © {year} {siteConfig.brandName}. All rights reserved.
         </p>
       </div>
