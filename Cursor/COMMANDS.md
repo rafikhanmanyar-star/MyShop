@@ -55,7 +55,24 @@ One-off script to remove a product and its **POS sales**, **sales returns**, **m
 
 ---
 
-## 4. Installable app
+## 4. Fetch marketing website from GitHub
+
+Pull the latest **`website/`** folder from the remote repo when another teammate has updated the marketing site on GitHub. This does **not** change other folders (client, server, mobile, etc.).
+
+| Command | Description |
+|--------|-------------|
+| `npm run fetch:website` | `git fetch` + checkout `website/` from `origin/main`, then `npm install` in `website/`. |
+| `.\fetch-website.ps1 -Force` | Overwrite local `website/` even if you have uncommitted edits there. |
+| `.\fetch-website.ps1 -SkipInstall` | Update files only; skip `npm install`. |
+| `.\fetch-website.ps1 -Branch main` | Use another branch (default: `main`). |
+
+**What it does:** Fetches from GitHub, replaces your local `website/` tree with `origin/main` (or the branch you pass), installs dependencies, and leaves those files **staged** in git — run `git status` before committing.
+
+**When to use:** After a teammate pushes website changes you need locally for `npm run dev:website` or Cloudflare deploy prep. Does not push anything to GitHub.
+
+---
+
+## 5. Installable app
 
 Build the Windows desktop app and optionally bump version, commit, push, and create a GitHub release.
 
@@ -104,6 +121,7 @@ One command runs the PowerShell script that does all steps: bump version, build,
 | **Local test** | `npm run electron:dev` | — (run-only; use installable release when ready to ship) |
 | **POS vs cloud API** | `npm run dev:pos:cloud` | — |
 | **Database migrations** | `npm run migrate` (from repo root or `server/`) | — |
+| **Fetch website from GitHub** | `npm run fetch:website` | — |
 | **Delete test product (DB)** | From `server/`: set `TENANT_COMPANY_HINT` / `PRODUCT_HINT`, then `npx tsx scripts/delete-product-by-name.ts --dry` or `--execute` | — |
 | **Installable (local stack)** | `npm run dist:local` or `npm run dist:win:local` | — (use `release` for cloud + push) |
 | **Installable (cloud, Windows)** | `npm run dist:win` | `npm run release` (patch), `npm run release:minor`, `npm run release:major` |

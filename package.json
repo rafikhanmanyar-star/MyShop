@@ -1,6 +1,6 @@
 {
   "name": "myshop",
-  "version": "1.0.193",
+  "version": "1.0.194",
   "description": "MyShop - POS & Inventory Management",
   "main": "electron/main.js",
   "private": true,
@@ -17,6 +17,7 @@
     "dev:rider": "cd rider && npm run dev",
     "dev:website": "cd website && npm run dev",
     "build:website": "cd website && npm run build",
+    "fetch:website": "powershell -ExecutionPolicy Bypass -File ./fetch-website.ps1",
     "build": "npm run build:server && npm run build:client",
     "build:server": "cd server && npm run build",
     "migrate": "cd server && npm run migrate",
