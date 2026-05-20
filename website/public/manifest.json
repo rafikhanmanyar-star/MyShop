@@ -1,18 +1,59 @@
 {
-  "name": "oBo Store",
+  "id": "/",
+  "name": "oBo Store — Grocery Delivery B-17 Islamabad",
   "short_name": "oBo",
-  "description": "Smart grocery store PWA for FMC B-17 Kohsar Plaza Islamabad",
-  "start_url": "/",
+  "description": "Smart grocery store PWA for FMC B-17 Kohsar Plaza, Islamabad. Order snacks, dairy, frozen items, and household essentials with fast delivery.",
+  "lang": "en-PK",
+  "dir": "ltr",
+  "start_url": "/?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "background_color": "#F7F9F8",
   "theme_color": "#1F7A63",
   "orientation": "portrait-primary",
+  "categories": ["shopping", "food", "lifestyle"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Order groceries",
+      "short_name": "Order",
+      "description": "Start a new grocery order",
+      "url": "/?source=shortcut-order",
+      "icons": [{ "src": "/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Store location",
+      "short_name": "Visit",
+      "description": "Directions to FMC B-17 Kohsar Plaza",
+      "url": "/contact?source=shortcut-location",
+      "icons": [{ "src": "/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ]
 }

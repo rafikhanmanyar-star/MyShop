@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import {
+  ArrowRight,
   Bell,
   BookOpen,
   CalendarDays,
@@ -6,20 +8,58 @@ import {
   Users,
   Wallet,
 } from '@/components/icons';
+import OptimizedImage from '@/components/OptimizedImage';
+import SectionHeading from '@/components/SectionHeading';
 import { utilities } from '@/lib/data';
+import { siteImages } from '@/lib/images';
 
 const icons = [Wallet, CalendarDays, Bell, BookOpen, Users, ClipboardList];
 
-export default function SmartUtilities() {
+type SmartUtilitiesProps = {
+  headingLevel?: 'h1' | 'h2';
+  showExploreLink?: boolean;
+};
+
+export default function SmartUtilities({
+  headingLevel = 'h2',
+  showExploreLink = true,
+}: SmartUtilitiesProps) {
+  const budget = siteImages.budgetPlanner;
+
   return (
-    <section id="utilities" className="bg-dark-navy py-16 sm:py-20">
+    <section id="utilities" className="bg-dark-navy py-16 sm:py-20" aria-labelledby="utilities-heading">
       <div className="section-container">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold text-white sm:text-4xl">
-            Smart Utilities for a Smarter You
-          </h2>
-          <p className="mt-3 text-muted">Plan better. Save more. Live easier.</p>
+          <SectionHeading
+            level={headingLevel}
+            id="utilities-heading"
+            title="Smart Utilities for a Smarter You"
+            description="Plan budgets, weekly menus, and family shopping — built for households in B-17 Islamabad."
+            align="center"
+            titleClassName="text-3xl font-bold text-white sm:text-4xl"
+            descriptionClassName="mt-3 text-slate-400"
+          />
+          {showExploreLink && headingLevel === 'h2' && (
+            <Link
+              href="/utilities"
+              className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary-on-dark hover:text-white"
+            >
+              Explore smart grocery utilities
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          )}
         </div>
+
+        <figure className="mx-auto mt-10 max-w-xl overflow-hidden rounded-3xl border border-white/10 shadow-card-lg">
+          <OptimizedImage
+            src={budget.src}
+            alt={budget.alt}
+            width={budget.width}
+            height={budget.height}
+            sizes="(max-width: 768px) 100vw, 480px"
+            className="aspect-[3/2] h-auto w-full object-cover"
+          />
+        </figure>
 
         <div className="mt-10 flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible lg:grid-cols-6">
           {utilities.map((utility, index) => {
@@ -38,6 +78,14 @@ export default function SmartUtilities() {
             );
           })}
         </div>
+
+        {showExploreLink && headingLevel === 'h2' && (
+          <p className="mt-8 text-center text-sm text-slate-400">
+            <Link href="/utilities" className="font-semibold text-primary-on-dark hover:text-white">
+              Learn about budget planner, menu planner, and other oBo Store utilities
+            </Link>
+          </p>
+        )}
       </div>
     </section>
   );

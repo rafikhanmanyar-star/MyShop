@@ -4,69 +4,102 @@ export const siteConfig = {
   brand: 'oBo store',
   title: 'oBo Store | Smart Grocery Store in B-17 Islamabad',
   description:
-    'Install oBo Store PWA to order groceries, snacks, dairy, frozen items, and household essentials from FMC B-17 Kohsar Plaza Main Boulevard with fast delivery and real-time tracking.',
+    'Install oBo Store PWA to order groceries, snacks, drinks, dairy, frozen items, and household essentials from FMC B-17 Kohsar Plaza Main Boulevard with fast delivery and real-time tracking.',
+  pwaDescription:
+    'Install the oBo smart grocery app to order from our FMC B-17 store with real-time tracking, budget tools, and fast delivery across B-17 Islamabad.',
   url: 'https://obostore.com',
-  address: 'FMC B-17 Kohsar Plaza Main Boulevard',
+  /** Live grocery PWA / shop (Install CTA destination) */
+  shopUrl: 'https://obostores-shop.pages.dev/',
+  logo: '/logo.png',
+  schemaAddress: 'FMC B-17 Kohsar Plaza Main Boulevard, Islamabad, Pakistan',
+  schemaAreaServed: ['B-17 Islamabad', 'FMC B-17', 'Kohsar Plaza'] as const,
+  openingHours: '09:00-23:00',
+  priceRange: 'PKR',
+  address: 'FMC B-17 Kohsar Plaza, Main Boulevard',
+  addressLine2: 'Sector B-17, Islamabad',
   city: 'Islamabad',
+  region: 'Islamabad Capital Territory',
+  postalCode: '44000',
+  countryCode: 'PK',
   phone: '+92 300 1234567',
+  phoneE164: '+923001234567',
   email: 'support@obostore.com',
   promoCode: 'OBOFIRST',
   themeColor: '#1F7A63',
   backgroundColor: '#F7F9F8',
-  hours: 'Open Daily 9:00 AM - 11:00 PM',
+  hours: 'Open Daily 9:00 AM – 11:00 PM',
+  mapsUrl:
+    'https://www.google.com/maps/search/?api=1&query=FMC+B-17+Kohsar+Plaza+Main+Boulevard+Islamabad',
+  geo: {
+    latitude: 33.6849,
+    longitude: 72.8458,
+  },
+  areaServed: [
+    'FMC B-17',
+    'Multi Gardens B-17',
+    'Gulberg Greens',
+    'MPCHS B-17',
+    'Sector B-17 Islamabad',
+    'Main Boulevard B-17',
+  ],
+  sameAs: [] as string[],
 } as const;
 
 export const navLinks = [
-  { label: 'Home', href: '#home' },
-  { label: 'Features', href: '#features' },
-  { label: 'Utilities', href: '#utilities' },
-  { label: 'About Us', href: '#about' },
-  { label: 'Contact', href: '#contact' },
+  { label: 'Home', href: '/' },
+  { label: 'Features', href: '/features' },
+  { label: 'Utilities', href: '/utilities' },
+  { label: 'About Us', href: '/about' },
+  { label: 'Contact', href: '/contact' },
 ] as const;
 
 export const trustFeatures = [
-  { title: 'Fast Delivery', subtitle: 'At your doorstep' },
+  { title: 'Fast Delivery', subtitle: 'Across B-17 Islamabad' },
   { title: 'Real-time Tracking', subtitle: 'Track your order live' },
   { title: 'Low Prices', subtitle: 'Best value every day' },
   { title: 'Return Available', subtitle: 'Easy returns policy' },
-  { title: 'Trusted Local Store', subtitle: 'Your neighborhood shop' },
+  { title: 'Trusted Local Store', subtitle: 'FMC B-17 Kohsar Plaza' },
   { title: 'Secure Ordering', subtitle: 'Safe & encrypted' },
 ] as const;
 
 export const topFeatures = [
   {
     title: 'Real-time Tracking',
-    description: 'Track your order live from store to doorstep with live rider updates.',
+    description:
+      'Follow local grocery delivery from Kohsar Plaza to your door with live rider updates in B-17 Islamabad.',
     icon: 'map-pin',
     color: 'bg-emerald-50 text-primary',
   },
   {
     title: 'Fast Delivery',
-    description: 'Quick delivery to your home with reliable on-time service.',
+    description:
+      'Same-day delivery across B-17 — snacks, drinks, household essentials, and more when you need them.',
     icon: 'truck',
     color: 'bg-orange-50 text-accent',
   },
   {
     title: 'Smart Offers',
-    description: 'Exclusive deals, bundle offers, and seasonal discounts every week.',
+    description: 'Weekly deals and bundles so families near FMC B-17 save on everyday shopping.',
     icon: 'tag',
     color: 'bg-blue-50 text-blue-600',
   },
   {
     title: 'Return Option',
-    description: 'Easy returns on eligible items with hassle-free support.',
+    description: 'Straightforward returns on eligible items — ask our team in store or in the app.',
     icon: 'rotate-ccw',
     color: 'bg-purple-50 text-purple-600',
   },
   {
     title: 'Household Essentials',
-    description: 'Everything from cleaning supplies to daily household needs.',
+    description:
+      'Cleaning, personal care, and daily home needs — your household essentials stop on Main Boulevard.',
     icon: 'home',
     color: 'bg-teal-50 text-teal-600',
   },
   {
     title: 'Frozen & Dairy',
-    description: 'Fresh dairy and frozen items delivered with care.',
+    description:
+      'Dairy and frozen items handled with care from our FMC B-17 store to your doorstep.',
     icon: 'snowflake',
     color: 'bg-cyan-50 text-cyan-600',
   },
@@ -78,7 +111,8 @@ export const topFeatures = [
   },
   {
     title: 'Easy Ordering',
-    description: 'Simple browse, cart, and checkout in just a few taps.',
+    description:
+      'Browse, cart, and checkout in a few taps — built for busy homes in B-17 Islamabad.',
     icon: 'shopping-cart',
     color: 'bg-rose-50 text-rose-600',
   },
@@ -151,27 +185,61 @@ export const stats = [
   { value: '99%', label: 'On-time Delivery' },
 ] as const;
 
+export const productCategories = [
+  'Snacks & beverages',
+  'Dairy products',
+  'Frozen foods',
+  'Household essentials',
+  'Personal care',
+  'Breakfast & pantry staples',
+] as const;
+
+export const faqItems = [
+  {
+    question: 'Where is oBo Store located?',
+    answer: 'oBo Store is located at FMC B-17 Kohsar Plaza Main Boulevard, Islamabad.',
+  },
+  {
+    question: 'Does oBo Store offer grocery delivery?',
+    answer:
+      'Yes, oBo Store offers grocery delivery through its PWA with fast delivery and real-time order tracking.',
+  },
+  {
+    question: 'What products are available at oBo Store?',
+    answer:
+      'oBo Store offers groceries, snacks, drinks, dairy products, frozen items, household essentials, and daily-use products.',
+  },
+  {
+    question: 'Can I install oBo Store like an app?',
+    answer:
+      'Yes, oBo Store is a PWA, so you can install it on your phone and use it like an app without Google Play or App Store.',
+  },
+  {
+    question: 'Can I track my order?',
+    answer: 'Yes, the oBo Store PWA allows customers to track orders in real time.',
+  },
+  {
+    question: 'Does oBo Store offer returns?',
+    answer: 'Yes, oBo Store provides an easy return option for eligible products.',
+  },
+  {
+    question: 'Does oBo Store sell fruits and vegetables?',
+    answer:
+      'No, oBo Store focuses on packaged groceries, household essentials, snacks, drinks, dairy, and frozen items.',
+  },
+] as const;
+
 export const footerQuickLinks = [
-  { label: 'Home', href: '#home' },
-  { label: 'Features', href: '#features' },
-  { label: 'Utilities', href: '#utilities' },
-  { label: 'About Us', href: '#about' },
-  { label: 'Contact', href: '#contact' },
+  { label: 'Home', href: '/' },
+  { label: 'Features', href: '/features' },
+  { label: 'Utilities', href: '/utilities' },
+  { label: 'About Us', href: '/about' },
+  { label: 'Contact', href: '/contact' },
 ] as const;
 
-export const footerUtilities = [
-  'Budget Planner',
-  'Weekly Menu Planner',
-  'Grocery Reminders',
-  'Smart Recipes',
-  'Family Shared Cart',
-  'Shopping Planning',
-] as const;
-
-export const footerHelp = [
-  'FAQ',
-  'Returns Policy',
-  'Privacy Policy',
-  'Terms of Service',
-  'Delivery Info',
+export const footerPolicyLinks = [
+  { label: 'Privacy Policy', href: '/privacy-policy' },
+  { label: 'Terms and Conditions', href: '/terms-and-conditions' },
+  { label: 'Return Policy', href: '/return-policy' },
+  { label: 'FAQ', href: '/#faq' },
 ] as const;

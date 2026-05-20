@@ -1,34 +1,37 @@
 'use client';
 
-import PromoBar from '@/components/sections/PromoBar';
-import Navbar from '@/components/sections/Navbar';
+import SkipLink from '@/components/SkipLink';
 import Hero from '@/components/sections/Hero';
-import TrustStrip from '@/components/sections/TrustStrip';
+import ServiceAreaSection from '@/components/sections/ServiceAreaSection';
+import WhyChooseSection from '@/components/sections/WhyChooseSection';
 import TopFeatures from '@/components/sections/TopFeatures';
 import SmartUtilities from '@/components/sections/SmartUtilities';
 import HowItWorks from '@/components/sections/HowItWorks';
-import TestimonialStats from '@/components/sections/TestimonialStats';
 import StoreSection from '@/components/sections/StoreSection';
+import LocalFaqSection from '@/components/sections/LocalFaqSection';
 import FinalCTA from '@/components/sections/FinalCTA';
 import Footer from '@/components/sections/Footer';
-import { PWAInstallProvider } from '@/components/PWAInstallProvider';
+import Navbar from '@/components/sections/Navbar';
+import PromoBar from '@/components/sections/PromoBar';
 
 export default function LandingPage() {
   return (
-    <PWAInstallProvider>
+    <>
+      <SkipLink />
       <PromoBar />
       <Navbar />
-      <main>
+      <main id="main-content" tabIndex={-1}>
         <Hero />
-        <TrustStrip />
+        <ServiceAreaSection />
+        <WhyChooseSection />
         <TopFeatures />
         <SmartUtilities />
         <HowItWorks />
-        <TestimonialStats />
         <StoreSection />
         <FinalCTA />
+        <LocalFaqSection />
       </main>
       <Footer />
-    </PWAInstallProvider>
+    </>
   );
 }

@@ -8,18 +8,30 @@ import {
   Truck,
 } from '@/components/icons';
 import InstallButton from '@/components/InstallButton';
+import OptimizedImage from '@/components/OptimizedImage';
+import SectionHeading from '@/components/SectionHeading';
+import { siteImages } from '@/lib/images';
 import { howItWorksSteps } from '@/lib/data';
 
 const stepIcons = [ShoppingBag, ShoppingCart, Truck, Gift, Package, Smartphone];
 
-export default function HowItWorks() {
+type HowItWorksProps = {
+  headingLevel?: 'h1' | 'h2';
+};
+
+export default function HowItWorks({ headingLevel = 'h2' }: HowItWorksProps) {
+  const install = siteImages.pwaInstall;
+
   return (
-    <section id="how-it-works" className="py-16 sm:py-20">
+    <section id="how-it-works" className="py-16 sm:py-20" aria-labelledby="how-it-works-heading">
       <div className="section-container">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold text-text-dark sm:text-4xl">How oBo Store Works</h2>
-          <p className="mt-3 text-muted">Simple steps to get your order</p>
-        </div>
+        <SectionHeading
+          level={headingLevel}
+          id="how-it-works-heading"
+          title="How oBo Store Works"
+          description="From browse to doorstep — simple local grocery delivery in B-17 Islamabad."
+          align="center"
+        />
 
         <div className="mt-12 grid gap-10 lg:grid-cols-[1fr_340px] lg:items-start">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -52,34 +64,25 @@ export default function HowItWorks() {
           <aside
             id="install"
             className="rounded-3xl border border-border bg-white p-6 shadow-card-lg lg:sticky lg:top-24"
+            aria-labelledby="install-sidebar-heading"
           >
-            <h3 className="text-lg font-bold text-text-dark">Install as App (PWA)</h3>
+            <h3 id="install-sidebar-heading" className="text-lg font-bold text-text-dark">
+              Quick install guide
+            </h3>
             <p className="mt-2 text-sm text-muted">
-              Tap the install button and enjoy the app-like experience.
+              Tap install and add oBo to your home screen for faster reordering from FMC B-17.
             </p>
 
-            {/* Browser install mockup */}
-            <div className="mt-5 overflow-hidden rounded-2xl border border-border bg-background">
-              <div className="flex items-center gap-1 border-b border-border bg-white px-3 py-2">
-                <span className="h-2 w-2 rounded-full bg-red-400" />
-                <span className="h-2 w-2 rounded-full bg-accent" />
-                <span className="h-2 w-2 rounded-full bg-green-400" />
-              </div>
-              <div className="p-4">
-                <div className="rounded-xl border border-border bg-white p-3 shadow-sm">
-                  <p className="text-xs font-semibold text-text-dark">Add to Home Screen</p>
-                  <p className="mt-1 text-[10px] text-muted">Install oBo Store for quick access</p>
-                  <div className="mt-3 flex gap-2">
-                    <span className="rounded-lg border border-border px-3 py-1 text-[10px] text-muted">
-                      Cancel
-                    </span>
-                    <span className="rounded-lg bg-primary px-3 py-1 text-[10px] font-semibold text-white">
-                      Install
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <figure className="mt-5 overflow-hidden rounded-2xl border border-border bg-background">
+              <OptimizedImage
+                src={install.src}
+                alt={install.alt}
+                width={install.width}
+                height={install.height}
+                sizes="320px"
+                className="h-auto w-full"
+              />
+            </figure>
 
             <div className="mt-5">
               <InstallButton className="w-full px-6 py-3" />

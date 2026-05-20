@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Menu, X } from '@/components/icons';
 import Logo from '@/components/Logo';
@@ -8,27 +10,32 @@ import { navLinks } from '@/lib/data';
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-white">
       <nav className="section-container flex h-16 items-center justify-between" aria-label="Main navigation">
-        <a href="#home" aria-label="oBo store home">
+        <Link href="/">
           <Logo />
-        </a>
+        </Link>
 
         <ul className="hidden items-center gap-8 md:flex">
-          {navLinks.map((link) => (
-            <li key={link.href}>
-              <a
-                href={link.href}
-                className={`text-sm font-medium ${
-                  link.label === 'Home' ? 'text-primary' : 'text-muted hover:text-text-dark'
-                }`}
-              >
-                {link.label}
-              </a>
-            </li>
-          ))}
+          {navLinks.map((link) => {
+            const isActive = pathname === link.href;
+            return (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  className={`rounded-md px-1 py-0.5 text-sm font-medium transition-colors ${
+                    isActive ? 'text-primary' : 'text-muted hover:text-text-dark'
+                  }`}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  {link.label}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="hidden md:block">
@@ -37,9 +44,10 @@ export default function Navbar() {
 
         <button
           type="button"
-          className="inline-flex items-center justify-center rounded-lg p-2 text-text-dark md:hidden"
-          aria-label={open ? 'Close menu' : 'Open menu'}
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg p-2 text-text-dark md:hidden"
+          aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
           aria-expanded={open}
+          aria-controls="mobile-navigation"
           onClick={() => setOpen(!open)}
         >
           {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -47,19 +55,25 @@ export default function Navbar() {
       </nav>
 
       {open && (
-        <div className="border-t border-border bg-white px-4 py-4 md:hidden">
+        <div id="mobile-navigation" className="border-t border-border bg-white px-4 py-4 md:hidden">
           <ul className="flex flex-col gap-3">
-            {navLinks.map((link) => (
-              <li key={link.href}>
-                <a
-                  href={link.href}
-                  className="block py-2 text-sm font-medium text-text-dark"
-                  onClick={() => setOpen(false)}
-                >
-                  {link.label}
-                </a>
-              </li>
-            ))}
+            {navLinks.map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className={`block py-2 text-sm font-medium ${
+                      isActive ? 'text-primary' : 'text-text-dark'
+                    }`}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => setOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
           <div className="mt-4">
             <InstallButton className="w-full" />

@@ -3,12 +3,21 @@ import { stats } from '@/lib/data';
 
 export default function TestimonialStats() {
   return (
-    <section id="about" className="pb-16 sm:pb-20">
+    <section id="about" className="pb-16 sm:pb-20" aria-labelledby="about-heading">
       <div className="section-container">
+        <div className="mx-auto mb-8 max-w-2xl text-center">
+          <h2 id="about-heading" className="text-3xl font-bold text-text-dark sm:text-4xl">
+            About oBo store Islamabad
+          </h2>
+          <p className="mt-3 text-muted">
+            A local smart grocery store serving B-17 families with in-store shopping and
+            online delivery
+          </p>
+        </div>
         <div className="overflow-hidden rounded-3xl border border-border bg-white shadow-card-lg">
           <div className="grid lg:grid-cols-2">
             <div className="border-b border-border p-8 sm:p-10 lg:border-b-0 lg:border-r">
-              <div className="flex gap-1" aria-label="5 star rating">
+              <div className="flex gap-1" role="img" aria-label="5 star rating">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Star key={i} className="h-5 w-5 fill-accent text-accent" aria-hidden="true" />
                 ))}

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { BadgeCheck, CreditCard, Play, RotateCcw, Truck } from '@/components/icons';
 import InstallButton from '@/components/InstallButton';
 import PhoneMockup from '@/components/PhoneMockup';
@@ -17,29 +18,28 @@ export default function Hero() {
           <div className="max-w-xl">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary">
               <BadgeCheck className="h-4 w-4" aria-hidden="true" />
-              Trusted by Thousands of Families
+              Trusted by families in B-17 Islamabad
             </span>
 
             <h1 className="mt-6 text-4xl font-bold leading-tight tracking-tight text-text-dark sm:text-5xl lg:text-[3.25rem]">
-              Your Trusted Smart{' '}
-              <span className="text-primary">Grocery</span> Store.
+              Your Trusted Smart Grocery Store in B-17 Islamabad
             </h1>
 
             <p className="mt-5 text-base leading-relaxed text-muted sm:text-lg">
-              Order groceries, snacks, dairy, frozen items, and household essentials with
-              real-time tracking, fast delivery, and smart planning utilities — all in one
-              modern app.
+              Shop at our FMC B-17 store on Main Boulevard, Kohsar Plaza, or order online for
+              local grocery delivery. Snacks, drinks, dairy and frozen items, and household
+              essentials — tracked to your door.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
               <InstallButton className="w-full px-6 py-3 sm:w-auto" />
-              <a
-                href="#how-it-works"
+              <Link
+                href="/#how-it-works"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-white px-6 py-3 text-sm font-semibold text-text-dark sm:w-auto"
               >
                 <Play className="h-4 w-4 text-primary" aria-hidden="true" />
-                How It Works
-              </a>
+                See how oBo Store works
+              </Link>
             </div>
 
             <div className="mt-8 flex flex-wrap gap-4">
