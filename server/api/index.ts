@@ -11,6 +11,7 @@ import forecastRoutes from './routes/forecast.js';
 import mobileRoutes from './routes/mobile.js';
 import riderRoutes from './routes/rider.js';
 import mobileOrdersRoutes from './routes/mobileOrders.js';
+import { shopVoiceOrdersRouter, mobileVoiceOrdersRouter } from './routes/voiceOrders.js';
 import accountingRoutes from './routes/accounting.js';
 import expensesRoutes from './routes/expenses.js';
 import procurementRoutes from './routes/procurement.js';
@@ -99,6 +100,7 @@ app.use('/api/platform/tenants', platformAdminMiddleware, platformTenantsRoutes)
 
 // Mobile ordering routes (mix of public + customer-authenticated)
 app.use('/api/mobile', mobileRoutes);
+app.use('/api/mobile/voice-orders', mobileVoiceOrdersRouter);
 app.use('/api/rider', riderRoutes);
 
 app.get('/api/shop-test', (_req, res) => {
@@ -109,6 +111,7 @@ app.get('/api/shop-test', (_req, res) => {
 const dbService = getDatabaseService();
 app.use('/api/shop/forecast', tenantMiddleware(dbService), forecastRoutes);
 app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRoutes);
+app.use('/api/shop/voice-orders', tenantMiddleware(dbService), shopVoiceOrdersRouter);
 app.use('/api/shop/accounting', tenantMiddleware(dbService), accountingRoutes);
 app.use('/api/shop/expenses', tenantMiddleware(dbService), expensesRoutes);
 app.use('/api/shop/procurement/demand', tenantMiddleware(dbService), procurementDemandRoutes);

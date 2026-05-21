@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useApp } from '../context/AppContext';
@@ -744,56 +745,59 @@ export default function Products() {
         | { similar?: any[]; recommended?: any[]; categories?: any[] }
         | undefined;
 
-    return (
-        <div className="page page--browse fade-in">
-            <div className="browse-search-sticky">
-                <div className="browse-search-row">
-                    <button
-                        type="button"
-                        className={`browse-filter-trigger ${activeFilterCount > 0 ? 'active' : ''}`}
-                        onClick={() => setIsFilterOpen(true)}
-                        aria-expanded={isFilterOpen ? 'true' : 'false'}
-                        aria-label="Open filters"
+    const browseSearchBar = shopSlug ? (
+        <div className="browse-search-fixed" role="search">
+            <div className="browse-search-row">
+                <button
+                    type="button"
+                    className={`browse-filter-trigger ${activeFilterCount > 0 ? 'active' : ''}`}
+                    onClick={() => setIsFilterOpen(true)}
+                    aria-expanded={isFilterOpen ? 'true' : 'false'}
+                    aria-label="Open filters"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="22"
+                        height="22"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden
                     >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="22"
-                            height="22"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            aria-hidden
-                        >
-                            <line x1="4" y1="6" x2="20" y2="6" />
-                            <line x1="4" y1="12" x2="20" y2="12" />
-                            <line x1="4" y1="18" x2="14" y2="18" />
-                        </svg>
-                        <span>Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
-                    </button>
-                    <div className="browse-search-wrap">
-                        {shopSlug ? (
-                            <GlobalSearchBar
-                                variant="browse"
-                                value={searchTerm}
-                                onChange={handleSearchChange}
-                                onSubmit={commitSearchFromBar}
-                                focused={searchFocused}
-                                onFocusChange={setSearchFocused}
-                                overlay={
-                                    <SearchSuggestionsPanel
-                                        shopSlug={shopSlug}
-                                        query={searchTerm}
-                                        open={searchFocused}
-                                        recent={getRecentSearches(shopSlug)}
-                                        onPick={onSearchPick}
-                                    />
-                                }
+                        <line x1="4" y1="6" x2="20" y2="6" />
+                        <line x1="4" y1="12" x2="20" y2="12" />
+                        <line x1="4" y1="18" x2="14" y2="18" />
+                    </svg>
+                    <span>Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
+                </button>
+                <div className="browse-search-wrap">
+                    <GlobalSearchBar
+                        variant="browse"
+                        value={searchTerm}
+                        onChange={handleSearchChange}
+                        onSubmit={commitSearchFromBar}
+                        focused={searchFocused}
+                        onFocusChange={setSearchFocused}
+                        overlay={
+                            <SearchSuggestionsPanel
+                                shopSlug={shopSlug}
+                                query={searchTerm}
+                                open={searchFocused}
+                                recent={getRecentSearches(shopSlug)}
+                                onPick={onSearchPick}
                             />
-                        ) : null}
-                    </div>
+                        }
+                    />
                 </div>
             </div>
+        </div>
+    ) : null;
+
+    return (
+        <div className="page page--browse fade-in">
+            {browseSearchBar ? createPortal(browseSearchBar, document.body) : null}
+            <div className="browse-search-spacer" aria-hidden />
 
             <div className="browse-filters-scroll">
                 <div className="filter-chips-row" role="toolbar" aria-label="Quick filters">

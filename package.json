@@ -1,6 +1,6 @@
 {
   "name": "myshop",
-  "version": "1.0.196",
+  "version": "1.0.197",
   "description": "MyShop - POS & Inventory Management",
   "main": "electron/main.js",
   "private": true,
@@ -9,7 +9,7 @@
     "url": "https://github.com/rafikhanmanyar-star/MyShop.git"
   },
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "concurrently -n server,client,website -c blue,green,yellow \"npm run dev:server\" \"npm run dev:client\" \"npm run dev:website\"",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
     "dev:pos:cloud": "cd client && npm run dev:cloud",

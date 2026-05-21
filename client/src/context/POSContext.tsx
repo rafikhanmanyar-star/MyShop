@@ -806,6 +806,22 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     printSucceeded
                 );
 
+                const voiceOrderId = sessionStorage.getItem('myshop_pending_voice_order_id');
+                if (voiceOrderId && saleId) {
+                    try {
+                        const { voiceOrdersApi } = await import('../services/voiceOrdersApi.js');
+                        const pm = sessionStorage.getItem('myshop_pending_voice_delivery_mode') === 'pickup' ? 'SelfCollection' : 'COD';
+                        await voiceOrdersApi.linkInvoice(voiceOrderId, String(saleId), { createMobileOrder: true, paymentMethod: pm });
+                        sessionStorage.removeItem('myshop_pending_voice_order_id');
+                        sessionStorage.removeItem('myshop_pending_voice_order_notes');
+                        sessionStorage.removeItem('myshop_pending_voice_order_phone');
+                        sessionStorage.removeItem('myshop_pending_voice_delivery_mode');
+                        showSaleToast('Sale completed. Voice order linked.', true);
+                    } catch (linkErr) {
+                        console.warn('Voice order link failed:', linkErr);
+                    }
+                }
+
                 return completedSale;
             } catch (error: any) {
                 const canQueueOffline = !isBrowserOnline() || isApiConnectivityFailure(error);

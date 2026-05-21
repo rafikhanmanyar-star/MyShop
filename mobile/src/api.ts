@@ -377,3 +377,51 @@ export const menuPlannerApi = {
     deleteCustomerMenuItem: (shopSlug: string, itemId: string) =>
         shopAuthRequest(shopSlug, `/customer-menu-items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
 };
+
+const VOICE_BASE = `${getApiBaseUrl()}/mobile/voice-orders`;
+
+export const voiceOrderApi = {
+    getSettings: () => request(`${VOICE_BASE}/settings`),
+    create: (data: Record<string, unknown>) =>
+        request(`${VOICE_BASE}/create`, { method: 'POST', body: JSON.stringify(data) }),
+    list: (cursor?: string) =>
+        request(`${VOICE_BASE}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    get: (id: string) => request(`${VOICE_BASE}/${encodeURIComponent(id)}`),
+    approve: (id: string) =>
+        request(`${VOICE_BASE}/${encodeURIComponent(id)}/approve`, { method: 'POST', body: '{}' }),
+    cancel: (id: string, note?: string) =>
+        request(`${VOICE_BASE}/${encodeURIComponent(id)}/status`, {
+            method: 'POST',
+            body: JSON.stringify({ status: 'Cancelled', note }),
+        }),
+    uploadAudio: async (
+        orderId: string,
+        file: File,
+        durationSeconds: number,
+        onProgress?: (pct: number) => void
+    ) => {
+        const token = localStorage.getItem('mobile_token');
+        const form = new FormData();
+        form.append('audio', file);
+        form.append('durationSeconds', String(durationSeconds));
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${VOICE_BASE}/${encodeURIComponent(orderId)}/upload-audio`);
+            if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable && onProgress) onProgress((e.loaded / e.total) * 100);
+            };
+            xhr.onload = () => {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+                    else reject(new Error(data.error || 'Upload failed'));
+                } catch {
+                    reject(new Error('Upload failed'));
+                }
+            };
+            xhr.onerror = () => reject(new Error('Network error'));
+            xhr.send(form);
+        });
+    },
+};

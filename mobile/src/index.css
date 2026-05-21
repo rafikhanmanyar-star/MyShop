@@ -12,6 +12,7 @@
   --danger: #EF4444;
   --warning: #F59E0B;
   --header-height: 60px;
+  --browse-search-height: 56px;
 
   --bg: #F8FAFC;
   --bg-card: #FFFFFF;
@@ -1571,6 +1572,26 @@ img {
   color: var(--danger);
 }
 
+.menu-version {
+  padding: 10px 16px 14px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-light);
+  background: var(--bg);
+}
+
+.app-version-foot {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .menu-item.login-btn {
   color: var(--primary);
   justify-content: center;
@@ -2595,23 +2616,31 @@ img {
   white-space: nowrap;
 }
 
-/* ─── Browse: sticky search bar (filters scroll away) ───── */
-.browse-search-sticky {
-  position: -webkit-sticky;
-  position: sticky;
-  top: var(--header-height);
-  z-index: 90;
-  background: var(--bg);
-  padding-top: 4px;
-  padding-bottom: 10px;
-  margin: 0 -12px 4px;
-  padding-left: 12px;
-  padding-right: 12px;
-  border-bottom: 1px solid var(--border-light);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+/* ─── Browse: fixed search bar (always visible while scrolling) ─ */
+.browse-search-spacer {
+  height: var(--browse-search-height);
+  flex-shrink: 0;
+  pointer-events: none;
 }
 
-.browse-search-sticky:has(.global-search--focused) {
+.browse-search-fixed {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  z-index: 90;
+  width: 100%;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 6px 12px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-light);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  overflow: visible;
+}
+
+.browse-search-fixed:has(.global-search--focused) {
   z-index: 120;
 }
 

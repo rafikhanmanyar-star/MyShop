@@ -314,6 +314,8 @@ export default function AccountSettings() {
                         {pwSaving ? <span className="spinner" style={{ width: 20, height: 20 }} /> : 'Update password'}
                     </button>
                 </form>
+
+                <p className="app-version-foot">App version {__APP_VERSION__}</p>
             </div>
         </div>
     );

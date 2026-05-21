@@ -20,6 +20,7 @@ import {
     HelpCircle,
     Camera,
     Archive,
+    Mic,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ICONS } from '../../constants';
@@ -31,6 +32,7 @@ import Card from '../ui/Card';
 import { AccountingProvider } from '../../context/AccountingContext';
 import ChartOfAccounts from './accounting/ChartOfAccounts';
 import { MobileSettingsPanel } from './MobileOrdersPage';
+import { VoiceOrderSettingsPanel } from './VoiceOrdersPage';
 import DataExportImportSection from './settings/DataExportImportSection';
 import BackupRestoreSection from './settings/BackupRestoreSection';
 import { BranchConfigurationSection } from './settings/BranchConfigurationSection';
@@ -706,7 +708,7 @@ const SettingsContent: React.FC = () => {
     const { user } = useAuth();
     const settingsLock = useSettingsEditLock(user?.userId, user?.name || user?.username || 'User');
     const isCashier = user?.role === 'pos_cashier';
-    const [activeTab, setActiveTab] = useState<'coa' | 'users' | 'mobileBranding' | 'branchConfig' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
+    const [activeTab, setActiveTab] = useState<'coa' | 'users' | 'mobileBranding' | 'voiceOrders' | 'branchConfig' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
 
     const [posSettings, setPosSettings] = useState({
         auto_print_receipt: true,
@@ -1154,6 +1156,7 @@ const SettingsContent: React.FC = () => {
         { id: 'coa' as const, label: 'Chart of Accounts', icon: ICONS.list },
         { id: 'users' as const, label: 'User Management', icon: ICONS.users },
         { id: 'mobileBranding' as const, label: 'Mobile branding', icon: <Smartphone /> },
+        { id: 'voiceOrders' as const, label: 'Voice orders', icon: <Mic /> },
         { id: 'branchConfig' as const, label: 'Branch configuration', icon: <MapPin /> },
         { id: 'pos' as const, label: 'POS Preferences', icon: <Printer /> },
         { id: 'data' as const, label: 'Data', icon: ICONS.trash },
@@ -1308,6 +1311,10 @@ const SettingsContent: React.FC = () => {
 
                 {!isCashier && activeTab === 'mobileBranding' && (
                     <MobileSettingsPanel />
+                )}
+
+                {!isCashier && activeTab === 'voiceOrders' && (
+                    <VoiceOrderSettingsPanel />
                 )}
 
                 {activeTab === 'pos' && (

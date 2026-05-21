@@ -327,6 +327,18 @@ export default function Cart() {
             >
                 Proceed to Checkout — {formatPrice(Math.round(grandTotal * 100) / 100)}
             </button>
+
+            <button
+                type="button"
+                className="btn btn-secondary btn-full"
+                style={{ marginTop: 10, padding: '14px', fontSize: 15, borderRadius: 'var(--radius-lg)' }}
+                onClick={() => {
+                    if (!state.isLoggedIn) navigate(`/${shopSlug}/login?redirect=voice-order`);
+                    else navigate(`/${shopSlug}/voice-order`);
+                }}
+            >
+                🎤 Place voice order instead
+            </button>
         </div>
     );
 }

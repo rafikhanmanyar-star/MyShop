@@ -12,6 +12,9 @@ import Checkout from './pages/Checkout';
 import OrderConfirm from './pages/OrderConfirm';
 import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
+import VoiceOrderPlace from './pages/VoiceOrderPlace';
+import VoiceOrders from './pages/VoiceOrders';
+import VoiceOrderDetail from './pages/VoiceOrderDetail';
 import TrackOrder from './pages/TrackOrder';
 import LandingPage from './pages/LandingPage';
 import Offers from './pages/Offers';
@@ -35,6 +38,7 @@ import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
 import OfflineBanner from './components/OfflineBanner';
 import { processOrderQueue, subscribeToOnline } from './services/orderSyncService';
+import { processVoiceOrderQueue } from './services/voiceOrderSyncService';
 import { processPendingProductQueue } from './services/productSyncService';
 import { processMenuPlannerQueue } from './services/menuPlannerSyncQueue';
 import { useHeartbeat } from './hooks/useHeartbeat';
@@ -64,10 +68,11 @@ function SyncOnOnline() {
         window.dispatchEvent(new CustomEvent('myshop:mobile-sync:start'));
       }
       try {
-        const [orderResult, productResult, menuPlannerResult] = await Promise.all([
+        const [orderResult, productResult, menuPlannerResult, voiceResult] = await Promise.all([
           processOrderQueue(),
           processPendingProductQueue(),
           processMenuPlannerQueue(),
+          processVoiceOrderQueue(),
         ]);
         if (orderResult.succeeded > 0) {
           void refreshLoyalty({ force: true });
@@ -82,6 +87,9 @@ function SyncOnOnline() {
               ? 'Menu planner synced!'
               : `${menuPlannerResult.succeeded} menu planner updates synced!`
           );
+        }
+        if (voiceResult.succeeded > 0) {
+          showToast(voiceResult.succeeded === 1 ? 'Voice order sent!' : `${voiceResult.succeeded} voice orders sent!`);
         }
       } finally {
         if (typeof window !== 'undefined') {
@@ -125,6 +133,9 @@ export default function App() {
           <Route path="orders" element={<Orders />} />
           <Route path="orders/:id/track" element={<TrackOrder />} />
           <Route path="orders/:id" element={<OrderDetail />} />
+          <Route path="voice-order" element={<VoiceOrderPlace />} />
+          <Route path="voice-orders" element={<VoiceOrders />} />
+          <Route path="voice-orders/:id" element={<VoiceOrderDetail />} />
           <Route path="account" element={<AccountSettings />} />
           <Route path="notifications" element={<NotificationsPage />} />
 

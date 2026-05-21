@@ -286,6 +286,13 @@ const POSSalesContent: React.FC = () => {
         [rightColWidthPx, persistRight]
     );
 
+    const [voiceOrderHint, setVoiceOrderHint] = useState<string | null>(null);
+    useEffect(() => {
+        const id = sessionStorage.getItem('myshop_pending_voice_order_id');
+        const notes = sessionStorage.getItem('myshop_pending_voice_order_notes');
+        setVoiceOrderHint(id ? (notes || 'Voice order — add items from transcript') : null);
+    }, []);
+
     const isActive = (state as any).currentPage === 'posSales' || true; // Fallback to true if not managed by AppContext
 
     const setFullScreenEnabled = useCallback((enabled: boolean) => {
@@ -337,6 +344,12 @@ const POSSalesContent: React.FC = () => {
 
             {/* Top Status Bar */}
             <POSHeader />
+
+            {voiceOrderHint && (
+                <div className="relative z-20 mx-2 md:mx-3 mt-1 px-4 py-2 rounded-lg bg-violet-100 dark:bg-violet-950/50 border border-violet-300 dark:border-violet-800 text-sm text-violet-900 dark:text-violet-100">
+                    <strong>Voice order:</strong> {voiceOrderHint}
+                </div>
+            )}
 
             <div
                 ref={layoutRowRef}
