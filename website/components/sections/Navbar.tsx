@@ -26,8 +26,10 @@ export default function Navbar() {
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className={`rounded-md px-1 py-0.5 text-sm font-medium transition-colors ${
-                    isActive ? 'text-primary' : 'text-muted hover:text-text-dark'
+                  className={`border-b-2 px-1 py-0.5 text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted hover:border-border hover:text-text-dark'
                   }`}
                   aria-current={isActive ? 'page' : undefined}
                 >

@@ -12,6 +12,7 @@ export default function PhoneMockup() {
         width={hero.width}
         height={hero.height}
         priority
+        unoptimized
         fetchPriority="high"
         sizes="(max-width: 1024px) 92vw, 680px"
         className="h-auto w-full drop-shadow-[0_24px_48px_rgba(15,23,42,0.12)]"

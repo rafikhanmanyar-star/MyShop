@@ -3,17 +3,11 @@ import { stats } from '@/lib/data';
 
 export default function TestimonialStats() {
   return (
-    <section id="about" className="pb-16 sm:pb-20" aria-labelledby="about-heading">
+    <section className="pb-16 sm:pb-20" aria-labelledby="testimonial-heading">
       <div className="section-container">
-        <div className="mx-auto mb-8 max-w-2xl text-center">
-          <h2 id="about-heading" className="text-3xl font-bold text-text-dark sm:text-4xl">
-            About oBo store Islamabad
-          </h2>
-          <p className="mt-3 text-muted">
-            A local smart grocery store serving B-17 families with in-store shopping and
-            online delivery
-          </p>
-        </div>
+        <h2 id="testimonial-heading" className="sr-only">
+          Customer testimonial and store statistics
+        </h2>
         <div className="overflow-hidden rounded-3xl border border-border bg-white shadow-card-lg">
           <div className="grid lg:grid-cols-2">
             <div className="border-b border-border p-8 sm:p-10 lg:border-b-0 lg:border-r">
@@ -23,9 +17,9 @@ export default function TestimonialStats() {
                 ))}
               </div>
               <blockquote className="mt-5 text-lg leading-relaxed text-text-dark">
-                &ldquo;oBo Store has completely changed how I shop for groceries. Fast delivery,
-                great prices, and the app is so easy to use. I love the budget planner
-                feature!&rdquo;
+                &ldquo;oBo Store is the nearby grocery store we rely on in B-17. Local grocery
+                delivery is fast, prices are fair, and ordering household essentials takes
+                minutes.&rdquo;
               </blockquote>
               <div className="mt-6 flex items-center gap-3">
                 <div
@@ -36,7 +30,7 @@ export default function TestimonialStats() {
                 </div>
                 <div>
                   <p className="font-semibold text-text-dark">Sarah Khan</p>
-                  <p className="text-sm text-muted">Regular Customer, B-17 Islamabad</p>
+                  <p className="text-sm text-muted">Happy Customer, B-17 Islamabad</p>
                 </div>
               </div>
             </div>

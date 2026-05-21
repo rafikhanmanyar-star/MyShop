@@ -25,14 +25,14 @@ export const siteConfig = {
   phoneE164: '+923001234567',
   email: 'support@obostore.com',
   promoCode: 'OBOFIRST',
-  themeColor: '#1F7A63',
-  backgroundColor: '#F7F9F8',
+  themeColor: '#DC2626',
+  backgroundColor: '#FFFFFF',
   hours: 'Open Daily 9:00 AM – 11:00 PM',
   mapsUrl:
-    'https://www.google.com/maps/search/?api=1&query=FMC+B-17+Kohsar+Plaza+Main+Boulevard+Islamabad',
+    'https://www.google.com/maps/search/?api=1&query=FMC+B-17+Kohsar+Plaza%2C+Main+Boulevard%2C+Sector+B-17%2C+Islamabad',
   geo: {
-    latitude: 33.6849,
-    longitude: 72.8458,
+    latitude: 33.681,
+    longitude: 72.819,
   },
   areaServed: [
     'FMC B-17',
@@ -68,7 +68,7 @@ export const topFeatures = [
     description:
       'Follow local grocery delivery from Kohsar Plaza to your door with live rider updates in B-17 Islamabad.',
     icon: 'map-pin',
-    color: 'bg-emerald-50 text-primary',
+    color: 'bg-red-50 text-primary',
   },
   {
     title: 'Fast Delivery',
@@ -94,7 +94,7 @@ export const topFeatures = [
     description:
       'Cleaning, personal care, and daily home needs — your household essentials stop on Main Boulevard.',
     icon: 'home',
-    color: 'bg-teal-50 text-teal-600',
+    color: 'bg-red-50 text-red-600',
   },
   {
     title: 'Frozen & Dairy',
@@ -107,7 +107,7 @@ export const topFeatures = [
     title: 'Secure Payments',
     description: 'Pay safely with COD, Easypaisa, JazzCash, and more.',
     icon: 'shield-check',
-    color: 'bg-green-50 text-green-600',
+    color: 'bg-red-50 text-red-600',
   },
   {
     title: 'Easy Ordering',
@@ -142,6 +142,24 @@ export const utilities = [
   {
     title: 'Shopping Planning',
     description: 'Plan ahead with organized lists and scheduled orders.',
+  },
+] as const;
+
+export const howItWorksLandingSteps = [
+  {
+    step: 1,
+    title: 'Install oBo Store',
+    description: 'Add the PWA to your home screen for fast, app-like ordering.',
+  },
+  {
+    step: 2,
+    title: 'Choose Products',
+    description: 'Browse categories, search products, and add items to your cart.',
+  },
+  {
+    step: 3,
+    title: 'Track & Receive',
+    description: 'Follow your order live and receive it at your doorstep.',
   },
 ] as const;
 
@@ -235,6 +253,23 @@ export const footerQuickLinks = [
   { label: 'Utilities', href: '/utilities' },
   { label: 'About Us', href: '/about' },
   { label: 'Contact', href: '/contact' },
+] as const;
+
+export const footerUtilityLinks = [
+  { label: 'Budget Planner', href: '/utilities#budget-planner' },
+  { label: 'Weekly Menu Planner', href: '/utilities#menu-planner' },
+  { label: 'Grocery Reminders', href: '/utilities#grocery-reminders' },
+  { label: 'Smart Recipes', href: '/utilities#smart-recipes' },
+  { label: 'Family Shared Cart', href: '/utilities#family-cart' },
+  { label: 'Shopping Planning', href: '/utilities#shopping-planning' },
+] as const;
+
+export const footerHelpLinks = [
+  { label: 'FAQ', href: '/#faq' },
+  { label: 'Returns', href: '/return-policy' },
+  { label: 'Privacy Policy', href: '/privacy-policy' },
+  { label: 'Terms & Conditions', href: '/terms-and-conditions' },
+  { label: 'Contact Support', href: '/contact' },
 ] as const;
 
 export const footerPolicyLinks = [

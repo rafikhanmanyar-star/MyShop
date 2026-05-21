@@ -8,13 +8,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: '#1F7A63',
-        'primary-on-dark': '#5EEAD4',
-        cta: '#047857',
-        'dark-navy': '#001F24',
+        primary: '#DC2626',
+        'primary-on-dark': '#FCA5A5',
+        cta: '#B91C1C',
+        'dark-navy': '#18181B',
         'text-dark': '#0F172A',
         muted: '#64748B',
-        background: '#F7F9F8',
+        background: '#FFFFFF',
         accent: '#F59E0B',
         border: '#E5E7EB',
       },

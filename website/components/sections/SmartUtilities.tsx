@@ -18,13 +18,42 @@ const icons = [Wallet, CalendarDays, Bell, BookOpen, Users, ClipboardList];
 type SmartUtilitiesProps = {
   headingLevel?: 'h1' | 'h2';
   showExploreLink?: boolean;
+  variant?: 'full' | 'banner';
 };
 
 export default function SmartUtilities({
   headingLevel = 'h2',
   showExploreLink = true,
+  variant = 'full',
 }: SmartUtilitiesProps) {
   const budget = siteImages.budgetPlanner;
+
+  if (variant === 'banner') {
+    return (
+      <section id="utilities" className="pb-16 sm:pb-20" aria-labelledby="utilities-heading">
+        <div className="section-container">
+          <div className="overflow-hidden rounded-3xl bg-gradient-to-r from-primary to-cta px-4 py-8 sm:px-8 sm:py-10">
+            <h2 id="utilities-heading" className="sr-only">
+              Smart Utilities for a Smarter You
+            </h2>
+            <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6">
+              {utilities.map((utility, index) => {
+                const Icon = icons[index];
+                return (
+                  <div key={utility.title} className="flex flex-col items-center text-center">
+                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-white/30 bg-white/10">
+                      <Icon className="h-5 w-5 text-white" aria-hidden="true" />
+                    </div>
+                    <p className="text-sm font-semibold text-white">{utility.title}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section id="utilities" className="bg-dark-navy py-16 sm:py-20" aria-labelledby="utilities-heading">
