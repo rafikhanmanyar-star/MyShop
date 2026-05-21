@@ -1,8 +1,10 @@
 import { siteConfig } from '@/lib/data';
 
 export default function StoreMap() {
-  const { latitude, longitude } = siteConfig.geo;
-  const embedSrc = `https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed`;
+  const mapQuery = encodeURIComponent(
+    `${siteConfig.address}, ${siteConfig.addressLine2}, Pakistan`,
+  );
+  const embedSrc = `https://maps.google.com/maps?q=${mapQuery}&z=16&output=embed`;
 
   return (
     <figure className="overflow-hidden rounded-3xl border border-border bg-white shadow-card">

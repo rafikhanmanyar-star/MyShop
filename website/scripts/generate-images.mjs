@@ -12,11 +12,11 @@ const outDir = path.join(__dirname, '../public/images');
 const publicDir = path.join(__dirname, '../public');
 const iconSvg = path.join(publicDir, 'icons/icon-512.svg');
 
-const brand = '#1F7A63';
+const brand = '#DC2626';
 const accent = '#F59E0B';
 const dark = '#1E293B';
 const muted = '#64748B';
-const bg = '#F7F9F8';
+const bg = '#FFFFFF';
 
 function phoneMockupSvg() {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1440" viewBox="0 0 720 1440">
@@ -88,7 +88,7 @@ function deliverySvg() {
   <text x="160" y="560" fill="${dark}" font-family="Arial,sans-serif" font-size="28" font-weight="700">Household essentials</text>
   <rect x="680" y="280" width="480" height="280" rx="24" fill="${brand}"/>
   <text x="720" y="380" fill="#fff" font-family="Arial,sans-serif" font-size="36" font-weight="700">Local delivery</text>
-  <text x="720" y="430" fill="#D1FAE5" font-family="Arial,sans-serif" font-size="26">B-17 Islamabad</text>
+  <text x="720" y="430" fill="#FECACA" font-family="Arial,sans-serif" font-size="26">B-17 Islamabad</text>
   <polygon points="900,520 980,480 1060,520 980,560" fill="${accent}"/>
 </svg>`;
 }

@@ -29,6 +29,15 @@ export function ArrowRight(props: IconProps) {
   );
 }
 
+export function ArrowUp(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="m5 12 7-7 7 7" />
+      <path d="M12 19V5" />
+    </IconBase>
+  );
+}
+
 export function BadgeCheck(props: IconProps) {
   return (
     <IconBase {...props}>
@@ -203,6 +212,14 @@ export function Menu(props: IconProps) {
       <line x1="4" x2="20" y1="12" y2="12" />
       <line x1="4" x2="20" y1="6" y2="6" />
       <line x1="4" x2="20" y1="18" y2="18" />
+    </IconBase>
+  );
+}
+
+export function MessageCircle(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
     </IconBase>
   );
 }
@@ -427,6 +444,15 @@ export function X(props: IconProps) {
     <IconBase {...props}>
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
+    </IconBase>
+  );
+}
+
+export function Youtube(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17" />
+      <path d="m10 15 5-3-5-3z" />
     </IconBase>
   );
 }

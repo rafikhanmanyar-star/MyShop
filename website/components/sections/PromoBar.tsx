@@ -10,7 +10,7 @@ export default function PromoBar() {
       <p>
         <span aria-hidden="true">🚚 </span>
         Free delivery on first 3 orders! Use code:{' '}
-        <strong className="font-semibold">{siteConfig.promoCode}</strong>
+        <strong className="font-semibold text-accent">{siteConfig.promoCode}</strong>
         <span aria-hidden="true"> ✨</span>
       </p>
     </div>

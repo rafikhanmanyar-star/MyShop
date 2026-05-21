@@ -47,14 +47,14 @@ export default function TopFeatures({
             level={headingLevel}
             id="features-heading"
             title="Top Features"
-            description="Everything you need from a nearby grocery store in B-17 — online or in person at FMC B-17."
+            description="Everything you need in one app."
           />
           {showViewAllLink && headingLevel === 'h2' && (
             <Link
               href="/features"
               className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:text-primary/80"
             >
-              Explore all oBo Store features
+              See All Features
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
           )}
@@ -98,11 +98,9 @@ export default function TopFeatures({
 
         {showViewAllLink && headingLevel === 'h2' && (
           <p className="mt-8 text-center text-sm text-muted">
-            Want the full list?{' '}
             <Link href="/features" className="font-semibold text-primary hover:text-primary/80">
-              See delivery, tracking, offers, and more on our Features page
+              See all oBo Store features
             </Link>
-            .
           </p>
         )}
       </div>

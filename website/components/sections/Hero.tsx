@@ -22,7 +22,8 @@ export default function Hero() {
             </span>
 
             <h1 className="mt-6 text-4xl font-bold leading-tight tracking-tight text-text-dark sm:text-5xl lg:text-[3.25rem]">
-              Your Trusted Smart Grocery Store in B-17 Islamabad
+              Your Trusted Smart{' '}
+              <span className="text-primary">Grocery</span> Store in B-17 Islamabad
             </h1>
 
             <p className="mt-5 text-base leading-relaxed text-muted sm:text-lg">
@@ -35,7 +36,7 @@ export default function Hero() {
               <InstallButton className="w-full px-6 py-3 sm:w-auto" />
               <Link
                 href="/#how-it-works"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-white px-6 py-3 text-sm font-semibold text-text-dark sm:w-auto"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-primary bg-white px-6 py-3 text-sm font-semibold text-text-dark hover:bg-primary/5 sm:w-auto"
               >
                 <Play className="h-4 w-4 text-primary" aria-hidden="true" />
                 See how oBo Store works

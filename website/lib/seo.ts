@@ -179,9 +179,9 @@ export const seoConfig = {
     description: siteConfig.description,
     images: [
       {
-        url: '/images/hero-app-mockup.png',
-        width: 1019,
-        height: 807,
+        url: '/images/hero-app-mockup-red.png',
+        width: 909,
+        height: 755,
         alt: 'oBo Store grocery app with delivery tracking for FMC B-17 Kohsar Plaza',
       },
     ],
@@ -190,7 +190,7 @@ export const seoConfig = {
     card: 'summary_large_image' as const,
     title: siteConfig.title,
     description: siteConfig.description,
-    images: ['/images/hero-app-mockup.png'],
+    images: ['/images/hero-app-mockup-red.png'],
   },
   icons: {
     icon: [
@@ -201,7 +201,7 @@ export const seoConfig = {
     ],
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
     other: [
-      { rel: 'mask-icon', url: '/icons/icon.svg', color: '#1F7A63' },
+      { rel: 'mask-icon', url: '/icons/icon.svg', color: siteConfig.themeColor },
     ],
   },
   manifest: '/manifest.json',

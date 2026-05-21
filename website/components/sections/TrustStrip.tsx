@@ -12,9 +12,9 @@ const icons = [Truck, MapPin, DollarSign, RotateCcw, Store, ShieldCheck];
 
 export default function TrustStrip() {
   return (
-    <section className="pb-12 sm:pb-16" aria-label="Trust features">
+    <section className="pb-12 sm:pb-14" aria-label="Trust features">
       <div className="section-container">
-        <div className="rounded-3xl border border-border bg-white p-6 shadow-card sm:p-8">
+        <div className="rounded-3xl border border-border bg-white px-4 py-6 shadow-card sm:px-8 sm:py-8">
           <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-6">
             {trustFeatures.map((feature, index) => {
               const Icon = icons[index];

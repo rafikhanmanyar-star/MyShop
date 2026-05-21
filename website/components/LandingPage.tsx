@@ -2,11 +2,11 @@
 
 import SkipLink from '@/components/SkipLink';
 import Hero from '@/components/sections/Hero';
-import ServiceAreaSection from '@/components/sections/ServiceAreaSection';
-import WhyChooseSection from '@/components/sections/WhyChooseSection';
+import TrustStrip from '@/components/sections/TrustStrip';
 import TopFeatures from '@/components/sections/TopFeatures';
 import SmartUtilities from '@/components/sections/SmartUtilities';
 import HowItWorks from '@/components/sections/HowItWorks';
+import TestimonialStats from '@/components/sections/TestimonialStats';
 import StoreSection from '@/components/sections/StoreSection';
 import LocalFaqSection from '@/components/sections/LocalFaqSection';
 import FinalCTA from '@/components/sections/FinalCTA';
@@ -22,12 +22,12 @@ export default function LandingPage() {
       <Navbar />
       <main id="main-content" tabIndex={-1}>
         <Hero />
-        <ServiceAreaSection />
-        <WhyChooseSection />
+        <TrustStrip />
         <TopFeatures />
-        <SmartUtilities />
-        <HowItWorks />
-        <StoreSection />
+        <SmartUtilities variant="banner" />
+        <HowItWorks compact />
+        <TestimonialStats />
+        <StoreSection showContactLink={false} />
         <FinalCTA />
         <LocalFaqSection />
       </main>
