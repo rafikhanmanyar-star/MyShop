@@ -12,9 +12,9 @@ const chips = [
 
 export default function Hero() {
   return (
-    <section id="home" className="overflow-hidden bg-background py-12 sm:py-16 lg:py-20">
+    <section id="home" className="overflow-visible bg-background py-12 sm:py-16 lg:py-20">
       <div className="section-container">
-        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-8">
+        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-12">
           <div className="max-w-xl">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-sm font-medium text-primary">
               <BadgeCheck className="h-4 w-4" aria-hidden="true" />
@@ -52,7 +52,7 @@ export default function Hero() {
             </div>
           </div>
 
-          <div className="flex justify-center lg:justify-end">
+          <div className="flex justify-center overflow-visible px-2 sm:px-4 lg:justify-end lg:pr-0">
             <PhoneMockup />
           </div>
         </div>

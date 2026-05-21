@@ -9,7 +9,7 @@ type PageMetadataInput = {
 };
 
 const defaultOgImage = {
-  url: absoluteUrl('/images/hero-pwa-ordering.webp'),
+  url: absoluteUrl('/images/hero-app-mockup.png'),
   width: 360,
   height: 720,
   alt: 'oBo Store PWA grocery ordering screen',

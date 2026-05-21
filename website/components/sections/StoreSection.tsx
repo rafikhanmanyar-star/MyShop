@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Clock, MapPin, Phone } from '@/components/icons';
 import OptimizedImage from '@/components/OptimizedImage';
 import SectionHeading from '@/components/SectionHeading';
+import StoreMap from '@/components/StoreMap';
 import { siteConfig } from '@/lib/data';
 import { siteImages } from '@/lib/images';
 
@@ -19,7 +20,6 @@ export default function StoreSection({
   showContactLink = true,
 }: StoreSectionProps) {
   const store = siteImages.storeFmcB17;
-  const orderQr = siteImages.scanToOrderQr;
 
   return (
     <section className="pb-16 sm:pb-20" aria-labelledby="store-heading">
@@ -77,24 +77,7 @@ export default function StoreSection({
             )}
           </div>
 
-          <figure className="flex flex-col items-center justify-center rounded-3xl border border-border bg-white p-6 shadow-card">
-            <a
-              href={siteConfig.shopUrl}
-              rel="noopener noreferrer"
-              className="block text-center"
-              aria-label="Scan QR code to order online at oBo Store"
-            >
-              <OptimizedImage
-                src={orderQr.src}
-                alt={orderQr.alt}
-                width={orderQr.width}
-                height={orderQr.height}
-                sizes="213px"
-                className="mx-auto h-auto w-full max-w-[213px]"
-              />
-              <span className="sr-only">Opens oBo Store online shop</span>
-            </a>
-          </figure>
+          <StoreMap />
         </div>
       </div>
     </section>

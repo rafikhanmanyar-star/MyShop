@@ -179,10 +179,10 @@ export const seoConfig = {
     description: siteConfig.description,
     images: [
       {
-        url: '/images/hero-pwa-ordering.webp',
-        width: 360,
-        height: 720,
-        alt: 'oBo Store PWA grocery ordering screen',
+        url: '/images/hero-app-mockup.png',
+        width: 1019,
+        height: 807,
+        alt: 'oBo Store grocery app with delivery tracking for FMC B-17 Kohsar Plaza',
       },
     ],
   },
@@ -190,7 +190,7 @@ export const seoConfig = {
     card: 'summary_large_image' as const,
     title: siteConfig.title,
     description: siteConfig.description,
-    images: ['/images/hero-pwa-ordering.webp'],
+    images: ['/images/hero-app-mockup.png'],
   },
   icons: {
     icon: [

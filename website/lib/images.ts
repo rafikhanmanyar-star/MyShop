@@ -1,10 +1,16 @@
 /** Optimized image assets — alt text must match visible content for SEO */
 export const siteImages = {
+  heroAppMockup: {
+    src: '/images/hero-app-mockup.png',
+    alt: 'oBo Store grocery app on mobile with live delivery tracking, categories, and best deals for FMC B-17 Kohsar Plaza',
+    width: 1019,
+    height: 807,
+  },
   heroPwaOrdering: {
-    src: '/images/hero-pwa-ordering.webp',
+    src: '/images/hero-app-mockup.png',
     alt: 'oBo Store PWA grocery ordering screen',
-    width: 360,
-    height: 720,
+    width: 1019,
+    height: 807,
   },
   trackingFeature: {
     src: '/images/tracking-feature.webp',
@@ -45,8 +51,8 @@ export const siteImages = {
   scanToOrderQr: {
     src: '/images/scan-to-order-qr.png',
     alt: 'QR code — scan to order groceries online at oBo Store',
-    width: 213,
-    height: 234,
+    width: 134,
+    height: 123,
   },
 } as const;
 
