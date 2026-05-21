@@ -11,6 +11,7 @@
   --accent-light: #34D399;
   --danger: #EF4444;
   --warning: #F59E0B;
+  --header-height: 60px;
 
   --bg: #F8FAFC;
   --bg-card: #FFFFFF;
@@ -1327,7 +1328,7 @@ img {
   top: 0;
   left: 0;
   right: 0;
-  height: 60px;
+  height: var(--header-height);
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -2311,7 +2312,7 @@ img {
   display: flex;
   align-items: stretch;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .browse-filter-trigger {
@@ -2594,17 +2595,28 @@ img {
   white-space: nowrap;
 }
 
-/* ─── Browse: sticky search + chips ─────────────────────── */
-.browse-sticky {
+/* ─── Browse: sticky search bar (filters scroll away) ───── */
+.browse-search-sticky {
+  position: -webkit-sticky;
   position: sticky;
-  top: 60px;
-  z-index: 50;
+  top: var(--header-height);
+  z-index: 90;
   background: var(--bg);
-  padding-bottom: 8px;
-  margin: 0 -12px;
+  padding-top: 4px;
+  padding-bottom: 10px;
+  margin: 0 -12px 4px;
   padding-left: 12px;
   padding-right: 12px;
-  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.browse-search-sticky:has(.global-search--focused) {
+  z-index: 120;
+}
+
+.browse-filters-scroll {
+  margin-bottom: 4px;
 }
 
 .filter-chips-row {
@@ -2832,8 +2844,9 @@ img {
 
 /* ─── Home: sticky search + sections ─────────────────────── */
 .home-search-sticky {
+  position: -webkit-sticky;
   position: sticky;
-  top: 60px;
+  top: var(--header-height);
   z-index: 55;
   background: var(--bg);
   padding-bottom: 8px;

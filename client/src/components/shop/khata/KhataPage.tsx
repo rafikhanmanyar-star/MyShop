@@ -146,6 +146,17 @@ function buildKhataPaymentConfirmationMessage(opts: {
   return lines.join('\n');
 }
 
+function buildKhataPaymentDescriptionPreview(
+  invoices: Array<{ ref: string; amount: number }>,
+  totalAmount: number,
+  userNote?: string
+): string {
+  const invPart = invoices.map((i) => `${i.ref} (${formatMoney(i.amount)})`).join('; ');
+  let text = `Payment ${formatMoney(totalAmount)} — Invoices: ${invPart}`;
+  if (userNote?.trim()) text += ` — ${userNote.trim()}`;
+  return text;
+}
+
 function buildKhataPendingReminderMessage(
   customerName: string,
   currency: string,
@@ -191,7 +202,9 @@ const KhataPage: React.FC = () => {
   const [depositAccounts, setDepositAccounts] = useState<ShopBankAccount[]>([]);
   const [receiveCustomerLocked, setReceiveCustomerLocked] = useState(false);
   const [receiveSubmitting, setReceiveSubmitting] = useState(false);
-  const [receiveApplyToLedgerId, setReceiveApplyToLedgerId] = useState<string | null>(null);
+  const [receiveSelectedDebitIds, setReceiveSelectedDebitIds] = useState<string[]>([]);
+  const [receiveCustomerLedger, setReceiveCustomerLedger] = useState<KhataLedgerEntry[]>([]);
+  const [receiveLedgerLoading, setReceiveLedgerLoading] = useState(false);
   const [customers, setCustomers] = useState<
     { id: string; name: string; contact_no: string | null; company_name?: string | null }[]
   >([]);
@@ -236,11 +249,7 @@ const KhataPage: React.FC = () => {
     }
   }, []);
 
-  const loadLedger = useCallback(async (customerId: string | null) => {
-    if (!customerId) {
-      setLedger([]);
-      return;
-    }
+  const loadLedger = useCallback(async (customerId: string) => {
     try {
       const data = await khataApi.getLedger(customerId);
       setLedger(Array.isArray(data) ? data : []);
@@ -283,6 +292,10 @@ const KhataPage: React.FC = () => {
   }, [location.state]);
 
   useEffect(() => {
+    if (!selectedCustomerId) {
+      setLedger([]);
+      return;
+    }
     void loadLedger(selectedCustomerId);
   }, [selectedCustomerId, loadLedger]);
 
@@ -316,8 +329,6 @@ const KhataPage: React.FC = () => {
     }
   }, [receiveModalOpen, loadCustomers, loadDepositAccounts]);
 
-  const contactById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
-
   const debitRemaining = (entry: KhataLedgerEntry): number => {
     if (entry.type !== 'debit') return 0;
     const r = entry.remaining_debit;
@@ -333,6 +344,56 @@ const KhataPage: React.FC = () => {
     if (rem >= amt - PAID_EPS) return 'open';
     return 'partial';
   };
+
+  useEffect(() => {
+    if (!receiveModalOpen || !receiveCustomerId) {
+      setReceiveCustomerLedger([]);
+      setReceiveLedgerLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setReceiveLedgerLoading(true);
+    void khataApi
+      .getLedger(receiveCustomerId)
+      .then((data) => {
+        if (!cancelled) setReceiveCustomerLedger(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setReceiveCustomerLedger([]);
+      })
+      .finally(() => {
+        if (!cancelled) setReceiveLedgerLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [receiveModalOpen, receiveCustomerId]);
+
+  const receiveUnpaidInvoices = useMemo(() => {
+    return receiveCustomerLedger
+      .filter((e) => e.type === 'debit' && debitRemaining(e) > PAID_EPS)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  }, [receiveCustomerLedger]);
+
+  useEffect(() => {
+    if (receiveSelectedDebitIds.length === 0) return;
+    const sum = receiveUnpaidInvoices
+      .filter((e) => receiveSelectedDebitIds.includes(e.id))
+      .reduce((s, e) => s + debitRemaining(e), 0);
+    if (sum > PAID_EPS) setReceiveAmount(sum.toFixed(2));
+  }, [receiveSelectedDebitIds, receiveUnpaidInvoices]);
+
+  const receivePaymentDescriptionPreview = useMemo(() => {
+    if (receiveSelectedDebitIds.length === 0) return null;
+    const invoices = receiveUnpaidInvoices
+      .filter((e) => receiveSelectedDebitIds.includes(e.id))
+      .map((e) => ({ ref: referenceLabel(e), amount: debitRemaining(e) }));
+    const total = invoices.reduce((s, i) => s + i.amount, 0);
+    if (total <= PAID_EPS) return null;
+    return buildKhataPaymentDescriptionPreview(invoices, total, receiveNote);
+  }, [receiveSelectedDebitIds, receiveUnpaidInvoices, receiveNote]);
+
+  const contactById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
 
   const totalReceivables = useMemo(
     () => summary.reduce((s, r) => s + (r.balance > 0 ? r.balance : 0), 0),
@@ -460,11 +521,40 @@ const KhataPage: React.FC = () => {
     return rows;
   }, [directoryRows, directorySort]);
 
+  const activeLedger = useMemo(
+    () => (selectedCustomerId ? ledger : allLedger),
+    [selectedCustomerId, ledger, allLedger]
+  );
+
+  const sortLedgerRecentFirst = useCallback((rows: KhataLedgerEntry[]) => {
+    return [...rows].sort((a, b) => {
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
+      if (ta !== tb) return tb - ta;
+      return String(b.id).localeCompare(String(a.id));
+    });
+  }, []);
+
   const displayedLedger = useMemo(() => {
-    if (ledgerTypeFilter === 'invoices') return ledger.filter((e) => e.type === 'debit');
-    if (ledgerTypeFilter === 'payments') return ledger.filter((e) => e.type === 'credit');
-    return ledger;
-  }, [ledger, ledgerTypeFilter]);
+    let rows = activeLedger;
+    if (ledgerTypeFilter === 'invoices') rows = rows.filter((e) => e.type === 'debit');
+    if (ledgerTypeFilter === 'payments') rows = rows.filter((e) => e.type === 'credit');
+    return sortLedgerRecentFirst(rows);
+  }, [activeLedger, ledgerTypeFilter, sortLedgerRecentFirst]);
+
+  const memberNameForEntry = useCallback(
+    (entry: KhataLedgerEntry) =>
+      entry.customer_name?.trim() ||
+      summary.find((s) => s.customer_id === entry.customer_id)?.customer_name ||
+      contactById.get(entry.customer_id)?.name ||
+      '—',
+    [summary, contactById]
+  );
+
+  const selectMember = useCallback((customerId: string, customerName: string) => {
+    setSelectedCustomerId(customerId);
+    setSelectedCustomerName(customerName);
+  }, []);
 
   const selectedContact = selectedCustomerId ? contactById.get(selectedCustomerId) : undefined;
   const highRisk =
@@ -480,25 +570,43 @@ const KhataPage: React.FC = () => {
       );
     })();
 
-  const openReceiveModal = () => {
-    setReceiveCustomerLocked(false);
-    setReceiveApplyToLedgerId(null);
+  const resetReceiveModalForm = () => {
+    setReceiveSelectedDebitIds([]);
     setReceiveCustomerId('');
     setReceiveAmount('');
     setReceiveNote('');
     setReceiveBankAccountId('');
+    setReceiveCustomerLocked(false);
+  };
+
+  const openReceiveModal = () => {
+    resetReceiveModalForm();
     setReceiveModalOpen(true);
   };
 
   const openReceiveModalForCurrentCustomer = () => {
     if (!selectedCustomerId) return;
     setReceiveCustomerLocked(true);
-    setReceiveApplyToLedgerId(null);
+    setReceiveSelectedDebitIds([]);
     setReceiveCustomerId(selectedCustomerId);
     setReceiveAmount('');
     setReceiveNote('');
     setReceiveBankAccountId('');
     setReceiveModalOpen(true);
+  };
+
+  const toggleReceiveInvoice = (debitId: string) => {
+    setReceiveSelectedDebitIds((prev) =>
+      prev.includes(debitId) ? prev.filter((id) => id !== debitId) : [...prev, debitId]
+    );
+  };
+
+  const selectAllReceiveInvoices = () => {
+    setReceiveSelectedDebitIds(receiveUnpaidInvoices.map((e) => e.id));
+  };
+
+  const clearReceiveInvoiceSelection = () => {
+    setReceiveSelectedDebitIds([]);
   };
 
   const noteFromLedgerEntry = (entry: KhataLedgerEntry): string => {
@@ -512,14 +620,14 @@ const KhataPage: React.FC = () => {
     if (entry.type !== 'debit') return;
     const cid = selectedCustomerId || entry.customer_id;
     setReceiveCustomerLocked(true);
-    setReceiveApplyToLedgerId(entry.id);
+    setReceiveSelectedDebitIds([entry.id]);
     setReceiveCustomerId(cid);
     const due =
       typeof entry.remaining_debit === 'number' && Number.isFinite(entry.remaining_debit)
         ? Math.max(0, entry.remaining_debit)
         : entry.amount;
     setReceiveAmount(String(due));
-    setReceiveNote(noteFromLedgerEntry(entry));
+    setReceiveNote('');
     setReceiveBankAccountId('');
     setReceiveModalOpen(true);
   };
@@ -600,6 +708,25 @@ const KhataPage: React.FC = () => {
     e.preventDefault();
     const amount = parseFloat(receiveAmount);
     if (!receiveCustomerId || !receiveBankAccountId || !amount || amount <= 0) return;
+
+    let allocations = receiveUnpaidInvoices
+      .filter((inv) => receiveSelectedDebitIds.includes(inv.id))
+      .map((inv) => ({ debitLedgerId: inv.id, amount: debitRemaining(inv) }));
+
+    if (allocations.length === 1 && amount < allocations[0].amount - PAID_EPS) {
+      allocations = [{ ...allocations[0], amount: Math.round(amount * 100) / 100 }];
+    }
+
+    if (allocations.length > 0) {
+      const allocSum = Math.round(allocations.reduce((s, a) => s + a.amount, 0) * 100) / 100;
+      if (Math.abs(allocSum - amount) > 0.01) {
+        alert(
+          `Amount (${CURRENCY} ${formatMoney(amount)}) must match the total of selected invoices (${CURRENCY} ${formatMoney(allocSum)}).`
+        );
+        return;
+      }
+    }
+
     const payCustomerId = receiveCustomerId;
     const payAmount = amount;
     const payNote = receiveNote.trim();
@@ -608,6 +735,7 @@ const KhataPage: React.FC = () => {
       (payCustomerId === selectedCustomerId ? selectedCustomerName : '') ||
       'Customer';
     const payPhone = customers.find((c) => c.id === payCustomerId)?.contact_no ?? null;
+    const paymentDescription = receivePaymentDescriptionPreview;
     setReceiveSubmitting(true);
     try {
       await khataApi.receivePayment({
@@ -615,15 +743,10 @@ const KhataPage: React.FC = () => {
         amount: payAmount,
         bankAccountId: receiveBankAccountId,
         note: payNote || undefined,
-        ...(receiveApplyToLedgerId ? { applyToLedgerId: receiveApplyToLedgerId } : {}),
+        ...(allocations.length > 0 ? { allocations } : {}),
       });
       setReceiveModalOpen(false);
-      setReceiveCustomerId('');
-      setReceiveAmount('');
-      setReceiveNote('');
-      setReceiveBankAccountId('');
-      setReceiveCustomerLocked(false);
-      setReceiveApplyToLedgerId(null);
+      resetReceiveModalForm();
       await refreshSummaryAndLedger();
       void loadCustomers();
       if (normalizeWhatsAppPhone(payPhone)) {
@@ -631,7 +754,7 @@ const KhataPage: React.FC = () => {
           customerName: payName,
           amount: payAmount,
           currency: CURRENCY,
-          note: payNote || undefined,
+          note: paymentDescription || payNote || undefined,
         });
         openWhatsAppTextMessage(msg, payPhone ?? undefined);
       }
@@ -884,10 +1007,7 @@ const KhataPage: React.FC = () => {
                             <li key={row.customer_id}>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setSelectedCustomerId(row.customer_id);
-                                  setSelectedCustomerName(row.customer_name);
-                                }}
+                                onClick={() => selectMember(row.customer_id, row.customer_name)}
                                 className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg border px-2 py-2 text-left transition-colors ${
                                   selected
                                     ? 'border-primary bg-primary/10 text-foreground shadow-sm'
@@ -923,44 +1043,42 @@ const KhataPage: React.FC = () => {
               {/* Ledger detail */}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="card flex min-h-[min(48dvh,360px)] flex-1 flex-col overflow-hidden p-0 shadow-sm lg:min-h-0">
-                {!selectedCustomerId ? (
-                  <div className="flex flex-1 flex-col items-center justify-center px-6 py-20 text-center">
-                    <p className="text-muted-foreground">Select a member in the tree to view invoices and payments.</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/25 px-3 py-2.5">
-                      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-                        <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                          Khata ledger
-                        </span>
-                        <div
-                          className="inline-flex rounded-lg border border-border bg-background p-0.5 shadow-sm"
-                          role="group"
-                          aria-label="Filter by transaction type"
-                        >
-                          {(
-                            [
-                              { id: 'all' as const, label: 'All' },
-                              { id: 'invoices' as const, label: 'Invoices' },
-                              { id: 'payments' as const, label: 'Payments' },
-                            ] as const
-                          ).map(({ id, label }) => (
-                            <button
-                              key={id}
-                              type="button"
-                              onClick={() => setLedgerTypeFilter(id)}
-                              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                ledgerTypeFilter === id
-                                  ? 'bg-primary text-primary-foreground shadow-sm'
-                                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
+                  <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/25 px-3 py-2.5">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                      <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                        {selectedCustomerId ? 'Khata ledger' : 'All transactions'}
+                      </span>
+                      <div
+                        className="inline-flex rounded-lg border border-border bg-background p-0.5 shadow-sm"
+                        role="group"
+                        aria-label="Filter by transaction type"
+                      >
+                        {(
+                          [
+                            { id: 'all' as const, label: 'All' },
+                            { id: 'invoices' as const, label: 'Invoices' },
+                            { id: 'payments' as const, label: 'Payments' },
+                          ] as const
+                        ).map(({ id, label }) => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => setLedgerTypeFilter(id)}
+                            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              ledgerTypeFilter === id
+                                ? 'bg-primary text-primary-foreground shadow-sm'
+                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
                       </div>
+                      {!selectedCustomerId && (
+                        <span className="text-xs text-muted-foreground">Newest first · select a member to filter</span>
+                      )}
+                    </div>
+                    {selectedCustomerId && (
                       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                         <button
                           type="button"
@@ -997,8 +1115,10 @@ const KhataPage: React.FC = () => {
                           Receive Payment
                         </button>
                       </div>
-                    </div>
+                    )}
+                  </div>
 
+                  {selectedCustomerId && (
                     <div className="border-b border-border px-6 py-4 md:px-8">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-3">
@@ -1045,35 +1165,40 @@ const KhataPage: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                  )}
 
-                    <div className="min-h-0 flex-1 overflow-auto">
-                      {ledger.length === 0 ? (
-                        <div className="p-12 text-center text-sm text-muted-foreground">No transactions for this member.</div>
-                      ) : displayedLedger.length === 0 ? (
-                        <div className="p-12 text-center text-sm text-muted-foreground">
-                          No rows match this filter. Choose &quot;All&quot; to see every invoice and payment.
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full min-w-[720px] text-left text-sm">
-                            <thead className="sticky top-0 z-10 border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              <tr>
-                                <th className="px-6 py-3">Date</th>
-                                <th className="px-4 py-3">Type</th>
-                                <th className="px-4 py-3">Status</th>
-                                <th className="px-4 py-3">Reference</th>
-                                <th className="px-4 py-3 text-right">Amount</th>
-                                <th className="w-[1%] whitespace-nowrap px-6 py-3 text-right">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                              {displayedLedger.map((entry) => {
-                                const badge = entryStatusBadge(entry, debitLineStatus);
-                                const ref = referenceLabel(entry);
-                                const inv = khataEntrySaleInvoice(entry);
-                                const typ = rowDisplayType(entry);
-                                return (
-                                  <tr key={entry.id} className="hover:bg-muted/50">
+                  <div className="min-h-0 flex-1 overflow-auto">
+                    {activeLedger.length === 0 ? (
+                      <div className="p-12 text-center text-sm text-muted-foreground">
+                        {selectedCustomerId ? 'No transactions for this member.' : 'No khata transactions yet.'}
+                      </div>
+                    ) : displayedLedger.length === 0 ? (
+                      <div className="p-12 text-center text-sm text-muted-foreground">
+                        No rows match this filter. Choose &quot;All&quot; to see every invoice and payment.
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] text-left text-sm">
+                          <thead className="sticky top-0 z-10 border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <tr>
+                              <th className="px-6 py-3">Date</th>
+                              {!selectedCustomerId && <th className="px-4 py-3">Member</th>}
+                              <th className="px-4 py-3">Type</th>
+                              <th className="px-4 py-3">Status</th>
+                              <th className="px-4 py-3">Reference</th>
+                              <th className="px-4 py-3 text-right">Amount</th>
+                              <th className="w-[1%] whitespace-nowrap px-6 py-3 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {displayedLedger.map((entry) => {
+                              const badge = entryStatusBadge(entry, debitLineStatus);
+                              const ref = referenceLabel(entry);
+                              const inv = khataEntrySaleInvoice(entry);
+                              const typ = rowDisplayType(entry);
+                              const memberName = memberNameForEntry(entry);
+                              return (
+                                <tr key={entry.id} className="hover:bg-muted/50">
                                   <td className="whitespace-nowrap px-6 py-3 text-slate-600 dark:text-slate-400">
                                     {new Date(entry.created_at).toLocaleDateString(undefined, {
                                       day: 'numeric',
@@ -1081,6 +1206,18 @@ const KhataPage: React.FC = () => {
                                       year: 'numeric',
                                     })}
                                   </td>
+                                  {!selectedCustomerId && (
+                                    <td className="max-w-[180px] px-4 py-3">
+                                      <button
+                                        type="button"
+                                        onClick={() => selectMember(entry.customer_id, memberName)}
+                                        className="truncate text-left text-sm font-semibold text-primary hover:underline"
+                                        title={`View ${memberName}'s ledger`}
+                                      >
+                                        {memberName}
+                                      </button>
+                                    </td>
+                                  )}
                                   <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{typ}</td>
                                   <td className="px-4 py-3">
                                     <span
@@ -1151,11 +1288,11 @@ const KhataPage: React.FC = () => {
                             })}
                           </tbody>
                         </table>
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
+                  </div>
 
-                    {customerFooter && (
+                  {selectedCustomerId && customerFooter && (
                       <div className="border-t border-slate-200 bg-slate-100/90 px-6 py-4 dark:border-slate-800 dark:bg-slate-800/50 md:px-8">
                         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:gap-6">
                           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -1184,8 +1321,9 @@ const KhataPage: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                    )}
+                  )}
 
+                  {selectedCustomerId && (
                     <div className="grid grid-cols-1 gap-4 border-t border-slate-100 p-6 dark:border-slate-800 md:grid-cols-3 md:p-8">
                       <div className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40">
                         <Clock className="mt-0.5 h-5 w-5 shrink-0 text-slate-500" />
@@ -1216,8 +1354,7 @@ const KhataPage: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                  </>
-                )}
+                  )}
                 </div>
               </div>
             </>
@@ -1240,29 +1377,22 @@ const KhataPage: React.FC = () => {
         onClose={() => {
           if (receiveSubmitting) return;
           setReceiveModalOpen(false);
-          setReceiveCustomerLocked(false);
-          setReceiveApplyToLedgerId(null);
+          resetReceiveModalForm();
         }}
         title="Receive Payment"
-        size="md"
+        size="lg"
       >
         <form onSubmit={handleReceivePayment} className="space-y-5">
           {receiveCustomerLocked && selectedCustomerName && (
             <p className="rounded-lg border border-border bg-muted/80 px-3 py-2 text-xs text-muted-foreground">
               Ledger: <span className="font-bold text-foreground">{selectedCustomerName}</span>
-              {receiveApplyToLedgerId ? (
+              {receiveSelectedDebitIds.length > 0 ? (
                 <span className="mt-1 block font-semibold text-emerald-700 dark:text-emerald-400">
-                  This payment will settle the selected debit line (partial or full).
+                  {receiveSelectedDebitIds.length} invoice{receiveSelectedDebitIds.length === 1 ? '' : 's'} selected for
+                  settlement.
                 </span>
-              ) : null}
-              {receiveAmount ? (
-                <>
-                  {' · '}
-                  {receiveApplyToLedgerId ? 'Amount (due on line): ' : 'Amount: '}
-                  {CURRENCY} {receiveAmount}
-                </>
               ) : (
-                ' — choose deposit account and amount below.'
+                <span className="mt-1 block">Select unpaid invoices below, or enter an unallocated payment amount.</span>
               )}
             </p>
           )}
@@ -1271,7 +1401,11 @@ const KhataPage: React.FC = () => {
             <select
               aria-label="Select customer"
               value={receiveCustomerId}
-              onChange={(e) => setReceiveCustomerId(e.target.value)}
+              onChange={(e) => {
+                setReceiveCustomerId(e.target.value);
+                setReceiveSelectedDebitIds([]);
+                setReceiveAmount('');
+              }}
               disabled={receiveSubmitting || receiveCustomerLocked}
               className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 disabled:cursor-not-allowed disabled:opacity-70 dark:border-gray-600 dark:bg-gray-900/90"
               required
@@ -1296,6 +1430,90 @@ const KhataPage: React.FC = () => {
               </p>
             )}
           </div>
+
+          {receiveCustomerId && (
+            <div>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Unpaid invoices
+                </label>
+                {receiveUnpaidInvoices.length > 0 && (
+                  <div className="flex gap-2 text-[11px] font-semibold">
+                    <button
+                      type="button"
+                      onClick={selectAllReceiveInvoices}
+                      className="text-primary hover:underline"
+                      disabled={receiveSubmitting}
+                    >
+                      Select all
+                    </button>
+                    <span className="text-muted-foreground">·</span>
+                    <button
+                      type="button"
+                      onClick={clearReceiveInvoiceSelection}
+                      className="text-primary hover:underline"
+                      disabled={receiveSubmitting || receiveSelectedDebitIds.length === 0}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+              {receiveLedgerLoading ? (
+                <p className="rounded-lg border border-border bg-muted/40 px-3 py-4 text-center text-sm text-muted-foreground">
+                  Loading invoices…
+                </p>
+              ) : receiveUnpaidInvoices.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
+                  No open invoices for this member. You can still record an unallocated payment below.
+                </p>
+              ) : (
+                <div className="max-h-52 overflow-y-auto rounded-lg border border-border">
+                  <ul className="divide-y divide-border">
+                    {receiveUnpaidInvoices.map((inv) => {
+                      const checked = receiveSelectedDebitIds.includes(inv.id);
+                      const ref = referenceLabel(inv);
+                      const due = debitRemaining(inv);
+                      const badge = entryStatusBadge(inv, debitLineStatus);
+                      return (
+                        <li key={inv.id}>
+                          <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-muted/50">
+                            <input
+                              type="checkbox"
+                              className="mt-1 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary"
+                              checked={checked}
+                              disabled={receiveSubmitting}
+                              onChange={() => toggleReceiveInvoice(inv.id)}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-foreground">{ref}</span>
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${badge.className}`}
+                                >
+                                  {badge.label}
+                                </span>
+                              </span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {new Date(inv.created_at).toLocaleDateString(undefined, {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })}
+                                {' · '}
+                                Due {CURRENCY} {formatMoney(due)}
+                              </span>
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Deposit to (chart-linked account)
@@ -1336,7 +1554,22 @@ const KhataPage: React.FC = () => {
               placeholder="0.00"
               required
             />
+            {receiveSelectedDebitIds.length > 0 && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Amount is the sum of selected invoices. Clear selection to enter a different amount (unallocated payment).
+              </p>
+            )}
           </div>
+          {receivePaymentDescriptionPreview && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5 dark:border-emerald-900 dark:bg-emerald-950/40">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                Payment description (saved on record)
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-emerald-900 dark:text-emerald-100">
+                {receivePaymentDescriptionPreview}
+              </p>
+            </div>
+          )}
           <div>
             <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">Note (optional)</label>
             <input
@@ -1352,7 +1585,7 @@ const KhataPage: React.FC = () => {
               type="button"
               onClick={() => {
                 setReceiveModalOpen(false);
-                setReceiveCustomerLocked(false);
+                resetReceiveModalForm();
               }}
               disabled={receiveSubmitting}
               className="flex-1 rounded-xl border-2 border-border py-3 font-bold text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50 dark:border-slate-600"

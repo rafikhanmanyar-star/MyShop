@@ -333,6 +333,8 @@ export const khataApi = {
     bankAccountId: string;
     /** Settles this debit row (partial or full); omit for unallocated payment */
     applyToLedgerId?: string;
+    /** Settle multiple invoices; amounts must sum to `amount` */
+    allocations?: Array<{ debitLedgerId: string; amount: number }>;
   }) => apiClient.post<{ id: string }>('/shop/khata/receive-payment', data),
   getCustomers: (params?: { q?: string }) =>
     apiClient.get<{ id: string; name: string; contact_no: string | null; company_name?: string | null; address?: string | null }[]>(

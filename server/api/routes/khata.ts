@@ -78,12 +78,24 @@ router.delete('/ledger/:entryId', checkRole(['admin', 'pos_cashier', 'accountant
 
 router.post('/receive-payment', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
-    const { customerId, amount, note, bankAccountId, applyToLedgerId } = req.body || {};
+    const { customerId, amount, note, bankAccountId, applyToLedgerId, allocations } = req.body || {};
     if (!customerId || amount == null || Number(amount) <= 0) {
       return res.status(400).json({ error: 'customerId and positive amount are required' });
     }
     if (!bankAccountId || typeof bankAccountId !== 'string') {
       return res.status(400).json({ error: 'bankAccountId is required (deposit to chart-linked cash/bank account)' });
+    }
+    let parsedAllocations: { debitLedgerId: string; amount: number }[] | undefined;
+    if (Array.isArray(allocations) && allocations.length > 0) {
+      parsedAllocations = allocations
+        .map((a: any) => ({
+          debitLedgerId: typeof a?.debitLedgerId === 'string' ? a.debitLedgerId.trim() : '',
+          amount: Number(a?.amount),
+        }))
+        .filter((a) => a.debitLedgerId && Number.isFinite(a.amount) && a.amount > 0);
+      if (parsedAllocations.length === 0) {
+        return res.status(400).json({ error: 'allocations must include debitLedgerId and positive amount' });
+      }
     }
     const id = await getKhataService().receivePayment(req.tenantId, {
       customerId,
@@ -91,6 +103,7 @@ router.post('/receive-payment', checkRole(['admin', 'pos_cashier', 'accountant']
       note: note === undefined || note === null || String(note).trim() === '' ? undefined : String(note).trim(),
       bankAccountId,
       applyToLedgerId: typeof applyToLedgerId === 'string' && applyToLedgerId.trim() ? applyToLedgerId.trim() : null,
+      allocations: parsedAllocations,
     });
     res.status(201).json({ id, message: 'Payment recorded' });
   } catch (error: any) {

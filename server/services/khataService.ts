@@ -27,6 +27,26 @@ export interface KhataSummaryRow {
   balance: number;
 }
 
+export interface KhataPaymentAllocation {
+  debitLedgerId: string;
+  amount: number;
+}
+
+/** Human-readable payment note / journal description listing settled invoices. */
+export function buildKhataPaymentDescription(params: {
+  totalAmount: number;
+  invoices: Array<{ ref: string; amount: number }>;
+  userNote?: string | null;
+}): string {
+  const invPart = params.invoices
+    .map((i) => `${i.ref} (${i.amount.toFixed(2)})`)
+    .join('; ');
+  let text = `Payment ${params.totalAmount.toFixed(2)} — Invoices: ${invPart}`;
+  const extra = params.userNote?.trim();
+  if (extra) text += ` — ${extra}`;
+  return text;
+}
+
 let instance: KhataService | null = null;
 
 export function getKhataService(): KhataService {
@@ -107,6 +127,8 @@ export class KhataService {
       bankAccountId: string;
       /** When set, this credit settles (fully or partially) this debit row */
       applyToLedgerId?: string | null;
+      /** Settle multiple debit lines; amounts must sum to `amount` */
+      allocations?: KhataPaymentAllocation[];
     }
   ): Promise<string> {
     const accounting = getAccountingService();
@@ -114,28 +136,9 @@ export class KhataService {
       accounting.getOrCreateAccountByCode(tenantId, code, name, type, client);
 
     const ledgerId = await this.db.transaction(async (client) => {
-      let linkedDebitId: string | null = params.applyToLedgerId?.trim() || null;
-      if (linkedDebitId) {
-        const deb = await client.query(
-          `SELECT id, type, amount, customer_id FROM khata_ledger WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
-          [linkedDebitId, tenantId]
-        );
-        if (deb.length === 0) throw new Error('Debit ledger line not found');
-        const row = deb[0] as { type: string; amount: unknown; customer_id: string };
-        if (row.type !== 'debit') throw new Error('Payment can only be applied to a debit line');
-        if (row.customer_id !== params.customerId) throw new Error('Debit line does not belong to this customer');
-        const fifoRows = await client.query(
-          `SELECT id, type, amount, linked_debit_id, created_at FROM khata_ledger
-           WHERE tenant_id = $1 AND customer_id = $2
-           ORDER BY created_at ASC, id ASC`,
-          [tenantId, params.customerId]
-        );
-        const fifoRemaining = computeDebitRemainingById(fifoRows as any[]);
-        const remaining = Math.round((fifoRemaining.get(linkedDebitId) ?? 0) * 100) / 100;
-        if (remaining <= 0) throw new Error('This debit is already fully paid');
-        if (params.amount > remaining + 0.01) {
-          throw new Error(`Amount exceeds remaining balance for this line (${remaining.toFixed(2)})`);
-        }
+      const roundedAmount = Math.round(params.amount * 100) / 100;
+      if (!Number.isFinite(roundedAmount) || roundedAmount <= 0) {
+        throw new Error('amount must be a positive number');
       }
 
       const banks = await client.query(
@@ -151,11 +154,158 @@ export class KhataService {
         throw new Error('Deposit account must be linked to the chart of accounts');
       }
 
+      const fifoRows = await client.query(
+        `SELECT id, type, amount, linked_debit_id, created_at FROM khata_ledger
+         WHERE tenant_id = $1 AND customer_id = $2
+         ORDER BY created_at ASC, id ASC`,
+        [tenantId, params.customerId]
+      );
+      const fifoRemaining = computeDebitRemainingById(fifoRows as any[]);
+
+      const debitRef = (row: { sale_number?: string | null; note?: string | null; id: string }) => {
+        const sn = row.sale_number?.trim();
+        if (sn && /^SALE-/i.test(sn)) return sn;
+        const note = row.note?.trim();
+        if (note) {
+          const m = note.match(/SALE-\d+/i);
+          if (m) return m[0];
+        }
+        if (sn) return sn;
+        const short = String(row.id).replace(/-/g, '').slice(0, 8).toUpperCase();
+        return `INV-${short}`;
+      };
+
+      let allocations: KhataPaymentAllocation[] = Array.isArray(params.allocations)
+        ? params.allocations.filter((a) => a?.debitLedgerId && Number(a.amount) > 0)
+        : [];
+
+      if (allocations.length === 0 && params.applyToLedgerId?.trim()) {
+        allocations = [{ debitLedgerId: params.applyToLedgerId.trim(), amount: roundedAmount }];
+      }
+
+      const assetAccId = bankRow.chart_account_id;
+      const arAcc = await getAcc(COA.TRADE_RECEIVABLES, 'Trade Receivables', 'Asset', client);
+
+      if (allocations.length > 0) {
+        let allocSum = 0;
+        const invoiceLines: Array<{ ref: string; amount: number }> = [];
+        const seenDebit = new Set<string>();
+
+        for (const alloc of allocations) {
+          const debitId = alloc.debitLedgerId.trim();
+          if (seenDebit.has(debitId)) throw new Error('Duplicate invoice in payment allocation');
+          seenDebit.add(debitId);
+
+          const amt = Math.round(Number(alloc.amount) * 100) / 100;
+          if (!Number.isFinite(amt) || amt <= 0) throw new Error('Each allocation amount must be positive');
+
+          const deb = await client.query(
+            `SELECT k.id, k.type, k.amount, k.customer_id, k.note, s.sale_number
+             FROM khata_ledger k
+             LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
+             WHERE k.id = $1 AND k.tenant_id = $2
+             FOR UPDATE`,
+            [debitId, tenantId]
+          );
+          if (deb.length === 0) throw new Error('Debit ledger line not found');
+          const row = deb[0] as {
+            type: string;
+            customer_id: string;
+            sale_number?: string | null;
+            note?: string | null;
+            id: string;
+          };
+          if (row.type !== 'debit') throw new Error('Payment can only be applied to debit (invoice) lines');
+          if (row.customer_id !== params.customerId) throw new Error('Debit line does not belong to this customer');
+
+          const remaining = Math.round((fifoRemaining.get(debitId) ?? 0) * 100) / 100;
+          if (remaining <= 0) throw new Error(`Invoice ${debitRef(row)} is already fully paid`);
+          if (amt > remaining + 0.01) {
+            throw new Error(`Amount for ${debitRef(row)} exceeds remaining balance (${remaining.toFixed(2)})`);
+          }
+
+          allocSum += amt;
+          invoiceLines.push({ ref: debitRef(row), amount: amt });
+        }
+
+        allocSum = Math.round(allocSum * 100) / 100;
+        if (Math.abs(allocSum - roundedAmount) > 0.01) {
+          throw new Error(`Payment amount (${roundedAmount.toFixed(2)}) must equal sum of selected invoices (${allocSum.toFixed(2)})`);
+        }
+
+        const paymentNote = buildKhataPaymentDescription({
+          totalAmount: roundedAmount,
+          invoices: invoiceLines,
+          userNote: params.note,
+        });
+
+        const creditIds: string[] = [];
+        for (const alloc of allocations) {
+          const amt = Math.round(Number(alloc.amount) * 100) / 100;
+          const ins = await client.query(
+            `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note, linked_debit_id)
+             VALUES ($1, $2, NULL, 'credit', $3, $4, $5)
+             RETURNING id`,
+            [tenantId, params.customerId, amt, paymentNote, alloc.debitLedgerId.trim()]
+          );
+          creditIds.push(ins[0].id as string);
+        }
+
+        const kId = creditIds[0];
+
+        await client.query(
+          `UPDATE shop_bank_accounts
+           SET balance = COALESCE(balance, 0) + $1, updated_at = NOW()
+           WHERE id = $2 AND tenant_id = $3`,
+          [roundedAmount, params.bankAccountId, tenantId]
+        );
+
+        const reference = `KHATA-PAY-${kId}`;
+        const jRes = await client.query(
+          `INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+           VALUES ($1, NOW(), $2, $3, 'Khata', $4, 'Posted')
+           RETURNING id`,
+          [tenantId, reference, paymentNote, kId]
+        );
+        const journalId = jRes[0].id as string;
+
+        await client.query(
+          `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+           VALUES ($1, $2, $3, $4, 0)`,
+          [tenantId, journalId, assetAccId, roundedAmount]
+        );
+        await client.query(
+          `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+           VALUES ($1, $2, $3, 0, $4)`,
+          [tenantId, journalId, arAcc, roundedAmount]
+        );
+
+        await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+        return kId;
+      }
+
+      let linkedDebitId: string | null = params.applyToLedgerId?.trim() || null;
+      if (linkedDebitId) {
+        const deb = await client.query(
+          `SELECT id, type, amount, customer_id FROM khata_ledger WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+          [linkedDebitId, tenantId]
+        );
+        if (deb.length === 0) throw new Error('Debit ledger line not found');
+        const row = deb[0] as { type: string; amount: unknown; customer_id: string };
+        if (row.type !== 'debit') throw new Error('Payment can only be applied to a debit line');
+        if (row.customer_id !== params.customerId) throw new Error('Debit line does not belong to this customer');
+        const remaining = Math.round((fifoRemaining.get(linkedDebitId) ?? 0) * 100) / 100;
+        if (remaining <= 0) throw new Error('This debit is already fully paid');
+        if (roundedAmount > remaining + 0.01) {
+          throw new Error(`Amount exceeds remaining balance for this line (${remaining.toFixed(2)})`);
+        }
+      }
+
       const ins = await client.query(
         `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note, linked_debit_id)
          VALUES ($1, $2, NULL, 'credit', $3, $4, $5)
          RETURNING id`,
-        [tenantId, params.customerId, params.amount, params.note ?? null, linkedDebitId]
+        [tenantId, params.customerId, roundedAmount, params.note ?? null, linkedDebitId]
       );
       const kId = ins[0].id as string;
 
@@ -163,11 +313,8 @@ export class KhataService {
         `UPDATE shop_bank_accounts
          SET balance = COALESCE(balance, 0) + $1, updated_at = NOW()
          WHERE id = $2 AND tenant_id = $3`,
-        [params.amount, params.bankAccountId, tenantId]
+        [roundedAmount, params.bankAccountId, tenantId]
       );
-
-      const assetAccId = bankRow.chart_account_id;
-      const arAcc = await getAcc(COA.TRADE_RECEIVABLES, 'Trade Receivables', 'Asset', client);
 
       const reference = `KHATA-PAY-${kId}`;
       const description =
@@ -184,12 +331,12 @@ export class KhataService {
       await client.query(
         `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
          VALUES ($1, $2, $3, $4, 0)`,
-        [tenantId, journalId, assetAccId, params.amount]
+        [tenantId, journalId, assetAccId, roundedAmount]
       );
       await client.query(
         `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
          VALUES ($1, $2, $3, 0, $4)`,
-        [tenantId, journalId, arAcc, params.amount]
+        [tenantId, journalId, arAcc, roundedAmount]
       );
 
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);

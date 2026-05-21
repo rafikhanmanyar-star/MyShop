@@ -29,6 +29,8 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
     const [registerForm, setRegisterForm] = useState({ name: '', contactNo: '', companyName: '' });
     const [registerSubmitting, setRegisterSubmitting] = useState(false);
     const [registerError, setRegisterError] = useState<string | null>(null);
+    const [listIndex, setListIndex] = useState(0);
+    const searchInputRef = React.useRef<HTMLInputElement>(null);
 
     const contactsApi = new ContactsApiRepository();
 
@@ -156,6 +158,31 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
 
     const filteredContacts = contacts;
 
+    useEffect(() => {
+        if (!isOpen) return;
+        setListIndex(0);
+    }, [isOpen, searchQuery, filteredContacts.length]);
+
+    useEffect(() => {
+        if (!isOpen || showRegisterForm) return;
+        const onKey = (e: KeyboardEvent) => {
+            const len = filteredContacts.length;
+            if (e.key === 'ArrowDown' && len > 0) {
+                e.preventDefault();
+                setListIndex((i) => Math.min(i + 1, len - 1));
+            } else if (e.key === 'ArrowUp' && len > 0) {
+                e.preventDefault();
+                setListIndex((i) => Math.max(i - 1, 0));
+            } else if (e.key === 'Enter' && len > 0) {
+                e.preventDefault();
+                const c = filteredContacts[listIndex];
+                if (c) handleSelect(c);
+            }
+        };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+    }, [isOpen, showRegisterForm, filteredContacts, listIndex]);
+
     return (
         <Modal
             isOpen={isOpen}
@@ -269,6 +296,8 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                 {React.cloneElement(ICONS.search as React.ReactElement, { size: 20 })}
                             </div>
                             <input
+                                id="customer-modal-search"
+                                ref={searchInputRef}
                                 type="text"
                                 placeholder="Live search by name, contact or loyalty ID..."
                                 className="w-full pl-14 pr-6 py-5 bg-[#f8fafc] dark:bg-slate-800 border-2 border-transparent rounded-[1.5rem] focus:bg-white dark:focus:bg-slate-700 focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 outline-none transition-all text-sm font-semibold text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 shadow-none"
@@ -276,6 +305,7 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 autoFocus
                             />
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-2">↑↓ navigate · Enter select · Esc close</p>
                         </div>
 
                         <div className="max-h-[55vh] overflow-y-auto pr-2 pos-scrollbar">
@@ -294,13 +324,16 @@ const CustomerSelectionModal: React.FC<CustomerSelectionModalProps> = ({ isOpen,
                                 </div>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {filteredContacts.map(contact => {
+                                    {filteredContacts.map((contact, idx) => {
                                         const loyaltyMember = members.find(m => m.customerId === contact.id || phoneDigitsMatch(m.phone, contact.contactNo));
+                                        const selected = idx === listIndex;
                                         return (
                                             <button
                                                 key={contact.id}
+                                                type="button"
+                                                data-customer-idx={idx}
                                                 onClick={() => handleSelect(contact)}
-                                                className="flex items-center gap-5 p-5 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[2rem] hover:border-indigo-200 dark:hover:border-indigo-700 transition-all text-left group relative overflow-hidden"
+                                                className={`flex items-center gap-5 p-5 bg-white dark:bg-slate-800 border rounded-[2rem] transition-all text-left group relative overflow-hidden ${selected ? 'border-indigo-500 ring-2 ring-indigo-500/30 dark:border-indigo-500' : 'border-slate-100 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-700'}`}
                                             >
                                                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/[0.02] dark:bg-indigo-400/[0.04] rounded-full translate-x-10 -translate-y-10 group-hover:scale-150 transition-transform"></div>
                                                 <div className="w-14 h-14 rounded-2xl bg-[#f8fafc] dark:bg-slate-700 flex items-center justify-center text-slate-400 dark:text-slate-500 font-semibold text-xl group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-none">

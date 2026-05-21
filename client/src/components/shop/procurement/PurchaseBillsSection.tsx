@@ -199,6 +199,24 @@ type ProcurementRowStatus = 'PAID' | 'POSTED' | 'AWAITING';
 
 type PurchaseLedgerRow = { kind: 'bill'; item: any } | { kind: 'payment'; item: any };
 
+/** Numeric timestamp for reliable newest-first / oldest-first sorting. */
+function rowDateSortTime(raw: unknown): number {
+  if (raw == null || raw === '') return 0;
+  const d = new Date(String(raw));
+  const t = d.getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+function rowCreatedSortTime(row: PurchaseLedgerRow): number {
+  const raw =
+    row.kind === 'bill'
+      ? row.item.created_at ?? row.item.createdAt ?? row.item.bill_date ?? row.item.billDate
+      : row.item.created_at ?? row.item.createdAt ?? row.item.payment_date ?? row.item.paymentDate;
+  return rowDateSortTime(raw);
+}
+
+const LEDGER_DATE_SORT_COLUMNS: LedgerSortColumn[] = ['issueDate', 'dueOrApplied'];
+
 function getProcurementRowStatus(b: { is_posted?: unknown; status?: unknown }): ProcurementRowStatus {
   const posted = b.is_posted !== false && b.is_posted !== 0;
   const st = String(b.status ?? '').trim();
@@ -221,8 +239,8 @@ function ledgerRowSortValues(
     return {
       reference: billNum || String(b.id ?? ''),
       vendor: vendorTitle.toLowerCase(),
-      issueDate: String(b.bill_date ?? b.billDate ?? '').slice(0, 10),
-      dueOrApplied: String(b.due_date ?? b.dueDate ?? '').slice(0, 10),
+      issueDate: rowDateSortTime(b.bill_date ?? b.billDate),
+      dueOrApplied: rowDateSortTime(b.due_date ?? b.dueDate),
       amount: Number(b.total_amount ?? b.totalAmount ?? 0),
       status: getProcurementRowStatus(b),
       actions: `bill:${String(b.id ?? '')}`,
@@ -236,7 +254,7 @@ function ledgerRowSortValues(
   return {
     reference: refLabel,
     vendor: pVendorTitle.toLowerCase(),
-    issueDate: String(p.payment_date ?? p.paymentDate ?? '').slice(0, 10),
+    issueDate: rowDateSortTime(p.payment_date ?? p.paymentDate),
     dueOrApplied: String(p.allocated_bill_numbers ?? '').toLowerCase(),
     amount: Number(p.amount) || 0,
     status: 'payment',
@@ -263,6 +281,9 @@ function compareLedgerRows(
     cmp = String(av).localeCompare(String(bv), undefined, { sensitivity: 'base', numeric: true });
   }
   if (cmp !== 0) return cmp * mult;
+  const ta = rowCreatedSortTime(a);
+  const tb = rowCreatedSortTime(b);
+  if (ta !== tb) return (ta < tb ? -1 : 1) * mult;
   const ida = String(a.kind === 'bill' ? a.item.id : a.item.id);
   const idb = String(b.kind === 'bill' ? b.item.id : b.item.id);
   return ida.localeCompare(idb) * mult;
@@ -487,9 +508,13 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
 
     const sortedBills = useMemo(() => {
       return [...bills].sort((a, b) => {
-        const ad = String(a.bill_date ?? a.billDate ?? '').slice(0, 10);
-        const bd = String(b.bill_date ?? b.billDate ?? '').slice(0, 10);
-        return bd.localeCompare(ad);
+        const ad = rowDateSortTime(a.bill_date ?? a.billDate);
+        const bd = rowDateSortTime(b.bill_date ?? b.billDate);
+        if (bd !== ad) return bd - ad;
+        const ac = rowDateSortTime(a.created_at ?? a.createdAt);
+        const bc = rowDateSortTime(b.created_at ?? b.createdAt);
+        if (bc !== ac) return bc - ac;
+        return String(b.id ?? '').localeCompare(String(a.id ?? ''));
       });
     }, [bills]);
 
@@ -563,7 +588,11 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     }, [ledgerRowsMerged, ledgerTypeFilter, ledgerSort, vendorById]);
 
     const toggleLedgerSort = useCallback((col: LedgerSortColumn) => {
-      setLedgerSort((s) => (s.col === col ? { col, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' }));
+      setLedgerSort((s) => {
+        if (s.col === col) return { col, dir: s.dir === 'asc' ? 'desc' : 'asc' };
+        return { col, dir: LEDGER_DATE_SORT_COLUMNS.includes(col) ? 'desc' : 'asc' };
+      });
+      setBillListPage(1);
     }, []);
 
     const beginLedgerColumnResize = useCallback((colIndex: number, e: React.MouseEvent) => {
@@ -633,7 +662,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
 
     useEffect(() => {
       setBillListPage(1);
-    }, [selectedVendorFilterId, bills.length, supplierPayments.length, ledgerTypeFilter]);
+    }, [selectedVendorFilterId, bills.length, supplierPayments.length, ledgerTypeFilter, ledgerSort.col, ledgerSort.dir]);
 
     const selectedVendor = vendors.find((v) => v.id === form.supplierId);
     const vendorDisplayName = selectedVendor
@@ -685,7 +714,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         ])
           .then(([b, pay, v, w, ba]) => {
             const billList = normalizeList(b);
-            const payList = normalizeList(pay);
+            const payList = normalizeList<{
+              id?: string;
+              payment_date?: string;
+              paymentDate?: string;
+            }>(pay).sort((a, b) => {
+              const ad = rowDateSortTime(a.payment_date ?? a.paymentDate);
+              const bd = rowDateSortTime(b.payment_date ?? b.paymentDate);
+              if (bd !== ad) return bd - ad;
+              return String(b.id ?? '').localeCompare(String(a.id ?? ''));
+            });
             setBills(billList);
             setSupplierPayments(payList);
             const vList = normalizeList(v);

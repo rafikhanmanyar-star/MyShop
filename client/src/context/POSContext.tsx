@@ -108,6 +108,9 @@ interface POSContextType {
     holdSale: (reference: string) => void;
     recallSale: (heldSaleId: string) => void;
 
+    /** Unit price of the most recently added cart line (for POS summary strip). */
+    lastAddedUnitPrice: number | null;
+
     subtotal: number;
     taxTotal: number;
     discountTotal: number;
@@ -155,6 +158,7 @@ const POSContext = createContext<POSContextType | undefined>(undefined);
 export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { state } = useAppContext(); // Access app state for print settings
     const [cart, setCart] = useState<POSCartItem[]>([]);
+    const [lastAddedUnitPrice, setLastAddedUnitPrice] = useState<number | null>(null);
     const [customer, setCustomer] = useState<POSCustomer | null>(null);
     const [payments, setPayments] = useState<POSPayment[]>([]);
     const [heldSales, setHeldSales] = useState<POSHeldSale[]>([]);
@@ -365,6 +369,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setSelectedBranchId(branchId);
             apiClient.setBranchId(branchId);
             setCart([]);
+            setLastAddedUnitPrice(null);
             setPayments([]);
             setCustomer(null);
             setHeldSales([]);
@@ -484,6 +489,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const requestedQty = Math.max(1, Math.floor(quantity));
         const safeQty = Math.min(requestedQty, availableStock);
 
+        setLastAddedUnitPrice(unitPrice);
+
         setCart(prev => {
             const existingItemIndex = prev.findIndex(item =>
                 item.productId === product.id && item.variantId === variant?.id
@@ -578,6 +585,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const clearCart = useCallback(() => {
         setCart([]);
+        setLastAddedUnitPrice(null);
         setPayments([]);
         setCustomer(null);
     }, []);
@@ -619,6 +627,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const heldSale = heldSalesRef.current.find((s) => s.id === heldSaleId);
         if (heldSale) {
             setCart(heldSale.cart);
+            setLastAddedUnitPrice(null);
             setPayments([]); // Clear any previous payments so summary reflects recalled sale only
 
             if (heldSale.customerId) {
@@ -910,6 +919,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const value = {
         cart,
+        lastAddedUnitPrice,
         addToCart,
         removeFromCart,
         updateCartItem,

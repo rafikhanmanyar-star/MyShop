@@ -181,7 +181,43 @@
     background: rgba(129, 140, 248, 0.5);
 }
 
-/* Product Card Hover Effect */
+/* POS product catalog */
+.pos-product-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pos-product-grid-list {
+    scroll-behavior: smooth;
+}
+
+.pos-catalog-panel {
+    background: var(--pos-surface);
+}
+
+.pos-catalog-scroll-shadow {
+    box-shadow: inset 0 8px 8px -8px rgba(15, 23, 42, 0.08);
+}
+
+:where(.dark) .pos-catalog-scroll-shadow {
+    box-shadow: inset 0 8px 8px -8px rgba(0, 0, 0, 0.35);
+}
+
+@keyframes posCardFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.pos-product-card {
+    animation: posCardFadeIn 0.25s ease-out forwards;
+}
+
+/* Product Card Hover Effect (legacy panels) */
 .product-card-hover {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -222,6 +258,64 @@
     transform: scale(0.97);
 }
 
+/* Customer-facing payable total — large, high contrast */
+.pos-payable-amount__label {
+    font-size: 0.8125rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--pos-primary);
+}
+
+.pos-payable-amount__currency {
+    font-size: 1.375rem;
+    font-weight: 800;
+    color: var(--pos-text-secondary);
+}
+
+.pos-payable-amount__totals-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.125rem;
+}
+
+.pos-payable-amount__last-added {
+    font-size: calc(clamp(3.025rem, 5.5vw, 4.125rem) * 0.5);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: #16a34a;
+}
+
+:where(.dark) .pos-payable-amount__last-added {
+    color: #4ade80;
+}
+
+.pos-payable-amount__value {
+    font-size: clamp(3.025rem, 5.5vw, 4.125rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: #dc2626;
+}
+
+:where(.dark) .pos-payable-amount__value {
+    color: #f87171;
+}
+
+/* Sticky payable strip — stays pinned while line items scroll above */
+.pos-payable-amount--sticky {
+    position: sticky;
+    z-index: 15;
+    top: 0;
+}
+
+.pos-payable-amount--sticky:last-child {
+    top: auto;
+    bottom: 0;
+}
+
 .shadow-premium {
     box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
 }
@@ -243,4 +337,24 @@
 .pos-page-root {
     overflow-x: hidden;
     overflow-y: hidden;
+}
+
+/* Checkout receipt column */
+.pos-bill-line-grid {
+    grid-template-columns: minmax(0, 1fr) 2.25rem 4.5rem;
+}
+
+.pos-checkout-bill {
+    min-height: 0;
+}
+
+.pos-shortcut-bar {
+    min-height: 0;
+    flex-shrink: 0;
+}
+
+@media (max-width: 380px) {
+    .pos-bill-line-grid {
+        grid-template-columns: minmax(0, 1fr) 2rem 4rem;
+    }
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../../ui/Modal';
 import { usePOS } from '../../../context/POSContext';
 import { ICONS, CURRENCY } from '../../../constants';
@@ -10,6 +10,35 @@ const HeldSalesModal: React.FC = () => {
         heldSales,
         recallSale
     } = usePOS();
+
+    const [selectedIdx, setSelectedIdx] = useState(0);
+
+    useEffect(() => {
+        if (!isHeldSalesModalOpen) return;
+        setSelectedIdx(0);
+    }, [isHeldSalesModalOpen, heldSales.length]);
+
+    useEffect(() => {
+        if (!isHeldSalesModalOpen || heldSales.length === 0) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedIdx((i) => Math.min(i + 1, heldSales.length - 1));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedIdx((i) => Math.max(i - 1, 0));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const sale = heldSales[selectedIdx];
+                if (sale) {
+                    recallSale(sale.id);
+                    setIsHeldSalesModalOpen(false);
+                }
+            }
+        };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+    }, [isHeldSalesModalOpen, heldSales, selectedIdx, recallSale, setIsHeldSalesModalOpen]);
 
     if (!isHeldSalesModalOpen) return null;
 
@@ -38,14 +67,15 @@ const HeldSalesModal: React.FC = () => {
                             {React.cloneElement(ICONS.archive as React.ReactElement, { size: 40, className: "opacity-20" })}
                         </div>
                         <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 uppercase">Vault is Empty</h3>
-                        <p className="text-slate-500 dark:text-slate-400 font-bold text-sm mt-3 max-w-xs mx-auto leading-relaxed">Active transactions can be suspended by pressing <kbd className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-200 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 font-semibold mx-1">F2</kbd> for later retrieval.</p>
+                        <p className="text-slate-500 dark:text-slate-400 font-bold text-sm mt-3 max-w-xs mx-auto leading-relaxed">Active transactions can be suspended with <kbd className="kbd-tag mx-1">Ctrl+H</kbd> and recalled with <kbd className="kbd-tag mx-1">F4</kbd>.</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 gap-5 max-h-[60vh] overflow-y-auto pr-3 pos-scrollbar pb-6">
-                        {heldSales.map((sale) => (
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">↑↓ select · Enter recall · Esc close</p>
+                        {heldSales.map((sale, idx) => (
                             <div
                                 key={sale.id}
-                                className="flex items-center justify-between p-6 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-[2.5rem] hover:border-indigo-200 dark:hover:border-indigo-700 transition-all group animate-slide-up"
+                                className={`flex items-center justify-between p-6 bg-white dark:bg-slate-800 border rounded-[2.5rem] transition-all group animate-slide-up ${idx === selectedIdx ? 'border-indigo-500 ring-2 ring-indigo-500/25 dark:border-indigo-500' : 'border-slate-100 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-700'}`}
                             >
                                 <div className="flex items-center gap-6">
                                     <div className="w-16 h-16 bg-[#f8fafc] dark:bg-slate-700 rounded-2xl flex items-center justify-center text-slate-300 dark:text-slate-500 group-hover:bg-indigo-600 group-hover:text-white transition-all shadow-none">

@@ -60,6 +60,8 @@ export default function CachedImage({
       alt={alt}
       className={className}
       style={style}
+      loading="lazy"
+      decoding="async"
       onError={() => setLoadError(true)}
     />
   );

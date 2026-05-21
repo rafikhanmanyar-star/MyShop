@@ -746,7 +746,7 @@ export default function Products() {
 
     return (
         <div className="page page--browse fade-in">
-            <div className="browse-sticky">
+            <div className="browse-search-sticky">
                 <div className="browse-search-row">
                     <button
                         type="button"
@@ -793,7 +793,9 @@ export default function Products() {
                         ) : null}
                     </div>
                 </div>
+            </div>
 
+            <div className="browse-filters-scroll">
                 <div className="filter-chips-row" role="toolbar" aria-label="Quick filters">
                     <button
                         type="button"

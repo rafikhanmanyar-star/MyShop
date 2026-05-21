@@ -28,17 +28,17 @@ const STORAGE_POS_RIGHT_W = 'pos-layout-right-w-px';
 const MIN_LEFT_W = 220;
 /** Wide enough for catalog + category tree + product grid without capping typical tree widths. */
 const MAX_LEFT_W = 680;
-const MIN_RIGHT_W = 180;
-const MAX_RIGHT_W = 400;
+const MIN_RIGHT_W = 200;
+const MAX_RIGHT_W = 440;
 /** Default: slightly narrower than before so the bill / product grid column gains space. */
 const DEFAULT_LEFT_W = 280;
-/** Default: narrower checkout / cart sidebar (was ~320px fixed). */
-const DEFAULT_RIGHT_W = 260;
+/** Default checkout column — wide enough for receipt lines without stealing catalog space. */
+const DEFAULT_RIGHT_W = 300;
 
 /** Two vertical resize handles between the three columns (see POSColumnResizeHandle). */
 const HANDLES_TOTAL_PX = 12;
-/** `gap-4` on the layout row: five flex children → four gaps (1rem each in Tailwind default). */
-const LAYOUT_ROW_GAP_PX = 16;
+/** `gap-2` on the layout row: five flex children → four gaps (0.5rem each in Tailwind default). */
+const LAYOUT_ROW_GAP_PX = 8;
 const LAYOUT_ROW_GAP_COUNT = 4;
 const LAYOUT_ROW_GAPS_TOTAL_PX = LAYOUT_ROW_GAP_PX * LAYOUT_ROW_GAP_COUNT;
 /** Minimum width reserved for the center (line items) column before we stack or clamp sides. */
@@ -307,6 +307,10 @@ const POSSalesContent: React.FC = () => {
     usePosKeyboard({
         enabled: isActive,
         cartLength: cart.length,
+        modalsOpen:
+            isHeldSalesModalOpen ||
+            isCustomerModalOpen ||
+            isSalesHistoryModalOpen,
         cartRef,
         checkoutRef,
         clearCart,
@@ -336,7 +340,7 @@ const POSSalesContent: React.FC = () => {
 
             <div
                 ref={layoutRowRef}
-                className={`relative z-10 flex min-h-0 w-full min-w-0 flex-1 gap-4 p-4 ${
+                className={`relative z-10 flex min-h-0 w-full min-w-0 flex-1 gap-2 p-2 md:p-3 ${
                     useStackedLayout
                         ? 'flex-col overflow-y-auto overflow-x-hidden'
                         : 'flex-row overflow-x-auto overflow-y-hidden'

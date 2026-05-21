@@ -177,6 +177,7 @@ const Modal: React.FC<ModalProps> = ({
     >
       <div
         ref={modalContentRef}
+        data-pos-modal="true"
         className={`bg-card ${modalPositionClasses} shadow-2xl ${sizeClasses} ${maxHeightClass} flex flex-col overflow-hidden mx-auto sm:mx-0 transition-transform duration-300 transform translate-y-0 border border-border ${className || ''}`}
         style={maxHeightStyle}
         role="dialog"

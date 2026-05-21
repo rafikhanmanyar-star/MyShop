@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandl
 import { usePOS } from '../../../context/POSContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import type { CartGridHandle } from './usePosKeyboard';
+import { POS_CLEAR_CART_SHORTCUT_KEY, requestClearCart } from './posCartShortcuts';
 import CachedImage from '../../ui/CachedImage';
 
 const gridCols = 'minmax(0,1fr) minmax(70px,100px) minmax(100px,140px) minmax(80px,100px) 48px';
@@ -36,6 +37,7 @@ const CartRow = memo(
       } ${selected ? 'ring-2 ring-inset ring-primary-500/50 dark:ring-primary-400/40' : ''}`}
       style={{ gridTemplateColumns: gridCols }}
       data-cart-line
+      data-cart-idx={idx}
     >
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
@@ -129,7 +131,7 @@ const CartRow = memo(
 );
 
 const CartGrid = forwardRef<CartGridHandle>(function CartGrid(_, ref) {
-  const { cart, removeFromCart, updateCartItem, clearCart, grandTotal } = usePOS();
+  const { cart, removeFromCart, updateCartItem, clearCart, grandTotal, lastAddedUnitPrice } = usePOS();
   const panelRef = useRef<HTMLDivElement>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
 
@@ -140,6 +142,12 @@ const CartGrid = forwardRef<CartGridHandle>(function CartGrid(_, ref) {
       setSelectedIdx((i) => Math.min(i, cart.length - 1));
     }
   }, [cart.length]);
+
+  useEffect(() => {
+    if (cart.length === 0) return;
+    const row = panelRef.current?.querySelector(`[data-cart-line][data-cart-idx="${selectedIdx}"]`);
+    row?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedIdx, cart.length]);
 
   const focusCart = useCallback(() => {
     panelRef.current?.focus();
@@ -203,14 +211,21 @@ const CartGrid = forwardRef<CartGridHandle>(function CartGrid(_, ref) {
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-white dark:bg-gray-900">
       <div className="z-20 flex shrink-0 items-center justify-between gap-3 bg-primary-600 px-4 py-3 text-white dark:bg-primary-700">
-        <span className="text-xs font-bold uppercase tracking-wider md:text-sm">Current cart</span>
+        <span className="text-xs font-bold uppercase tracking-wider md:text-sm">
+          Current cart{' '}
+          <span className="hidden font-mono font-semibold normal-case tracking-normal text-white/70 lg:inline">
+            (F2 · ↑↓ · +/- · Del · {POS_CLEAR_CART_SHORTCUT_KEY} clear)
+          </span>
+        </span>
         <button
           type="button"
-          onClick={() => clearCart()}
+          onClick={() => requestClearCart(clearCart, cart.length)}
           disabled={cart.length === 0}
-          className="rounded-lg border border-white/40 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40 touch-manipulation"
+          title={`Clear all items (${POS_CLEAR_CART_SHORTCUT_KEY})`}
+          className="flex items-center gap-2 rounded-lg border border-white/40 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40 touch-manipulation"
         >
-          Clear all
+          <span>Clear all</span>
+          <span className="kbd-tag !border-white/30 !bg-white/10 !text-white/90">{POS_CLEAR_CART_SHORTCUT_KEY}</span>
         </button>
       </div>
       <div
@@ -254,23 +269,37 @@ const CartGrid = forwardRef<CartGridHandle>(function CartGrid(_, ref) {
         )}
       </div>
 
-      {cart.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-primary-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/80">
-          <div>
-            <span className="mb-0.5 block text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Summary</span>
-            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-              {cart.length} lines · {totalQty} qty
-            </span>
+      <div
+        className="pos-payable-amount pos-payable-amount--sticky shrink-0 border-t-2 border-primary-500/30 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,86,179,0.08)] dark:border-primary-400/25 dark:bg-gray-900 dark:shadow-[0_-4px_16px_rgba(0,0,0,0.35)]"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div className="min-w-0">
+            <span className="pos-payable-amount__label mb-0.5 block">Payable amount</span>
+            {cart.length > 0 ? (
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                {cart.length} lines · {totalQty} qty
+              </span>
+            ) : (
+              <span className="text-xs font-medium text-gray-400 dark:text-gray-500">Cart is empty</span>
+            )}
           </div>
-          <div className="text-right">
-            <span className="mb-0.5 block text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Total</span>
-            <span className="text-lg font-semibold tabular-nums text-primary-600 dark:text-primary-400">
-              {CURRENCY}
-              {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </span>
+          <div className="pos-payable-amount__totals-stack">
+            {cart.length > 0 && lastAddedUnitPrice != null ? (
+              <div className="pos-payable-amount__last-added tabular-nums" aria-hidden="true">
+                {lastAddedUnitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </div>
+            ) : null}
+            <div className="flex items-baseline gap-2">
+              <span className="pos-payable-amount__currency">{CURRENCY}</span>
+              <div className="pos-payable-amount__value tabular-nums">
+                {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 });
