@@ -1,4 +1,11 @@
 import { apiClient } from './apiClient';
+import type { DashboardStats } from './dashboardOfflineCache';
+
+export interface DashboardOverviewResponse {
+  stats: DashboardStats;
+  lowStockRows: { name: string; qty: string }[];
+  pendingOrders: { id: string; orderNumber: string; customer: string }[];
+}
 
 export interface ShopBranch {
   id: string;
@@ -137,6 +144,7 @@ export const shopApi = {
         ? `/shop/sync/changes?since=${encodeURIComponent(since)}`
         : '/shop/sync/changes'
     ),
+  getDashboardOverview: () => apiClient.get<DashboardOverviewResponse>('/shop/dashboard/overview'),
 
   getBranches: () => apiClient.get<ShopBranch[]>('/shop/branches'),
   createBranch: (data: any) => apiClient.post('/shop/branches', data),
@@ -193,6 +201,8 @@ export const shopApi = {
     stockFilter?: string;
     sortBy?: string;
     sortDir?: 'asc' | 'desc';
+    /** Bypass server SKU list cache after procurement / adjustments */
+    skipCache?: boolean;
   }) => {
     const q = new URLSearchParams();
     if (params?.page != null) q.set('page', String(params.page));
@@ -201,6 +211,7 @@ export const shopApi = {
     if (params?.stockFilter) q.set('stockFilter', params.stockFilter);
     if (params?.sortBy) q.set('sortBy', params.sortBy);
     if (params?.sortDir) q.set('sortDir', params.sortDir);
+    if (params?.skipCache) q.set('skipCache', '1');
     const qs = q.toString();
     return apiClient.get<{
       items: any[];

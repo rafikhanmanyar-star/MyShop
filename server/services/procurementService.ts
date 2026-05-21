@@ -56,6 +56,7 @@ export interface SupplierPaymentInput {
 }
 
 import { getAccountingService } from './accountingService.js';
+import { invalidateInventorySkuListCache } from './shopService.js';
 import { COA } from '../constants/accountCodes.js';
 
 export class ProcurementService {
@@ -89,8 +90,28 @@ export class ProcurementService {
     }
   }
 
+  /**
+   * Warehouse for purchase receipts. Prefer branch-linked warehouse (id = branch id) so POS
+   * branch stock matches procurement; legacy tenants may only have a standalone warehouse.
+   */
   private async ensureWarehouseId(client: any, tenantId: string): Promise<string> {
-    const whRows = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
+    const branchLinked = await client.query(
+      `SELECT w.id FROM shop_warehouses w
+       INNER JOIN shop_branches b ON b.id = w.id AND b.tenant_id = w.tenant_id
+       WHERE w.tenant_id = $1 AND COALESCE(w.is_active, TRUE) = TRUE
+       ORDER BY b.name ASC
+       LIMIT 1`,
+      [tenantId]
+    );
+    if (branchLinked.length > 0) return branchLinked[0].id as string;
+
+    const whRows = await client.query(
+      `SELECT id FROM shop_warehouses
+       WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE
+       ORDER BY name ASC
+       LIMIT 1`,
+      [tenantId]
+    );
     if (whRows.length === 0) {
       const ins = await client.query(
         `INSERT INTO shop_warehouses (tenant_id, name, code, location, is_active)
@@ -100,6 +121,10 @@ export class ProcurementService {
       return ins[0].id as string;
     }
     return whRows[0].id as string;
+  }
+
+  private bumpInventoryCaches(tenantId: string) {
+    invalidateInventorySkuListCache(tenantId);
   }
 
   /**
@@ -559,6 +584,7 @@ export class ProcurementService {
       await this.applyPostedPurchaseReceipt(client, tenantId, newId, data, warehouseId);
       await this.recordInitialBillPaymentIfAny(client, tenantId, newId, data);
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+      this.bumpInventoryCaches(tenantId);
       return newId;
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
@@ -628,6 +654,7 @@ export class ProcurementService {
       await this.applyPostedPurchaseReceipt(client, tenantId, billId, data, warehouseId);
       await this.recordInitialBillPaymentIfAny(client, tenantId, billId, data);
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+      this.bumpInventoryCaches(tenantId);
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});
@@ -971,6 +998,7 @@ export class ProcurementService {
       );
 
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+      this.bumpInventoryCaches(tenantId);
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});
@@ -1074,6 +1102,7 @@ export class ProcurementService {
       await client.query('DELETE FROM purchase_bill_items WHERE tenant_id = $1 AND purchase_bill_id = $2', [tenantId, billId]);
       await client.query('DELETE FROM purchase_bills WHERE tenant_id = $1 AND id = $2', [tenantId, billId]);
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+      this.bumpInventoryCaches(tenantId);
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});

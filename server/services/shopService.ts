@@ -3061,6 +3061,114 @@ export class ShopService {
     );
     await notifyDailyReportUpdated(tenantId, 'settings_edit_lock_changed');
   }
+
+  /**
+   * Aggregated dashboard KPIs + alert rows in one round-trip (replaces loading full product/sales/inventory lists on the client).
+   */
+  async getDashboardOverview(tenantId: string) {
+    const [statsRows, lowStockRows, pendingRows] = await Promise.all([
+      this.db.query(
+        `
+        WITH sales_union AS (
+          SELECT grand_total, created_at FROM shop_sales WHERE tenant_id = $1
+          UNION ALL
+          SELECT grand_total, created_at FROM mobile_orders
+            WHERE tenant_id = $1 AND status = 'Delivered'
+        )
+        SELECT
+          (SELECT COUNT(*)::int FROM shop_products
+            WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE) AS "totalProducts",
+          (SELECT COUNT(*)::int FROM sales_union) AS "totalSales",
+          (SELECT COALESCE(SUM(grand_total::numeric), 0)::float8 FROM sales_union) AS "totalRevenue",
+          (SELECT COALESCE(SUM(total_return_amount::numeric), 0)::float8
+            FROM shop_sales_returns WHERE tenant_id = $1) AS "totalReturns",
+          (SELECT COUNT(*)::int FROM shop_loyalty_members WHERE tenant_id = $1) AS "totalCustomers",
+          (SELECT COUNT(*)::int FROM shop_inventory i
+            WHERE i.tenant_id = $1
+              AND COALESCE(i.quantity_on_hand, 0) > 0
+              AND COALESCE(i.quantity_on_hand, 0) <= 10) AS "lowStockItems",
+          (SELECT COUNT(*)::int FROM shop_inventory i
+            WHERE i.tenant_id = $1 AND COALESCE(i.quantity_on_hand, 0) <= 0) AS "outOfStockItems",
+          (SELECT COUNT(*)::int FROM shop_branches WHERE tenant_id = $1) AS "branchesCount",
+          (SELECT COUNT(*)::int FROM shop_terminals WHERE tenant_id = $1) AS "terminalsCount",
+          (SELECT COUNT(*)::int FROM categories
+            WHERE tenant_id = $1 AND type = 'product' AND deleted_at IS NULL) AS "categoriesCount",
+          (SELECT COUNT(*)::int FROM shop_vendors WHERE tenant_id = $1) AS "vendorsCount",
+          (SELECT COUNT(*)::int FROM sales_union WHERE created_at >= CURRENT_DATE) AS "todaySalesCount",
+          (SELECT COALESCE(SUM(grand_total::numeric), 0)::float8 FROM sales_union
+            WHERE created_at >= CURRENT_DATE) AS "todayRevenue",
+          (SELECT COUNT(*)::int FROM mobile_orders
+            WHERE tenant_id = $1 AND LOWER(COALESCE(status, '')) = 'pending') AS "mobileOrdersPending"
+        `,
+        [tenantId]
+      ),
+      this.db.query(
+        `
+        SELECT
+          COALESCE(p.name, p.sku, 'Item') AS name,
+          i.quantity_on_hand AS qty
+        FROM shop_inventory i
+        JOIN shop_products p ON p.id = i.product_id AND p.tenant_id = $1
+        WHERE i.tenant_id = $1
+          AND COALESCE(i.quantity_on_hand, 0) > 0
+          AND COALESCE(i.quantity_on_hand, 0) <= 10
+        ORDER BY i.quantity_on_hand ASC
+        LIMIT 6
+        `,
+        [tenantId]
+      ),
+      this.db.query(
+        `
+        SELECT o.id, o.order_number AS "orderNumber", COALESCE(mc.name, '—') AS customer
+        FROM mobile_orders o
+        LEFT JOIN mobile_customers mc ON mc.id = o.customer_id AND mc.tenant_id = $1
+        WHERE o.tenant_id = $1 AND LOWER(COALESCE(o.status, '')) = 'pending'
+        ORDER BY o.created_at DESC
+        LIMIT 6
+        `,
+        [tenantId]
+      ),
+    ]);
+
+    const row = statsRows[0] || {};
+    const totalRevenue = Number(row.totalRevenue) || 0;
+    const totalReturns = Number(row.totalReturns) || 0;
+    const totalSales = Number(row.totalSales) || 0;
+    const netRevenue = Math.max(0, totalRevenue - totalReturns);
+
+    return {
+      stats: {
+        totalProducts: Number(row.totalProducts) || 0,
+        totalSales,
+        totalRevenue,
+        totalReturns,
+        netRevenue,
+        totalCustomers: Number(row.totalCustomers) || 0,
+        lowStockItems: Number(row.lowStockItems) || 0,
+        outOfStockItems: Number(row.outOfStockItems) || 0,
+        branchesCount: Number(row.branchesCount) || 0,
+        terminalsCount: Number(row.terminalsCount) || 0,
+        categoriesCount: Number(row.categoriesCount) || 0,
+        vendorsCount: Number(row.vendorsCount) || 0,
+        todaySalesCount: Number(row.todaySalesCount) || 0,
+        todayRevenue: Number(row.todayRevenue) || 0,
+        avgOrderValue: totalSales > 0 ? totalRevenue / totalSales : 0,
+        mobileOrdersPending: Number(row.mobileOrdersPending) || 0,
+      },
+      lowStockRows: lowStockRows.map((r: { name: string; qty: string | number }) => {
+        const q = parseFloat(String(r.qty)) || 0;
+        return {
+          name: String(r.name),
+          qty: q % 1 === 0 ? String(q) : q.toFixed(1),
+        };
+      }),
+      pendingOrders: pendingRows.map((r: { id: string; orderNumber: string; customer: string }) => ({
+        id: String(r.id),
+        orderNumber: String(r.orderNumber ?? '—'),
+        customer: String(r.customer ?? '—'),
+      })),
+    };
+  }
 }
 
 let shopServiceInstance: ShopService | null = null;

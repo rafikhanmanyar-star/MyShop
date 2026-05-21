@@ -63,3 +63,21 @@ export function filterPayFromChartAccounts(
 export function formatPayFromAccountLabel(acc: PayFromAccountOption): string {
   return acc.code ? `${acc.name} (${acc.code})` : acc.name;
 }
+
+/** Prefer Cash on Hand, then first available pay-from account. */
+export function pickDefaultPayFromAccountId(accounts: PayFromAccountOption[]): string {
+  if (accounts.length === 0) return '';
+  const cash =
+    accounts.find((a) => a.code === '11101') ??
+    accounts.find((a) => a.code === 'AST-100') ??
+    accounts.find((a) => /cash/i.test(a.name));
+  return String((cash ?? accounts[0]).id);
+}
+
+/** Maps chart account code to supplier payment_method for storage and reports. */
+export function paymentMethodForPayFromAccount(code?: string): 'Cash' | 'Bank' {
+  const c = String(code || '').trim();
+  if (c === '11101' || c === '11104' || c === '11105' || c === 'AST-100') return 'Cash';
+  if (c.startsWith('111') || LEGACY_CASH_BANK_CODES.has(c)) return 'Bank';
+  return 'Bank';
+}

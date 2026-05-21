@@ -522,7 +522,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const refreshItems = useCallback(async () => {
         try {
             console.log('🔄 [InventoryContext] Refreshing products/items...');
-            const skuPack = await shopApi.getInventorySkus({ page: 1, limit: 10000 });
+            const skuPack = await shopApi.getInventorySkus({ page: 1, limit: 10000, skipCache: true });
             let mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
             if (mappedItems.length === 0) {
                 try {

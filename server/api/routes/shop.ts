@@ -71,6 +71,15 @@ router.get('/sync/changes', checkRole(['admin', 'pos_cashier', 'accountant']), a
   }
 });
 
+router.get('/dashboard/overview', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const data = await getShopService().getDashboardOverview(req.tenantId);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/public-test', (_req, res) => {
   res.json({ message: 'Shop routes are working' });
 });
@@ -537,6 +546,10 @@ router.get('/inventory/skus', async (req: any, res) => {
     const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined;
     const sortDirRaw = typeof req.query.sortDir === 'string' ? req.query.sortDir.toLowerCase() : '';
     const sortDir = sortDirRaw === 'desc' ? 'desc' : 'asc';
+    const skipCache =
+      req.query.skipCache === '1' ||
+      req.query.skipCache === 'true' ||
+      req.query.refresh === '1';
     const result = await getShopService().listInventorySkus(req.tenantId, {
       page,
       limit,
@@ -544,6 +557,7 @@ router.get('/inventory/skus', async (req: any, res) => {
       stockFilter,
       sortBy,
       sortDir,
+      skipCache,
     });
     res.setHeader('X-Response-Time-Ms', String(Date.now() - t0));
     res.json({ ...result, routeMs: Date.now() - t0 });

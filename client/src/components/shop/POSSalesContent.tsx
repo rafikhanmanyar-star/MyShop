@@ -206,9 +206,20 @@ const POSSalesContent: React.FC = () => {
         navigate(location.pathname, { replace: true, state: null });
     }, [location.state, location.pathname, navigate, setSearchQuery, setIsSalesHistoryModalOpen]);
 
-    /** Refresh catalog when opening POS again (inventory may have changed on other pages). */
+    /** Refresh stock when opening POS or returning from procurement / inventory. */
     useEffect(() => {
-        void refreshItems().catch(() => {});
+        const refresh = () => void refreshItems().catch(() => {});
+        refresh();
+        const onRealtime = () => refresh();
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') refresh();
+        };
+        window.addEventListener('shop:realtime', onRealtime as EventListener);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            window.removeEventListener('shop:realtime', onRealtime as EventListener);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
     }, [refreshItems]);
 
     const useStackedLayout = layoutRowWidth > 0 && layoutRowWidth < STACK_LAYOUT_BELOW_PX;
