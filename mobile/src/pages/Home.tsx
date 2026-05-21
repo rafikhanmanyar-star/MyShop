@@ -165,6 +165,7 @@ export default function Home() {
     );
 
     const promoSlides = coercePromoSlides(state.branding?.home_promo_slides);
+    const promoIntervalSec = state.branding?.home_promo_interval_seconds ?? 5;
     const deliveryMins = state.settings?.estimated_delivery_minutes || 30;
 
     return (
@@ -290,14 +291,12 @@ export default function Home() {
                 </div>
             )}
 
-            <HomePromoCarousel slides={promoSlides} shopSlug={shopSlug!} deliveryMinutes={deliveryMins} />
-
-            <div className="home-recipes-banner">
-                <Link to={`/${shopSlug}/recipes`}>
-                    <span>Recipe ideas — add ingredients to your cart</span>
-                    <span aria-hidden>→</span>
-                </Link>
-            </div>
+            <HomePromoCarousel
+                slides={promoSlides}
+                shopSlug={shopSlug!}
+                deliveryMinutes={deliveryMins}
+                intervalSeconds={promoIntervalSec}
+            />
 
             <div className="home-service-strip" aria-label="Service highlights">
                 <div className="home-service-strip__item">

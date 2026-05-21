@@ -7,6 +7,14 @@ import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 import { parsePakistanMobile, pakistanMobileDigitsToE164 } from '../utils/pakistanMobile.js';
 import { deductInventoryFefo, insertReturnRestockBatch } from './inventoryBatchService.js';
+import {
+  clampHomePromoIntervalSeconds,
+  homePromoSlidesToStoredJson,
+  parseHomePromoSlides,
+  preserveHomePromoSlidesStored,
+} from './homePromoSlides.js';
+
+export { parseHomePromoSlides } from './homePromoSlides.js';
 
 /** Strip absolute URLs (e.g. http://localhost:3001/uploads/...) to relative paths for DB storage. */
 function normalizeImageUrl(url: string | null | undefined): string | null {
@@ -16,49 +24,6 @@ function normalizeImageUrl(url: string | null | undefined): string | null {
     try { return new URL(trimmed).pathname; } catch { return trimmed; }
   }
   return trimmed;
-}
-
-/** Mobile home promo carousel (stored as JSON text / tenant_branding.home_promo_slides). */
-export function parseHomePromoSlides(raw: unknown): { image_url: string; link_url: string | null }[] {
-  if (raw == null || raw === '') return [];
-  let arr: unknown[] = [];
-  if (typeof raw === 'string') {
-    try {
-      const p = JSON.parse(raw);
-      arr = Array.isArray(p) ? p : [];
-    } catch {
-      return [];
-    }
-  } else if (Array.isArray(raw)) {
-    arr = raw;
-  } else {
-    return [];
-  }
-  const out: { image_url: string; link_url: string | null }[] = [];
-  for (const x of arr) {
-    if (!x || typeof x !== 'object') continue;
-    const img = normalizeImageUrl(String((x as { image_url?: string }).image_url || '').trim()) || '';
-    if (!img) continue;
-    const linkRaw = (x as { link_url?: unknown }).link_url;
-    const link =
-      linkRaw == null || String(linkRaw).trim() === '' ? null : String(linkRaw).trim();
-    out.push({ image_url: img, link_url: link });
-    if (out.length >= 10) break;
-  }
-  return out;
-}
-
-function homePromoSlidesToStoredJson(input: unknown): string {
-  return JSON.stringify(parseHomePromoSlides(input));
-}
-
-function preserveHomePromoSlidesStored(existingRaw: unknown): string {
-  if (existingRaw == null || existingRaw === '') return '[]';
-  if (typeof existingRaw === 'string') {
-    const t = existingRaw.trim();
-    return t || '[]';
-  }
-  return homePromoSlidesToStoredJson(existingRaw);
 }
 
 function trimTextField(val: unknown): string | null {
@@ -2567,27 +2532,40 @@ export class ShopService {
         [tenantId]
       );
       const row = defaultRes[0];
-      return { ...row, home_promo_slides: parseHomePromoSlides(row.home_promo_slides) };
+      return this.formatTenantBrandingRow(row);
     }
     const row = res[0];
-    return { ...row, home_promo_slides: parseHomePromoSlides(row.home_promo_slides) };
+    return this.formatTenantBrandingRow(row);
+  }
+
+  private formatTenantBrandingRow(row: any) {
+    return {
+      ...row,
+      home_promo_slides: parseHomePromoSlides(row.home_promo_slides),
+      home_promo_interval_seconds: clampHomePromoIntervalSeconds(row.home_promo_interval_seconds),
+    };
   }
 
   async updateTenantBranding(tenantId: string, data: any) {
-    const existingSlides = await this.db.query(
-      `SELECT home_promo_slides FROM tenant_branding WHERE tenant_id = $1`,
+    const existing = await this.db.query(
+      `SELECT home_promo_slides, home_promo_interval_seconds FROM tenant_branding WHERE tenant_id = $1`,
       [tenantId]
     );
     const slidesStored =
       data.home_promo_slides !== undefined
         ? homePromoSlidesToStoredJson(data.home_promo_slides)
-        : preserveHomePromoSlidesStored(existingSlides[0]?.home_promo_slides);
+        : preserveHomePromoSlidesStored(existing[0]?.home_promo_slides);
+    const intervalSec =
+      data.home_promo_interval_seconds !== undefined
+        ? clampHomePromoIntervalSeconds(data.home_promo_interval_seconds)
+        : clampHomePromoIntervalSeconds(existing[0]?.home_promo_interval_seconds);
 
     const res = await this.db.query(
       `INSERT INTO tenant_branding (
         tenant_id, logo_url, logo_dark_url, primary_color, secondary_color,
-        accent_color, font_family, theme_mode, address, lat, lng, home_promo_slides, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        accent_color, font_family, theme_mode, address, lat, lng,
+        home_promo_slides, home_promo_interval_seconds, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
       ON CONFLICT (tenant_id) DO UPDATE SET
         logo_url = EXCLUDED.logo_url,
         logo_dark_url = EXCLUDED.logo_dark_url,
@@ -2600,16 +2578,17 @@ export class ShopService {
         lat = EXCLUDED.lat,
         lng = EXCLUDED.lng,
         home_promo_slides = EXCLUDED.home_promo_slides,
+        home_promo_interval_seconds = EXCLUDED.home_promo_interval_seconds,
         updated_at = NOW()
       RETURNING *`,
       [
         tenantId, data.logo_url, data.logo_dark_url, data.primary_color,
         data.secondary_color, data.accent_color, data.font_family, data.theme_mode,
-        data.address, data.lat, data.lng, slidesStored
+        data.address, data.lat, data.lng, slidesStored, intervalSec
       ]
     );
     const row = res[0];
-    return { ...row, home_promo_slides: parseHomePromoSlides(row.home_promo_slides) };
+    return this.formatTenantBrandingRow(row);
   }
 
   // --- POS Settings ---

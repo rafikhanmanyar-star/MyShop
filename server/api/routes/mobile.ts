@@ -1325,10 +1325,11 @@ router.get('/orders/:id/delivery-eta', mobileAuthMiddleware(db), async (req: any
     }
 });
 
-// Order history
+// Order history (cart + voice awaiting invoice + delivery orders)
 router.get('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     try {
-        const result = await getMobileOrderService().getCustomerOrders(
+        const { getVoiceOrderService } = await import('../../services/voiceOrderService.js');
+        const result = await getVoiceOrderService().getCustomerOrderFeed(
             req.tenantId,
             req.customerId,
             req.query.cursor as string,

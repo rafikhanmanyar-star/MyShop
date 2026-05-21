@@ -21,6 +21,8 @@ import {
     buildWhatsAppWebSendUrl,
 } from '../../utils/whatsappManualSend';
 import { MobileOrdersLiveMap } from './MobileOrdersLiveMap';
+import HomePromoAdsEditor from './HomePromoAdsEditor';
+import { clampHomePromoIntervalSeconds } from '../../utils/homePromoLinks';
 
 interface ShopBranchOption {
     id: string;
@@ -2361,6 +2363,17 @@ function OrderDetailPanel({
     );
 }
 
+function normalizeBrandingPromoFields<T extends Record<string, unknown>>(b: T): T {
+    const slides = (b as { home_promo_slides?: unknown }).home_promo_slides;
+    return {
+        ...b,
+        home_promo_slides: Array.isArray(slides) ? slides : [],
+        home_promo_interval_seconds: clampHomePromoIntervalSeconds(
+            (b as { home_promo_interval_seconds?: unknown }).home_promo_interval_seconds
+        ),
+    };
+}
+
 // ─── Settings Panel (exported for use in Settings page) ───
 export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
     const { settings, branding, loadSettings, loadBranding, updateSettings, updateBranding } = useMobileOrders();
@@ -2392,14 +2405,14 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
     }, [settings]);
 
     useEffect(() => {
-        if (branding && !selectedBranchId) setLocalBranding({ ...branding });
+        if (branding && !selectedBranchId) setLocalBranding(normalizeBrandingPromoFields({ ...branding }));
     }, [branding, selectedBranchId]);
 
     // When branch selection changes, load branding and QR for that branch (or tenant default)
     useEffect(() => {
         const branchId = selectedBranchId || undefined;
         mobileOrdersApi.getBranding(branchId).then((b) => {
-            setLocalBranding({ ...b });
+            setLocalBranding(normalizeBrandingPromoFields({ ...b }));
         }).catch(() => {});
         mobileOrdersApi.getQRCode(branchId).then(setQrData).catch(() => setQrData(null));
     }, [selectedBranchId]);
@@ -2413,7 +2426,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                 mobileOrdersApi.getBranding(branchId),
                 mobileOrdersApi.getQRCode(branchId).catch(() => null),
             ]);
-            if (b) setLocalBranding({ ...b });
+            if (b) setLocalBranding(normalizeBrandingPromoFields({ ...b }));
             if (qr) setQrData(qr);
         } catch {
             alert('Failed to discard changes.');
@@ -2691,6 +2704,15 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         className="w-full rounded-2xl border border-slate-200 bg-[#F4F4F9] px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-[#004494] focus:ring-2 focus:ring-[#004494]/20 resize-y min-h-[3rem] dark:border-slate-600 dark:bg-slate-800/80"
                                     />
                                 </div>
+
+                                <HomePromoAdsEditor
+                                    variant="panel"
+                                    value={{
+                                        home_promo_slides: localBranding.home_promo_slides,
+                                        home_promo_interval_seconds: localBranding.home_promo_interval_seconds,
+                                    }}
+                                    onChange={(patch) => setLocalBranding({ ...localBranding, ...patch })}
+                                />
 
                                 <details className="rounded-xl border border-slate-200/80 bg-muted/30 px-3 py-2 text-sm dark:border-slate-600">
                                     <summary className="cursor-pointer font-medium text-muted-foreground">Map coordinates (optional)</summary>

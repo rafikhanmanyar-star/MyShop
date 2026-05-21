@@ -121,6 +121,13 @@ export interface PosRidersOverview {
     };
 }
 
+export interface HomePromoSlide {
+    image_url: string;
+    link_type?: 'none' | 'products' | 'offers' | 'deals' | 'recipes' | 'voice_order' | 'budget' | 'utilities' | 'custom';
+    link_url?: string | null;
+    title?: string | null;
+}
+
 export interface ShopBranding {
     slug: string | null;
     logo_url: string | null;
@@ -138,6 +145,8 @@ export interface ShopBranding {
     branchId?: string | null;
     branch_name?: string | null;
     branch_location?: string | null;
+    home_promo_slides?: HomePromoSlide[];
+    home_promo_interval_seconds?: number;
 }
 
 export interface MobileOnlineUser {

@@ -1460,6 +1460,14 @@ export class MobileOrderService {
         }
         const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
         notifyDailyReportUpdated(tenantId).catch(() => {});
+
+        try {
+            const { getVoiceOrderService } = await import('./voiceOrderService.js');
+            await getVoiceOrderService().syncStatusFromMobileOrder(tenantId, orderId, newStatus);
+        } catch (syncErr) {
+            console.warn('Voice order status sync skipped:', syncErr);
+        }
+
         return result;
     }
 

@@ -79,10 +79,24 @@ export interface ProductApiResult {
   data?: Record<string, unknown>;
 }
 
-/** Mobile home hero carousel — edited under POS → Mobile branding */
+/** Preset tap targets for mobile home ads (POS → Mobile branding). */
+export type HomePromoLinkType =
+  | 'none'
+  | 'products'
+  | 'offers'
+  | 'deals'
+  | 'recipes'
+  | 'voice_order'
+  | 'budget'
+  | 'utilities'
+  | 'custom';
+
+/** Mobile home ad carousel slide — edited under POS → Mobile branding */
 export interface HomePromoSlide {
   image_url: string;
+  link_type?: HomePromoLinkType;
   link_url?: string | null;
+  title?: string | null;
 }
 
 export interface TenantBranding {
@@ -97,6 +111,8 @@ export interface TenantBranding {
   theme_mode: string;
   /** Parsed JSON array from tenant_branding.home_promo_slides */
   home_promo_slides?: HomePromoSlide[];
+  /** Seconds between carousel slides (3–30) */
+  home_promo_interval_seconds?: number;
   created_at?: string;
   updated_at?: string;
 }

@@ -25,6 +25,9 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
     const analyserRef = useRef<AnalyserNode | null>(null);
     const animRef = useRef<number>(0);
     const resultRef = useRef<VoiceRecorderResult | null>(null);
+    /** Wall-clock seconds while recording — React `elapsed` in onstop is stale (closure). */
+    const elapsedRef = useRef(0);
+    const recordingStartedAtRef = useRef<number | null>(null);
 
     const stopTracks = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -62,6 +65,22 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
         if (previewUrl) URL.revokeObjectURL(previewUrl);
     }, [previewUrl]);
 
+    const measureDurationFromUrl = (url: string): Promise<number> =>
+        new Promise((resolve) => {
+            const audio = new Audio();
+            const done = (sec: number) => {
+                audio.src = '';
+                resolve(sec);
+            };
+            audio.preload = 'metadata';
+            audio.onloadedmetadata = () => {
+                const d = audio.duration;
+                done(Number.isFinite(d) && d > 0 ? d : 0);
+            };
+            audio.onerror = () => done(0);
+            audio.src = url;
+        });
+
     const pickMime = (): string => {
         const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
         for (const t of types) {
@@ -72,6 +91,13 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
 
     const startRecording = async () => {
         try {
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
+            }
+            resultRef.current = null;
+            onRecordingReady(null);
+
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
             const mime = pickMime();
@@ -79,14 +105,31 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
             chunksRef.current = [];
             rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
             rec.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: mime });
-                const url = URL.createObjectURL(blob);
-                setPreviewUrl(url);
-                const dur = elapsed;
-                resultRef.current = { blob, mimeType: mime, durationSeconds: dur, url };
-                setState('preview');
-                onRecordingReady(resultRef.current);
-                stopTracks();
+                void (async () => {
+                    const blob = new Blob(chunksRef.current, { type: mime });
+                    const url = URL.createObjectURL(blob);
+                    setPreviewUrl(url);
+
+                    let dur = elapsedRef.current;
+                    if (recordingStartedAtRef.current != null) {
+                        const wallSec = (Date.now() - recordingStartedAtRef.current) / 1000;
+                        dur = Math.max(dur, wallSec);
+                    }
+                    try {
+                        const metaSec = await measureDurationFromUrl(url);
+                        if (metaSec > 0) dur = Math.max(dur, metaSec);
+                    } catch { /* use wall / tick duration */ }
+
+                    dur = Math.round(dur * 10) / 10;
+                    if (dur < 0.1 && blob.size > 0) dur = 1;
+
+                    resultRef.current = { blob, mimeType: mime, durationSeconds: dur, url };
+                    setElapsed(Math.max(0, Math.ceil(dur)));
+                    setState('preview');
+                    onRecordingReady(resultRef.current);
+                    stopTracks();
+                    recordingStartedAtRef.current = null;
+                })();
             };
             mediaRef.current = rec;
             const ctx = new AudioContext();
@@ -97,15 +140,16 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
             analyserRef.current = analyser;
             rec.start(200);
             setState('recording');
+            elapsedRef.current = 0;
+            recordingStartedAtRef.current = Date.now();
             setElapsed(0);
             timerRef.current = setInterval(() => {
-                setElapsed((s) => {
-                    const next = s + 1;
-                    if (next >= maxSeconds) {
-                        stopRecording();
-                    }
-                    return next;
-                });
+                const next = elapsedRef.current + 1;
+                elapsedRef.current = next;
+                setElapsed(next);
+                if (next >= maxSeconds) {
+                    stopRecording();
+                }
             }, 1000);
             drawWave();
         } catch {
@@ -126,11 +170,10 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
             mediaRef.current.resume();
             setState('recording');
             timerRef.current = setInterval(() => {
-                setElapsed((s) => {
-                    const next = s + 1;
-                    if (next >= maxSeconds) stopRecording();
-                    return next;
-                });
+                const next = elapsedRef.current + 1;
+                elapsedRef.current = next;
+                setElapsed(next);
+                if (next >= maxSeconds) stopRecording();
             }, 1000);
         }
     };
@@ -145,6 +188,8 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
         if (previewUrl) URL.revokeObjectURL(previewUrl);
         setPreviewUrl(null);
         resultRef.current = null;
+        elapsedRef.current = 0;
+        recordingStartedAtRef.current = null;
         setElapsed(0);
         setState('idle');
         onRecordingReady(null);

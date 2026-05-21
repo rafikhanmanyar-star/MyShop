@@ -20,7 +20,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
     Cancelled: { label: 'Cancelled', color: 'bg-slate-100 text-slate-600' },
 };
 
-const FILTERS = ['All', 'Pending', 'Received', 'Preparing', 'InvoiceCreated'];
+const FILTERS = ['All', 'Pending', 'Received', 'Preparing', 'InvoiceCreated', 'Accepted', 'OutForDelivery'];
 
 function VoiceAudioPlayer({ src, duration }: { src: string; duration?: number }) {
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -162,10 +162,10 @@ export function VoiceOrderSettingsPanel({ onBack }: { onBack?: () => void }) {
 }
 
 export default function VoiceOrdersPage() {
-    const { orders, loading, loadOrders, refreshOrders } = useVoiceOrders();
+    const { orders, loading, loadOrders, refreshOrders, setListStatusFilter } = useVoiceOrders();
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
-    const [filter, setFilter] = useState('Pending');
+    const [filter, setFilter] = useState('All');
     const [detail, setDetail] = useState<VoiceOrder | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
 
@@ -182,20 +182,29 @@ export default function VoiceOrdersPage() {
         }
     }, []);
 
+    const statusParam = filter === 'All' ? undefined : filter;
+
     useEffect(() => {
-        void loadOrders(filter === 'All' ? undefined : filter);
-    }, [filter, loadOrders]);
+        setListStatusFilter(statusParam);
+        void loadOrders(statusParam);
+    }, [filter, loadOrders, setListStatusFilter, statusParam]);
 
     useEffect(() => {
         if (selectedId) void loadDetail(selectedId);
         else setDetail(null);
     }, [selectedId, loadDetail]);
 
+    useEffect(() => {
+        if (!selectedId) return;
+        const row = orders.find((o) => o.id === selectedId);
+        if (row) void loadDetail(selectedId);
+    }, [orders, selectedId, loadDetail]);
+
     const openOrder = (id: string) => setSearchParams({ order: id });
 
     const markReceived = async (id: string) => {
         await voiceOrdersApi.updateStatus(id, 'Received');
-        refreshOrders();
+        refreshOrders(statusParam);
         if (selectedId === id) void loadDetail(id);
     };
 
@@ -215,7 +224,7 @@ export default function VoiceOrdersPage() {
         <div className="flex flex-col h-full min-h-0 bg-slate-50 dark:bg-slate-950">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
                 <h1 className="text-xl font-bold flex items-center gap-2"><Mic className="text-primary-600" /> Voice Orders</h1>
-                <button type="button" onClick={refreshOrders} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                <button type="button" onClick={() => refreshOrders(statusParam)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
                     <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
                 </button>
             </div>
@@ -325,9 +334,16 @@ export default function VoiceOrdersPage() {
                                     </button>
                                 )}
                                 {detail.created_invoice_id && (
-                                    <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">
-                                        Linked invoice: {detail.invoice_number} — Rs. {Number(detail.invoice_grand_total || 0).toLocaleString()}
-                                    </p>
+                                    <div className="text-sm text-emerald-700 dark:text-emerald-300 font-medium space-y-2">
+                                        <p>Linked invoice: {detail.invoice_number} — Rs. {Number(detail.invoice_grand_total || 0).toLocaleString()}</p>
+                                        {(detail as VoiceOrder & { invoice_items?: { product_name: string; quantity: number; subtotal: number }[] }).invoice_items?.length ? (
+                                            <ul className="text-xs space-y-1 text-slate-700 dark:text-slate-300 font-normal">
+                                                {((detail as any).invoice_items as any[]).map((line, i) => (
+                                                    <li key={i}>• {line.product_name} ×{line.quantity} — Rs. {Number(line.subtotal || 0).toLocaleString()}</li>
+                                                ))}
+                                            </ul>
+                                        ) : null}
+                                    </div>
                                 )}
                                 {detail.mobile_order_id && (
                                     <a href={`/mobile-orders?order=${encodeURIComponent(detail.mobile_order_id)}`} className="btn btn-secondary">

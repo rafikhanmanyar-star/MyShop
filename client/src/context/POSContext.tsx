@@ -817,8 +817,10 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         sessionStorage.removeItem('myshop_pending_voice_order_phone');
                         sessionStorage.removeItem('myshop_pending_voice_delivery_mode');
                         showSaleToast('Sale completed. Voice order linked.', true);
-                    } catch (linkErr) {
+                    } catch (linkErr: any) {
                         console.warn('Voice order link failed:', linkErr);
+                        const msg = linkErr?.message || linkErr?.error || String(linkErr);
+                        alert(`Sale saved, but voice order link failed: ${msg}`);
                     }
                 }
 

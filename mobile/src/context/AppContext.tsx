@@ -46,9 +46,22 @@ export interface ShopInfo {
     delivery_area?: ShopDeliveryArea | null;
 }
 
+export type HomePromoLinkType =
+    | 'none'
+    | 'products'
+    | 'offers'
+    | 'deals'
+    | 'recipes'
+    | 'voice_order'
+    | 'budget'
+    | 'utilities'
+    | 'custom';
+
 export interface HomePromoSlide {
     image_url: string;
+    link_type?: HomePromoLinkType;
     link_url?: string | null;
+    title?: string | null;
 }
 
 export interface TenantBranding {
@@ -62,6 +75,8 @@ export interface TenantBranding {
     address?: string | null;
     /** POS-configured home promo images */
     home_promo_slides?: HomePromoSlide[];
+    /** Seconds between carousel slides (3–30) */
+    home_promo_interval_seconds?: number;
 }
 
 export interface ShopSettings {

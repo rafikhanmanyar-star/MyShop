@@ -67,7 +67,20 @@ export default function VoiceOrderForm({ requireLogin = true, onSwitchToCart, co
             goLogin();
             return;
         }
-        if (!recording || recording.durationSeconds < 2) {
+        let durationSec = recording?.durationSeconds ?? 0;
+        if (recording?.url && durationSec < 2) {
+            try {
+                const meta = await new Promise<number>((resolve) => {
+                    const a = new Audio();
+                    a.preload = 'metadata';
+                    a.onloadedmetadata = () => resolve(Number.isFinite(a.duration) ? a.duration : 0);
+                    a.onerror = () => resolve(0);
+                    a.src = recording!.url;
+                });
+                if (meta >= 2) durationSec = meta;
+            } catch { /* keep durationSec */ }
+        }
+        if (!recording || durationSec < 2) {
             showToast('Record at least 2 seconds');
             return;
         }
@@ -82,7 +95,7 @@ export default function VoiceOrderForm({ requireLogin = true, onSwitchToCart, co
                         notes: notes || undefined,
                         deliveryMode,
                         deliveryAddress: deliveryMode === 'delivery' ? address : undefined,
-                        audioDurationSeconds: recording.durationSeconds,
+                        audioDurationSeconds: durationSec,
                     },
                     audioBlob: recording.blob,
                     audioMime: recording.mimeType,
@@ -109,13 +122,13 @@ export default function VoiceOrderForm({ requireLogin = true, onSwitchToCart, co
                 deliveryAddress: deliveryMode === 'delivery' ? address : undefined,
                 deliveryLat,
                 deliveryLng,
-                audioDurationSeconds: recording.durationSeconds,
+                audioDurationSeconds: durationSec,
             });
             const orderId = created.id;
             setUploadPct(40);
             const ext = recording.mimeType.includes('mp4') ? 'm4a' : 'webm';
             const file = new File([recording.blob], `voice.${ext}`, { type: recording.mimeType });
-            await voiceOrderApi.uploadAudio(orderId, file, recording.durationSeconds, (p) => setUploadPct(40 + p * 0.6));
+            await voiceOrderApi.uploadAudio(orderId, file, durationSec, (p) => setUploadPct(40 + p * 0.6));
             showToast('Voice order sent!');
             navigate(`/${shopSlug}/voice-orders/${orderId}`);
         } catch (e: unknown) {

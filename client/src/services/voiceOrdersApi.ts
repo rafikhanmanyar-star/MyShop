@@ -22,6 +22,7 @@ export interface VoiceOrder {
     invoice_grand_total?: number;
     mobile_order_id?: string;
     mobile_order_number?: string;
+    invoice_items?: { product_name: string; product_sku?: string; quantity: number; subtotal: number }[];
     created_at: string;
     updated_at: string;
     status_history?: { to_status: string; created_at: string; note?: string }[];

@@ -21,6 +21,7 @@ const DEFAULT_BRANDING: TenantBranding = {
     font_family: 'system-ui',
     theme_mode: 'light',
     home_promo_slides: [],
+    home_promo_interval_seconds: 5,
 };
 
 function normalizeBrandingFromApi(raw: unknown): TenantBranding | null {
@@ -35,7 +36,13 @@ function normalizeBrandingFromApi(raw: unknown): TenantBranding | null {
         }
     }
     if (!Array.isArray(slides)) slides = [];
-    return { ...b, home_promo_slides: slides as HomePromoSlide[] };
+    const intervalRaw = (b as { home_promo_interval_seconds?: unknown }).home_promo_interval_seconds;
+    const intervalSec = Number(intervalRaw);
+    const home_promo_interval_seconds =
+        Number.isFinite(intervalSec) && intervalSec >= 3 && intervalSec <= 30
+            ? Math.round(intervalSec)
+            : 5;
+    return { ...b, home_promo_slides: slides as HomePromoSlide[], home_promo_interval_seconds };
 }
 
 function applyBranding(shopData: { shop: { company_name?: string; name: string; brand_color?: string } }, brandingData: { primary_color?: string; secondary_color?: string; accent_color?: string } | null) {

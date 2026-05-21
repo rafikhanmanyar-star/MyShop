@@ -34,12 +34,19 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
     Received: ['Preparing', 'Rejected', 'Cancelled'],
     Preparing: ['InvoiceCreated', 'Rejected', 'Cancelled'],
     InvoiceCreated: ['Accepted', 'Rejected', 'Cancelled'],
-    Accepted: ['OutForDelivery', 'Cancelled'],
+    Accepted: ['Preparing', 'OutForDelivery', 'Cancelled'],
     OutForDelivery: ['Delivered', 'Cancelled'],
     Delivered: [],
     Rejected: [],
     Cancelled: [],
 };
+
+function generateMobileOrderNumber(): string {
+    const now = new Date();
+    const datePart = now.toISOString().slice(2, 10).replace(/-/g, '');
+    const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `MO-${datePart}-${randPart}`;
+}
 
 export interface VoiceOrderSettings {
     tenant_id: string;
@@ -218,6 +225,14 @@ export class VoiceOrderService {
             [relativeUrl, mimeType, durationSeconds, orderId, tenantId]
         );
 
+        const statusRows = await this.db.query(
+            `SELECT status FROM voice_orders WHERE id = $1 AND tenant_id = $2`,
+            [orderId, tenantId]
+        );
+        if (statusRows[0]?.status === 'Pending') {
+            await this.updateStatus(tenantId, orderId, 'Received', 'system', 'system', 'Audio received');
+        }
+
         if (settings.transcription_enabled && fs.existsSync(filePath)) {
             const buf = fs.readFileSync(filePath);
             const provider = settings.transcription_provider || 'none';
@@ -276,7 +291,33 @@ export class VoiceOrderService {
             `SELECT * FROM voice_order_status_history WHERE voice_order_id = $1 ORDER BY created_at ASC`,
             [orderId]
         );
-        return enrichOrderRow({ ...rows[0], status_history: history });
+        const row = rows[0] as Record<string, unknown>;
+        let invoice_items: unknown[] = [];
+        if (row.created_invoice_id) {
+            invoice_items = await this.db.query(
+                `SELECT si.product_id, si.quantity, si.unit_price, si.tax_amount, si.discount_amount, si.subtotal,
+                  p.name AS product_name, p.sku AS product_sku
+                 FROM shop_sale_items si
+                 JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
+                 WHERE si.sale_id = $1 AND si.tenant_id = $2
+                 ORDER BY si.created_at ASC`,
+                [row.created_invoice_id, tenantId]
+            );
+        }
+        let mobile_order_items: unknown[] = [];
+        if (row.mobile_order_id) {
+            mobile_order_items = await this.db.query(
+                `SELECT product_id, product_name, product_sku, quantity, unit_price, tax_amount, discount_amount, subtotal
+                 FROM mobile_order_items WHERE order_id = $1 AND tenant_id = $2`,
+                [row.mobile_order_id, tenantId]
+            );
+        }
+        return enrichOrderRow({
+            ...row,
+            status_history: history,
+            invoice_items,
+            mobile_order_items,
+        });
     }
 
     async listOrders(
@@ -310,10 +351,14 @@ export class VoiceOrderService {
         params.push(limit + 1);
         const rows = await this.db.query(
             `SELECT vo.*, mc.name AS customer_name, mc.phone AS customer_phone,
-              b.name AS branch_name
+              b.name AS branch_name,
+              mo.order_number AS mobile_order_number, mo.status AS mobile_order_status,
+              s.sale_number AS invoice_number, s.grand_total AS invoice_grand_total
              FROM voice_orders vo
              JOIN mobile_customers mc ON mc.id = vo.customer_id AND mc.tenant_id = vo.tenant_id
              LEFT JOIN shop_branches b ON b.id = vo.branch_id
+             LEFT JOIN mobile_orders mo ON mo.id = vo.mobile_order_id AND mo.tenant_id = vo.tenant_id
+             LEFT JOIN shop_sales s ON s.id = vo.created_invoice_id AND s.tenant_id = vo.tenant_id
              ${where}
              ORDER BY vo.created_at DESC
              LIMIT $${idx}`,
@@ -382,52 +427,234 @@ export class VoiceOrderService {
 
         let mobileOrderId: string | null = order.mobile_order_id as string | null;
         if (opts?.createMobileOrder !== false && !mobileOrderId) {
-            mobileOrderId = await this.createMobileOrderFromSale(tenantId, order, saleId, opts?.paymentMethod);
-            if (mobileOrderId) {
-                await this.db.execute(
-                    `UPDATE voice_orders SET mobile_order_id = $1 WHERE id = $2 AND tenant_id = $3`,
-                    [mobileOrderId, orderId, tenantId]
-                );
+            mobileOrderId = await this.createMobileOrderFromInvoice(
+                tenantId,
+                order,
+                saleId,
+                opts?.paymentMethod
+            );
+            if (!mobileOrderId) {
+                throw new Error('Could not create delivery order from invoice. Add line items to the POS sale and try again.');
             }
+            await this.db.execute(
+                `UPDATE voice_orders SET mobile_order_id = $1 WHERE id = $2 AND tenant_id = $3`,
+                [mobileOrderId, orderId, tenantId]
+            );
+        }
+
+        const currentAfter = await this.db.query(
+            `SELECT status FROM voice_orders WHERE id = $1 AND tenant_id = $2`,
+            [orderId, tenantId]
+        );
+        const st = String(currentAfter[0]?.status || 'InvoiceCreated');
+        if (st === 'InvoiceCreated') {
+            await this.updateStatus(tenantId, orderId, 'Accepted', changedBy, 'shop_user', 'Invoice linked — ready for delivery');
         }
 
         return this.getOrderById(tenantId, orderId);
     }
 
-    private async createMobileOrderFromSale(
+    /**
+     * Creates a mobile_orders row from a completed POS sale (no extra stock reservation).
+     * Stock was already deducted at checkout; inventory_deducted=TRUE skips mobile fulfillment deduction.
+     */
+    private async createMobileOrderFromInvoice(
         tenantId: string,
         voiceOrder: Record<string, unknown>,
         saleId: string,
         paymentMethod?: string
     ): Promise<string | null> {
-        const items = await this.db.query(
-            `SELECT product_id, quantity FROM shop_sale_items WHERE sale_id = $1 AND tenant_id = $2`,
+        const saleRows = await this.db.query(
+            `SELECT id, branch_id, subtotal, tax_total, discount_total, grand_total, payment_method
+             FROM shop_sales WHERE id = $1 AND tenant_id = $2`,
             [saleId, tenantId]
         );
-        if (!items.length) return null;
+        if (!saleRows.length) return null;
+
+        const sale = saleRows[0] as Record<string, unknown>;
+        const itemRows = await this.db.query(
+            `SELECT si.product_id, si.quantity, si.unit_price, si.tax_amount, si.discount_amount, si.subtotal,
+              p.name AS product_name, p.sku AS product_sku
+             FROM shop_sale_items si
+             JOIN shop_products p ON p.id = si.product_id AND p.tenant_id = si.tenant_id
+             WHERE si.sale_id = $1 AND si.tenant_id = $2`,
+            [saleId, tenantId]
+        );
+        if (!itemRows.length) return null;
 
         const pm = paymentMethod
-            || (voiceOrder.delivery_mode === 'pickup' ? 'SelfCollection' : 'COD');
+            || (voiceOrder.delivery_mode === 'pickup' ? 'SelfCollection' : String(sale.payment_method || 'COD'));
+        const deliveryNotes = voiceOrder.notes
+            ? `Voice ${voiceOrder.order_number}: ${voiceOrder.notes}`
+            : `Voice order ${voiceOrder.order_number}`;
+        const branchId = (voiceOrder.branch_id as string) || (sale.branch_id as string) || null;
+        const deliveryLat = voiceOrder.delivery_lat != null ? Number(voiceOrder.delivery_lat) : null;
+        const deliveryLng = voiceOrder.delivery_lng != null ? Number(voiceOrder.delivery_lng) : null;
+
+        const orderId = await this.db.transaction(async (client: any) => {
+            const mordId = generateId('mord');
+            const orderNumber = generateMobileOrderNumber();
+            const nowExpr = this.db.getType() === 'sqlite' ? "datetime('now')" : 'NOW()';
+
+            await client.query(
+                `INSERT INTO mobile_orders (
+                  id, tenant_id, customer_id, branch_id, order_number, status,
+                  subtotal, tax_total, discount_total, delivery_fee, grand_total,
+                  payment_method, payment_status,
+                  delivery_address, delivery_lat, delivery_lng, delivery_notes,
+                  assigned_branch_id, inventory_deducted, pos_synced, pos_synced_at,
+                  created_at, updated_at
+                ) VALUES (
+                  $1,$2,$3,$4,$5,'Pending',
+                  $6,$7,$8,$9,$10,
+                  $11,'Unpaid',
+                  $12,$13,$14,$15,
+                  $16,TRUE,TRUE,${nowExpr},
+                  ${nowExpr},${nowExpr}
+                )`,
+                [
+                    mordId,
+                    tenantId,
+                    String(voiceOrder.customer_id),
+                    branchId,
+                    orderNumber,
+                    sale.subtotal,
+                    sale.tax_total,
+                    sale.discount_total ?? 0,
+                    0,
+                    sale.grand_total,
+                    pm,
+                    voiceOrder.delivery_address || null,
+                    deliveryLat,
+                    deliveryLng,
+                    deliveryNotes,
+                    branchId,
+                ]
+            );
+
+            for (const line of itemRows as Record<string, unknown>[]) {
+                await client.query(
+                    `INSERT INTO mobile_order_items (
+                      id, tenant_id, order_id, product_id, product_name, product_sku,
+                      quantity, unit_price, tax_amount, discount_amount, subtotal
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                    [
+                        generateId('moi'),
+                        tenantId,
+                        mordId,
+                        line.product_id,
+                        line.product_name,
+                        line.product_sku,
+                        line.quantity,
+                        line.unit_price,
+                        line.tax_amount ?? 0,
+                        line.discount_amount ?? 0,
+                        line.subtotal,
+                    ]
+                );
+            }
+
+            await client.query(
+                `INSERT INTO mobile_order_status_history (id, tenant_id, order_id, from_status, to_status, changed_by, changed_by_type, note)
+                 VALUES ($1,$2,$3,NULL,'Pending','system','system',$4)`,
+                [generateId('mosh'), tenantId, mordId, `Created from voice order ${voiceOrder.order_number}`]
+            );
+
+            if (pm !== 'SelfCollection') {
+                try {
+                    const { tryAutoAssignRiderForMobileOrder } = await import('./deliveryAssignment.js');
+                    await tryAutoAssignRiderForMobileOrder(client, tenantId, mordId, {
+                        deliveryLat,
+                        deliveryLng,
+                        assignedBranchId: branchId,
+                    });
+                } catch (riderErr) {
+                    console.warn('Voice order rider auto-assign skipped:', riderErr);
+                }
+            }
+
+            return mordId;
+        });
+
+        return orderId;
+    }
+
+    /** Keep voice order status aligned with linked mobile_orders delivery pipeline. */
+    async syncStatusFromMobileOrder(tenantId: string, mobileOrderId: string, mobileStatus: string) {
+        const rows = await this.db.query(
+            `SELECT id, status FROM voice_orders WHERE tenant_id = $1 AND mobile_order_id = $2`,
+            [tenantId, mobileOrderId]
+        );
+        if (!rows.length) return;
+
+        const voiceId = String(rows[0].id);
+        const current = String(rows[0].status);
+        const map: Partial<Record<string, VoiceOrderStatus>> = {
+            OutForDelivery: 'OutForDelivery',
+            Delivered: 'Delivered',
+            Cancelled: 'Cancelled',
+        };
+        const target = map[mobileStatus];
+        if (!target || current === target) return;
+
         try {
-            const result = await getMobileOrderService().placeOrder(tenantId, {
-                customerId: String(voiceOrder.customer_id),
-                branchId: (voiceOrder.branch_id as string) || undefined,
-                items: items.map((i: { product_id: string; quantity: number }) => ({
-                    productId: i.product_id,
-                    quantity: Number(i.quantity),
-                })),
-                deliveryAddress: voiceOrder.delivery_address as string | undefined,
-                deliveryLat: voiceOrder.delivery_lat != null ? Number(voiceOrder.delivery_lat) : undefined,
-                deliveryLng: voiceOrder.delivery_lng != null ? Number(voiceOrder.delivery_lng) : undefined,
-                deliveryNotes: voiceOrder.notes ? `Voice order ${voiceOrder.order_number}: ${voiceOrder.notes}` : `Voice order ${voiceOrder.order_number}`,
-                paymentMethod: pm,
-            });
-            const placed = result as { order?: { id?: string } };
-            return placed?.order?.id || null;
-        } catch (e) {
-            console.warn('Could not create mobile order from voice invoice:', e);
-            return null;
+            await this.updateStatus(tenantId, voiceId, target, 'system', 'system', `Synced from delivery order (${mobileStatus})`);
+        } catch {
+            const nowExpr = this.db.getType() === 'sqlite' ? "datetime('now')" : 'NOW()';
+            await this.db.execute(
+                `UPDATE voice_orders SET status = $1, updated_at = ${nowExpr} WHERE id = $2 AND tenant_id = $3`,
+                [target, voiceId, tenantId]
+            );
+            await this.recordStatus(tenantId, voiceId, current, target, 'system', 'system', `Synced from delivery (${mobileStatus})`);
         }
+    }
+
+    /** Customer order history: mobile orders + voice orders still awaiting invoice. */
+    async getCustomerOrderFeed(tenantId: string, customerId: string, cursor?: string, limit = 20) {
+        const mobile = await getMobileOrderService().getCustomerOrders(tenantId, customerId, cursor, limit);
+        const voicePending = await this.listOrders(tenantId, {
+            customerId,
+            limit: 30,
+        });
+        const awaiting = (voicePending.items as Record<string, unknown>[]).filter(
+            (v) => !v.mobile_order_id
+        );
+
+        const voiceCards = awaiting.map((v) => ({
+            id: v.mobile_order_id || v.id,
+            order_number: (v.mobile_order_number as string) || (v.order_number as string),
+            status: v.mobile_order_id
+                ? (v.mobile_order_status as string)
+                : v.status === 'Pending'
+                  ? 'AwaitingShop'
+                  : (v.status as string),
+            grand_total: v.invoice_grand_total ?? null,
+            payment_method: v.delivery_mode === 'pickup' ? 'SelfCollection' : 'COD',
+            payment_status: 'Unpaid',
+            delivery_address: v.delivery_address,
+            created_at: v.created_at,
+            updated_at: v.updated_at,
+            order_type: 'voice' as const,
+            voice_order_id: v.id,
+        }));
+
+        const mobileCards = (mobile.items as Record<string, unknown>[]).map((m) => ({
+            ...m,
+            order_type: 'mobile' as const,
+            voice_order_id: null,
+        }));
+
+        const merged = [...voiceCards, ...mobileCards].sort(
+            (a, b) =>
+                new Date(String((a as { created_at?: string }).created_at || 0)).getTime() -
+                new Date(String((b as { created_at?: string }).created_at || 0)).getTime()
+        );
+
+        return {
+            items: merged.slice(0, limit),
+            nextCursor: mobile.nextCursor,
+            hasMore: mobile.hasMore || voiceCards.length > 0,
+        };
     }
 
     async customerApprove(tenantId: string, orderId: string, customerId: string) {
