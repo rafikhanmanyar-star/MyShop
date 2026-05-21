@@ -10,7 +10,7 @@ type FinalCTAProps = {
 };
 
 export default function FinalCTA({ headingLevel = 'h2' }: FinalCTAProps) {
-  const install = siteImages.pwaInstall;
+  const orderQr = siteImages.scanToOrderQr;
 
   return (
     <section className="pb-16 sm:pb-20" aria-labelledby="install-pwa-heading">
@@ -49,15 +49,18 @@ export default function FinalCTA({ headingLevel = 'h2' }: FinalCTAProps) {
               <h3 className="text-sm font-semibold text-white">Add to home screen</h3>
               <p className="text-xs text-white/75">Fast · Secure · Always with you</p>
               <InstallButton variant="white" className="w-full px-6 py-3" />
-              <figure className="overflow-hidden rounded-xl bg-white">
+              <figure className="rounded-xl bg-white p-3 text-center">
                 <OptimizedImage
-                  src={install.src}
-                  alt={install.alt}
-                  width={install.width}
-                  height={install.height}
-                  sizes="160px"
-                  className="h-24 w-24 object-cover object-top"
+                  src={orderQr.src}
+                  alt={orderQr.alt}
+                  width={orderQr.width}
+                  height={orderQr.height}
+                  sizes="120px"
+                  className="mx-auto h-auto w-full max-w-[120px]"
                 />
+                <figcaption className="mt-2 text-xs font-medium text-text-dark">
+                  Scan to Order Online
+                </figcaption>
               </figure>
             </div>
           </div>
