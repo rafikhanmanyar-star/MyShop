@@ -101,7 +101,12 @@ interface POSContextType {
     setCustomer: (customer: POSCustomer | null) => void;
 
     payments: POSPayment[];
-    addPayment: (method: POSPaymentMethod, amount: number, reference?: string, bankAccount?: { id: string; name: string }) => void;
+    addPayment: (
+        method: POSPaymentMethod,
+        amount: number,
+        reference?: string,
+        payFrom?: { chartAccountId: string; name: string; bankAccountId?: string }
+    ) => void;
     removePayment: (paymentId: string) => void;
 
     heldSales: POSHeldSale[];
@@ -110,6 +115,10 @@ interface POSContextType {
 
     /** Unit price of the most recently added cart line (for POS summary strip). */
     lastAddedUnitPrice: number | null;
+
+    /** Keyboard-highlighted catalog product (shown in cart payable strip). */
+    focusedCatalogProduct: { name: string; unitPrice: number } | null;
+    setFocusedCatalogProduct: (product: { name: string; unitPrice: number } | null) => void;
 
     subtotal: number;
     taxTotal: number;
@@ -159,6 +168,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { state } = useAppContext(); // Access app state for print settings
     const [cart, setCart] = useState<POSCartItem[]>([]);
     const [lastAddedUnitPrice, setLastAddedUnitPrice] = useState<number | null>(null);
+    const [focusedCatalogProduct, setFocusedCatalogProduct] = useState<{ name: string; unitPrice: number } | null>(null);
     const [customer, setCustomer] = useState<POSCustomer | null>(null);
     const [payments, setPayments] = useState<POSPayment[]>([]);
     const [heldSales, setHeldSales] = useState<POSHeldSale[]>([]);
@@ -370,6 +380,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             apiClient.setBranchId(branchId);
             setCart([]);
             setLastAddedUnitPrice(null);
+            setFocusedCatalogProduct(null);
             setPayments([]);
             setCustomer(null);
             setHeldSales([]);
@@ -590,14 +601,21 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCustomer(null);
     }, []);
 
-    const addPayment = useCallback((method: POSPaymentMethod, amount: number, reference?: string, bankAccount?: { id: string; name: string }) => {
+    const addPayment = useCallback((
+        method: POSPaymentMethod,
+        amount: number,
+        reference?: string,
+        payFrom?: { chartAccountId: string; name: string; bankAccountId?: string }
+    ) => {
         setPayments(prev => [...prev, {
             id: crypto.randomUUID(),
             method,
             amount,
             reference,
-            bankAccountId: bankAccount?.id,
-            bankAccountName: bankAccount?.name
+            chartAccountId: payFrom?.chartAccountId,
+            chartAccountName: payFrom?.name,
+            bankAccountId: payFrom?.bankAccountId,
+            bankAccountName: payFrom?.bankAccountId ? payFrom?.name : undefined,
         }]);
     }, []);
 
@@ -938,6 +956,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const value = {
         cart,
         lastAddedUnitPrice,
+        focusedCatalogProduct,
+        setFocusedCatalogProduct,
         addToCart,
         removeFromCart,
         updateCartItem,

@@ -29,8 +29,10 @@ export interface CreatePurchaseBillInput {
   paidAmount?: number;
   /** Cash | Bank | Credit. If Credit, paidAmount should be 0. */
   paymentStatus: 'Credit' | 'Paid' | 'Partial';
-  /** For Paid/Partial: bankAccountId for Bank, or null for Cash */
+  /** For Paid/Partial: legacy shop_bank_accounts id */
   bankAccountId?: string;
+  /** For Paid/Partial: chart of accounts asset id to pay from (preferred) */
+  chartAccountId?: string;
   notes?: string;
   userId?: string;
   /**
@@ -58,6 +60,10 @@ export interface SupplierPaymentInput {
 import { getAccountingService } from './accountingService.js';
 import { invalidateInventorySkuListCache } from './shopService.js';
 import { COA } from '../constants/accountCodes.js';
+import {
+  isPayFromEligibleAssetAccount,
+  paymentMethodForPayFromAccount,
+} from '../utils/payFromAccounts.js';
 
 export class ProcurementService {
   private db = getDatabaseService();
@@ -152,18 +158,23 @@ export class ProcurementService {
           'Cannot pay from a summary account. Select a detail cash or bank account from Chart of Accounts.'
         );
       }
-      const code = String(acc.code || '').trim();
-      const allowed =
-        (code.startsWith('111') && code.length >= 5) ||
-        ['AST-100', 'AST-101', 'AST-102'].includes(code);
+      const childRows = await client.query(
+        `SELECT 1 FROM accounts WHERE tenant_id = $1 AND parent_account_id = $2 LIMIT 1`,
+        [tenantId, data.chartAccountId]
+      );
       const bankLink = await client.query(
         `SELECT id FROM shop_bank_accounts
          WHERE tenant_id = $1 AND chart_account_id = $2 AND is_active = TRUE LIMIT 1`,
         [tenantId, data.chartAccountId]
       );
-      if (!allowed && bankLink.length === 0) {
+      if (
+        !isPayFromEligibleAssetAccount(acc, {
+          hasChildren: childRows.length > 0,
+          linkedToBank: bankLink.length > 0,
+        })
+      ) {
         throw new Error(
-          'Selected account is not a cash or bank account. Choose an account under Cash & Cash Equivalents (111xx) in Chart of Accounts.'
+          'Selected account cannot be used for payments. Choose an active cash or bank Asset account from Chart of Accounts (not inventory or other non-cash assets).'
         );
       }
       return {
@@ -310,10 +321,23 @@ export class ProcurementService {
     if (amount <= 0) return;
     if (data.paymentStatus !== 'Paid' && data.paymentStatus !== 'Partial') return;
 
+    let paymentMethod: 'Cash' | 'Bank' = 'Cash';
+    if (data.chartAccountId) {
+      const codeRows = await client.query(
+        `SELECT code FROM accounts WHERE id = $1 AND tenant_id = $2`,
+        [data.chartAccountId, tenantId]
+      );
+      paymentMethod = paymentMethodForPayFromAccount(
+        codeRows.length > 0 ? String(codeRows[0].code || '') : undefined
+      );
+    } else if (data.bankAccountId) {
+      paymentMethod = 'Bank';
+    }
     await this.applySupplierPaymentInTransaction(client, tenantId, {
       supplierId: data.supplierId,
       amount,
-      paymentMethod: data.bankAccountId ? 'Bank' : 'Cash',
+      paymentMethod,
+      chartAccountId: data.chartAccountId,
       bankAccountId: data.bankAccountId,
       paymentDate: data.billDate,
       reference: `Pay-${data.billNumber}`,

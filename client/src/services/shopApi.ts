@@ -56,6 +56,9 @@ export interface ShopBankAccount {
   id: string;
   name: string;
   code?: string;
+  /** Linked chart of accounts row id */
+  chart_account_id?: string;
+  chartAccountId?: string;
   /** Chart of accounts code (e.g. AST-100, AST-101) when linked */
   chart_code?: string;
   account_type: string;

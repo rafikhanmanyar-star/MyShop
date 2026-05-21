@@ -3,9 +3,15 @@ import Modal from '../../ui/Modal';
 import { usePOS } from '../../../context/POSContext';
 import { POSPaymentMethod } from '../../../types/pos';
 import { ICONS, CURRENCY } from '../../../constants';
-import { shopApi, ShopBankAccount } from '../../../services/shopApi';
 import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 import { showAppToast } from '../../../utils/appToast';
+import { usePayFromAccounts } from '../../../hooks/usePayFromAccounts';
+import {
+    formatPayFromAccountLabel,
+    isPosCashStylePayFromAccount,
+    pickDefaultPayFromAccountId,
+    type PayFromAccountOption,
+} from '../../../utils/payFromAccounts';
 
 const PaymentModal: React.FC = () => {
     const {
@@ -26,40 +32,61 @@ const PaymentModal: React.FC = () => {
 
     const [tenderAmount, setTenderAmount] = useState('0');
     const [selectedMethod, setSelectedMethod] = useState<POSPaymentMethod>(POSPaymentMethod.CASH);
-    const [bankAccounts, setBankAccounts] = useState<ShopBankAccount[]>([]);
-    const [selectedBankId, setSelectedBankId] = useState<string>('');
+    const [selectedChartAccountId, setSelectedChartAccountId] = useState('');
+    const { payFromAccounts, reload: reloadPayFrom } = usePayFromAccounts();
 
     const isKhata = selectedMethod === POSPaymentMethod.KHATA;
     const khataRequiresCustomer = isKhata && (!customer || customer.id === 'walk-in');
 
-    const loadBanks = useCallback(async () => {
-        try {
-            const list = await shopApi.getBankAccounts(true);
-            setBankAccounts(Array.isArray(list) ? list : []);
-            setSelectedBankId(prev => (list?.length && (!prev || !list.some((b: ShopBankAccount) => b.id === prev))) ? list[0].id : prev);
-        } catch (e) {
-            setBankAccounts([]);
-            if (isApiConnectivityFailure(e)) {
-                showAppToast(userMessageForApiError(e, 'Could not load bank accounts for checkout.'), 'error');
-            }
-        }
-    }, []);
+    const accountsForMethod = useCallback(
+        (method: POSPaymentMethod): PayFromAccountOption[] => {
+            if (method === POSPaymentMethod.KHATA) return [];
+            const cashStyle = method === POSPaymentMethod.CASH;
+            const filtered = payFromAccounts.filter((a) =>
+                cashStyle ? isPosCashStylePayFromAccount(a) : !isPosCashStylePayFromAccount(a)
+            );
+            return filtered.length > 0 ? filtered : payFromAccounts;
+        },
+        [payFromAccounts]
+    );
+
+    const pickDefaultForMethod = useCallback(
+        (method: POSPaymentMethod) => {
+            const list = accountsForMethod(method);
+            return pickDefaultPayFromAccountId(list);
+        },
+        [accountsForMethod]
+    );
 
     useEffect(() => {
-        if (isPaymentModalOpen) loadBanks();
-    }, [isPaymentModalOpen, loadBanks]);
+        if (isPaymentModalOpen) void reloadPayFrom();
+    }, [isPaymentModalOpen, reloadPayFrom]);
 
     useEffect(() => {
         if (isPaymentModalOpen) {
             setTenderAmount(balanceDue.toString());
+            setSelectedChartAccountId((prev) =>
+                prev && payFromAccounts.some((a) => a.id === prev)
+                    ? prev
+                    : pickDefaultForMethod(selectedMethod)
+            );
         }
-    }, [isPaymentModalOpen, balanceDue]);
+    }, [isPaymentModalOpen, balanceDue, payFromAccounts, selectedMethod, pickDefaultForMethod]);
 
     const handleAddPayment = async () => {
         const amount = parseFloat(tenderAmount);
         if (amount > 0) {
-            const bank = !isKhata ? bankAccounts.find(b => b.id === selectedBankId) : undefined;
-            addPayment(selectedMethod, amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
+            const acc = !isKhata ? payFromAccounts.find((a) => a.id === selectedChartAccountId) : undefined;
+            if (!isKhata && !acc) {
+                showAppToast('Select an account from Chart of Accounts to receive this payment.', 'error');
+                return;
+            }
+            addPayment(
+                selectedMethod,
+                amount,
+                undefined,
+                acc ? { chartAccountId: acc.id, name: acc.name } : undefined
+            );
             setTenderAmount('0');
         }
     };
@@ -108,15 +135,10 @@ const PaymentModal: React.FC = () => {
                                             key={method}
                                             onClick={() => {
                                                 setSelectedMethod(method);
-                                                if (method === POSPaymentMethod.CASH) {
-                                                    const cashBank = bankAccounts.find(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'));
-                                                    if (cashBank) setSelectedBankId(cashBank.id);
-                                                } else if (method === POSPaymentMethod.KHATA) {
-                                                    setSelectedBankId('');
+                                                if (method === POSPaymentMethod.KHATA) {
+                                                    setSelectedChartAccountId('');
                                                 } else {
-                                                    const firstOnline = bankAccounts.find(b => b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash'));
-                                                    if (firstOnline) setSelectedBankId(firstOnline.id);
-                                                    else setSelectedBankId('');
+                                                    setSelectedChartAccountId(pickDefaultForMethod(method));
                                                 }
                                             }}
                                             className={`flex flex-col items-center justify-center p-6 rounded-3xl border-2 transition-all relative group overflow-hidden ${selectedMethod === method
@@ -153,17 +175,26 @@ const PaymentModal: React.FC = () => {
                                     </div>
                                     <select
                                         className="block w-full rounded-[1.25rem] border-2 border-slate-50 bg-[#f8fafc] pl-14 pr-6 py-3 text-sm font-semibold text-slate-800 transition-all outline-none focus:bg-white focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 appearance-none"
-                                        value={selectedBankId}
-                                        onChange={e => setSelectedBankId(e.target.value)}
-                                        disabled={selectedMethod === POSPaymentMethod.CASH && bankAccounts.some(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'))}
+                                        value={selectedChartAccountId}
+                                        onChange={(e) => setSelectedChartAccountId(e.target.value)}
+                                        disabled={accountsForMethod(selectedMethod).length === 0}
                                     >
-                                        <option value="">{selectedMethod === POSPaymentMethod.CASH ? 'Primary Cash Account' : 'Choose Online Account'}</option>
-                                        {bankAccounts
-                                            .filter(b => selectedMethod === POSPaymentMethod.CASH ? (b.account_type === 'Cash' || b.name.toLowerCase().includes('cash')) : (b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash')))
-                                            .map(b => (
-                                                <option key={b.id} value={b.id}>{b.name}{b.chart_code ? ` — ${b.chart_code}` : b.code ? ` — ${b.code}` : ''}</option>
-                                            ))}
+                                        <option value="">
+                                            {selectedMethod === POSPaymentMethod.CASH
+                                                ? 'Select cash account'
+                                                : 'Select online / bank account'}
+                                        </option>
+                                        {accountsForMethod(selectedMethod).map((acc) => (
+                                            <option key={acc.id} value={acc.id}>
+                                                {formatPayFromAccountLabel(acc)}
+                                            </option>
+                                        ))}
                                     </select>
+                                    {payFromAccounts.length === 0 && (
+                                        <p className="mt-2 text-xs text-amber-700">
+                                            Add cash or bank Asset accounts in Settings → Chart of Accounts.
+                                        </p>
+                                    )}
                                     <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">
                                         {ICONS.chevronDown}
                                     </div>

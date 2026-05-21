@@ -231,6 +231,7 @@ const ProductSearch: React.FC = () => {
         addToCart,
         searchQuery,
         setSearchQuery,
+        setFocusedCatalogProduct,
         selectedBranchId,
         isDenseMode,
         isPaymentModalOpen,
@@ -707,6 +708,15 @@ const ProductSearch: React.FC = () => {
         recentProductIds,
         favoriteProductIds,
     ]);
+
+    useEffect(() => {
+        if (keyboardIndex >= 0 && filteredProducts[keyboardIndex]) {
+            const p = filteredProducts[keyboardIndex];
+            setFocusedCatalogProduct({ name: p.name, unitPrice: p.price });
+        } else {
+            setFocusedCatalogProduct(null);
+        }
+    }, [keyboardIndex, filteredProducts, setFocusedCatalogProduct]);
 
     // Keyboard navigation
     useEffect(() => {

@@ -448,7 +448,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       items: [] as LineItem[],
       paymentStatus: 'Credit' as PaymentStatus,
       paidAmount: 0,
-      bankAccountId: '',
+      chartAccountId: '',
       notes: '',
     });
     const [productSearch, setProductSearch] = useState('');
@@ -1130,6 +1130,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       }
     }, [form.paymentStatus, totalAmount]);
 
+    useEffect(() => {
+      if (
+        (form.paymentStatus === 'Paid' || form.paymentStatus === 'Partial') &&
+        !form.chartAccountId &&
+        payFromAccounts.length > 0
+      ) {
+        setForm((f) => ({ ...f, chartAccountId: pickDefaultPayFromAccountId(payFromAccounts) }));
+      }
+    }, [form.paymentStatus, form.chartAccountId, payFromAccounts]);
+
     const addItem = (p: ProductOption) => {
       const unitCost =
         parseMoney(p.cost_price ?? p.costPrice) ||
@@ -1187,7 +1197,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         items: [],
         paymentStatus: 'Credit',
         paidAmount: 0,
-        bankAccountId: '',
+        chartAccountId: pickDefaultPayFromAccountId(payFromAccounts),
         notes: '',
       });
       setVendorSearch('');
@@ -1196,7 +1206,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       setEditingIsDraft(false);
       setFormErrors({});
       setAutoBillMode(false);
-    }, []);
+    }, [payFromAccounts]);
 
     const applyVendorAutoLines = useCallback(async (supplierId: string, coverDays: number) => {
       const sid = String(supplierId || '').trim();
@@ -1289,7 +1299,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         items: [],
         paymentStatus: 'Credit',
         paidAmount: 0,
-        bankAccountId: '',
+        chartAccountId: pickDefaultPayFromAccountId(payFromAccounts),
         notes: '',
       });
       setVendorSearch(
@@ -1610,6 +1620,13 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       }
       setFormErrors({});
       if (!validatePostedLines()) return;
+      if (
+        (form.paymentStatus === 'Paid' || form.paymentStatus === 'Partial') &&
+        (!form.chartAccountId || payFromAccounts.length === 0)
+      ) {
+        alert('Select a Pay from account from Chart of Accounts (Settings → Chart of Accounts).');
+        return;
+      }
       setLoading(true);
       try {
         if (form.items.length > 0) {
@@ -1637,7 +1654,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           totalAmount: total,
           paymentStatus: form.paymentStatus,
           paidAmount: form.paymentStatus !== 'Credit' ? form.paidAmount || total : 0,
-          bankAccountId: form.bankAccountId || undefined,
+          chartAccountId: form.chartAccountId || undefined,
           notes: form.notes || undefined,
         };
 
@@ -1942,9 +1959,9 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                     paidAmount={form.paidAmount}
                     onPaidAmountChange={(n) => setForm((f) => ({ ...f, paidAmount: n }))}
                     totalAmount={totalAmount}
-                    bankAccountId={form.bankAccountId}
-                    onBankAccountChange={(id) => setForm((f) => ({ ...f, bankAccountId: id }))}
-                    bankAccounts={bankAccounts.map((b) => ({ id: b.id, name: b.name }))}
+                    chartAccountId={form.chartAccountId}
+                    onChartAccountChange={(id) => setForm((f) => ({ ...f, chartAccountId: id }))}
+                    payFromAccounts={payFromAccounts}
                   />
                 </div>
               )}
@@ -2379,7 +2396,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                                           }),
                                           paymentStatus: 'Credit',
                                           paidAmount: 0,
-                                          bankAccountId: '',
+                                          chartAccountId: pickDefaultPayFromAccountId(payFromAccounts),
                                           notes: bill.notes || '',
                                         });
                                         setVendorSearch(bill.supplier_name || '');

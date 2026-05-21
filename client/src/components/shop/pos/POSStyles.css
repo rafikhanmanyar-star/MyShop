@@ -258,9 +258,9 @@
     transform: scale(0.97);
 }
 
-/* Customer-facing payable total — large, high contrast */
+/* Customer-facing payable total — large, high contrast (+15% typography) */
 .pos-payable-amount__label {
-    font-size: 0.8125rem;
+    font-size: 0.934375rem;
     font-weight: 800;
     letter-spacing: 0.14em;
     text-transform: uppercase;
@@ -268,7 +268,7 @@
 }
 
 .pos-payable-amount__currency {
-    font-size: 1.375rem;
+    font-size: 1.58125rem;
     font-weight: 800;
     color: var(--pos-text-secondary);
 }
@@ -280,20 +280,20 @@
     gap: 0.125rem;
 }
 
-.pos-payable-amount__last-added {
-    font-size: calc(clamp(3.025rem, 5.5vw, 4.125rem) * 0.5);
+.pos-payable-amount__catalog-selection {
+    font-size: calc(clamp(3.025rem, 5.5vw, 4.125rem) * 0.5 * 1.15);
     font-weight: 800;
-    line-height: 1;
+    line-height: 1.15;
     letter-spacing: -0.02em;
     color: #16a34a;
 }
 
-:where(.dark) .pos-payable-amount__last-added {
+:where(.dark) .pos-payable-amount__catalog-selection {
     color: #4ade80;
 }
 
 .pos-payable-amount__value {
-    font-size: clamp(3.025rem, 5.5vw, 4.125rem);
+    font-size: clamp(3.47875rem, 6.325vw, 4.74375rem);
     font-weight: 800;
     line-height: 1;
     letter-spacing: -0.02em;
@@ -309,6 +309,7 @@
     position: sticky;
     z-index: 15;
     top: 0;
+    min-height: 6.5rem;
 }
 
 .pos-payable-amount--sticky:last-child {

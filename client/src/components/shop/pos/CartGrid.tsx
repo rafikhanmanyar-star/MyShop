@@ -131,7 +131,7 @@ const CartRow = memo(
 );
 
 const CartGrid = forwardRef<CartGridHandle>(function CartGrid(_, ref) {
-  const { cart, removeFromCart, updateCartItem, clearCart, grandTotal, lastAddedUnitPrice } = usePOS();
+  const { cart, removeFromCart, updateCartItem, clearCart, grandTotal, focusedCatalogProduct } = usePOS();
   const panelRef = useRef<HTMLDivElement>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
 
@@ -270,13 +270,13 @@ const CartGrid = forwardRef<CartGridHandle>(function CartGrid(_, ref) {
       </div>
 
       <div
-        className="pos-payable-amount pos-payable-amount--sticky shrink-0 border-t-2 border-primary-500/30 bg-white px-4 py-3 shadow-[0_-4px_12px_rgba(0,86,179,0.08)] dark:border-primary-400/25 dark:bg-gray-900 dark:shadow-[0_-4px_16px_rgba(0,0,0,0.35)]"
+        className="pos-payable-amount pos-payable-amount--sticky shrink-0 border-t-2 border-primary-500/30 bg-white px-4 py-5 shadow-[0_-4px_12px_rgba(0,86,179,0.08)] dark:border-primary-400/25 dark:bg-gray-900 dark:shadow-[0_-4px_16px_rgba(0,0,0,0.35)]"
         aria-live="polite"
         aria-atomic="true"
       >
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div className="min-w-0">
-            <span className="pos-payable-amount__label mb-0.5 block">Payable amount</span>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <span className="pos-payable-amount__label mb-1 block">Payable amount</span>
             {cart.length > 0 ? (
               <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
                 {cart.length} lines · {totalQty} qty
@@ -285,10 +285,18 @@ const CartGrid = forwardRef<CartGridHandle>(function CartGrid(_, ref) {
               <span className="text-xs font-medium text-gray-400 dark:text-gray-500">Cart is empty</span>
             )}
           </div>
-          <div className="pos-payable-amount__totals-stack">
-            {cart.length > 0 && lastAddedUnitPrice != null ? (
-              <div className="pos-payable-amount__last-added tabular-nums" aria-hidden="true">
-                {lastAddedUnitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          <div className="pos-payable-amount__totals-stack max-w-full min-w-[12rem]">
+            {focusedCatalogProduct ? (
+              <div
+                className="pos-payable-amount__catalog-selection flex w-full min-w-0 items-baseline justify-end gap-3 text-right"
+                aria-label={`Selected product: ${focusedCatalogProduct.name}, ${focusedCatalogProduct.unitPrice}`}
+              >
+                <span className="min-w-0 max-w-[14rem] truncate font-semibold sm:max-w-[18rem]">
+                  {focusedCatalogProduct.name}
+                </span>
+                <span className="shrink-0 tabular-nums font-extrabold">
+                  {focusedCatalogProduct.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
               </div>
             ) : null}
             <div className="flex items-baseline gap-2">

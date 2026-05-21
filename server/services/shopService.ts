@@ -1502,14 +1502,24 @@ export class ShopService {
         // The 750 change/refund is physical cash returned and should NOT inflate the books.
         let remainingToAllocate = saleData.grandTotal;
         for (const payment of saleData.paymentDetails) {
-          if (payment.bankAccountId && remainingToAllocate > 0) {
-            const effectiveAmount = Math.min(payment.amount, remainingToAllocate);
-            remainingToAllocate -= effectiveAmount;
+          if (remainingToAllocate <= 0) break;
+          const effectiveAmount = Math.min(payment.amount, remainingToAllocate);
+          remainingToAllocate -= effectiveAmount;
+          let bankId = payment.bankAccountId as string | undefined;
+          if (!bankId && payment.chartAccountId) {
+            const linked = await client.query(
+              `SELECT id FROM shop_bank_accounts
+               WHERE tenant_id = $1 AND chart_account_id = $2 AND is_active = TRUE LIMIT 1`,
+              [tenantId, payment.chartAccountId]
+            );
+            if (linked.length > 0) bankId = linked[0].id;
+          }
+          if (bankId) {
             await client.query(`
               UPDATE shop_bank_accounts 
               SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() 
               WHERE id = $2 AND tenant_id = $3
-            `, [effectiveAmount, payment.bankAccountId, tenantId]);
+            `, [effectiveAmount, bankId, tenantId]);
           }
         }
       }
@@ -1604,7 +1614,18 @@ export class ShopService {
         remainingToAllocate -= effectiveAmount;
 
         let debitAccId;
-        if (p.bankAccountId) {
+        if (p.chartAccountId) {
+          const accRows = await client.query(
+            `SELECT id, type, code FROM accounts
+             WHERE id = $1 AND tenant_id = $2 AND COALESCE(is_active, TRUE) = TRUE`,
+            [p.chartAccountId, tenantId]
+          );
+          if (accRows.length === 0) throw new Error('Payment account not found in Chart of Accounts.');
+          if (accRows[0].type !== 'Asset') {
+            throw new Error('POS payment account must be an Asset account from Chart of Accounts.');
+          }
+          debitAccId = p.chartAccountId;
+        } else if (p.bankAccountId) {
           const [bank] = await client.query(
             'SELECT name, account_type, chart_account_id FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2',
             [p.bankAccountId, tenantId]

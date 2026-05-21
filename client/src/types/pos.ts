@@ -65,6 +65,10 @@ export interface POSPayment {
     method: POSPaymentMethod;
     amount: number;
     reference?: string; // e.g. Card last 4, Transaction ID
+    /** Chart of Accounts asset id (preferred for cash/bank receipt) */
+    chartAccountId?: string;
+    chartAccountName?: string;
+    /** Legacy shop_bank_accounts id when linked from chart */
     bankAccountId?: string;
     bankAccountName?: string;
 }

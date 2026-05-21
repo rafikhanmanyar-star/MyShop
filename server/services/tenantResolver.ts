@@ -78,6 +78,7 @@ export async function resolveTenantFromShopSlug(
       id: string;
       slug: string;
       company_name?: string;
+      name?: string;
     };
     let branchId: string | null = null;
     let firstBranch = await db.query(
