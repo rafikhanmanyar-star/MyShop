@@ -106,7 +106,8 @@ export class VoiceOrderService {
         );
         if (rows.length > 0) return rowToSettings(rows[0]);
         await this.db.execute(
-            `INSERT INTO voice_order_settings (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING`,
+            `INSERT INTO voice_order_settings (tenant_id, is_enabled) VALUES ($1, TRUE)
+             ON CONFLICT (tenant_id) DO NOTHING`,
             [tenantId]
         );
         const again = await this.db.query(`SELECT * FROM voice_order_settings WHERE tenant_id = $1`, [tenantId]);

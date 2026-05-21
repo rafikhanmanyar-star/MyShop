@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useEffect, type CSSProperties } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { customerApi } from '../api';
 import CachedImage from '../components/CachedImage';
+import VoiceOrderForm from '../components/VoiceOrderForm';
 import { useOnline } from '../hooks/useOnline';
 import { haversineDistanceKm, estimatedDeliveryRangeMinutes } from '../utils/deliveryLocation';
+
+type OrderMode = 'cart' | 'voice';
 
 function parseProfileCoord(v: unknown): number | null {
     if (v == null) return null;
@@ -12,11 +15,55 @@ function parseProfileCoord(v: unknown): number | null {
     return Number.isFinite(n) ? n : null;
 }
 
+function OrderModeTabs({ mode, onChange }: { mode: OrderMode; onChange: (m: OrderMode) => void }) {
+    const tabStyle = (active: boolean): CSSProperties => ({
+        flex: 1,
+        padding: '12px 8px',
+        borderRadius: 12,
+        border: active ? '2px solid var(--primary)' : '1px solid var(--border-subtle, #e2e8f0)',
+        background: active ? 'rgba(79, 70, 229, 0.08)' : 'var(--surface-elevated, #fff)',
+        fontWeight: active ? 700 : 600,
+        fontSize: 13,
+        color: active ? 'var(--primary)' : 'var(--text)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 4,
+        cursor: 'pointer',
+    });
+
+    return (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button type="button" style={tabStyle(mode === 'cart')} onClick={() => onChange('cart')}>
+                <span style={{ fontSize: 20 }} aria-hidden>🛒</span>
+                <span>Cart order</span>
+            </button>
+            <button type="button" style={tabStyle(mode === 'voice')} onClick={() => onChange('voice')}>
+                <span style={{ fontSize: 20 }} aria-hidden>🎤</span>
+                <span>Voice order</span>
+            </button>
+        </div>
+    );
+}
+
 export default function Cart() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
     const { state, dispatch, cartTotal, cartTax, cartCount } = useApp();
     const online = useOnline();
+    const [searchParams] = useSearchParams();
+    const modeFromUrl = searchParams.get('mode') === 'voice' ? 'voice' : 'cart';
+    const [orderMode, setOrderMode] = useState<OrderMode>(modeFromUrl);
+
+    useEffect(() => {
+        try {
+            const stored = sessionStorage.getItem('myshop_cart_order_mode');
+            if (stored === 'voice') {
+                setOrderMode('voice');
+                sessionStorage.removeItem('myshop_cart_order_mode');
+            }
+        } catch { /* ignore */ }
+    }, []);
     const [etaLine, setEtaLine] = useState<string | null>(null);
 
     const formatPrice = (p: number | string | null | undefined) => {
@@ -111,15 +158,60 @@ export default function Cart() {
 
     const isEmpty = state.cart.length === 0 && state.offerBundles.length === 0;
 
+    if (orderMode === 'voice') {
+        return (
+            <div className="page slide-up" style={{ paddingBottom: 100 }}>
+                <div className="page-header" style={{ marginBottom: 8 }}>
+                    <h1 style={{ fontSize: 22, fontWeight: 700 }}>Order</h1>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+                        Record what you need — no need to add items to cart
+                    </p>
+                </div>
+                <OrderModeTabs mode={orderMode} onChange={setOrderMode} />
+                <div
+                    style={{
+                        background: 'white',
+                        borderRadius: 'var(--radius-lg)',
+                        border: '1px solid var(--border-light)',
+                        padding: 16,
+                    }}
+                >
+                    <VoiceOrderForm compact requireLogin onSwitchToCart={() => setOrderMode('cart')} />
+                </div>
+            </div>
+        );
+    }
+
     if (isEmpty) {
         return (
-            <div className="page fade-in">
-                <div className="empty-state">
+            <div className="page fade-in" style={{ paddingBottom: 100 }}>
+                <div className="page-header" style={{ marginBottom: 8 }}>
+                    <h1 style={{ fontSize: 22, fontWeight: 700 }}>Order</h1>
+                </div>
+                <OrderModeTabs mode={orderMode} onChange={setOrderMode} />
+                <div className="empty-state" style={{ marginTop: 8 }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" /></svg>
                     <h3>Your cart is empty</h3>
-                    <p>Browse products and add items to get started</p>
-                    <button className="btn btn-primary" onClick={() => navigate(`/${shopSlug}/products`)}>
-                        Browse Products
+                    <p>Add products to cart, or place a voice order below</p>
+                    <button type="button" className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => navigate(`/${shopSlug}/products`)}>
+                        Browse products
+                    </button>
+                </div>
+                <div
+                    style={{
+                        marginTop: 20,
+                        padding: 16,
+                        borderRadius: 'var(--radius-lg)',
+                        border: '2px dashed var(--primary)',
+                        background: 'rgba(79, 70, 229, 0.06)',
+                    }}
+                >
+                    <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: 'var(--primary)' }}>Prefer voice?</p>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                        Tap Voice order above to record your list like a WhatsApp message.
+                    </p>
+                    <button type="button" className="btn btn-primary btn-full" onClick={() => setOrderMode('voice')}>
+                        🎤 Place voice order
                     </button>
                 </div>
             </div>
@@ -127,7 +219,12 @@ export default function Cart() {
     }
 
     return (
-        <div className="page slide-up">
+        <div className="page slide-up" style={{ paddingBottom: 100 }}>
+            <div className="page-header" style={{ marginBottom: 8 }}>
+                <h1 style={{ fontSize: 22, fontWeight: 700 }}>Order</h1>
+            </div>
+            <OrderModeTabs mode={orderMode} onChange={setOrderMode} />
+
             <div style={{
                 background: 'white', borderRadius: 'var(--radius-lg)',
                 border: '1px solid var(--border-light)', padding: '0', marginBottom: 16, overflow: 'hidden',
@@ -142,9 +239,9 @@ export default function Cart() {
                         borderBottom: '1px solid var(--border-light)',
                     }}
                 >
-                    <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3, margin: 0, lineHeight: 1.2 }}>
+                    <h2 style={{ fontSize: 18, fontWeight: 700, letterSpacing: -0.3, margin: 0, lineHeight: 1.2 }}>
                         Cart ({cartCount})
-                    </h1>
+                    </h2>
                     {etaLine && (
                         <div
                             style={{
@@ -326,18 +423,6 @@ export default function Cart() {
                 style={{ padding: '16px', fontSize: 16, borderRadius: 'var(--radius-lg)' }}
             >
                 Proceed to Checkout — {formatPrice(Math.round(grandTotal * 100) / 100)}
-            </button>
-
-            <button
-                type="button"
-                className="btn btn-secondary btn-full"
-                style={{ marginTop: 10, padding: '14px', fontSize: 15, borderRadius: 'var(--radius-lg)' }}
-                onClick={() => {
-                    if (!state.isLoggedIn) navigate(`/${shopSlug}/login?redirect=voice-order`);
-                    else navigate(`/${shopSlug}/voice-order`);
-                }}
-            >
-                🎤 Place voice order instead
             </button>
         </div>
     );

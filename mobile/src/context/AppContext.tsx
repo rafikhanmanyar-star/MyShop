@@ -72,6 +72,8 @@ export interface ShopSettings {
     order_acceptance_start: string;
     order_acceptance_end: string;
     offer_stacking_mode?: 'best' | 'stack';
+    voice_ordering_enabled?: boolean;
+    max_voice_recording_seconds?: number;
 }
 
 interface AppState {
@@ -243,6 +245,10 @@ function normalizeShopSettings(raw: ShopSettings): ShopSettings {
         free_delivery_above:
             free === null || free === undefined ? null : toFiniteNumber(free),
         estimated_delivery_minutes: Math.round(toFiniteNumber(raw.estimated_delivery_minutes, 60)),
+        voice_ordering_enabled: raw.voice_ordering_enabled !== false,
+        max_voice_recording_seconds: raw.max_voice_recording_seconds != null
+            ? Math.min(300, Math.max(10, Math.round(toFiniteNumber(raw.max_voice_recording_seconds, 120))))
+            : 120,
     };
 }
 

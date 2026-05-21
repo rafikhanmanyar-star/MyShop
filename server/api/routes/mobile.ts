@@ -584,10 +584,29 @@ router.get('/:shopSlug/signup-otp-config', publicTenantMiddleware(db), async (re
     }
 });
 
+// Voice order public config (cart page, no login required to view UI)
+router.get('/:shopSlug/voice-order-config', publicTenantMiddleware(db), async (req: any, res) => {
+    try {
+        const { getVoiceOrderService } = await import('../../services/voiceOrderService.js');
+        const enabled = await getVoiceOrderService().isVoiceOrderingEnabled(req.tenantId);
+        const vs = await getVoiceOrderService().getSettings(req.tenantId);
+        res.json({
+            enabled,
+            maxRecordingSeconds: vs.max_recording_seconds,
+            maxUploadBytes: vs.max_upload_bytes,
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Shop info (branding, hours, settings)
 router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) => {
     try {
         const settings = await getMobileCustomerService().getMobileSettings(req.tenantId);
+        const { getVoiceOrderService } = await import('../../services/voiceOrderService.js');
+        const voiceEnabled = await getVoiceOrderService().isVoiceOrderingEnabled(req.tenantId);
+        const voiceSettings = await getVoiceOrderService().getSettings(req.tenantId);
 
         if (!settings.is_enabled) {
             return res.status(404).json({ error: 'Mobile ordering is not available for this shop.' });
@@ -658,6 +677,8 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
                 order_acceptance_start: settings.order_acceptance_start,
                 order_acceptance_end: settings.order_acceptance_end,
                 offer_stacking_mode: settings.offer_stacking_mode === 'stack' ? 'stack' : 'best',
+                voice_ordering_enabled: voiceEnabled,
+                max_voice_recording_seconds: voiceSettings.max_recording_seconds,
             },
         });
     } catch (error: any) {
