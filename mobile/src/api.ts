@@ -1,3 +1,8 @@
+import {
+    getAuthTokenForShop,
+    MOBILE_SHOP_SLUG_HEADER,
+} from './services/mobileSession';
+
 /** Keep in sync with client/src/config/apiUrl.ts so API + image URLs resolve the same way. */
 const API_PORT = 3001;
 
@@ -68,14 +73,26 @@ export function getProductImagePath(product: { image_url?: string | null; imageU
 }
 
 const API_BASE = `${getApiBaseUrl()}/mobile`;
+const LAST_SHOP_SLUG_KEY = 'myshop_last_shop_slug';
 
-async function request(url: string, options: RequestInit = {}) {
-    const token = localStorage.getItem('mobile_token');
+function currentShopSlug(): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        return localStorage.getItem(LAST_SHOP_SLUG_KEY);
+    } catch {
+        return null;
+    }
+}
+
+async function request(url: string, options: RequestInit = {}, shopSlug?: string | null) {
+    const slug = shopSlug ?? currentShopSlug();
+    const token = getAuthTokenForShop(slug);
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...(options.headers as Record<string, string> || {}),
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (slug) headers[MOBILE_SHOP_SLUG_HEADER] = slug;
 
     const res = await fetch(url, { ...options, headers });
     const data = await res.json();
@@ -150,9 +167,10 @@ export const publicApi = {
     uploadImage: async (slug: string, file: File): Promise<{ imageUrl: string }> => {
         const formData = new FormData();
         formData.append('image', file);
-        const token = localStorage.getItem('mobile_token');
+        const token = getAuthTokenForShop(slug);
         const headers: Record<string, string> = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (slug) headers[MOBILE_SHOP_SLUG_HEADER] = slug;
         const res = await fetch(`${getApiBaseUrl()}/mobile/${slug}/upload-image`, { method: 'POST', body: formData, headers });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
@@ -208,10 +226,12 @@ export const customerApi = {
         request(`${API_BASE}/orders`, { method: 'POST', body: JSON.stringify(data) }),
     /** Same branch/stock/schedule rules as placeOrder; does not reserve inventory. Always HTTP 200 — check `ok`. */
     checkoutPreflight: async (data: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> => {
-        const token = localStorage.getItem('mobile_token');
+        const slug = currentShopSlug();
+        const token = getAuthTokenForShop(slug);
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(slug ? { [MOBILE_SHOP_SLUG_HEADER]: slug } : {}),
         };
         const res = await fetch(`${API_BASE}/orders/checkout-preflight`, {
             method: 'POST',
@@ -279,7 +299,7 @@ export const customerApi = {
 };
 
 function shopAuthRequest(shopSlug: string, path: string, options: RequestInit = {}) {
-    return request(`${API_BASE}/${shopSlug}${path}`, options);
+    return request(`${API_BASE}/${shopSlug}${path}`, options, shopSlug);
 }
 
 /** Authenticated routes under `/api/mobile/:shopSlug/...` */
@@ -332,11 +352,12 @@ export const menuPlannerApi = {
     getShoppingList: (shopSlug: string, listId: string) =>
         shopAuthRequest(shopSlug, `/shopping-lists/${encodeURIComponent(listId)}`),
     getExternalMarketList: (shopSlug: string, listId: string, acceptPlainText?: boolean) => {
-        const token = localStorage.getItem('mobile_token');
+        const token = getAuthTokenForShop(shopSlug);
         const url = `${getApiBaseUrl()}/mobile/${shopSlug}/shopping-lists/${encodeURIComponent(listId)}/external-market-list`;
         return fetch(url, {
             headers: {
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                [MOBILE_SHOP_SLUG_HEADER]: shopSlug,
                 ...(acceptPlainText ? { Accept: 'text/plain' } : { Accept: 'application/json' }),
             },
         }).then(async (res) => {
@@ -404,7 +425,8 @@ export const voiceOrderApi = {
         durationSeconds: number,
         onProgress?: (pct: number) => void
     ) => {
-        const token = localStorage.getItem('mobile_token');
+        const slug = currentShopSlug();
+        const token = getAuthTokenForShop(slug);
         const form = new FormData();
         form.append('audio', file);
         form.append('durationSeconds', String(durationSeconds));
@@ -412,6 +434,7 @@ export const voiceOrderApi = {
             const xhr = new XMLHttpRequest();
             xhr.open('POST', `${VOICE_BASE}/${encodeURIComponent(orderId)}/upload-audio`);
             if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            if (slug) xhr.setRequestHeader(MOBILE_SHOP_SLUG_HEADER, slug);
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable && onProgress) onProgress((e.loaded / e.total) * 100);
             };

@@ -111,6 +111,7 @@ export default function Login() {
             dispatch({
                 type: 'LOGIN',
                 customerId: result.customerId,
+                tenantId: result.tenantId,
                 phone: result.phone,
                 name: result.name || null,
                 token: result.token,

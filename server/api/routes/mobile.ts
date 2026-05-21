@@ -11,6 +11,7 @@ import {
 } from '../../services/mobileOrderBranchRouting.js';
 import { getOfferService } from '../../services/offerService.js';
 import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/mobileMiddleware.js';
+import { mobileTenantGuard } from '../../middleware/mobileTenantGuard.js';
 import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
 import { getRecipeService } from '../../services/recipeService.js';
 import { getWeeklyMenuPlannerService } from '../../services/weeklyMenuPlannerService.js';
@@ -658,6 +659,7 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
 
         res.json({
             shop: {
+                id: req.tenantId,
                 name: req.shop.name,
                 company_name: req.shop.company_name,
                 logo_url: logoUrl,
@@ -1209,7 +1211,7 @@ router.get('/loyalty-history', mobileAuthMiddleware(db), async (req: any, res: e
 });
 
 // Place order — shop and branch are the same entity: server uses tenant's default (first) branch when branchId omitted
-router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
+router.post('/orders', mobileAuthMiddleware(db), mobileTenantGuard(db), async (req: any, res) => {
     try {
         const result = await getMobileOrderService().placeOrder(req.tenantId, {
             customerId: req.customerId,
@@ -1236,7 +1238,7 @@ router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
 });
 
 /** Validates cart + branch routing + schedule rules without reserving inventory (same demand as POST /orders). */
-router.post('/orders/checkout-preflight', mobileAuthMiddleware(db), async (req: any, res) => {
+router.post('/orders/checkout-preflight', mobileAuthMiddleware(db), mobileTenantGuard(db), async (req: any, res) => {
     try {
         await getMobileOrderService().preflightCheckout(req.tenantId, {
             customerId: req.customerId,

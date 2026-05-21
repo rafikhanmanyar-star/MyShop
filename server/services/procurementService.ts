@@ -44,7 +44,10 @@ export interface SupplierPaymentInput {
   supplierId: string;
   amount: number;
   paymentMethod: 'Cash' | 'Bank' | 'Card';
+  /** shop_bank_accounts id (legacy); optional when chartAccountId is set */
   bankAccountId?: string;
+  /** Chart of Accounts asset id to credit (Settings → Chart of Accounts) */
+  chartAccountId?: string;
   paymentDate: string;
   reference?: string;
   notes?: string;
@@ -100,7 +103,202 @@ export class ProcurementService {
   }
 
   /**
-   * Inserts posted purchase lines, updates inventory / batches / movements, posts AP and optional cash/bank.
+   * Resolve the chart account to credit for a supplier payment and optional shop bank row for balance updates.
+   */
+  private async resolveSupplierPaymentCredit(
+    client: any,
+    tenantId: string,
+    data: Pick<SupplierPaymentInput, 'bankAccountId' | 'chartAccountId'>
+  ): Promise<{ chartAccountId: string; bankAccountIdForBalance?: string }> {
+    if (data.chartAccountId) {
+      const accRows = await client.query(
+        `SELECT id, type, level, code FROM accounts
+         WHERE id = $1 AND tenant_id = $2 AND COALESCE(is_active, TRUE) = TRUE`,
+        [data.chartAccountId, tenantId]
+      );
+      if (accRows.length === 0) throw new Error('Payment account not found in Chart of Accounts.');
+      const acc = accRows[0];
+      if (acc.type !== 'Asset') {
+        throw new Error('Payment account must be an Asset account from Chart of Accounts.');
+      }
+      const level = acc.level != null ? Number(acc.level) : null;
+      if (level != null && level < 4) {
+        throw new Error(
+          'Cannot pay from a summary account. Select a detail cash or bank account from Chart of Accounts.'
+        );
+      }
+      const code = String(acc.code || '').trim();
+      const allowed =
+        (code.startsWith('111') && code.length >= 5) ||
+        ['AST-100', 'AST-101', 'AST-102'].includes(code);
+      const bankLink = await client.query(
+        `SELECT id FROM shop_bank_accounts
+         WHERE tenant_id = $1 AND chart_account_id = $2 AND is_active = TRUE LIMIT 1`,
+        [tenantId, data.chartAccountId]
+      );
+      if (!allowed && bankLink.length === 0) {
+        throw new Error(
+          'Selected account is not a cash or bank account. Choose an account under Cash & Cash Equivalents (111xx) in Chart of Accounts.'
+        );
+      }
+      return {
+        chartAccountId: data.chartAccountId,
+        bankAccountIdForBalance: bankLink[0]?.id as string | undefined,
+      };
+    }
+
+    if (data.bankAccountId) {
+      const bankRows = await client.query(
+        'SELECT chart_account_id FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2',
+        [data.bankAccountId, tenantId]
+      );
+      const chartAccountId =
+        bankRows.length > 0 && bankRows[0].chart_account_id
+          ? bankRows[0].chart_account_id
+          : await this.getOrCreateAccount(client, tenantId, 'Main Bank Account', 'Asset', COA.MAIN_BANK);
+      return { chartAccountId, bankAccountIdForBalance: data.bankAccountId };
+    }
+
+    const cashRows = await client.query(
+      `SELECT id, chart_account_id FROM shop_bank_accounts
+       WHERE tenant_id = $1 AND account_type = 'Cash' AND is_active = TRUE ORDER BY name LIMIT 1`,
+      [tenantId]
+    );
+    const chartAccountId =
+      cashRows.length > 0 && cashRows[0].chart_account_id
+        ? cashRows[0].chart_account_id
+        : await this.getOrCreateAccount(client, tenantId, 'Cash on Hand', 'Asset', COA.CASH_ON_HAND);
+    return {
+      chartAccountId,
+      bankAccountIdForBalance: cashRows[0]?.id as string | undefined,
+    };
+  }
+
+  /** Amount paid at purchase (Paid / Partial). Credit bills return 0. */
+  private paidAmountAtPurchase(data: CreatePurchaseBillInput): number {
+    if (data.paymentStatus === 'Credit') return 0;
+    if (data.paymentStatus === 'Paid') return data.totalAmount;
+    const partial = data.paidAmount ?? 0;
+    return partial > 0 ? partial : 0;
+  }
+
+  /**
+   * Record supplier payment inside an existing transaction (allocations + AP/cash journal).
+   */
+  private async applySupplierPaymentInTransaction(
+    client: any,
+    tenantId: string,
+    data: SupplierPaymentInput
+  ): Promise<string> {
+    const payRes = await client.query(
+      `INSERT INTO supplier_payments (tenant_id, supplier_id, amount, payment_method, bank_account_id, payment_date, reference, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+      [
+        tenantId,
+        data.supplierId,
+        data.amount,
+        data.paymentMethod,
+        data.bankAccountId || null,
+        data.paymentDate,
+        data.reference || null,
+        data.notes || null,
+      ]
+    );
+    const paymentId = payRes[0].id as string;
+    const affectedBillIds: string[] = [];
+
+    for (const alloc of data.allocations) {
+      if (alloc.amount <= 0) continue;
+      const br = await client.query(
+        `SELECT is_posted FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, alloc.purchaseBillId]
+      );
+      if (br.length === 0) throw new Error('Purchase bill not found');
+      if (!this.isPostedBillRow(br[0])) {
+        throw new Error('Supplier payments cannot be applied to draft purchase bills. Post the bill first.');
+      }
+      await client.query(
+        `INSERT INTO purchase_bill_payments (tenant_id, purchase_bill_id, supplier_payment_id, amount)
+         VALUES ($1, $2, $3, $4)`,
+        [tenantId, alloc.purchaseBillId, paymentId, alloc.amount]
+      );
+      await client.query(
+        `UPDATE purchase_bills
+         SET paid_amount = paid_amount + $1, balance_due = balance_due - $1, updated_at = NOW()
+         WHERE id = $2 AND tenant_id = $3`,
+        [alloc.amount, alloc.purchaseBillId, tenantId]
+      );
+      affectedBillIds.push(alloc.purchaseBillId);
+    }
+    await this.recalcPostedBillPaymentStatuses(client, tenantId, affectedBillIds);
+
+    const apAccId = await this.getOrCreateAccount(
+      client,
+      tenantId,
+      'Trade Payables (Suppliers)',
+      'Liability',
+      COA.TRADE_PAYABLES
+    );
+
+    const { chartAccountId: cashBankAccId, bankAccountIdForBalance } =
+      await this.resolveSupplierPaymentCredit(client, tenantId, data);
+
+    const ref = data.reference || `SP-${paymentId.slice(0, 8)}`;
+    const journalRes = await client.query(
+      `INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+       VALUES ($1, $2, $3, $4, 'Purchases', $5, 'Posted') RETURNING id`,
+      [tenantId, data.paymentDate, ref, `Supplier payment ${ref}`, paymentId]
+    );
+    const journalId = journalRes[0].id;
+
+    await client.query(
+      `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+       VALUES ($1, $2, $3, $4, 0)`,
+      [tenantId, journalId, apAccId, data.amount]
+    );
+    await client.query(
+      `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
+       VALUES ($1, $2, $3, 0, $4)`,
+      [tenantId, journalId, cashBankAccId, data.amount]
+    );
+
+    const bankIdToUpdate = bankAccountIdForBalance ?? data.bankAccountId;
+    if (bankIdToUpdate) {
+      await client.query(
+        `UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) - $1, updated_at = NOW()
+         WHERE id = $2 AND tenant_id = $3`,
+        [data.amount, bankIdToUpdate, tenantId]
+      );
+    }
+
+    return paymentId;
+  }
+
+  /** When posting with Paid/Partial, create a linked supplier_payments row after the bill is posted. */
+  private async recordInitialBillPaymentIfAny(
+    client: any,
+    tenantId: string,
+    billId: string,
+    data: CreatePurchaseBillInput
+  ): Promise<void> {
+    const amount = this.paidAmountAtPurchase(data);
+    if (amount <= 0) return;
+    if (data.paymentStatus !== 'Paid' && data.paymentStatus !== 'Partial') return;
+
+    await this.applySupplierPaymentInTransaction(client, tenantId, {
+      supplierId: data.supplierId,
+      amount,
+      paymentMethod: data.bankAccountId ? 'Bank' : 'Cash',
+      bankAccountId: data.bankAccountId,
+      paymentDate: data.billDate,
+      reference: `Pay-${data.billNumber}`,
+      notes: data.notes?.trim() ? `Payment at purchase — ${data.notes.trim()}` : 'Payment at purchase',
+      allocations: [{ purchaseBillId: billId, amount }],
+    });
+  }
+
+  /**
+   * Inserts posted purchase lines, updates inventory / batches / movements, posts purchase to AP.
    * Caller must have inserted the purchase_bills row with is_posted true (or is about to flip after — not used here).
    */
   private async applyPostedPurchaseReceipt(
@@ -338,21 +536,11 @@ export class ProcurementService {
         return newId;
       }
 
-      const balanceDue = data.totalAmount - (data.paidAmount || 0);
-      const status =
-        balanceDue <= 0 ? 'Paid' : data.paidAmount && data.paidAmount > 0 ? 'Partial' : 'Posted';
-
-      const paidNow = data.paidAmount || 0;
-      const initialBankId =
-        paidNow > 0 && (data.paymentStatus === 'Paid' || data.paymentStatus === 'Partial')
-          ? data.bankAccountId || null
-          : null;
-
       const billRes = await client.query(
         `INSERT INTO purchase_bills (
           tenant_id, supplier_id, bill_number, bill_date, due_date,
           subtotal, tax_total, total_amount, paid_amount, balance_due, status, notes, initial_payment_bank_account_id, is_posted
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE) RETURNING id`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9, 'Posted', $10, NULL, TRUE) RETURNING id`,
         [
           tenantId,
           data.supplierId,
@@ -362,16 +550,14 @@ export class ProcurementService {
           data.subtotal,
           data.taxTotal,
           data.totalAmount,
-          paidNow,
-          balanceDue,
-          status,
+          data.totalAmount,
           data.notes || null,
-          initialBankId,
         ]
       );
       const newId = billRes[0].id as string;
       const warehouseId = await this.ensureWarehouseId(client, tenantId);
       await this.applyPostedPurchaseReceipt(client, tenantId, newId, data, warehouseId);
+      await this.recordInitialBillPaymentIfAny(client, tenantId, newId, data);
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
       return newId;
     });
@@ -412,22 +598,13 @@ export class ProcurementService {
         throw new Error('Cannot post: supplier payments are linked to this bill.');
       }
 
-      const balanceDue = data.totalAmount - (data.paidAmount || 0);
-      const status =
-        balanceDue <= 0 ? 'Paid' : data.paidAmount && data.paidAmount > 0 ? 'Partial' : 'Posted';
-      const paidNow = data.paidAmount || 0;
-      const initialBankId =
-        paidNow > 0 && (data.paymentStatus === 'Paid' || data.paymentStatus === 'Partial')
-          ? data.bankAccountId || null
-          : null;
-
       await client.query(
         `UPDATE purchase_bills SET
           bill_number = $1, bill_date = $2, due_date = $3, notes = $4,
           subtotal = $5, tax_total = $6, total_amount = $7,
-          paid_amount = $8, balance_due = $9, status = $10,
-          initial_payment_bank_account_id = $11, is_posted = TRUE, updated_at = NOW()
-         WHERE id = $12 AND tenant_id = $13`,
+          paid_amount = 0, balance_due = $8, status = 'Posted',
+          initial_payment_bank_account_id = NULL, is_posted = TRUE, updated_at = NOW()
+         WHERE id = $9 AND tenant_id = $10`,
         [
           data.billNumber,
           data.billDate,
@@ -436,10 +613,7 @@ export class ProcurementService {
           data.subtotal,
           data.taxTotal,
           data.totalAmount,
-          paidNow,
-          balanceDue,
-          status,
-          initialBankId,
+          data.totalAmount,
           billId,
           tenantId,
         ]
@@ -452,6 +626,7 @@ export class ProcurementService {
 
       const warehouseId = await this.ensureWarehouseId(client, tenantId);
       await this.applyPostedPurchaseReceipt(client, tenantId, billId, data, warehouseId);
+      await this.recordInitialBillPaymentIfAny(client, tenantId, billId, data);
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
@@ -488,7 +663,6 @@ export class ProcurementService {
     const journalId = journalRes[0].id;
 
     const totalAmount = data.totalAmount;
-    const paidNowForAccounting = data.paidAmount || 0;
 
     // Debit Inventory (asset increase)
     await client.query(
@@ -496,68 +670,12 @@ export class ProcurementService {
        VALUES ($1, $2, $3, $4, 0)`,
       [tenantId, journalId, invAccId, totalAmount]
     );
-    // Credit Accounts Payable (full liability at purchase)
+    // Credit Accounts Payable (full liability at purchase; cash/AP settlement via supplier_payments)
     await client.query(
       `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
        VALUES ($1, $2, $3, 0, $4)`,
       [tenantId, journalId, apAccId, totalAmount]
     );
-
-    // If paid at purchase: Debit AP, Credit Cash/Bank
-    if (paidNowForAccounting > 0 && (data.paymentStatus === 'Paid' || data.paymentStatus === 'Partial')) {
-      let cashBankAccId: string;
-      if (data.bankAccountId) {
-        const bankRows = await client.query(
-          'SELECT chart_account_id FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2',
-          [data.bankAccountId, tenantId]
-        );
-        if (bankRows.length > 0 && bankRows[0].chart_account_id) {
-          cashBankAccId = bankRows[0].chart_account_id;
-        } else {
-          cashBankAccId = await this.getOrCreateAccount(
-            client,
-            tenantId,
-            'Main Bank Account',
-            'Asset',
-            COA.MAIN_BANK
-          );
-        }
-      } else {
-        const cashRows = await client.query(
-          `SELECT chart_account_id FROM shop_bank_accounts WHERE tenant_id = $1 AND account_type = 'Cash' AND is_active = TRUE ORDER BY name LIMIT 1`,
-          [tenantId]
-        );
-        if (cashRows.length > 0 && cashRows[0].chart_account_id) {
-          cashBankAccId = cashRows[0].chart_account_id;
-        } else {
-          cashBankAccId = await this.getOrCreateAccount(
-            client,
-            tenantId,
-            'Cash on Hand',
-            'Asset',
-            COA.CASH_ON_HAND
-          );
-        }
-      }
-      await client.query(
-        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
-         VALUES ($1, $2, $3, $4, 0)`,
-        [tenantId, journalId, apAccId, paidNowForAccounting]
-      );
-      await client.query(
-        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
-         VALUES ($1, $2, $3, 0, $4)`,
-        [tenantId, journalId, cashBankAccId, paidNowForAccounting]
-      );
-
-      if (data.bankAccountId) {
-        await client.query(
-          `UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) - $1, updated_at = NOW()
-           WHERE id = $2 AND tenant_id = $3`,
-          [paidNowForAccounting, data.bankAccountId, tenantId]
-        );
-      }
-    }
   }
 
   /**
@@ -966,105 +1084,9 @@ export class ProcurementService {
    */
   async recordSupplierPayment(tenantId: string, data: SupplierPaymentInput): Promise<string> {
     const paymentId = await this.db.transaction(async (client) => {
-      const payRes = await client.query(
-        `INSERT INTO supplier_payments (tenant_id, supplier_id, amount, payment_method, bank_account_id, payment_date, reference, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-        [
-          tenantId,
-          data.supplierId,
-          data.amount,
-          data.paymentMethod,
-          data.bankAccountId || null,
-          data.paymentDate,
-          data.reference || null,
-          data.notes || null,
-        ]
-      );
-      const paymentId = payRes[0].id;
-
-      for (const alloc of data.allocations) {
-        if (alloc.amount <= 0) continue;
-        const br = await client.query(
-          `SELECT is_posted FROM purchase_bills WHERE tenant_id = $1 AND id = $2`,
-          [tenantId, alloc.purchaseBillId]
-        );
-        if (br.length === 0) throw new Error('Purchase bill not found');
-        if (!this.isPostedBillRow(br[0])) {
-          throw new Error('Supplier payments cannot be applied to draft purchase bills. Post the bill first.');
-        }
-        await client.query(
-          `INSERT INTO purchase_bill_payments (tenant_id, purchase_bill_id, supplier_payment_id, amount)
-           VALUES ($1, $2, $3, $4)`,
-          [tenantId, alloc.purchaseBillId, paymentId, alloc.amount]
-        );
-        await client.query(
-          `UPDATE purchase_bills
-           SET paid_amount = paid_amount + $1, balance_due = balance_due - $1,
-               status = CASE WHEN (balance_due - $1) <= 0 THEN 'Paid' ELSE 'Partial' END,
-               updated_at = NOW()
-           WHERE id = $2 AND tenant_id = $3`,
-          [alloc.amount, alloc.purchaseBillId, tenantId]
-        );
-      }
-
-      const apAccId = await this.getOrCreateAccount(
-        client,
-        tenantId,
-        'Trade Payables (Suppliers)',
-        'Liability',
-        COA.TRADE_PAYABLES
-      );
-
-      let cashBankAccId: string;
-      if (data.bankAccountId) {
-        const bankRows = await client.query(
-          'SELECT chart_account_id FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2',
-          [data.bankAccountId, tenantId]
-        );
-        cashBankAccId =
-          bankRows.length > 0 && bankRows[0].chart_account_id
-            ? bankRows[0].chart_account_id
-            : await this.getOrCreateAccount(client, tenantId, 'Main Bank Account', 'Asset', COA.MAIN_BANK);
-      } else {
-        const cashRows = await client.query(
-          `SELECT chart_account_id FROM shop_bank_accounts WHERE tenant_id = $1 AND account_type = 'Cash' AND is_active = TRUE LIMIT 1`,
-          [tenantId]
-        );
-        cashBankAccId =
-          cashRows.length > 0 && cashRows[0].chart_account_id
-            ? cashRows[0].chart_account_id
-            : await this.getOrCreateAccount(client, tenantId, 'Cash on Hand', 'Asset', COA.CASH_ON_HAND);
-      }
-
-      const ref = data.reference || `SP-${paymentId.slice(0, 8)}`;
-      const journalRes = await client.query(
-        `INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
-         VALUES ($1, $2, $3, $4, 'Purchases', $5, 'Posted') RETURNING id`,
-        [tenantId, data.paymentDate, ref, `Supplier payment ${ref}`, paymentId]
-      );
-      const journalId = journalRes[0].id;
-
-      await client.query(
-        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
-         VALUES ($1, $2, $3, $4, 0)`,
-        [tenantId, journalId, apAccId, data.amount]
-      );
-      await client.query(
-        `INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit)
-         VALUES ($1, $2, $3, 0, $4)`,
-        [tenantId, journalId, cashBankAccId, data.amount]
-      );
-
-      if (data.bankAccountId) {
-        await client.query(
-          `UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) - $1, updated_at = NOW()
-           WHERE id = $2 AND tenant_id = $3`,
-          [data.amount, data.bankAccountId, tenantId]
-        );
-      }
-
+      const id = await this.applySupplierPaymentInTransaction(client, tenantId, data);
       await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
-      return paymentId;
+      return id;
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
     notifyDailyReportUpdated(tenantId).catch(() => {});
@@ -1228,26 +1250,8 @@ export class ProcurementService {
         'Liability',
         COA.TRADE_PAYABLES
       );
-      let cashBankAccId: string;
-      if (data.bankAccountId) {
-        const bankRows = await client.query(
-          'SELECT chart_account_id FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2',
-          [data.bankAccountId, tenantId]
-        );
-        cashBankAccId =
-          bankRows.length > 0 && bankRows[0].chart_account_id
-            ? bankRows[0].chart_account_id
-            : await this.getOrCreateAccount(client, tenantId, 'Main Bank Account', 'Asset', COA.MAIN_BANK);
-      } else {
-        const cashRows = await client.query(
-          `SELECT chart_account_id FROM shop_bank_accounts WHERE tenant_id = $1 AND account_type = 'Cash' AND is_active = TRUE LIMIT 1`,
-          [tenantId]
-        );
-        cashBankAccId =
-          cashRows.length > 0 && cashRows[0].chart_account_id
-            ? cashRows[0].chart_account_id
-            : await this.getOrCreateAccount(client, tenantId, 'Cash on Hand', 'Asset', COA.CASH_ON_HAND);
-      }
+      const { chartAccountId: cashBankAccId, bankAccountIdForBalance } =
+        await this.resolveSupplierPaymentCredit(client, tenantId, data);
 
       const ref = data.reference || `SP-${paymentId.slice(0, 8)}`;
       const journalRes = await client.query(
@@ -1266,11 +1270,12 @@ export class ProcurementService {
          VALUES ($1, $2, $3, 0, $4)`,
         [tenantId, journalId, cashBankAccId, data.amount]
       );
-      if (data.bankAccountId) {
+      const bankIdToUpdate = bankAccountIdForBalance ?? data.bankAccountId;
+      if (bankIdToUpdate) {
         await client.query(
           `UPDATE shop_bank_accounts SET balance = COALESCE(balance, 0) - $1, updated_at = NOW()
            WHERE id = $2 AND tenant_id = $3`,
-          [data.amount, data.bankAccountId, tenantId]
+          [data.amount, bankIdToUpdate, tenantId]
         );
       }
 
@@ -1527,10 +1532,33 @@ export class ProcurementService {
       if (!arr.includes(s)) arr.push(s);
     }
 
-    return (payments as any[]).map((p) => ({
-      ...p,
-      allocated_bill_numbers: byPay.get(p.id)?.join(', ') ?? '',
-    }));
+    const coaSql = `
+      SELECT je.source_id AS payment_id, a.id, a.name, a.code
+      FROM ledger_entries le
+      JOIN journal_entries je ON je.id = le.journal_entry_id AND je.tenant_id = le.tenant_id
+      JOIN accounts a ON a.id = le.account_id AND a.tenant_id = le.tenant_id
+      WHERE le.tenant_id = $1 AND je.source_module = 'Purchases'
+        AND je.source_id IN (${idPlaceholders})
+        AND le.credit > 0 AND a.type = 'Asset'
+    `;
+    const coaRows = await this.db.query(coaSql, [tenantId, ...ids]);
+    const coaByPay = new Map<string, { id: string; name: string; code: string | null }>();
+    for (const r of coaRows as any[]) {
+      if (!coaByPay.has(r.payment_id)) {
+        coaByPay.set(r.payment_id, { id: r.id, name: r.name, code: r.code });
+      }
+    }
+
+    return (payments as any[]).map((p) => {
+      const coa = coaByPay.get(p.id);
+      return {
+        ...p,
+        allocated_bill_numbers: byPay.get(p.id)?.join(', ') ?? '',
+        payment_chart_account_id: coa?.id ?? null,
+        payment_chart_account_name: coa?.name ?? null,
+        payment_chart_account_code: coa?.code ?? null,
+      };
+    });
   }
 
   async getSupplierPaymentById(tenantId: string, paymentId: string) {
@@ -1549,8 +1577,46 @@ export class ProcurementService {
        WHERE pbp.tenant_id = $1 AND pbp.supplier_payment_id = $2`,
       [tenantId, paymentId]
     );
+    let paymentChartAccountId: string | null = null;
+    let paymentChartAccountName: string | null = null;
+    let paymentChartAccountCode: string | null = null;
+    if (payments[0].bank_account_id) {
+      const bankCoa = await this.db.query(
+        `SELECT sba.chart_account_id, a.name, a.code
+         FROM shop_bank_accounts sba
+         LEFT JOIN accounts a ON a.id = sba.chart_account_id AND a.tenant_id = sba.tenant_id
+         WHERE sba.id = $1 AND sba.tenant_id = $2`,
+        [payments[0].bank_account_id, tenantId]
+      );
+      if (bankCoa.length > 0 && bankCoa[0].chart_account_id) {
+        paymentChartAccountId = bankCoa[0].chart_account_id;
+        paymentChartAccountName = bankCoa[0].name;
+        paymentChartAccountCode = bankCoa[0].code;
+      }
+    }
+    if (!paymentChartAccountId) {
+      const creditLine = await this.db.query(
+        `SELECT a.id, a.name, a.code
+         FROM ledger_entries le
+         JOIN journal_entries je ON je.id = le.journal_entry_id AND je.tenant_id = le.tenant_id
+         JOIN accounts a ON a.id = le.account_id AND a.tenant_id = le.tenant_id
+         WHERE le.tenant_id = $1 AND je.source_module = 'Purchases' AND je.source_id = $2
+           AND le.credit > 0 AND a.type = 'Asset'
+         ORDER BY le.credit DESC
+         LIMIT 1`,
+        [tenantId, paymentId]
+      );
+      if (creditLine.length > 0) {
+        paymentChartAccountId = creditLine[0].id;
+        paymentChartAccountName = creditLine[0].name;
+        paymentChartAccountCode = creditLine[0].code;
+      }
+    }
     return {
       ...payments[0],
+      payment_chart_account_id: paymentChartAccountId,
+      payment_chart_account_name: paymentChartAccountName,
+      payment_chart_account_code: paymentChartAccountCode,
       allocations: allocations.map((a: any) => ({
         purchaseBillId: a.purchase_bill_id,
         amount: parseFloat(a.amount) || 0,

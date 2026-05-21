@@ -99,6 +99,18 @@ export interface HomePromoSlide {
   title?: string | null;
 }
 
+/** Sidebar / header company display (GET /shop/organization) */
+export interface OrganizationProfile {
+  id: string;
+  name: string;
+  company_name: string;
+  phone: string | null;
+  address: string | null;
+  logo_url: string | null;
+  slug: string | null;
+  branch_name: string | null;
+}
+
 export interface TenantBranding {
   id: string;
   tenant_id: string;
@@ -239,6 +251,8 @@ export const shopApi = {
     apiClient.post<ShopVendor>('/shop/vendors', data),
   updateVendor: (id: string, data: Partial<ShopVendor>) => apiClient.put(`/shop/vendors/${id}`, data),
   deleteVendor: (id: string) => apiClient.delete(`/shop/vendors/${id}`),
+
+  getOrganization: () => apiClient.get<OrganizationProfile>('/shop/organization'),
 
   getBranding: () => apiClient.get<TenantBranding>('/shop/branding'),
   updateBranding: (data: Partial<TenantBranding>) => apiClient.post<TenantBranding>('/shop/branding', data),

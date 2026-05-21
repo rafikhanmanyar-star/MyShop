@@ -73,31 +73,35 @@ export class AuthService {
       throw new Error('Invalid username or password');
     }
 
-    // If org_id (QR) provided, only consider users in that tenant
-    const candidates = data.orgId
-      ? users.filter((u: any) => u.tenant_id === data.orgId)
-      : users;
-
-    let matchedUser = null;
-    for (const user of candidates) {
-      if (!user.is_active) continue;
+    const activeUsers = users.filter((u: { is_active: boolean }) => u.is_active);
+    const passwordMatches: typeof users = [];
+    for (const user of activeUsers) {
       const valid = await bcrypt.compare(data.password, user.password);
-      if (valid) {
-        matchedUser = user;
-        break;
-      }
+      if (valid) passwordMatches.push(user);
     }
 
-    if (data.orgId && users.some((u: any) => u.tenant_id === data.orgId) && !matchedUser) {
-      throw new Error('User does not belong to this organization or invalid password');
-    }
-
-    if (!matchedUser) {
-      const hasInactive = users.some((u: any) => !u.is_active);
-      if (hasInactive && users.every((u: any) => !u.is_active)) {
+    if (passwordMatches.length === 0) {
+      const hasInactive = users.some((u: { is_active: boolean }) => !u.is_active);
+      if (hasInactive && users.every((u: { is_active: boolean }) => !u.is_active)) {
         throw new Error('Account is deactivated. Contact your administrator.');
       }
       throw new Error('Invalid username or password');
+    }
+
+    let matchedUser: (typeof users)[0] | null = null;
+
+    if (data.orgId) {
+      matchedUser = passwordMatches.find((u: { tenant_id: string }) => u.tenant_id === data.orgId) ?? null;
+      if (!matchedUser) {
+        throw new Error('User does not belong to this organization or invalid password');
+      }
+    } else if (passwordMatches.length > 1) {
+      // Same username in multiple tenants — never pick an arbitrary tenant (cross-tenant data leak).
+      throw new Error(
+        'This username exists in more than one company. Select your company on the login page, then sign in again.'
+      );
+    } else {
+      matchedUser = passwordMatches[0];
     }
 
     const posClient = Boolean(data.posClient);

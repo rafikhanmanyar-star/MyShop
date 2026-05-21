@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useReducer, useCallback, useRef } from 'react';
 import { customerApi } from '../api';
+import {
+    clearMobileSession,
+    decodeJwtTenantId,
+    getMobileSession,
+    saveMobileSession,
+} from '../services/mobileSession';
 
 // ─── Types ─────────────────────────────────────────────────
 // Customer-visible branch may come from QR; delivery otherwise auto-routes to nearest fulfillable branch.
@@ -34,6 +40,8 @@ export interface ShopDeliveryArea {
 }
 
 export interface ShopInfo {
+    /** Tenant id from GET /:shopSlug/info — used to validate JWT session */
+    id?: string;
     name: string;
     company_name: string;
     logo_url: string | null;
@@ -120,6 +128,7 @@ type Action =
     | {
           type: 'LOGIN';
           customerId: string;
+          tenantId: string;
           phone: string;
           name: string | null;
           token: string;
@@ -128,6 +137,7 @@ type Action =
           loyaltyRedemptionRatio?: number;
           loyaltyLastUpdated?: string | null;
       }
+    | { type: 'SESSION_INVALID'; reason?: string }
     | { type: 'LOGOUT' }
     | { type: 'UPDATE_CUSTOMER_PROFILE'; name: string | null }
     | { type: 'SHOW_TOAST'; message: string }
@@ -307,6 +317,16 @@ function getInitialCartForSession(isLoggedIn: boolean): { cart: CartItem[]; offe
 }
 
 function loadAuth(): { isLoggedIn: boolean; customerId: string | null; phone: string | null; name: string | null } {
+    const slug = localStorage.getItem(LAST_SHOP_SLUG_KEY);
+    const session = slug ? getMobileSession(slug) : null;
+    if (session) {
+        return {
+            isLoggedIn: true,
+            customerId: session.customerId,
+            phone: session.phone,
+            name: session.name,
+        };
+    }
     const token = localStorage.getItem(AUTH_KEY);
     const customer = localStorage.getItem(CUSTOMER_KEY);
     if (token && customer) {
@@ -346,10 +366,47 @@ function reducer(state: AppState, action: Action): AppState {
             } catch { /* ignore */ }
             const prevSlug = state.shopSlug;
             const shopChanged = prevSlug != null && prevSlug !== action.slug;
+
+            const shopTenantId = action.shop?.id;
+            const session = getMobileSession(action.slug);
+            let sessionInvalid = false;
+            if (session && shopTenantId && session.tenantId !== shopTenantId) {
+                sessionInvalid = true;
+            } else if (session && shopTenantId) {
+                const jwtTenant = decodeJwtTenantId(session.token);
+                if (jwtTenant && jwtTenant !== shopTenantId) sessionInvalid = true;
+            } else if (session && !shopTenantId) {
+                const jwtTenant = decodeJwtTenantId(session.token);
+                if (jwtTenant && jwtTenant !== session.tenantId) sessionInvalid = true;
+            }
+
             if (shopChanged) {
                 saveCart([]);
                 saveOfferCart([]);
             }
+
+            if (sessionInvalid) {
+                clearMobileSession(action.slug);
+                if (prevSlug) clearMobileSession(prevSlug);
+                return {
+                    ...state,
+                    shopSlug: action.slug,
+                    shop: action.shop,
+                    branchId: action.shop?.branchId ?? null,
+                    settings: action.settings ? normalizeShopSettings(action.settings) : null,
+                    branding: action.branding,
+                    cart: [],
+                    offerBundles: [],
+                    isLoggedIn: false,
+                    customerId: null,
+                    customerPhone: null,
+                    customerName: null,
+                    loyalty: emptyLoyalty,
+                    toast: 'Signed out — this shop uses a different account. Please sign in again.',
+                };
+            }
+
+            const restoredSession = getMobileSession(action.slug);
             return {
                 ...state,
                 shopSlug: action.slug,
@@ -359,6 +416,24 @@ function reducer(state: AppState, action: Action): AppState {
                 branding: action.branding,
                 cart: shopChanged ? [] : state.cart,
                 offerBundles: shopChanged ? [] : state.offerBundles,
+                isLoggedIn: !!restoredSession,
+                customerId: restoredSession?.customerId ?? (shopChanged ? null : state.customerId),
+                customerPhone: restoredSession?.phone ?? (shopChanged ? null : state.customerPhone),
+                customerName: restoredSession?.name ?? (shopChanged ? null : state.customerName),
+            };
+        }
+
+        case 'SESSION_INVALID': {
+            if (state.shopSlug) clearMobileSession(state.shopSlug);
+            clearMobileSession(null);
+            return {
+                ...state,
+                isLoggedIn: false,
+                customerId: null,
+                customerPhone: null,
+                customerName: null,
+                loyalty: emptyLoyalty,
+                toast: action.reason ?? 'Session expired for this shop. Please sign in again.',
             };
         }
 
@@ -475,8 +550,18 @@ function reducer(state: AppState, action: Action): AppState {
         }
 
         case 'LOGIN': {
-            localStorage.setItem(AUTH_KEY, action.token);
-            localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ id: action.customerId, phone: action.phone, name: action.name }));
+            if (state.shopSlug) {
+                saveMobileSession(state.shopSlug, {
+                    token: action.token,
+                    customerId: action.customerId,
+                    tenantId: action.tenantId,
+                    phone: action.phone,
+                    name: action.name,
+                });
+            } else {
+                localStorage.setItem(AUTH_KEY, action.token);
+                localStorage.setItem(CUSTOMER_KEY, JSON.stringify({ id: action.customerId, phone: action.phone, name: action.name }));
+            }
             const cached = readLoyaltySession(action.customerId);
             const fromApi =
                 action.loyaltyTotalPoints != null
@@ -527,8 +612,7 @@ function reducer(state: AppState, action: Action): AppState {
             }
             saveCart([]);
             saveOfferCart([]);
-            localStorage.removeItem(AUTH_KEY);
-            localStorage.removeItem(CUSTOMER_KEY);
+            clearMobileSession(state.shopSlug);
             try {
                 sessionStorage.removeItem(LOYALTY_SESSION_KEY);
             } catch {

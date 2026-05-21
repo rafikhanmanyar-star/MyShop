@@ -67,12 +67,20 @@ export async function processOrderQueue(): Promise<{
     failed: number;
 }> {
     const pending = await getAllPendingOrders();
+    const activeSlug =
+        typeof localStorage !== 'undefined'
+            ? localStorage.getItem('myshop_last_shop_slug')
+            : null;
     let succeeded = 0;
     let failed = 0;
     for (const item of pending) {
         if (!isOnline()) break;
+        if (activeSlug && item.shopSlug !== activeSlug) continue;
         await setOrderStatus(item.localId, 'syncing');
         try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('myshop_last_shop_slug', item.shopSlug);
+            }
             const result = await customerApi.placeOrder(item.payload as any);
             const serverOrderId = result?.id ?? (result as any)?.order_number;
             await setOrderStatus(item.localId, 'synced', serverOrderId);

@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { procurementApi } from '../../../services/shopApi';
+import {
+  formatPayFromAccountLabel,
+  type PayFromAccountOption,
+} from '../../../utils/payFromAccounts';
 import Button from '../../ui/Button';
 import Select from '../../ui/Select';
 
@@ -7,7 +11,7 @@ export type SupplierPaymentEditFormState = {
   supplierId: string;
   amount: number;
   paymentMethod: 'Cash' | 'Bank' | 'Card';
-  bankAccountId: string;
+  chartAccountId: string;
   paymentDate: string;
   reference: string;
   notes: string;
@@ -50,13 +54,13 @@ function scaleAllocationsToAmount(
 export function SupplierPaymentEditDialog({
   paymentId,
   vendors,
-  bankAccounts,
+  payFromAccounts,
   onClose,
   onSaved,
 }: {
   paymentId: string | null;
   vendors: any[];
-  bankAccounts: any[];
+  payFromAccounts: PayFromAccountOption[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -85,11 +89,15 @@ export function SupplierPaymentEditDialog({
             }))
           : [];
         setBaselineAllocations(allocs);
+        const chartId =
+          payment.payment_chart_account_id ||
+          payment.paymentChartAccountId ||
+          '';
         setForm({
           supplierId: payment.supplier_id,
           amount: Number(payment.amount) || 0,
           paymentMethod: (payment.payment_method as SupplierPaymentEditFormState['paymentMethod']) || 'Cash',
-          bankAccountId: payment.bank_account_id || '',
+          chartAccountId: chartId ? String(chartId) : payFromAccounts[0]?.id ?? '',
           paymentDate: (payment.payment_date || '').toString().slice(0, 10),
           reference: payment.reference || '',
           notes: payment.notes || '',
@@ -169,18 +177,21 @@ export function SupplierPaymentEditDialog({
               </div>
               {form.paymentMethod === 'Bank' && (
                 <div>
-                  <label className="label mb-1 block">Bank account</label>
+                  <label className="label mb-1 block">Pay from account</label>
                   <Select
-                    value={form.bankAccountId}
-                    onChange={(e) => setForm((f) => (f ? { ...f, bankAccountId: e.target.value } : f))}
+                    value={form.chartAccountId}
+                    onChange={(e) => setForm((f) => (f ? { ...f, chartAccountId: e.target.value } : f))}
                   >
                     <option value="">Select...</option>
-                    {bankAccounts.map((b) => (
+                    {payFromAccounts.map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.name}
+                        {formatPayFromAccountLabel(b)}
                       </option>
                     ))}
                   </Select>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    From Settings → Chart of Accounts (cash & bank accounts).
+                  </p>
                 </div>
               )}
               <div>
@@ -219,7 +230,7 @@ export function SupplierPaymentEditDialog({
                   !form ||
                   form.amount <= 0 ||
                   baselineAllocations.length === 0 ||
-                  (form.paymentMethod === 'Bank' && !form.bankAccountId)
+                  (form.paymentMethod === 'Bank' && !form.chartAccountId)
                 }
                 onClick={async () => {
                   if (!form || !paymentId) return;
@@ -234,7 +245,8 @@ export function SupplierPaymentEditDialog({
                       supplierId: form.supplierId,
                       amount: form.amount,
                       paymentMethod: form.paymentMethod,
-                      bankAccountId: form.paymentMethod === 'Bank' && form.bankAccountId ? form.bankAccountId : undefined,
+                      chartAccountId:
+                        form.paymentMethod === 'Bank' && form.chartAccountId ? form.chartAccountId : undefined,
                       paymentDate: form.paymentDate,
                       reference: form.reference || undefined,
                       notes: form.notes || undefined,

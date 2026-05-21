@@ -33,90 +33,36 @@ export class MobileCustomerService {
     }
 
     // ─── Tenant / Shop Discovery ────────────────────────────────────────
+    /**
+     * Resolves shop → tenant via centralized {@link resolveTenantFromShopSlug}.
+     * Tenant slug always wins over branch slug (prevents cross-tenant shadowing).
+     */
     async resolveShopBySlug(slug: string): Promise<{ id: string; name: string; company_name: string; logo_url?: string; brand_color?: string; slug: string; branchId?: string } | null> {
-        const key = normalizeShopSlugForLookup(slug);
-        if (!key) return null;
+        const { resolveTenantFromShopSlug } = await import('./tenantResolver.js');
+        const resolved = await resolveTenantFromShopSlug(this.db, slug);
+        if (!resolved) return null;
 
-        const { getShopService } = await import('./shopService.js');
-        const branch = await getShopService().getBranchBySlug(slug);
-        if (branch) {
-            const tenantRows = await this.db.query(
-                `SELECT id, name, company_name, logo_url, brand_color FROM tenants WHERE id = $1`,
-                [branch.tenant_id]
-            );
-            if (tenantRows.length === 0) return null;
-            return {
-                ...tenantRows[0],
-                slug: branch.slug || key,
-                branchId: branch.id,
-            };
-        }
-
-        // Exact tenant slug match
-        const rows = await this.db.query(
+        const tenantRows = await this.db.query(
             `SELECT id, name, company_name, email, logo_url, brand_color, slug
-       FROM tenants
-       WHERE slug IS NOT NULL
-         AND LOWER(TRIM(CAST(slug AS TEXT))) = $1`,
-            [key]
+             FROM tenants WHERE id = $1`,
+            [resolved.tenantId]
         );
+        if (tenantRows.length === 0) return null;
 
-        if (rows.length > 0) {
-            const tenant = rows[0];
-            // Prefer branches with geo coordinates set (real branches, not auto-created placeholders)
-            let firstBranch = await this.db.query(
-                `SELECT id FROM shop_branches
-                 WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE
-                   AND latitude IS NOT NULL AND longitude IS NOT NULL
-                 ORDER BY name ASC LIMIT 1`,
-                [tenant.id]
-            );
-            if (firstBranch.length === 0) {
-                firstBranch = await this.db.query(
-                    'SELECT id FROM shop_branches WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE ORDER BY name ASC LIMIT 1',
-                    [tenant.id]
-                );
-            }
-            return {
-                ...tenant,
-                branchId: firstBranch.length > 0 ? firstBranch[0].id : undefined,
-            };
-        }
+        const tenant = tenantRows[0] as {
+            id: string;
+            name: string;
+            company_name: string;
+            logo_url?: string;
+            brand_color?: string;
+            slug: string;
+        };
 
-        // Generated branch slug: {tenantSlug}-{branchCode} (from /branches endpoint)
-        // Try every dash position since tenant slugs can contain dashes
-        for (let i = key.length - 1; i > 0; i--) {
-            if (key[i] !== '-') continue;
-            const possibleTenantSlug = key.substring(0, i);
-            const branchSuffix = key.substring(i + 1);
-            if (!possibleTenantSlug || !branchSuffix) continue;
-
-            const tenantRows = await this.db.query(
-                `SELECT id, name, company_name, email, logo_url, brand_color, slug
-           FROM tenants
-           WHERE slug IS NOT NULL
-             AND LOWER(TRIM(CAST(slug AS TEXT))) = $1`,
-                [possibleTenantSlug]
-            );
-            if (tenantRows.length > 0) {
-                const tenant = tenantRows[0];
-                const branchRows = await this.db.query(
-                    `SELECT id FROM shop_branches
-               WHERE tenant_id = $1
-                 AND COALESCE(is_active, TRUE) = TRUE
-                 AND LOWER(REGEXP_REPLACE(code, '[^a-zA-Z0-9]+', '-', 'g')) = $2`,
-                    [tenant.id, branchSuffix]
-                );
-                if (branchRows.length > 0) {
-                    return {
-                        ...tenant,
-                        branchId: branchRows[0].id,
-                    };
-                }
-            }
-        }
-
-        return null;
+        return {
+            ...tenant,
+            slug: resolved.slug || tenant.slug || normalizeShopSlugForLookup(slug),
+            branchId: resolved.branchId ?? undefined,
+        };
     }
 
     async getOrCreateSlug(tenantId: string): Promise<string> {

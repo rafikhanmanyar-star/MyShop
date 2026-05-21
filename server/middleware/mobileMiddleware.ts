@@ -2,7 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { IDatabaseService } from '../services/databaseService.js';
 import { runWithTenantContextThroughResponse } from '../services/tenantContext.js';
-import { getMobileCustomerService } from '../services/mobileCustomerService.js';
+import { resolveTenantFromShopSlug, assertJwtMatchesResolvedTenant, TenantMismatchError } from '../services/tenantResolver.js';
+import { MOBILE_SHOP_SLUG_HEADER } from './mobileTenantGuard.js';
 
 /** Bearer header, or GET `access_token` (for EventSource, which cannot set headers). */
 function getMobileJwtToken(req: any): string | undefined {
@@ -26,14 +27,14 @@ export function publicTenantMiddleware(db: IDatabaseService) {
                 return res.status(400).json({ error: 'Shop identifier is required' });
             }
 
-            const shop = await getMobileCustomerService().resolveShopBySlug(slug);
-            if (!shop) {
+            const resolved = await resolveTenantFromShopSlug(db, slug);
+            if (!resolved) {
                 return res.status(404).json({ error: 'Shop not found' });
             }
 
             const tenantRow = await db.query(
                 'SELECT id, name, company_name, logo_url, brand_color, slug, address, phone FROM tenants WHERE id = $1',
-                [shop.id]
+                [resolved.tenantId]
             );
             if (tenantRow.length === 0) {
                 return res.status(404).json({ error: 'Shop not found' });
@@ -41,8 +42,9 @@ export function publicTenantMiddleware(db: IDatabaseService) {
 
             const tenant = tenantRow[0];
             req.tenantId = tenant.id;
-            req.branchId = shop.branchId || null;
-            req.shop = { ...tenant, branchId: shop.branchId };
+            req.branchId = resolved.branchId || null;
+            req.shop = { ...tenant, branchId: resolved.branchId };
+            req.resolvedShopSlug = slug;
 
             return await runWithTenantContextThroughResponse(
                 { tenantId: tenant.id },
@@ -101,16 +103,41 @@ export function mobileAuthMiddleware(db: IDatabaseService) {
                 return res.status(403).json({ error: 'Your account has been blocked. Contact the shop.', code: 'CUSTOMER_BLOCKED' });
             }
 
-            req.tenantId = decoded.tenantId;
+            // When URL/header already resolved a shop, JWT tenant must match (never trust JWT alone on slug routes).
+            const slugHint =
+                (typeof req.params?.shopSlug === 'string' && req.params.shopSlug) ||
+                (typeof req.headers[MOBILE_SHOP_SLUG_HEADER] === 'string' && req.headers[MOBILE_SHOP_SLUG_HEADER]) ||
+                (typeof req.headers[MOBILE_SHOP_SLUG_HEADER.toLowerCase()] === 'string' &&
+                    req.headers[MOBILE_SHOP_SLUG_HEADER.toLowerCase()]) ||
+                undefined;
+
+            if (req.tenantId && slugHint) {
+                const resolved = await resolveTenantFromShopSlug(db, String(slugHint));
+                if (resolved) {
+                    assertJwtMatchesResolvedTenant(decoded.tenantId, resolved, {
+                        shopSlug: String(slugHint),
+                        customerId: decoded.customerId,
+                        path: req.path,
+                    });
+                    req.tenantId = resolved.tenantId;
+                    if (resolved.branchId && !req.branchId) req.branchId = resolved.branchId;
+                }
+            } else {
+                req.tenantId = decoded.tenantId;
+            }
+
             req.customerId = decoded.customerId;
             req.customerPhone = decoded.phone;
 
             return await runWithTenantContextThroughResponse(
-                { tenantId: decoded.tenantId },
+                { tenantId: req.tenantId },
                 res,
                 next
             );
         } catch (error) {
+            if (error instanceof TenantMismatchError) {
+                return res.status(error.statusCode).json({ error: error.message, code: error.code });
+            }
             console.error('Mobile auth middleware error:', error);
             res.status(401).json({ error: 'Authentication failed' });
         }

@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 import { flushSync } from 'react-dom';
-import { procurementApi, procurementDemandApi, shopApi } from '../../../services/shopApi';
+import { accountingApi, procurementApi, procurementDemandApi, shopApi } from '../../../services/shopApi';
+import {
+  filterPayFromChartAccounts,
+  formatPayFromAccountLabel,
+  type PayFromAccountOption,
+} from '../../../utils/payFromAccounts';
 import { createPurchaseBillOfflineFirst, recordSupplierPaymentOfflineFirst, setProcurementCache } from '../../../services/procurementSyncService';
 import { getProcurementCache, getTenantId } from '../../../services/procurementOfflineCache';
 import { useAppContext } from '../../../context/AppContext';
@@ -428,6 +433,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     const [bills, setBills] = useState<any[]>([]);
     const [vendorsFromApi, setVendorsFromApi] = useState<any[]>([]);
     const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+    const [chartAccountsRaw, setChartAccountsRaw] = useState<any[]>([]);
     const [showForm, setShowForm] = useState(false);
     const [loading, setLoading] = useState(false);
     const [loadingData, setLoadingData] = useState(true);
@@ -479,7 +485,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       amount: 0,
       paymentDate: '',
       paymentMethod: 'Bank' as 'Bank' | 'Cash',
-      bankAccountId: '',
+      chartAccountId: '',
       notes: '',
     });
     const [quickPaySuccess, setQuickPaySuccess] = useState<QuickPayShareInfo | null>(null);
@@ -505,6 +511,19 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       }
       return m;
     }, [vendors]);
+
+    const payFromAccounts: PayFromAccountOption[] = useMemo(() => {
+      const linkedChartIds = bankAccounts
+        .map((b: { chart_account_id?: string; chartAccountId?: string }) => b.chart_account_id ?? b.chartAccountId)
+        .filter(Boolean) as string[];
+      return filterPayFromChartAccounts(chartAccountsRaw, linkedChartIds);
+    }, [chartAccountsRaw, bankAccounts]);
+
+    const payFromAccountById = useMemo(() => {
+      const m = new Map<string, PayFromAccountOption>();
+      for (const a of payFromAccounts) m.set(a.id, a);
+      return m;
+    }, [payFromAccounts]);
 
     const sortedBills = useMemo(() => {
       return [...bills].sort((a, b) => {
@@ -711,8 +730,9 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           shopApi.getVendors(),
           shopApi.getWarehouses(),
           shopApi.getBankAccounts(),
+          accountingApi.getAccounts(),
         ])
-          .then(([b, pay, v, w, ba]) => {
+          .then(([b, pay, v, w, ba, coa]) => {
             const billList = normalizeList(b);
             const payList = normalizeList<{
               id?: string;
@@ -743,6 +763,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
               });
             }
             setBankAccounts(normalizeList(ba));
+            setChartAccountsRaw(normalizeList(coa));
             setProcurementCache(tenantId, { purchaseBills: billList, supplierPayments: payList }).catch(() => {});
           })
           .catch(() => {
@@ -758,6 +779,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
             setSupplierPayments([]);
             setVendorsFromApi([]);
             setBankAccounts([]);
+            setChartAccountsRaw([]);
           })
           .finally(() => setLoadingData(false));
         return;
@@ -771,10 +793,16 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           })
           .catch(() => setBills([]))
           .finally(() => setLoadingData(false));
-        Promise.all([shopApi.getVendors(), shopApi.getWarehouses(), shopApi.getBankAccounts()])
-          .then(([v, w, ba]) => {
+        Promise.all([
+          shopApi.getVendors(),
+          shopApi.getWarehouses(),
+          shopApi.getBankAccounts(),
+          accountingApi.getAccounts(),
+        ])
+          .then(([v, w, ba, coa]) => {
             setVendorsFromApi(normalizeList(v));
             setBankAccounts(normalizeList(ba));
+            setChartAccountsRaw(normalizeList(coa));
           })
           .catch(() => {});
         return;
@@ -790,18 +818,18 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         if (bal <= 0) return;
         const billDate =
           String(b.bill_date ?? b.billDate ?? '').slice(0, 10) || new Date().toISOString().slice(0, 10);
-        const hasBanks = bankAccounts.length > 0;
+        const hasPayFrom = payFromAccounts.length > 0;
         setQuickPayBill(b);
         setQuickPaySuccess(null);
         setQuickPayForm({
           amount: Math.round(bal * 100) / 100,
           paymentDate: billDate,
-          paymentMethod: hasBanks ? 'Bank' : 'Cash',
-          bankAccountId: hasBanks ? String(bankAccounts[0]?.id ?? '') : '',
+          paymentMethod: hasPayFrom ? 'Bank' : 'Cash',
+          chartAccountId: hasPayFrom ? String(payFromAccounts[0]?.id ?? '') : '',
           notes: '',
         });
       },
-      [bankAccounts]
+      [payFromAccounts]
     );
 
     const closeQuickPay = useCallback(() => {
@@ -823,8 +851,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         showProcurementToast(`Amount must be between 0.01 and ${maxBal.toFixed(2)}.`, 'error');
         return;
       }
-      if (quickPayForm.paymentMethod === 'Bank' && !quickPayForm.bankAccountId) {
-        showProcurementToast('Select a bank account.', 'error');
+      if (quickPayForm.paymentMethod === 'Bank' && !quickPayForm.chartAccountId) {
+        showProcurementToast('Select an account from Chart of Accounts.', 'error');
         return;
       }
       const billNum = String(quickPayBill.bill_number ?? quickPayBill.billNumber ?? '');
@@ -833,10 +861,12 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       const vendorName = String(
         vopt?.company_name || vopt?.companyName || quickPayBill.supplier_name || vopt?.name || 'Supplier'
       ).trim();
-      const bankLabel =
-        quickPayForm.paymentMethod === 'Bank'
-          ? bankAccounts.find((x) => x.id === quickPayForm.bankAccountId)?.name
+      const payAcc =
+        quickPayForm.paymentMethod === 'Bank' && quickPayForm.chartAccountId
+          ? payFromAccountById.get(quickPayForm.chartAccountId)
           : undefined;
+      const bankLabel =
+        payAcc != null ? formatPayFromAccountLabel(payAcc) : undefined;
 
       setQuickPayPaying(true);
       try {
@@ -844,9 +874,9 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
           supplierId,
           amount: amt,
           paymentMethod: quickPayForm.paymentMethod,
-          bankAccountId:
-            quickPayForm.paymentMethod === 'Bank' && quickPayForm.bankAccountId
-              ? quickPayForm.bankAccountId
+          chartAccountId:
+            quickPayForm.paymentMethod === 'Bank' && quickPayForm.chartAccountId
+              ? quickPayForm.chartAccountId
               : undefined,
           paymentDate: quickPayForm.paymentDate,
           reference,
@@ -881,7 +911,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       } finally {
         setQuickPayPaying(false);
       }
-    }, [quickPayBill, quickPayForm, bankAccounts, vendors, vendorsFromApi, loadBillsAndFormData]);
+    }, [quickPayBill, quickPayForm, payFromAccountById, vendors, vendorsFromApi, loadBillsAndFormData]);
 
     useEffect(() => {
       loadBillsAndFormData();
@@ -1615,9 +1645,12 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         if (editBillId && editingIsDraft) {
           await procurementApi.postPurchaseBill(editBillId, payload);
           closeForm();
-          showProcurementToast('Purchase bill posted — stock updated', 'success');
-          const list = await procurementApi.getPurchaseBills();
-          setBills(Array.isArray(list) ? list : []);
+          const paidAtPost = form.paymentStatus !== 'Credit';
+          showProcurementToast(
+            paidAtPost ? 'Purchase bill posted — payment recorded' : 'Purchase bill posted — stock updated',
+            'success'
+          );
+          loadBillsAndFormData();
           refreshItemsRef.current?.();
           return;
         }
@@ -1638,10 +1671,13 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         const result = await createPurchaseBillOfflineFirst(payload);
         if (result.synced) {
           closeForm();
-          showProcurementToast('Purchase bill saved', 'success');
+          const paidAtPost = form.paymentStatus !== 'Credit';
+          showProcurementToast(
+            paidAtPost ? 'Purchase bill posted — payment recorded' : 'Purchase bill saved',
+            'success'
+          );
           setSharePdfToWhatsAppAfterSave(false);
-          const list = await procurementApi.getPurchaseBills();
-          setBills(Array.isArray(list) ? list : []);
+          loadBillsAndFormData();
           refreshItemsRef.current?.();
           if (snapshotForPdf) {
             try {
@@ -2406,10 +2442,25 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                         const refLabel = refTrim || String(p.id ?? '').slice(0, 10);
                         const payNotes = String(p.notes ?? '').trim();
                         const payMethod = String(p.payment_method ?? '').trim();
+                        const chartPayId = String(
+                          p.payment_chart_account_id ?? p.paymentChartAccountId ?? ''
+                        ).trim();
                         const bankLabelPay =
-                          payMethod === 'Bank'
-                            ? bankAccounts.find((x) => x.id === (p.bank_account_id ?? p.bankAccountId))?.name
-                            : undefined;
+                          payMethod === 'Bank' && chartPayId
+                            ? formatPayFromAccountLabel(
+                                payFromAccountById.get(chartPayId) ?? {
+                                  id: chartPayId,
+                                  name: String(
+                                    p.payment_chart_account_name ??
+                                      p.paymentChartAccountName ??
+                                      'Account'
+                                  ),
+                                  code: p.payment_chart_account_code ?? p.paymentChartAccountCode,
+                                }
+                              )
+                            : payMethod === 'Bank'
+                              ? bankAccounts.find((x) => x.id === (p.bank_account_id ?? p.bankAccountId))?.name
+                              : undefined;
 
                         return (
                           <tr
@@ -2846,47 +2897,53 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                         setQuickPayForm((f) => ({
                           ...f,
                           paymentMethod: 'Bank',
-                          bankAccountId: bankAccounts[0]?.id ? String(bankAccounts[0].id) : f.bankAccountId,
+                          chartAccountId: payFromAccounts[0]?.id
+                            ? String(payFromAccounts[0].id)
+                            : f.chartAccountId,
                         }))
                       }
-                      disabled={bankAccounts.length === 0}
+                      disabled={payFromAccounts.length === 0}
                     />
-                    <span>Bank account</span>
+                    <span>Account</span>
                   </label>
                   <label className="flex cursor-pointer items-center gap-2">
                     <input
                       type="radio"
                       name="quick-pay-method"
                       checked={quickPayForm.paymentMethod === 'Cash'}
-                      onChange={() => setQuickPayForm((f) => ({ ...f, paymentMethod: 'Cash', bankAccountId: '' }))}
+                      onChange={() => setQuickPayForm((f) => ({ ...f, paymentMethod: 'Cash', chartAccountId: '' }))}
                     />
                     <span>Cash</span>
                   </label>
                 </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Accounts are from Settings → Chart of Accounts (cash & bank, 111xx).
+                </p>
               </div>
-              {quickPayForm.paymentMethod === 'Bank' && bankAccounts.length > 0 && (
+              {quickPayForm.paymentMethod === 'Bank' && payFromAccounts.length > 0 && (
                 <div>
-                  <label className="label mb-1 block" htmlFor="quick-pay-bank">
-                    Bank account
+                  <label className="label mb-1 block" htmlFor="quick-pay-account">
+                    Pay from account
                   </label>
                   <select
-                    id="quick-pay-bank"
-                    value={quickPayForm.bankAccountId}
-                    onChange={(e) => setQuickPayForm((f) => ({ ...f, bankAccountId: e.target.value }))}
+                    id="quick-pay-account"
+                    value={quickPayForm.chartAccountId}
+                    onChange={(e) => setQuickPayForm((f) => ({ ...f, chartAccountId: e.target.value }))}
                     className="input input-text w-full"
                   >
                     <option value="">Select account…</option>
-                    {bankAccounts.map((acc: { id: string; name: string }) => (
+                    {payFromAccounts.map((acc) => (
                       <option key={acc.id} value={acc.id}>
-                        {acc.name}
+                        {formatPayFromAccountLabel(acc)}
                       </option>
                     ))}
                   </select>
                 </div>
               )}
-              {quickPayForm.paymentMethod === 'Bank' && bankAccounts.length === 0 && (
+              {quickPayForm.paymentMethod === 'Bank' && payFromAccounts.length === 0 && (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-                  No bank accounts on file. Choose Cash or add an account in settings.
+                  No cash or bank accounts in Chart of Accounts. Choose Cash or add an Asset account under Cash & Cash
+                  Equivalents (code 111xx) in Settings.
                 </p>
               )}
               <div>
@@ -2915,7 +2972,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                   type="button"
                   disabled={
                     quickPayPaying ||
-                    (quickPayForm.paymentMethod === 'Bank' && (!quickPayForm.bankAccountId || bankAccounts.length === 0))
+                    (quickPayForm.paymentMethod === 'Bank' &&
+                      (!quickPayForm.chartAccountId || payFromAccounts.length === 0))
                   }
                   onClick={() => void submitQuickPay()}
                   className="btn-primary rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-50"
@@ -2987,7 +3045,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         <SupplierPaymentEditDialog
           paymentId={editSupplierPaymentId}
           vendors={vendors as any[]}
-          bankAccounts={bankAccounts}
+          payFromAccounts={payFromAccounts}
           onClose={() => setEditSupplierPaymentId(null)}
           onSaved={() => {
             showProcurementToast('Payment updated', 'success');

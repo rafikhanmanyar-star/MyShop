@@ -25,6 +25,8 @@ import AppHeader from './components/AppHeader';
 import { InventoryPageHeaderProvider } from './context/InventoryPageHeaderContext';
 import { ProcurementPageHeaderProvider } from './context/ProcurementPageHeaderContext';
 import { useAutoLogout } from './hooks/useAutoLogout';
+import { shopApi, type OrganizationProfile } from './services/shopApi';
+import { getFullImageUrl } from './config/apiUrl';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
 const InventoryPage = lazy(() => import('./components/shop/InventoryPage'));
@@ -137,10 +139,53 @@ function getUserInitials(name: string) {
     .slice(0, 2);
 }
 
+function organizationDisplayTitle(org: OrganizationProfile | null): string {
+  if (!org) return 'MyShop';
+  const company = org.company_name?.trim();
+  if (company) return company;
+  return org.name?.trim() || 'MyShop';
+}
+
+function organizationDisplaySubtitle(org: OrganizationProfile | null): string | null {
+  if (!org) return null;
+  const branch = org.branch_name?.trim();
+  if (branch) return branch;
+  const phone = org.phone?.trim();
+  if (phone) return phone;
+  const address = org.address?.trim();
+  if (address) return address.length > 48 ? `${address.slice(0, 45)}…` : address;
+  const name = org.name?.trim();
+  const company = org.company_name?.trim();
+  if (name && company && name !== company) return name;
+  return null;
+}
+
 function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onToggle: () => void; onLogout: () => void }) {
   const { user } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [organization, setOrganization] = useState<OrganizationProfile | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    shopApi
+      .getOrganization()
+      .then((data) => {
+        if (!cancelled) setOrganization(data);
+      })
+      .catch(() => {
+        if (!cancelled) setOrganization(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const companyTitle = organizationDisplayTitle(organization);
+  const companySubtitle = organizationDisplaySubtitle(organization);
+  const logoUrl = organization?.logo_url
+    ? getFullImageUrl(organization.logo_url) || organization.logo_url
+    : null;
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -166,25 +211,46 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
       className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-white/10 bg-[#0056b3] shadow-sm transition-all duration-300 ease-in-out ${collapsed ? 'w-20' : 'w-72'}`}
     >
       {/* Header: Logo + Toggle — same brand blue as POS category chips */}
-      <div className="flex h-20 shrink-0 items-center justify-between border-b border-white/10 bg-[#0056b3] px-5">
+      <div className={`flex shrink-0 items-center justify-between border-b border-white/10 bg-[#0056b3] ${collapsed ? 'h-20 px-2' : 'min-h-20 px-5 py-3'}`}>
         {!collapsed && (
-          <div className="group flex cursor-pointer items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 shadow-md transition-transform duration-200 group-hover:scale-105">
-              <Store className="h-[1.125rem] w-[1.125rem] text-white" />
+          <div className="group flex min-w-0 flex-1 cursor-default items-center gap-2.5" title={companySubtitle ? `${companyTitle} — ${companySubtitle}` : companyTitle}>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/20 shadow-md transition-transform duration-200 group-hover:scale-105">
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <Store className="h-[1.125rem] w-[1.125rem] text-white" />
+              )}
             </div>
-            <div className="flex flex-col">
-              <span className="text-lg font-extrabold leading-none tracking-tight text-white">MyShop</span>
-              <span className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-blue-200/80">The Digital Atelier</span>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-lg font-extrabold leading-tight tracking-tight text-white" title={companyTitle}>
+                {companyTitle}
+              </span>
+              {companySubtitle ? (
+                <span
+                  className="truncate text-[0.65rem] font-medium leading-snug text-blue-200/90"
+                  title={companySubtitle}
+                >
+                  {companySubtitle}
+                </span>
+              ) : null}
             </div>
           </div>
         )}
         {collapsed && (
           <button
             onClick={onToggle}
-            className="group flex w-full items-center justify-center rounded-lg py-3 text-blue-100 transition-colors duration-200 hover:bg-white/10 hover:text-white"
-            title="Open sidebar"
+            className="group flex w-full flex-col items-center justify-center gap-1 rounded-lg py-2 text-blue-100 transition-colors duration-200 hover:bg-white/10 hover:text-white"
+            title={companySubtitle ? `${companyTitle} — ${companySubtitle}` : companyTitle}
+            aria-label="Open sidebar"
           >
-            <ChevronRight className="h-6 w-6 transition-transform group-hover:translate-x-0.5" />
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-white/20 shadow-md">
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-xs font-bold text-white">{companyTitle.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+            <ChevronRight className="h-5 w-5 transition-transform group-hover:translate-x-0.5" />
           </button>
         )}
         {!collapsed && (

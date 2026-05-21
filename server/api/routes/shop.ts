@@ -868,6 +868,34 @@ router.delete('/users/:id', checkRole(['admin']), async (req: any, res) => {
   }
 });
 
+// --- Organization profile for sidebar / header (any authenticated shop user) ---
+router.get('/organization', async (req: any, res) => {
+  try {
+    const row = await getTenantManagementService().getTenantById(req.tenantId);
+    if (!row) return res.status(404).json({ error: 'Organization not found' });
+
+    let branch_name: string | null = null;
+    if (req.branchId) {
+      const branches = await getShopService().getBranches(req.tenantId);
+      const branch = (branches as { id: string; name: string }[]).find((b) => b.id === req.branchId);
+      branch_name = branch?.name?.trim() || null;
+    }
+
+    res.json({
+      id: row.id,
+      name: row.name?.trim() || '',
+      company_name: row.company_name?.trim() || '',
+      phone: row.phone?.trim() || null,
+      address: row.address?.trim() || null,
+      logo_url: row.logo_url?.trim() || null,
+      slug: row.slug?.trim() || null,
+      branch_name,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- Current organization (tenant row); admin can view/edit own tenant ---
 router.get('/tenant', checkRole(['admin']), async (req: any, res) => {
   try {
