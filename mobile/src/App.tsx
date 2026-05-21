@@ -23,6 +23,8 @@ import BudgetDashboard from './pages/BudgetDashboard';
 import BudgetCreation from './pages/BudgetCreation';
 import BudgetDetail from './pages/BudgetDetail';
 import AccountSettings from './pages/AccountSettings';
+import LoyaltyHistory from './pages/LoyaltyHistory';
+import LoyaltyBenefits from './pages/LoyaltyBenefits';
 import NotificationsPage from './pages/NotificationsPage';
 import RecipeHome from './pages/RecipeHome';
 import RecipeDetail from './pages/RecipeDetail';
@@ -137,6 +139,8 @@ export default function App() {
           <Route path="voice-orders" element={<VoiceOrders />} />
           <Route path="voice-orders/:id" element={<VoiceOrderDetail />} />
           <Route path="account" element={<AccountSettings />} />
+          <Route path="loyalty/history" element={<LoyaltyHistory />} />
+          <Route path="loyalty/benefits" element={<LoyaltyBenefits />} />
           <Route path="notifications" element={<NotificationsPage />} />
 
           {/* Budget Feature */}

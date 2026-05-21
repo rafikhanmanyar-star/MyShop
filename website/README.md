@@ -19,7 +19,7 @@ Open **http://localhost:5190**. The dev server proxies `/api` and `/uploads` to 
 npm run build
 ```
 
-Output: `website/dist/`
+Output: `website/out/` (static HTML export for Render / Cloudflare Pages)
 
 ## Deploy to Cloudflare Pages
 
@@ -33,7 +33,7 @@ That error means the Pages project **Root directory** is set to `mobile` (custom
 |--------|-----------------------------------|------------------------|
 | **Root directory** | `website` | `mobile` |
 | **Build command** | `npm ci && npm run build` | `npm ci && npm run build` |
-| **Build output directory** | `dist` | `dist` |
+| **Build output directory** | `out` | `dist` |
 
 Use a **separate Pages project** for the marketing site and for the mobile shop app — do not reuse the mobile project’s root directory.
 
@@ -47,7 +47,19 @@ Use a **separate Pages project** for the marketing site and for the mobile shop 
 1. **Workers & Pages → Create → Connect Git** → **MyShop** repo (or your standalone Website repo with files at root).
 2. **Root directory:** `website` (MyShop) or leave blank (standalone repo)
 3. **Build command:** `npm ci && npm run build`
-4. **Output directory:** `dist`
+4. **Output directory:** `out`
+
+### Deploy on Render (static site)
+
+In the Render dashboard for **OboStores-Website**:
+
+| Setting | Value |
+|--------|--------|
+| **Root directory** | `website` |
+| **Build command** | `NODE_OPTIONS=--max-old-space-size=2048 npm ci && npm run build` |
+| **Publish directory** | `out` |
+
+The repo `render.yaml` is configured the same way. After pushing these fixes, trigger **Manual Deploy** (or push to `main`).
 5. **Environment variables** (production) — copy from `.env.production.example`:
    - `VITE_API_URL` — your API, e.g. `https://api.obostores.com/api`
    - `VITE_SHOP_SLUG` — shop slug, e.g. `obo`

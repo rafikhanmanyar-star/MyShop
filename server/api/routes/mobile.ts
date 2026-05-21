@@ -1193,6 +1193,21 @@ const loyaltyPointsHandler = async (req: any, res: express.Response) => {
 router.get('/loyalty-points', mobileAuthMiddleware(db), loyaltyPointsHandler);
 router.get('/user/loyalty-points', mobileAuthMiddleware(db), loyaltyPointsHandler);
 
+router.get('/loyalty-history', mobileAuthMiddleware(db), async (req: any, res: express.Response) => {
+    try {
+        const { getShopService } = await import('../../services/shopService.js');
+        const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 50;
+        const items = await getShopService().getLoyaltyHistoryForMobileCustomer(
+            req.tenantId,
+            req.customerId,
+            limit
+        );
+        res.json({ items });
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 // Place order — shop and branch are the same entity: server uses tenant's default (first) branch when branchId omitted
 router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     try {

@@ -52,8 +52,8 @@ services:
     runtime: static
     branch: main
     rootDir: website
-    buildCommand: npm ci && npm run build
-    staticPublishPath: ./dist
+    buildCommand: NODE_OPTIONS=--max-old-space-size=2048 npm ci && npm run build
+    staticPublishPath: ./out
     envVars:
       - key: VITE_API_URL
         value: https://myshop-api-9pd4.onrender.com/api

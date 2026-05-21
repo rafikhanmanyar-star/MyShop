@@ -4054,6 +4054,101 @@ img {
   color: var(--text-muted);
 }
 
+.loyalty-history-row {
+  display: block;
+  padding: 14px 16px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.loyalty-history-row__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.loyalty-history-row__order {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.loyalty-history-row__points {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.loyalty-history-row__meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.loyalty-benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.loyalty-benefits__balance {
+  padding: 18px 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.loyalty-benefits__label {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.loyalty-benefits__points {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.loyalty-benefits__points span {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.loyalty-benefits__tier {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.loyalty-benefits__section {
+  padding: 16px;
+}
+
+.loyalty-benefits__section h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.loyalty-benefits__section ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.loyalty-benefits__section li + li {
+  margin-top: 8px;
+}
+
 .home-loyalty-card__actions .home-loyalty-card__cta:not(.home-loyalty-card__cta--ghost) {
   flex: 1;
   display: inline-flex;

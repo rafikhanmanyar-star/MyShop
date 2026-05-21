@@ -267,11 +267,6 @@ export default function Home() {
                                             Showing last saved balance
                                         </p>
                                     )}
-                                    {loyalty.pointsValue != null && loyalty.pointsValue > 0 && !loyalty.fetchFailed && (
-                                        <p className="home-loyalty-card__hint">
-                                            ≈ Rs. {loyalty.pointsValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} redeemable value
-                                        </p>
-                                    )}
                                     <div className="home-loyalty-card__progress" aria-hidden>
                                         <span className="home-loyalty-card__progress-fill" />
                                     </div>
@@ -281,10 +276,10 @@ export default function Home() {
                         </div>
                     </div>
                     <div className="home-loyalty-card__actions">
-                        <Link to={`/${shopSlug}/account#loyalty`} className="home-loyalty-card__cta home-loyalty-card__cta--ghost">
+                        <Link to={`/${shopSlug}/loyalty/history`} className="home-loyalty-card__cta home-loyalty-card__cta--ghost">
                             View History
                         </Link>
-                        <Link to={`/${shopSlug}/account#loyalty`} className="home-loyalty-card__cta">
+                        <Link to={`/${shopSlug}/loyalty/benefits`} className="home-loyalty-card__cta">
                             View Benefits →
                         </Link>
                     </div>

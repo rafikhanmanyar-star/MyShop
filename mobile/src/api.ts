@@ -261,6 +261,10 @@ export const customerApi = {
     getBudgetAlerts: () => request(`${API_BASE}/budget-alerts`),
     /** Loyalty balance (backend-calculated; same source as POS) */
     getLoyaltyPoints: () => request(`${API_BASE}/loyalty-points`),
+    getLoyaltyHistory: (limit?: number) => {
+        const qs = limit != null ? `?limit=${limit}` : '';
+        return request(`${API_BASE}/loyalty-history${qs}`);
+    },
     getSavedRecipes: (shopSlug: string, params?: { limit?: number; offset?: number }) => {
         const q = new URLSearchParams();
         if (params?.limit != null) q.set('limit', String(params.limit));

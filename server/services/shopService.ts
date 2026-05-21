@@ -1999,6 +1999,7 @@ export class ShopService {
     points_value: number;
     redemption_ratio: number;
     last_updated: string | null;
+    tier: string | null;
   }> {
     const mcRows = await this.db.query(
       `SELECT COALESCE(c.phone_number, mc.phone) AS phone
@@ -2014,9 +2015,10 @@ export class ShopService {
 
     let totalPoints = 0;
     let lastUpdated: string | null = null;
+    let tier: string | null = null;
     if (phone) {
       const memberRows = await this.db.query(
-        `SELECT m.points_balance, m.updated_at
+        `SELECT m.points_balance, m.updated_at, m.tier
          FROM shop_loyalty_members m
          INNER JOIN contacts c ON c.id = m.customer_id AND c.tenant_id = m.tenant_id
          WHERE m.tenant_id = $1
@@ -2036,6 +2038,7 @@ export class ShopService {
         totalPoints = Math.max(0, parseInt(String(memberRows[0].points_balance), 10) || 0);
         const u = memberRows[0].updated_at;
         lastUpdated = u ? new Date(u).toISOString() : null;
+        tier = memberRows[0].tier ? String(memberRows[0].tier) : null;
       }
     }
 
@@ -2055,7 +2058,44 @@ export class ShopService {
       points_value: pointsValue,
       redemption_ratio: ratio,
       last_updated: lastUpdated,
+      tier,
     };
+  }
+
+  /** Delivered mobile orders that earned loyalty points for this customer. */
+  async getLoyaltyHistoryForMobileCustomer(
+    tenantId: string,
+    mobileCustomerId: string,
+    limit: number = 50
+  ): Promise<
+    Array<{
+      order_id: string;
+      order_number: string;
+      status: string;
+      grand_total: number;
+      points_earned: number;
+      created_at: string;
+    }>
+  > {
+    const safeLimit = Math.min(Math.max(1, Math.floor(limit) || 50), 100);
+    const rows = await this.db.query(
+      `SELECT o.id, o.order_number, o.status, o.grand_total,
+              COALESCE(o.points_earned, 0)::int AS points_earned, o.created_at
+       FROM mobile_orders o
+       WHERE o.tenant_id = $1 AND o.customer_id = $2 AND COALESCE(o.points_earned, 0) > 0
+       ORDER BY o.created_at DESC
+       LIMIT $3`,
+      [tenantId, mobileCustomerId, safeLimit]
+    );
+    return rows.map((r: any) => ({
+      order_id: String(r.id),
+      order_number: String(r.order_number),
+      status: String(r.status),
+      grand_total: parseFloat(String(r.grand_total)) || 0,
+      points_earned: parseInt(String(r.points_earned), 10) || 0,
+      created_at:
+        r.created_at instanceof Date ? r.created_at.toISOString() : new Date(r.created_at).toISOString(),
+    }));
   }
 
   /**
