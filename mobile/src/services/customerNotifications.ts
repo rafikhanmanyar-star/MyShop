@@ -185,6 +185,20 @@ export function formatOrderEventMessage(payload: Record<string, unknown>): { tit
         };
     }
 
+    if (source === 'chat_message') {
+        const preview = payload.messagePreview != null ? String(payload.messagePreview) : '';
+        const who =
+            payload.senderRole === 'rider'
+                ? 'Rider'
+                : payload.senderRole === 'shop'
+                  ? 'Shop'
+                  : 'New message';
+        return {
+            title: orderNumber ? `${who} · #${orderNumber}` : who,
+            body: preview || 'You have a new chat message.',
+        };
+    }
+
     if (deliveryStatus && source.startsWith('delivery')) {
         const label = deliveryLabels[deliveryStatus.toUpperCase()] || deliveryStatus.replace(/_/g, ' ');
         return {
@@ -211,5 +225,6 @@ export function makeOrderNotificationId(payload: Record<string, unknown>, channe
     const st = String(payload.status || '');
     const ds = String(payload.deliveryStatus || '');
     const src = String(payload.source || '');
-    return `ord-${oid}-${channel}-${src}-${st}-${ds}-${Date.now()}`;
+    const preview = String(payload.messagePreview || '').slice(0, 40);
+    return `ord-${oid}-${channel}-${src}-${st}-${ds}-${preview}`;
 }

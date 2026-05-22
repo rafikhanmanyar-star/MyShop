@@ -1,43 +1,35 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useToast } from '../context/ToastContext';
 
 const items = [
-  { id: 'orders', label: 'ORDERS', icon: 'truck' },
-  { id: 'earn', label: 'EARNINGS', icon: 'wallet' },
-  { id: 'map', label: 'MAP', icon: 'map' },
-  { id: 'profile', label: 'PROFILE', icon: 'user' },
+  { path: '/', label: 'Home', icon: '🏠' },
+  { path: '/queue', label: 'Queue', icon: '📦' },
+  { path: '/route', label: 'Route', icon: '🗺️' },
+  { path: '/chat', label: 'Chat', icon: '💬' },
+  { path: '/profile', label: 'Profile', icon: '👤' },
 ] as const;
 
 export function RiderBottomNav() {
   const nav = useNavigate();
   const loc = useLocation();
-  const { showToast } = useToast();
+  const onOrder = loc.pathname.startsWith('/order/');
 
-  const onOrderDetail = loc.pathname.startsWith('/order/');
+  if (onOrder) return null;
 
   return (
-    <nav className="rider-bottom-nav" aria-label="Main">
+    <nav className="r-bottom-nav" aria-label="Main navigation">
       {items.map((it) => {
-        const active =
-          (it.id === 'orders' && loc.pathname === '/') || (it.id === 'map' && onOrderDetail);
-
-        const go = () => {
-          if (it.id === 'orders') {
-            nav('/');
-            return;
-          }
-          if (it.id === 'map') {
-            if (onOrderDetail) showToast('Map is shown above');
-            else showToast('Open an order to view the map');
-            return;
-          }
-          showToast('Coming soon');
-        };
-
+        const active = loc.pathname === it.path;
         return (
-          <button key={it.id} type="button" className={`rider-bottom-nav__item ${active ? 'is-active' : ''}`} onClick={go}>
-            <span className={`rider-bottom-nav__ico rider-bottom-nav__ico--${it.icon}`} aria-hidden />
-            <span className="rider-bottom-nav__label">{it.label}</span>
+          <button
+            key={it.path}
+            type="button"
+            className={`r-bottom-nav__item ${active ? 'is-active' : ''}`}
+            onClick={() => nav(it.path)}
+          >
+            <span className="r-bottom-nav__icon" aria-hidden>
+              {it.icon}
+            </span>
+            {it.label}
           </button>
         );
       })}

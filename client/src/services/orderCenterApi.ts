@@ -67,6 +67,30 @@ export const orderCenterApi = {
         body: { bankAccountId?: string; paymentType?: 'bank' | 'khata' }
     ) => apiClient.put(`/shop/order-center/cart/${encodeURIComponent(orderId)}/collect-payment`, body),
 
+    getChatMessages: (orderId: string) =>
+        apiClient.get<{ messages: Array<{ id: string; sender_role: string; body: string; created_at: string }> }>(
+            `/shop/order-center/cart/${encodeURIComponent(orderId)}/chat`
+        ),
+
+    sendChatMessage: (orderId: string, body: string) =>
+        apiClient.post(`/shop/order-center/cart/${encodeURIComponent(orderId)}/chat`, { body }),
+
+    getRidersLiveLocations: () =>
+        apiClient.get<{
+            riders: Array<{
+                id: string;
+                name: string;
+                status: string;
+                latitude: number;
+                longitude: number;
+            }>;
+        }>('/shop/order-center/riders/live-locations'),
+
+    getFleetRiderAnalytics: (days = 7) =>
+        apiClient.get<{ period_days: number; riders: Array<{ id: string; name: string; status: string; deliveries: number; completed: number }> }>(
+            `/shop/order-center/riders/analytics?days=${days}`
+        ),
+
     getCustomerHistory: (customerId: string) =>
         apiClient.get<{
             previous_orders: { id: string; order_number: string; status: string; grand_total: number; created_at: string; kind: string }[];

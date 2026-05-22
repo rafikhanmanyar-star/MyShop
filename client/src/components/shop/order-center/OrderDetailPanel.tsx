@@ -15,6 +15,7 @@ import { CartCollectPaymentModal } from './CartCollectPaymentModal';
 import { useOrderCenter } from '../../../context/OrderCenterContext';
 import { useMobileOrders } from '../../../context/MobileOrdersContext';
 import { CartRiderAssign } from './CartRiderAssign';
+import { OrderCenterChat } from './OrderCenterChat';
 import type { PosRidersOverview } from '../../../services/mobileOrdersApi';
 
 const VOICE_STATUS: Record<string, { label: string; color: string }> = {
@@ -250,6 +251,7 @@ function CartDetail({
     const terminal = ['Delivered', 'Cancelled'].includes(order.status);
     const fromVoice = !!order.converted_from_voice_order_id;
     const voiceAwaitingApproval = fromVoice && order.voice_order_status === 'InvoiceCreated';
+    const voiceCustomerApproved = fromVoice && order.voice_order_status === 'Accepted';
     const canConfirm = next === 'Confirmed' && !voiceAwaitingApproval;
     const riderLocked = isRiderFulfillmentLocked(order);
     const canAdvance = shopCanAdvanceCartStatus(order, next);
@@ -344,6 +346,11 @@ function CartDetail({
                     approve, use <strong>Mark Confirmed</strong> to start packing.
                 </div>
             )}
+            {voiceCustomerApproved && next === 'Confirmed' && (
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 p-4 text-sm text-emerald-900 dark:text-emerald-100">
+                    <strong>Customer approved the invoice.</strong> Use <strong>Mark Confirmed</strong> to start packing.
+                </div>
+            )}
             {riderLocked && !terminal && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50/80 dark:border-blue-900 dark:bg-blue-950/40 px-3 py-2.5 text-sm text-blue-950 dark:text-blue-100 flex items-start gap-2">
                     <Truck className="w-4 h-4 shrink-0 mt-0.5" />
@@ -362,6 +369,12 @@ function CartDetail({
                     onRidersRefresh();
                 }}
             />
+            {order.delivery_order_id && order.payment_method !== 'SelfCollection' ? (
+                <OrderCenterChat
+                    orderId={order.id}
+                    riderName={order.rider_name ?? order.rider_id ?? undefined}
+                />
+            ) : null}
             <div className="flex flex-wrap gap-2">
                 {isUnpaidDelivered && (
                     <button type="button" className="btn bg-orange-600 text-white hover:bg-orange-700" onClick={() => setPaymentOpen(true)}>

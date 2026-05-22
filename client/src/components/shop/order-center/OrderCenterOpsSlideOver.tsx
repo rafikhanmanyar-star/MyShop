@@ -6,6 +6,8 @@ import { mobileOrdersApi, type MobileOrder, type PosRidersOverview } from '../..
 import { MobileOrdersLiveMap } from '../MobileOrdersLiveMap';
 import { MobileSettingsPanel } from '../MobileOrdersPage';
 import { fetchRidersOverview } from './CartRiderAssign';
+import { orderCenterApi } from '../../../services/orderCenterApi';
+import { useOrderCenter } from '../../../context/OrderCenterContext';
 
 export type OpsSlideTab = 'map' | 'riders' | 'settings';
 
@@ -33,7 +35,11 @@ export function OrderCenterOpsSlideOver({
     onMapOrderRefresh,
 }: Props) {
     const { branding, loadBranding, loadSettings } = useMobileOrders();
+    const { subscribeDetailRefresh } = useOrderCenter();
     const [ridersOverview, setRidersOverview] = useState<PosRidersOverview | null>(null);
+    const [liveRiderPositions, setLiveRiderPositions] = useState<
+        Record<string, { lat: number; lng: number; status: string }>
+    >({});
     const [ridersLoading, setRidersLoading] = useState(false);
     const [liveMapOrder, setLiveMapOrder] = useState<MobileOrder | null>(mapOrder);
 
@@ -41,6 +47,14 @@ export function OrderCenterOpsSlideOver({
         setRidersLoading(true);
         try {
             setRidersOverview(await fetchRidersOverview());
+            const live = await orderCenterApi.getRidersLiveLocations();
+            const map: Record<string, { lat: number; lng: number; status: string }> = {};
+            for (const r of live.riders) {
+                if (r.latitude != null && r.longitude != null) {
+                    map[r.id] = { lat: r.latitude, lng: r.longitude, status: r.status };
+                }
+            }
+            setLiveRiderPositions(map);
         } finally {
             setRidersLoading(false);
         }
@@ -70,9 +84,37 @@ export function OrderCenterOpsSlideOver({
         };
         refresh();
         if (!shouldPollDelivery(mapOrder)) return;
-        const id = window.setInterval(refresh, 12_000);
+        const id = window.setInterval(refresh, 8_000);
         return () => clearInterval(id);
     }, [open, tab, mapOrder?.id, mapOrder?.delivery_order_id, mapOrder?.delivery_status, onMapOrderRefresh]);
+
+    useEffect(() => {
+        if (!open || tab !== 'map') return;
+        const id = window.setInterval(() => void loadRiders(), 5_000);
+        return () => clearInterval(id);
+    }, [open, tab, loadRiders]);
+
+    useEffect(() => {
+        return subscribeDetailRefresh((p) => {
+            if (p.source === 'rider_location' && p.riderId && p.latitude != null && p.longitude != null) {
+                setLiveRiderPositions((prev) => ({
+                    ...prev,
+                    [p.riderId!]: {
+                        lat: Number(p.latitude),
+                        lng: Number(p.longitude),
+                        status: 'BUSY',
+                    },
+                }));
+                if (mapOrder?.rider_id === p.riderId && liveMapOrder) {
+                    setLiveMapOrder({
+                        ...liveMapOrder,
+                        rider_latitude: Number(p.latitude),
+                        rider_longitude: Number(p.longitude),
+                    });
+                }
+            }
+        });
+    }, [subscribeDetailRefresh, mapOrder?.rider_id, liveMapOrder]);
 
     const tabs: { id: OpsSlideTab; label: string; icon: typeof Map }[] = [
         { id: 'map', label: 'Live map', icon: Map },
@@ -167,6 +209,7 @@ export function OrderCenterOpsSlideOver({
                                                     branding={branding}
                                                     selectedOrder={liveMapOrder}
                                                     riders={ridersOverview?.riders ?? []}
+                                                    liveRiderPositions={liveRiderPositions}
                                                 />
                                             </div>
                                         </>

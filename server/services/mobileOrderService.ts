@@ -1158,6 +1158,18 @@ export class MobileOrderService {
 
         const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
         notifyDailyReportUpdated(tenantId).catch(() => {});
+
+        const ord = placed?.order as { id?: string; order_number?: string; rider_id?: string } | undefined;
+        if (ord?.rider_id && ord.id) {
+            const { getPushNotificationService } = await import('./pushNotificationService.js');
+            void getPushNotificationService().notifyRiderNewAssignment(
+                tenantId,
+                ord.rider_id,
+                String(ord.order_number || ord.id.slice(0, 8)),
+                ord.id
+            );
+        }
+
         return placed;
     }
 
@@ -1533,6 +1545,15 @@ export class MobileOrderService {
 
         const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
         notifyDailyReportUpdated(tenantId).catch(() => {});
+
+        const ord = await this.db.query(
+            `SELECT order_number FROM mobile_orders WHERE id = $1 AND tenant_id = $2`,
+            [orderId, tenantId]
+        );
+        const orderNumber = String(ord[0]?.order_number || orderId.slice(0, 8));
+        const { getPushNotificationService } = await import('./pushNotificationService.js');
+        void getPushNotificationService().notifyRiderNewAssignment(tenantId, riderId, orderNumber, orderId);
+
         return { success: true, orderId };
     }
 

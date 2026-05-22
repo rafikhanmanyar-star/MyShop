@@ -477,6 +477,16 @@ router.get('/', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: a
 });
 
 // ─── Riders overview + manual assignment (POS) — before GET /:id ─────
+router.get('/riders-live-locations', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+    try {
+        const { getRiderService } = await import('../../services/riderService.js');
+        const riders = await getRiderService().listLiveLocations(req.tenantId);
+        res.json({ riders });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.get('/riders-overview', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
     try {
         const data = await getMobileOrderService().getPosRidersOverview(req.tenantId);

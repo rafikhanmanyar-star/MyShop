@@ -1,64 +1,19 @@
-import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useRiderWork } from '../context/RiderWorkContext';
-import { useRider } from '../context/RiderContext';
-import { useToast } from '../context/ToastContext';
 
-type Props = {
-  /** When true, show compact ONLINE pill (order detail style). */
-  compactOnline?: boolean;
-};
+export function RiderTopBar() {
+  const { online, profile } = useRiderWork();
+  const loc = useLocation();
+  const onOrder = loc.pathname.startsWith('/order/');
 
-export function RiderTopBar({ compactOnline }: Props) {
-  const { logout } = useRider();
-  const { profileLoading, online } = useRiderWork();
-  const { showToast } = useToast();
-  const [menuOpen, setMenuOpen] = useState(false);
+  if (onOrder) return null;
 
   return (
-    <header className="rider-top-bar">
-      {menuOpen ? (
-        <button
-          type="button"
-          className="rider-top-bar__backdrop"
-          aria-label="Close menu"
-          onClick={() => setMenuOpen(false)}
-        />
-      ) : null}
-      <button type="button" className="rider-top-bar__icon-btn" aria-label="Menu" onClick={() => setMenuOpen((v) => !v)}>
-        <span className="rider-top-bar__burger" />
-      </button>
-      {menuOpen ? (
-        <div className="rider-top-bar__menu">
-          <button type="button" className="rider-top-bar__menu-item" onClick={() => { logout(); setMenuOpen(false); }}>
-            Log out
-          </button>
-        </div>
-      ) : null}
-
-      <div className="rider-top-bar__brand">
-        <span className="rider-top-bar__brand-mark" aria-hidden />
-        <span className="rider-top-bar__brand-text">OBO RIDER</span>
-      </div>
-
-      <div className="rider-top-bar__right">
-        {!compactOnline ? (
-          <span className={`rider-pill rider-pill--online ${online ? 'is-on' : ''}`}>
-            <span className="rider-pill__dot" />
-            {profileLoading ? '…' : online ? 'ONLINE' : 'OFFLINE'}
-          </span>
-        ) : (
-          <span className={`rider-pill rider-pill--compact ${online ? 'is-on' : ''}`}>
-            ⚡ {profileLoading ? '…' : online ? 'ONLINE' : 'OFFLINE'}
-          </span>
-        )}
-        <button
-          type="button"
-          className="rider-top-bar__icon-btn"
-          aria-label="Notifications"
-          onClick={() => showToast('No new notifications')}
-        >
-          <span className="rider-top-bar__bell" />
-        </button>
+    <header className="rider-top--enterprise">
+      <span className="rider-top__brand">MyShop Rider</span>
+      <div className="rider-top__online">
+        <span className={`r-online-dot ${online ? 'is-on' : ''}`} aria-hidden />
+        {online ? (profile?.status === 'BUSY' ? 'On delivery' : 'Online') : 'Offline'}
       </div>
     </header>
   );

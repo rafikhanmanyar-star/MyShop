@@ -11,6 +11,18 @@ export interface OrderCenterBellAlert {
     createdAt?: string;
 }
 
+/** Payload from Order Center SSE (Postgres NOTIFY). */
+export type OrderCenterSsePayload = {
+    type: string;
+    source?: string;
+    voiceOrderId?: string;
+    orderId?: string;
+    mobileOrderId?: string;
+    riderId?: string;
+    latitude?: number;
+    longitude?: number;
+};
+
 interface OrderCenterContextType {
     items: OrderCenterListItem[];
     counts: OrderCenterCounts;
@@ -25,6 +37,8 @@ interface OrderCenterContextType {
     dismissBellAlert: (id: string) => void;
     clearBellAlerts: () => void;
     playNotificationSound: () => void;
+    /** Called when SSE indicates an order change; use to refresh open detail panel. */
+    subscribeDetailRefresh: (handler: (payload: OrderCenterSsePayload) => void) => () => void;
 }
 
 const defaultCounts: OrderCenterCounts = {
@@ -51,6 +65,7 @@ export function OrderCenterProvider({ children }: { children: React.ReactNode })
     const [sseConnected, setSseConnected] = useState(false);
     const [bellAlerts, setBellAlerts] = useState<OrderCenterBellAlert[]>([]);
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const detailRefreshHandlersRef = useRef(new Set<(payload: OrderCenterSsePayload) => void>());
     const filterRef = useRef(filter);
     const searchRef = useRef(search);
 
@@ -96,6 +111,21 @@ export function OrderCenterProvider({ children }: { children: React.ReactNode })
     }, []);
 
     const clearBellAlerts = useCallback(() => setBellAlerts([]), []);
+
+    const subscribeDetailRefresh = useCallback((handler: (payload: OrderCenterSsePayload) => void) => {
+        detailRefreshHandlersRef.current.add(handler);
+        return () => {
+            detailRefreshHandlersRef.current.delete(handler);
+        };
+    }, []);
+
+    const notifyDetailRefresh = useCallback((payload: OrderCenterSsePayload) => {
+        for (const fn of detailRefreshHandlersRef.current) {
+            try {
+                fn(payload);
+            } catch { /* ignore */ }
+        }
+    }, []);
 
     useEffect(() => {
         if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
@@ -163,7 +193,8 @@ export function OrderCenterProvider({ children }: { children: React.ReactNode })
                                         d.type
                                     )
                                 ) {
-                                    void refreshQueue();
+                                    if (d.source !== 'rider_location') void refreshQueue();
+                                    notifyDetailRefresh(d as OrderCenterSsePayload);
                                 }
                             } catch { /* ignore */ }
                         }
@@ -178,7 +209,7 @@ export function OrderCenterProvider({ children }: { children: React.ReactNode })
             controller.abort();
             setSseConnected(false);
         };
-    }, [user?.role, refreshQueue, playNotificationSound]);
+    }, [user?.role, refreshQueue, playNotificationSound, notifyDetailRefresh]);
 
     return (
         <OrderCenterContext.Provider
@@ -196,6 +227,7 @@ export function OrderCenterProvider({ children }: { children: React.ReactNode })
                 dismissBellAlert,
                 clearBellAlerts,
                 playNotificationSound,
+                subscribeDetailRefresh,
             }}
         >
             {children}

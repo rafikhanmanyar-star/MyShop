@@ -3,6 +3,9 @@ import { getDatabaseService } from '../../services/databaseService.js';
 import { getOrderCenterService } from '../../services/orderCenterService.js';
 import { getMobileOrderService } from '../../services/mobileOrderService.js';
 import { getVoiceOrderService } from '../../services/voiceOrderService.js';
+import { getDeliveryChatService } from '../../services/deliveryChatService.js';
+import { getRiderService } from '../../services/riderService.js';
+import { getRiderAnalyticsService } from '../../services/riderAnalyticsService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
 import type { OrderCenterKind, OrderCenterQueueFilter } from '../../services/orderCenterService.js';
 
@@ -194,6 +197,50 @@ shopOrderCenterRouter.post('/voice/:id/link-invoice', checkRole(['admin', 'pos_c
             { createMobileOrder, paymentMethod }
         );
         res.json(order);
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+shopOrderCenterRouter.get('/riders/live-locations', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const riders = await getRiderService().listLiveLocations(req.tenantId);
+        res.json({ riders });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+shopOrderCenterRouter.get('/riders/analytics', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const days = req.query.days ? parseInt(String(req.query.days), 10) : 7;
+        const out = await getRiderAnalyticsService().getFleetAnalytics(req.tenantId, days);
+        res.json(out);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+shopOrderCenterRouter.get('/cart/:id/chat', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const messages = await getDeliveryChatService().listMessages(req.tenantId, req.params.id, 100);
+        res.json({ messages });
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
+shopOrderCenterRouter.post('/cart/:id/chat', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const { body } = req.body;
+        const msg = await getDeliveryChatService().sendMessage(
+            req.tenantId,
+            req.params.id,
+            'shop',
+            req.userId || 'shop_user',
+            body
+        );
+        res.json(msg);
     } catch (e: any) {
         res.status(400).json({ error: e.message });
     }

@@ -1358,6 +1358,53 @@ router.get('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     }
 });
 
+// Delivery chat (customer ↔ rider / shop)
+router.get('/orders/:id/chat', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getDeliveryChatService } = await import('../../services/deliveryChatService.js');
+        const messages = await getDeliveryChatService().listMessages(
+            req.tenantId,
+            req.params.id,
+            100,
+            { customerId: req.customerId }
+        );
+        res.json({ messages });
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.post('/orders/:id/chat', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { body } = req.body;
+        const { getDeliveryChatService } = await import('../../services/deliveryChatService.js');
+        const msg = await getDeliveryChatService().sendMessage(
+            req.tenantId,
+            req.params.id,
+            'customer',
+            req.customerId,
+            body,
+            { customerId: req.customerId }
+        );
+        res.json(msg);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.get('/orders/chat-threads', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getDeliveryChatService } = await import('../../services/deliveryChatService.js');
+        const threads = await getDeliveryChatService().listThreadsForCustomer(
+            req.tenantId,
+            req.customerId
+        );
+        res.json({ threads });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Order detail
 router.get('/orders/:id', mobileAuthMiddleware(db), async (req: any, res) => {
     try {

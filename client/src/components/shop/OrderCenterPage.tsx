@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { LayoutGrid, Wifi } from 'lucide-react';
 import { OrderCenterProvider, useOrderCenter } from '../../context/OrderCenterContext';
+import { orderCenterDetailMatchesSse } from '../../utils/orderCenterDetailRefresh';
 import { orderCenterApi, type OrderCenterDetail } from '../../services/orderCenterApi';
 import type { OrderCenterListItem } from '../../types/orderCenter';
 import type { MobileOrder, PosRidersOverview } from '../../services/mobileOrdersApi';
@@ -22,7 +23,7 @@ function parseSelection(params: URLSearchParams): { kind: 'cart' | 'voice'; id: 
 
 function OrderCenterPageInner() {
     const [searchParams, setSearchParams] = useSearchParams();
-    const { items, sseConnected } = useOrderCenter();
+    const { items, sseConnected, subscribeDetailRefresh } = useOrderCenter();
     const [detail, setDetail] = useState<OrderCenterDetail | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [ridersOverview, setRidersOverview] = useState<PosRidersOverview | null>(null);
@@ -71,6 +72,34 @@ function OrderCenterPageInner() {
         }
         void loadDetail(selection.kind, selection.id);
     }, [selection?.kind, selection?.id, loadDetail]);
+
+    useEffect(() => {
+        if (!selection) return;
+        const listItem = items.find((i) => i.kind === selection.kind && i.id === selection.id);
+        const linkedVoiceOrderId =
+            detail?.kind === 'cart' ? detail.order.converted_from_voice_order_id : undefined;
+        return subscribeDetailRefresh((payload) => {
+            if (
+                !orderCenterDetailMatchesSse(
+                    selection,
+                    { listItem, linkedVoiceOrderId },
+                    payload
+                )
+            ) {
+                return;
+            }
+            void loadDetail(selection.kind, selection.id);
+        });
+    }, [selection, items, detail, subscribeDetailRefresh, loadDetail]);
+
+    const awaitingVoiceApproval =
+        detail?.kind === 'cart' && detail.order.voice_order_status === 'InvoiceCreated';
+
+    useEffect(() => {
+        if (!selection || selection.kind !== 'cart' || !awaitingVoiceApproval) return;
+        const poll = setInterval(() => void loadDetail('cart', selection.id), 4000);
+        return () => clearInterval(poll);
+    }, [selection, awaitingVoiceApproval, loadDetail]);
 
     useEffect(() => {
         const legacyVoice = searchParams.get('order');

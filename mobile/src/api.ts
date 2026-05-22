@@ -247,6 +247,29 @@ export const customerApi = {
     getOrders: (cursor?: string) =>
         request(`${API_BASE}/orders${cursor ? `?cursor=${cursor}` : ''}`),
     getOrder: (id: string) => request(`${API_BASE}/orders/${id}`),
+    getChatMessages: (orderId: string) =>
+        request(`${API_BASE}/orders/${encodeURIComponent(orderId)}/chat`) as Promise<{
+            messages: Array<{
+                id: string;
+                sender_role: 'rider' | 'shop' | 'customer';
+                body: string;
+                created_at: string;
+            }>;
+        }>,
+    sendChatMessage: (orderId: string, body: string) =>
+        request(`${API_BASE}/orders/${encodeURIComponent(orderId)}/chat`, {
+            method: 'POST',
+            body: JSON.stringify({ body }),
+        }),
+    getChatThreads: () =>
+        request(`${API_BASE}/orders/chat-threads`) as Promise<{
+            threads: Array<{
+                order_id: string;
+                order_number: string;
+                last_message?: string | null;
+                last_sender_role?: string | null;
+            }>;
+        }>,
     /** Driving ETA (Google Directions on server; cached). */
     getDeliveryEta: (id: string) =>
         request(`${API_BASE}/orders/${encodeURIComponent(id)}/delivery-eta`),

@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { riderApi } from '../api';
+import { riderApi, type DeliveryProofPayload } from '../api';
 import { BottomSheetPanel } from '../components/BottomSheetPanel';
+import { DeliveryProofSheet } from '../components/delivery/DeliveryProofSheet';
+import { FailedDeliverySheet } from '../components/delivery/FailedDeliverySheet';
 import { GoogleDeliveryMap, openGoogleMapsTurnByTurn, type RouteInfo } from '../components/GoogleDeliveryMap';
-import { StatusButton } from '../components/StatusButton';
 import { useRiderWork } from '../context/RiderWorkContext';
 import { useToast } from '../context/ToastContext';
+import { useOfflineStore } from '../stores/offlineStore';
+import { formatPkr, isCodPayment } from '../utils/deliveryStatus';
+import { whatsappCustomerUrl } from '../utils/phone';
+import { Link } from 'react-router-dom';
 
 type Detail = {
   order_id: string;
   order_number: string;
-  order_status: string;
   delivery_status: string;
   accepted_at?: string | null;
+  arrived_at?: string | null;
   delivery_address: string;
   delivery_lat?: string | number | null;
   delivery_lng?: string | number | null;
@@ -23,37 +28,27 @@ type Detail = {
   customer_name?: string;
   customer_phone?: string | null;
   payment_method?: string | null;
-  items: Array<{ product_name: string; product_sku: string; quantity: number; subtotal: number }>;
+  items: Array<{ product_name: string; quantity: number; subtotal: number }>;
   estimated_delivery_at?: string | null;
 };
-
-function deliveryProgress(ds: string, accepted: boolean): number {
-  if (ds === 'DELIVERED') return 4;
-  if (ds === 'ON_THE_WAY') return 3;
-  if (ds === 'PICKED') return 2;
-  if (ds === 'ASSIGNED' && accepted) return 1;
-  return 0;
-}
-
-function formatPkr(n: number) {
-  return `PKR ${Number(n).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 export default function OrderDetailScreen() {
   const { orderId } = useParams();
   const nav = useNavigate();
-  const { refreshProfile } = useRiderWork();
+  const { refreshProfile, bumpDeliveryFeed } = useRiderWork();
   const { showToast } = useToast();
+  const enqueue = useOfflineStore((s) => s.enqueue);
   const [d, setD] = useState<Detail | null>(null);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null);
   const [riderPos, setRiderPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [showProof, setShowProof] = useState(false);
+  const [showFailed, setShowFailed] = useState(false);
+  const netOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 
-  const onRouteInfo = useCallback((info: RouteInfo | null) => {
-    setRouteInfo(info);
-  }, []);
+  const onRouteInfo = useCallback((info: RouteInfo | null) => setRouteInfo(info), []);
 
   const reload = async () => {
     if (!orderId) return;
@@ -71,12 +66,18 @@ export default function OrderDetailScreen() {
       .finally(() => setLoading(false));
   }, [orderId]);
 
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = async (fn: () => Promise<unknown>, offlineType?: Parameters<typeof enqueue>[0]['type']) => {
     setBusy(true);
     setErr('');
     try {
+      if (!netOnline && offlineType && orderId) {
+        enqueue({ type: offlineType, orderId });
+        showToast('Queued for sync when online');
+        return;
+      }
       await fn();
       await refreshProfile();
+      bumpDeliveryFeed();
       await reload();
     } catch (e: unknown) {
       const m = e instanceof Error ? e.message : 'Action failed';
@@ -89,22 +90,22 @@ export default function OrderDetailScreen() {
 
   if (loading || !orderId) {
     return (
-      <div className="page order-detail-loading">
-        <p className="muted">Loading…</p>
+      <div className="r-page">
+        <div className="r-skeleton" style={{ height: 200 }} />
       </div>
     );
   }
   if (err && !d) {
     return (
-      <div className="page order-detail-loading">
-        <p className="field-error">{err}</p>
+      <div className="r-page">
+        <p style={{ color: 'var(--r-danger)' }}>{err}</p>
       </div>
     );
   }
   if (!d) {
     return (
-      <div className="page order-detail-loading">
-        <p>Not found</p>
+      <div className="r-page">
+        <p>Order not found</p>
       </div>
     );
   }
@@ -113,40 +114,26 @@ export default function OrderDetailScreen() {
   const lng = d.delivery_lng != null ? parseFloat(String(d.delivery_lng)) : NaN;
   const custLat = Number.isFinite(lat) ? lat : null;
   const custLng = Number.isFinite(lng) ? lng : null;
-
   const ds = d.delivery_status;
   const showAccept = ds === 'ASSIGNED' && !d.accepted_at;
   const showPicked = ds === 'ASSIGNED' && !!d.accepted_at;
   const showOnWay = ds === 'PICKED';
-  const showDelivered = ds === 'ON_THE_WAY';
-  const done = ds === 'DELIVERED';
-
+  const showArrived = ds === 'ON_THE_WAY' && !d.arrived_at;
+  const canComplete = ds === 'ON_THE_WAY' || ds === 'PICKED';
+  const done = ds === 'DELIVERED' || ds === 'FAILED';
+  const isCod = isCodPayment(d.payment_method);
   const tel =
     d.customer_phone && String(d.customer_phone).replace(/\D/g, '').length > 0
       ? `tel:${d.customer_phone}`
       : null;
-
+  const wa = whatsappCustomerUrl(d.customer_phone);
   const canNav = custLat != null && custLng != null;
-  const prog = deliveryProgress(ds, !!d.accepted_at);
-  const phaseLabel = done
-    ? 'DELIVERED'
-    : showDelivered
-      ? 'ARRIVING'
-      : showOnWay
-        ? 'ON THE WAY'
-        : showPicked
-          ? 'PICKED UP'
-          : showAccept
-            ? 'NEW ASSIGNMENT'
-            : 'ACTIVE';
 
-  const paymentLabel = d.payment_method || 'COD';
-  const estWeight = d.items?.length
-    ? `${(d.items.reduce((s, i) => s + Number(i.quantity || 0), 0) * 0.5).toFixed(1)} kg est.`
-    : '—';
+  const finishDelivery = (payload: DeliveryProofPayload) =>
+    run(() => riderApi.delivered(orderId, payload), 'delivered');
 
   return (
-    <div className="order-detail-page order-detail-page--obo">
+    <div className="order-detail-page order-detail-page--enterprise">
       <div className="order-detail-page__map-stack">
         <div className="order-detail-page__map">
           <GoogleDeliveryMap
@@ -157,23 +144,28 @@ export default function OrderDetailScreen() {
           />
         </div>
         {canNav ? (
-          <div className="route-eta-bar route-eta-bar--overlay">
-            {routeInfo ? (
-              <div className="route-eta-bar__metrics route-eta-bar__metrics--compact">
-                <span className="route-eta-bar__time">
-                  {routeInfo.durationText.replace(/\bmins?\b/i, 'MIN').replace(/\bmin\b/i, 'MIN')}
-                </span>
-                <span className="route-eta-bar__slash">/</span>
-                <span className="route-eta-bar__km">{routeInfo.distanceText}</span>
-              </div>
-            ) : (
-              <span className="route-eta-bar__muted">
-                {riderPos ? '…' : 'GPS…'}
-              </span>
-            )}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 12,
+              left: 12,
+              right: 12,
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+              background: 'var(--r-surface)',
+              padding: '10px 14px',
+              borderRadius: 12,
+              boxShadow: 'var(--r-shadow)',
+            }}
+          >
+            <span style={{ flex: 1, fontWeight: 700 }}>
+              {routeInfo ? `${routeInfo.durationText} · ${routeInfo.distanceText}` : 'Calculating route…'}
+            </span>
             <button
               type="button"
-              className="route-eta-bar__nav-mini"
+              className="r-btn r-btn--accent"
+              style={{ width: 'auto', minHeight: 40, padding: '8px 16px' }}
               onClick={() => openGoogleMapsTurnByTurn(custLat!, custLng!, riderPos)}
             >
               Navigate
@@ -183,120 +175,121 @@ export default function OrderDetailScreen() {
       </div>
 
       <BottomSheetPanel title="">
-        <div className="obo-sheet__badge-row">
-          <span className="obo-sheet__pill">{done ? 'COMPLETED' : 'ACTIVE DELIVERY'}</span>
-          <span className="obo-sheet__order-id">#{d.order_number}</span>
-        </div>
-
-        <button type="button" className="obo-sheet__back" onClick={() => nav(-1)}>
+        <button type="button" className="r-btn r-btn--ghost" style={{ width: 'auto', marginBottom: 8 }} onClick={() => nav(-1)}>
           ← Back
         </button>
-
-        <div className="detail-head obo-sheet__head">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div className="obo-sheet__customer">{d.customer_name || 'Customer'}</div>
+            <span className="r-badge r-badge--route">#{d.order_number}</span>
+            <h2 style={{ margin: '8px 0 0', fontSize: 22 }}>{d.customer_name || 'Customer'}</h2>
           </div>
           {tel ? (
-            <a className="obo-sheet__call" href={tel} aria-label="Call">
-              <span className="obo-sheet__call-ico" />
+            <a href={tel} className="r-btn r-btn--accent" style={{ width: 'auto', minHeight: 44, textDecoration: 'none' }}>
+              Call
             </a>
           ) : null}
         </div>
+        <p style={{ color: 'var(--r-muted)', margin: '8px 0' }}>{d.delivery_address}</p>
+        {d.delivery_notes ? <p style={{ fontSize: 14 }}>Note: {d.delivery_notes}</p> : null}
+        {isCod ? (
+          <p style={{ fontWeight: 800, color: '#c2410c', margin: '12px 0' }}>Collect {formatPkr(d.grand_total)}</p>
+        ) : null}
+        <Link to={`/chat/${orderId}`} className="r-btn r-btn--outline" style={{ marginBottom: 10, textDecoration: 'none', textAlign: 'center' }}>
+          Chat with dispatch
+        </Link>
 
-        <p className="obo-sheet__addr">
-          <span className="obo-sheet__addr-ico" aria-hidden />
-          {d.delivery_address || '—'}
-        </p>
-        {(() => {
-          if (d.estimated_delivery_at == null || String(d.estimated_delivery_at).trim() === '') return null;
-          const t = new Date(String(d.estimated_delivery_at));
-          if (Number.isNaN(t.getTime())) return null;
-          const label = t.toLocaleString('en-PK', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-          return (
-            <div
-              className="obo-sheet__sched-banner"
-              style={{
-                marginTop: 10,
-                padding: '10px 12px',
-                borderRadius: 10,
-                background: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)',
-                border: '1px solid #7c3aed',
-                fontSize: 14,
-                fontWeight: 700,
-                color: '#4c1d95',
-              }}
-            >
-              Deliver by {label}
-            </div>
-          );
-        })()}
-        {d.delivery_notes ? <p className="muted small">Note: {d.delivery_notes}</p> : null}
-
-        <div className="obo-sheet__mini-grid">
-          <div className="obo-sheet__mini">
-            <span className="obo-sheet__mini-ico obo-sheet__mini-ico--pay" />
-            <span className="obo-sheet__mini-label">Payment</span>
-            <span className="obo-sheet__mini-val">{paymentLabel}</span>
+        {!done ? (
+          <div className="r-action-grid">
+            {canNav ? (
+              <button
+                type="button"
+                className="r-btn r-btn--outline"
+                onClick={() => openGoogleMapsTurnByTurn(custLat!, custLng!, riderPos)}
+              >
+                Maps
+              </button>
+            ) : null}
+            {wa ? (
+              <a href={wa} className="r-btn r-btn--outline" style={{ textDecoration: 'none', textAlign: 'center' }}>
+                WhatsApp
+              </a>
+            ) : null}
+            {showArrived ? (
+              <button
+                type="button"
+                className="r-btn r-btn--outline"
+                disabled={busy}
+                onClick={() => run(() => riderApi.arrived(orderId), 'arrived')}
+              >
+                Mark arrived
+              </button>
+            ) : null}
           </div>
-          <div className="obo-sheet__mini">
-            <span className="obo-sheet__mini-ico obo-sheet__mini-ico--wt" />
-            <span className="obo-sheet__mini-label">Weight</span>
-            <span className="obo-sheet__mini-val">{estWeight}</span>
-          </div>
-        </div>
-
-        {(d.branch_to_customer_km != null && Number.isFinite(Number(d.branch_to_customer_km))) || d.distance_km != null ? (
-          <p className="detail-dist obo-sheet__dist">
-            {d.branch_to_customer_km != null && Number.isFinite(Number(d.branch_to_customer_km))
-              ? `Branch → customer ≈ ${Number(d.branch_to_customer_km).toFixed(2)} km`
-              : `Straight-line ≈ ${d.distance_km} km`}
-          </p>
         ) : null}
 
-        <div className="obo-progress">
-          <div className="obo-progress__label">{phaseLabel}</div>
-          <div className="obo-progress__bar" role="status" aria-label={`Delivery progress step ${prog} of 4`}>
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className={`obo-progress__seg ${i < prog ? 'is-done' : ''}`} />
-            ))}
-          </div>
-        </div>
+        {err ? <p style={{ color: 'var(--r-danger)' }}>{err}</p> : null}
 
-        <div className="detail-items">
-          <div className="detail-kicker">Items · {formatPkr(d.grand_total)}</div>
-          <ul className="detail-ul">
+        {showAccept ? (
+          <button type="button" className="r-btn r-btn--primary" disabled={busy} onClick={() => run(() => riderApi.accept(orderId), 'accept')}>
+            Accept order
+          </button>
+        ) : null}
+        {showPicked ? (
+          <button type="button" className="r-btn r-btn--primary" disabled={busy} onClick={() => run(() => riderApi.picked(orderId), 'picked')}>
+            Picked up
+          </button>
+        ) : null}
+        {showOnWay ? (
+          <button type="button" className="r-btn r-btn--primary" disabled={busy} onClick={() => run(() => riderApi.onTheWay(orderId), 'onTheWay')}>
+            On the way
+          </button>
+        ) : null}
+        {canComplete && !done ? (
+          <>
+            <button type="button" className="r-btn r-btn--primary" style={{ marginTop: 10 }} disabled={busy} onClick={() => setShowProof(true)}>
+              Delivered
+            </button>
+            <button type="button" className="r-btn r-btn--danger" style={{ marginTop: 10 }} disabled={busy} onClick={() => setShowFailed(true)}>
+              Failed delivery
+            </button>
+          </>
+        ) : null}
+        {done ? <p style={{ color: 'var(--r-primary-dark)', fontWeight: 700 }}>Delivery closed.</p> : null}
+
+        <div style={{ marginTop: 16 }}>
+          <strong>Items</strong>
+          <ul style={{ paddingLeft: 18, margin: '8px 0' }}>
             {d.items.map((it, i) => (
               <li key={i}>
-                {it.product_name} × {it.quantity} · {formatPkr(it.subtotal)}
+                {it.product_name} × {it.quantity}
               </li>
             ))}
           </ul>
         </div>
-
-        {err ? <p className="field-error">{err}</p> : null}
-
-        <div className="status-stack">
-          {showAccept ? (
-            <StatusButton label="ACCEPT ORDER" disabled={busy} onClick={() => run(() => riderApi.accept(orderId))} />
-          ) : null}
-          {showPicked ? (
-            <StatusButton label="MARK PICKED UP" disabled={busy} onClick={() => run(() => riderApi.picked(orderId))} />
-          ) : null}
-          {showOnWay ? (
-            <StatusButton label="ON THE WAY" disabled={busy} onClick={() => run(() => riderApi.onTheWay(orderId))} />
-          ) : null}
-          {showDelivered ? (
-            <StatusButton label="CONFIRM DELIVERY" disabled={busy} onClick={() => run(() => riderApi.delivered(orderId))} />
-          ) : null}
-          {done ? <p className="ok-text">Delivered. Great job.</p> : null}
-        </div>
       </BottomSheetPanel>
+
+      {showProof ? (
+        <DeliveryProofSheet
+          expectedCod={d.grand_total}
+          isCod={isCod}
+          busy={busy}
+          onClose={() => setShowProof(false)}
+          onConfirm={(p) => {
+            setShowProof(false);
+            void finishDelivery(p);
+          }}
+        />
+      ) : null}
+      {showFailed ? (
+        <FailedDeliverySheet
+          busy={busy}
+          onClose={() => setShowFailed(false)}
+          onConfirm={(p) => {
+            setShowFailed(false);
+            void run(() => riderApi.failed(orderId, p), 'failed');
+          }}
+        />
+      ) : null}
     </div>
   );
 }
