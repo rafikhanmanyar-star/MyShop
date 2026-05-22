@@ -119,6 +119,11 @@ export interface OrganizationProfile {
   logo_url: string | null;
   slug: string | null;
   branch_name: string | null;
+  timezone?: string;
+}
+
+export interface RegionalSettings {
+  timezone: string;
 }
 
 export interface TenantBranding {
@@ -267,6 +272,10 @@ export const shopApi = {
   deleteVendor: (id: string) => apiClient.delete(`/shop/vendors/${id}`),
 
   getOrganization: () => apiClient.get<OrganizationProfile>('/shop/organization'),
+
+  getRegionalSettings: () => apiClient.get<RegionalSettings>('/shop/regional-settings'),
+  updateRegionalSettings: (data: RegionalSettings) =>
+    apiClient.put<RegionalSettings>('/shop/regional-settings', data),
 
   getBranding: () => apiClient.get<TenantBranding>('/shop/branding'),
   updateBranding: (data: Partial<TenantBranding>) => apiClient.post<TenantBranding>('/shop/branding', data),

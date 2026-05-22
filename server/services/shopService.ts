@@ -6,7 +6,12 @@ import { insertSystemLog } from './systemLogService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 import { parsePakistanMobile, pakistanMobileDigitsToE164 } from '../utils/pakistanMobile.js';
-import { deductInventoryFefo, insertReturnRestockBatch } from './inventoryBatchService.js';
+import {
+  deductInventoryFefo,
+  getSellableQuantityForWarehouse,
+  insertReturnRestockBatch,
+  resolveWarehouseForSaleDeduction,
+} from './inventoryBatchService.js';
 import {
   clampHomePromoIntervalSeconds,
   homePromoSlidesToStoredJson,
@@ -1364,7 +1369,11 @@ export class ShopService {
     if (!saleData?.items?.length) {
       throw new Error('Sale must have at least one item');
     }
-    const saleProductIds = [...new Set(saleData.items.map((i) => i.productId))];
+    let customerId = saleData.customerId ?? null;
+    if (customerId === 'walk-in' || customerId === '') customerId = null;
+    const salePayload = { ...saleData, customerId };
+
+    const saleProductIds = [...new Set(salePayload.items.map((i) => i.productId))];
     const blockedForSale = await this.db.query(
       `SELECT name FROM shop_products WHERE tenant_id = $1 AND id = ANY($2::text[]) AND COALESCE(sales_deactivated, FALSE) = TRUE`,
       [tenantId, saleProductIds]
@@ -1375,25 +1384,25 @@ export class ShopService {
         `Cannot sell deactivated SKU(s): ${names}. Open the product in Inventory and turn off "Deactivate for sales" to sell it again.`
       );
     }
-    const paymentDetails = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [];
-    const barcodeValue = `SALE|${tenantId}|${saleData.saleNumber}`;
+    const paymentDetails = Array.isArray(salePayload.paymentDetails) ? salePayload.paymentDetails : [];
+    const barcodeValue = `SALE|${tenantId}|${salePayload.saleNumber}`;
 
-    let resolvedLoyaltyMemberId: string | null = saleData.loyaltyMemberId ?? null;
-    if (!resolvedLoyaltyMemberId && saleData.customerId) {
+    let resolvedLoyaltyMemberId: string | null = salePayload.loyaltyMemberId ?? null;
+    if (!resolvedLoyaltyMemberId && customerId) {
       const lm = await this.db.query(
         'SELECT id FROM shop_loyalty_members WHERE tenant_id = $1 AND customer_id = $2 LIMIT 1',
-        [tenantId, saleData.customerId]
+        [tenantId, customerId]
       );
       if (lm.length > 0) resolvedLoyaltyMemberId = lm[0].id as string;
     }
 
     const existingSale = await this.db.query<{ id: string; barcode_value: string | null }>(
       `SELECT id, barcode_value FROM shop_sales WHERE tenant_id = $1 AND sale_number = $2 LIMIT 1`,
-      [tenantId, saleData.saleNumber]
+      [tenantId, salePayload.saleNumber]
     );
     if (existingSale.length > 0) {
       const row = existingSale[0];
-      const bc = row.barcode_value || `SALE|${tenantId}|${saleData.saleNumber}`;
+      const bc = row.barcode_value || `SALE|${tenantId}|${salePayload.saleNumber}`;
       return { id: row.id, barcode_value: bc, duplicate: true as const };
     }
 
@@ -1408,60 +1417,79 @@ export class ShopService {
         RETURNING id
       `, [
         tenantId,
-        saleData.branchId ?? null,
-        saleData.terminalId ?? null,
-        saleData.userId ?? null,
-        saleData.customerId ?? null,
+        salePayload.branchId ?? null,
+        salePayload.terminalId ?? null,
+        salePayload.userId ?? null,
+        customerId,
         resolvedLoyaltyMemberId,
-        saleData.saleNumber,
-        saleData.subtotal,
-        saleData.taxTotal,
-        saleData.discountTotal,
-        saleData.grandTotal,
-        saleData.totalPaid,
-        saleData.changeDue,
-        saleData.paymentMethod ?? 'Cash',
+        salePayload.saleNumber,
+        salePayload.subtotal,
+        salePayload.taxTotal,
+        salePayload.discountTotal,
+        salePayload.grandTotal,
+        salePayload.totalPaid,
+        salePayload.changeDue,
+        salePayload.paymentMethod ?? 'Cash',
         JSON.stringify(paymentDetails),
-        saleData.shiftId ?? null,
+        salePayload.shiftId ?? null,
         barcodeValue
       ]);
 
       const saleId = saleRes[0].id;
 
       const itemsWithCost: ShopSaleItem[] = [];
-      for (const item of saleData.items) {
+      for (const item of salePayload.items) {
         const fallbackUnitCost = await fetchUnitCostForProduct(client, tenantId, item.productId);
 
-        let warehouseId: string | null = null;
-        if (saleData.branchId) {
-          const branchWh = await client.query(
-            'SELECT id FROM shop_warehouses WHERE id = $1 AND tenant_id = $2 LIMIT 1',
-            [saleData.branchId, tenantId]
-          );
-          if (branchWh.length > 0) warehouseId = branchWh[0].id;
-        }
-        if (!warehouseId) {
-          const whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
-          if (whRes.length > 0) warehouseId = whRes[0].id;
-        }
+        const warehouseId = await resolveWarehouseForSaleDeduction(
+          client,
+          tenantId,
+          item.productId,
+          item.quantity,
+          salePayload.branchId ?? null
+        );
 
-        let unitCostForLine = fallbackUnitCost;
-        if (warehouseId) {
-          try {
-            const fefo = await deductInventoryFefo(
+        if (!warehouseId) {
+          const productRows = await client.query(
+            'SELECT name FROM shop_products WHERE tenant_id = $1 AND id = $2 LIMIT 1',
+            [tenantId, item.productId]
+          );
+          const productName = productRows[0]?.name || item.productId;
+          let totalSellable = 0;
+          const whRows = await client.query(
+            'SELECT id FROM shop_warehouses WHERE tenant_id = $1',
+            [tenantId]
+          );
+          for (const wh of whRows as { id: string }[]) {
+            totalSellable += await getSellableQuantityForWarehouse(
               client,
               tenantId,
               item.productId,
-              warehouseId,
-              item.quantity,
-              saleId
+              wh.id
             );
-            if (fefo.weightedUnitCost != null && fefo.weightedUnitCost > 0) {
-              unitCostForLine = fefo.weightedUnitCost;
-            }
-          } catch (e: any) {
-            throw new Error(e?.message || String(e));
           }
+          const rounded = Math.max(0, Math.round(totalSellable * 100) / 100);
+          throw new Error(
+            `Insufficient stock for "${productName}". Sellable across all warehouses: ${rounded}, requested: ${item.quantity}. ` +
+              'Transfer stock to your POS branch warehouse in Inventory, or reduce quantity.'
+          );
+        }
+
+        let unitCostForLine = fallbackUnitCost;
+        try {
+          const fefo = await deductInventoryFefo(
+            client,
+            tenantId,
+            item.productId,
+            warehouseId,
+            item.quantity,
+            saleId
+          );
+          if (fefo.weightedUnitCost != null && fefo.weightedUnitCost > 0) {
+            unitCostForLine = fefo.weightedUnitCost;
+          }
+        } catch (e: any) {
+          throw new Error(e?.message || String(e));
         }
 
         itemsWithCost.push({ ...item, unitCostAtSale: unitCostForLine });
@@ -1479,12 +1507,12 @@ export class ShopService {
           await client.query(`
             INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, unit_cost, total_cost)
             VALUES ($1, $2, $3, 'Sale', $4, $5, $6, $7, $8)
-          `, [tenantId, item.productId, warehouseId, -item.quantity, saleId, saleData.userId, unitCost, totalCost]);
+          `, [tenantId, item.productId, warehouseId, -item.quantity, saleId, salePayload.userId, unitCost, totalCost]);
         }
       }
 
       if (resolvedLoyaltyMemberId) {
-        const pointsEarned = Math.floor(saleData.grandTotal / 100);
+        const pointsEarned = Math.floor(salePayload.grandTotal / 100);
         await client.query(`
           UPDATE shop_loyalty_members
           SET points_balance = points_balance + $1,
@@ -1492,16 +1520,16 @@ export class ShopService {
               total_spend = total_spend + $2,
               visit_count = visit_count + 1
           WHERE id = $3 AND tenant_id = $4
-        `, [pointsEarned, saleData.grandTotal, resolvedLoyaltyMemberId, tenantId]);
+        `, [pointsEarned, salePayload.grandTotal, resolvedLoyaltyMemberId, tenantId]);
         await client.query(`UPDATE shop_sales SET points_earned = $1 WHERE id = $2 AND tenant_id = $3`, [pointsEarned, saleId, tenantId]);
       }
 
-      if (saleData.paymentDetails && Array.isArray(saleData.paymentDetails)) {
+      if (salePayload.paymentDetails && Array.isArray(salePayload.paymentDetails)) {
         // Only record the actual sale amount (grandTotal) in bank accounts, not the full tendered amount.
         // If customer pays 1000 for a 250 item, only 250 goes into the cash account.
         // The 750 change/refund is physical cash returned and should NOT inflate the books.
-        let remainingToAllocate = saleData.grandTotal;
-        for (const payment of saleData.paymentDetails) {
+        let remainingToAllocate = salePayload.grandTotal;
+        for (const payment of salePayload.paymentDetails) {
           if (remainingToAllocate <= 0) break;
           const effectiveAmount = Math.min(payment.amount, remainingToAllocate);
           remainingToAllocate -= effectiveAmount;
@@ -1524,13 +1552,13 @@ export class ShopService {
         }
       }
 
-      await this.postSaleToAccounting(client, saleId, tenantId, { ...saleData, items: itemsWithCost });
+      await this.postSaleToAccounting(client, saleId, tenantId, { ...salePayload, items: itemsWithCost });
 
       // --- UPDATE BUDGET ACTUALS (if customer linked) ---
-      if (saleData.customerId) {
+      if (customerId) {
         try {
           const { getBudgetService } = await import('./budgetService.js');
-          await getBudgetService().updateActualsFromOrder(client, tenantId, saleData.customerId, saleData.items.map(i => ({
+          await getBudgetService().updateActualsFromOrder(client, tenantId, customerId, salePayload.items.map(i => ({
             productId: i.productId,
             quantity: i.quantity,
             subtotal: i.subtotal
@@ -1541,12 +1569,12 @@ export class ShopService {
       }
 
       // --- Khata / Credit: add debit entry to khata_ledger (customer credit system)
-      const isKhata = (saleData.paymentMethod || '').toLowerCase().includes('khata');
-      if (isKhata && saleData.customerId && saleData.grandTotal > 0) {
+      const isKhata = (salePayload.paymentMethod || '').toLowerCase().includes('khata');
+      if (isKhata && customerId && salePayload.grandTotal > 0) {
         await client.query(
           `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note)
            VALUES ($1, $2, $3, 'debit', $4, $5)`,
-          [tenantId, saleData.customerId, saleId, saleData.grandTotal, `Sale ${saleData.saleNumber}`]
+          [tenantId, customerId, saleId, salePayload.grandTotal, `Sale ${salePayload.saleNumber}`]
         );
       }
 

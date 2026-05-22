@@ -4,16 +4,20 @@ import { getMobileOrderService } from '../../services/mobileOrderService.js';
 import { getMobileCustomerService } from '../../services/mobileCustomerService.js';
 import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
+import {
+    calendarDayBoundsIso,
+    resolveTenantTimezone,
+    todayYmdInTimezone,
+} from '../../utils/shopTimezone.js';
 
 const router = express.Router();
 
-/** Calendar day bounds in the server's local timezone (ISO strings for timestamp comparisons). */
-function localCalendarDayBoundsIso(): { startIso: string; endIso: string } {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    return { startIso: start.toISOString(), endIso: end.toISOString() };
+/** Calendar day bounds in the shop's configured timezone. */
+async function shopCalendarDayBoundsIso(tenantId: string): Promise<{ startIso: string; endIso: string }> {
+    const tz = await resolveTenantTimezone(tenantId);
+    const ymd = todayYmdInTimezone(tz);
+    const { start, end } = calendarDayBoundsIso(tz, ymd);
+    return { startIso: start, endIso: end };
 }
 
 console.log('✅ Mobile-orders POS router initialized');
@@ -253,7 +257,7 @@ router.get('/online-users', checkRole(['admin', 'pos_cashier']), async (req: any
         const db = getDatabaseService();
         const thresholdMinutes = parseInt(req.query.threshold as string) || 5;
         const onlineAfterIso = new Date(Date.now() - thresholdMinutes * 60_000).toISOString();
-        const { startIso, endIso } = localCalendarDayBoundsIso();
+        const { startIso, endIso } = await shopCalendarDayBoundsIso(req.tenantId);
 
         const users = await db.query(
             `SELECT
@@ -315,7 +319,7 @@ router.get('/active-today-users', checkRole(['admin', 'pos_cashier']), async (re
         const db = getDatabaseService();
         const thresholdMinutes = parseInt(req.query.threshold as string) || 5;
         const onlineAfterIso = new Date(Date.now() - thresholdMinutes * 60_000).toISOString();
-        const { startIso, endIso } = localCalendarDayBoundsIso();
+        const { startIso, endIso } = await shopCalendarDayBoundsIso(req.tenantId);
 
         const users = await db.query(
             `WITH active AS (

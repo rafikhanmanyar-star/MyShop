@@ -3,6 +3,7 @@ import path from 'path';
 import { getDatabaseService } from './databaseService.js';
 import { getMobileOrderService } from './mobileOrderService.js';
 import { transcribeVoiceAudio, type TranscriptionProvider } from './voiceTranscriptionService.js';
+import { toApiInstant } from '../utils/apiTimestamps.js';
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -34,7 +35,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
     Received: ['Preparing', 'Rejected', 'Cancelled'],
     Preparing: ['InvoiceCreated', 'Rejected', 'Cancelled'],
     InvoiceCreated: ['Accepted', 'Rejected', 'Cancelled'],
-    Accepted: ['Preparing', 'OutForDelivery', 'Cancelled'],
+    Accepted: ['OutForDelivery', 'Cancelled'],
     OutForDelivery: ['Delivered', 'Cancelled'],
     Delivered: [],
     Rejected: [],
@@ -90,17 +91,29 @@ function rowToSettings(row: Record<string, unknown>): VoiceOrderSettings {
     };
 }
 
+const TIMESTAMP_FIELDS = [
+    'created_at',
+    'updated_at',
+    'received_at',
+    'cancelled_at',
+    'invoice_created_at',
+] as const;
+
 function enrichOrderRow(o: Record<string, unknown>): Record<string, unknown> {
     let transcription_items: unknown[] = [];
     try {
         const raw = o.transcription_items_json;
         if (raw) transcription_items = JSON.parse(String(raw));
     } catch { /* ignore */ }
-    return {
+    const out: Record<string, unknown> = {
         ...o,
         transcription_items,
         audio_duration: o.audio_duration_seconds,
     };
+    for (const key of TIMESTAMP_FIELDS) {
+        if (out[key] != null) out[key] = toApiInstant(out[key]);
+    }
+    return out;
 }
 
 export class VoiceOrderService {
@@ -391,12 +404,109 @@ export class VoiceOrderService {
         const nowExpr = this.db.getType() === 'sqlite' ? "datetime('now')" : 'NOW()';
         let extra = '';
         if (newStatus === 'Received') extra = `, received_at = ${nowExpr}`;
+        if (newStatus === 'Cancelled') extra += `, cancelled_at = ${nowExpr}`;
         await this.db.execute(
             `UPDATE voice_orders SET status = $1, updated_at = ${nowExpr}${extra}
              WHERE id = $2 AND tenant_id = $3`,
             [newStatus, orderId, tenantId]
         );
         await this.recordStatus(tenantId, orderId, current, newStatus, changedBy, changedByType, note);
+        return this.getOrderById(tenantId, orderId);
+    }
+
+    static readonly VOICE_CANCEL_REASONS = [
+        'unclear_audio',
+        'out_of_service_area',
+        'product_unavailable',
+        'fake_order',
+        'customer_unreachable',
+        'duplicate_request',
+        'other',
+    ] as const;
+
+    async cancelVoiceOrder(
+        tenantId: string,
+        orderId: string,
+        opts: {
+            reason: string;
+            note?: string;
+            notifyCustomer?: boolean;
+            changedBy: string;
+            changedByType?: string;
+        }
+    ) {
+        const reason = String(opts.reason || '').trim();
+        if (!VoiceOrderService.VOICE_CANCEL_REASONS.includes(reason as (typeof VoiceOrderService.VOICE_CANCEL_REASONS)[number])) {
+            throw new Error('Invalid cancellation reason');
+        }
+        const rows = await this.db.query(
+            `SELECT status, mobile_order_id FROM voice_orders WHERE id = $1 AND tenant_id = $2`,
+            [orderId, tenantId]
+        );
+        if (!rows.length) throw new Error('Voice order not found');
+        const current = String(rows[0].status);
+        if (current === 'Delivered' || current === 'Cancelled') {
+            throw new Error(`Cannot cancel order in status ${current}`);
+        }
+        const linkedMobileId = rows[0].mobile_order_id as string | null;
+        const nowExpr = this.db.getType() === 'sqlite' ? "datetime('now')" : 'NOW()';
+        const historyNote = [reason, opts.note].filter(Boolean).join(' — ');
+        await this.db.execute(
+            `UPDATE voice_orders SET status = 'Cancelled', cancelled_reason = $1, cancelled_note = $2,
+             cancelled_by = $3, cancelled_at = ${nowExpr}, updated_at = ${nowExpr}
+             WHERE id = $4 AND tenant_id = $5`,
+            [reason, opts.note || null, opts.changedBy, orderId, tenantId]
+        );
+        await this.recordStatus(
+            tenantId,
+            orderId,
+            current,
+            'Cancelled',
+            opts.changedBy,
+            opts.changedByType || 'shop_user',
+            historyNote
+        );
+        if (linkedMobileId) {
+            try {
+                const mo = await this.db.query(
+                    `SELECT status FROM mobile_orders WHERE id = $1 AND tenant_id = $2`,
+                    [linkedMobileId, tenantId]
+                );
+                const mst = String(mo[0]?.status || '');
+                if (mst && mst !== 'Delivered' && mst !== 'Cancelled') {
+                    const { getMobileOrderService } = await import('./mobileOrderService.js');
+                    await getMobileOrderService().updateOrderStatus(
+                        tenantId,
+                        linkedMobileId,
+                        'Cancelled',
+                        opts.changedBy,
+                        'system',
+                        `Cancelled with voice order: ${historyNote}`
+                    );
+                }
+            } catch (e) {
+                console.warn('Failed to cancel linked mobile order:', e);
+            }
+        }
+
+        if (opts.notifyCustomer) {
+            try {
+                const order = await this.getOrderById(tenantId, orderId);
+                const customerId = order?.customer_id as string | undefined;
+                if (customerId) {
+                    const cust = await this.db.query(
+                        `SELECT device_token, phone FROM mobile_customers WHERE id = $1 AND tenant_id = $2`,
+                        [customerId, tenantId]
+                    );
+                    const token = cust[0]?.device_token;
+                    if (token) {
+                        console.log(`[voice-order] Push cancel notification queued for ${orderId}`);
+                    }
+                }
+            } catch (e) {
+                console.warn('Voice cancel notification failed:', e);
+            }
+        }
         return this.getOrderById(tenantId, orderId);
     }
 
@@ -407,23 +517,48 @@ export class VoiceOrderService {
         changedBy: string,
         opts?: { createMobileOrder?: boolean; paymentMethod?: string }
     ) {
-        const order = await this.getOrderById(tenantId, orderId);
-        if (!order) throw new Error('Voice order not found');
-
         const saleRows = await this.db.query(
-            `SELECT id, branch_id, grand_total FROM shop_sales WHERE id = $1 AND tenant_id = $2`,
+            `SELECT id, branch_id, grand_total, customer_id FROM shop_sales WHERE id = $1 AND tenant_id = $2`,
             [saleId, tenantId]
         );
         if (!saleRows.length) throw new Error('Invoice (sale) not found');
 
-        const nowExpr = this.db.getType() === 'sqlite' ? "datetime('now')" : 'NOW()';
-        await this.db.execute(
-            `UPDATE voice_orders SET created_invoice_id = $1, status = 'InvoiceCreated',
-             invoice_created_at = ${nowExpr}, updated_at = ${nowExpr}
-             WHERE id = $2 AND tenant_id = $3`,
-            [saleId, orderId, tenantId]
+        const existingMo = await this.db.query(
+            `SELECT id FROM mobile_orders WHERE tenant_id = $1 AND converted_from_voice_order_id = $2 LIMIT 1`,
+            [tenantId, orderId]
         );
-        await this.recordStatus(tenantId, orderId, String(order.status), 'InvoiceCreated', changedBy, 'shop_user');
+        if (existingMo.length > 0) {
+            const mobileOrderId = String(existingMo[0].id);
+            await this.db.execute(
+                `UPDATE voice_orders SET created_invoice_id = $1, mobile_order_id = $2,
+                 status = 'InvoiceCreated', updated_at = ${this.db.getType() === 'sqlite' ? "datetime('now')" : 'NOW()'}
+                 WHERE id = $3 AND tenant_id = $4`,
+                [saleId, mobileOrderId, orderId, tenantId]
+            );
+            return this.getOrderById(tenantId, orderId);
+        }
+
+        const order = await this.getOrderById(tenantId, orderId);
+        if (!order) throw new Error('Voice order not found');
+
+        if (order.created_invoice_id && order.created_invoice_id !== saleId) {
+            throw new Error('This voice order is already linked to a different invoice.');
+        }
+        if (order.mobile_order_id && opts?.createMobileOrder !== false) {
+            return this.getOrderById(tenantId, orderId);
+        }
+
+        const nowExpr = this.db.getType() === 'sqlite' ? "datetime('now')" : 'NOW()';
+        const priorStatus = String(order.status);
+        if (!order.created_invoice_id) {
+            await this.db.execute(
+                `UPDATE voice_orders SET created_invoice_id = $1, status = 'InvoiceCreated',
+                 invoice_created_at = ${nowExpr}, updated_at = ${nowExpr}
+                 WHERE id = $2 AND tenant_id = $3`,
+                [saleId, orderId, tenantId]
+            );
+            await this.recordStatus(tenantId, orderId, priorStatus, 'InvoiceCreated', changedBy, 'shop_user');
+        }
 
         let mobileOrderId: string | null = order.mobile_order_id as string | null;
         if (opts?.createMobileOrder !== false && !mobileOrderId) {
@@ -442,14 +577,7 @@ export class VoiceOrderService {
             );
         }
 
-        const currentAfter = await this.db.query(
-            `SELECT status FROM voice_orders WHERE id = $1 AND tenant_id = $2`,
-            [orderId, tenantId]
-        );
-        const st = String(currentAfter[0]?.status || 'InvoiceCreated');
-        if (st === 'InvoiceCreated') {
-            await this.updateStatus(tenantId, orderId, 'Accepted', changedBy, 'shop_user', 'Invoice linked — ready for delivery');
-        }
+        await this.notifyCustomerInvoiceReady(tenantId, orderId);
 
         return this.getOrderById(tenantId, orderId);
     }
@@ -503,6 +631,7 @@ export class VoiceOrderService {
                   payment_method, payment_status,
                   delivery_address, delivery_lat, delivery_lng, delivery_notes,
                   assigned_branch_id, inventory_deducted, pos_synced, pos_synced_at,
+                  order_source, converted_from_voice_order_id,
                   created_at, updated_at
                 ) VALUES (
                   $1,$2,$3,$4,$5,'Pending',
@@ -510,6 +639,7 @@ export class VoiceOrderService {
                   $11,'Unpaid',
                   $12,$13,$14,$15,
                   $16,TRUE,TRUE,${nowExpr},
+                  'voice', $17,
                   ${nowExpr},${nowExpr}
                 )`,
                 [
@@ -529,6 +659,7 @@ export class VoiceOrderService {
                     deliveryLng,
                     deliveryNotes,
                     branchId,
+                    String(voiceOrder.id),
                 ]
             );
 
@@ -609,52 +740,149 @@ export class VoiceOrderService {
         }
     }
 
-    /** Customer order history: mobile orders + voice orders still awaiting invoice. */
+    /** Customer order history: cart + voice (deduped when voice linked to mobile_orders). */
     async getCustomerOrderFeed(tenantId: string, customerId: string, cursor?: string, limit = 20) {
-        const mobile = await getMobileOrderService().getCustomerOrders(tenantId, customerId, cursor, limit);
-        const voicePending = await this.listOrders(tenantId, {
-            customerId,
-            limit: 30,
-        });
-        const awaiting = (voicePending.items as Record<string, unknown>[]).filter(
-            (v) => !v.mobile_order_id
+        const mergeCap = 150;
+        const [mobileResult, voiceResult] = await Promise.all([
+            getMobileOrderService().getCustomerOrders(tenantId, customerId, undefined, mergeCap),
+            this.listOrders(tenantId, { customerId, limit: mergeCap }),
+        ]);
+
+        const voiceByMobileId = new Map<string, Record<string, unknown>>();
+        for (const v of voiceResult.items as Record<string, unknown>[]) {
+            if (v.mobile_order_id) voiceByMobileId.set(String(v.mobile_order_id), v);
+        }
+
+        const items: Record<string, unknown>[] = [];
+
+        for (const v of voiceResult.items as Record<string, unknown>[]) {
+            if (v.mobile_order_id) continue;
+            items.push(this.buildVoiceOnlyFeedItem(v));
+        }
+
+        for (const m of mobileResult.items as Record<string, unknown>[]) {
+            const linked = voiceByMobileId.get(String(m.id)) ?? null;
+            items.push(this.buildMobileFeedItem(m, linked));
+        }
+
+        items.sort(
+            (a, b) =>
+                new Date(String(b.created_at || 0)).getTime() -
+                new Date(String(a.created_at || 0)).getTime()
         );
 
-        const voiceCards = awaiting.map((v) => ({
-            id: v.mobile_order_id || v.id,
-            order_number: (v.mobile_order_number as string) || (v.order_number as string),
-            status: v.mobile_order_id
-                ? (v.mobile_order_status as string)
-                : v.status === 'Pending'
-                  ? 'AwaitingShop'
-                  : (v.status as string),
+        let start = 0;
+        if (cursor) {
+            try {
+                const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
+                const [cursorDate, cursorId] = decoded.split('|');
+                const idx = items.findIndex((i) => {
+                    const ca =
+                        i.created_at instanceof Date
+                            ? i.created_at.toISOString()
+                            : new Date(String(i.created_at)).toISOString();
+                    return ca === cursorDate && String(i.id) === cursorId;
+                });
+                start = idx >= 0 ? idx + 1 : 0;
+            } catch {
+                /* ignore bad cursor */
+            }
+        }
+
+        const page = items.slice(start, start + limit);
+        const hasMore = start + limit < items.length;
+        let nextCursor: string | null = null;
+        if (hasMore && page.length > 0) {
+            const last = page[page.length - 1];
+            const createdAt =
+                last.created_at instanceof Date
+                    ? last.created_at.toISOString()
+                    : new Date(String(last.created_at)).toISOString();
+            nextCursor = Buffer.from(`${createdAt}|${last.id}`).toString('base64');
+        }
+
+        return { items: page, nextCursor, hasMore };
+    }
+
+    private voiceFeedStatus(v: Record<string, unknown>): string {
+        const st = String(v.status || 'Pending');
+        if (st === 'Pending') return 'AwaitingShop';
+        return st;
+    }
+
+    private buildVoiceOnlyFeedItem(v: Record<string, unknown>): Record<string, unknown> {
+        const status = this.voiceFeedStatus(v);
+        const vid = String(v.id);
+        return {
+            id: vid,
+            order_number: (v.order_number as string) || vid,
+            status,
             grand_total: v.invoice_grand_total ?? null,
             payment_method: v.delivery_mode === 'pickup' ? 'SelfCollection' : 'COD',
             payment_status: 'Unpaid',
             delivery_address: v.delivery_address,
             created_at: v.created_at,
             updated_at: v.updated_at,
-            order_type: 'voice' as const,
-            voice_order_id: v.id,
-        }));
+            order_channel: 'voice',
+            order_type: 'voice',
+            detail_kind: 'voice',
+            detail_id: vid,
+            voice_order_id: vid,
+        };
+    }
 
-        const mobileCards = (mobile.items as Record<string, unknown>[]).map((m) => ({
-            ...m,
-            order_type: 'mobile' as const,
-            voice_order_id: null,
-        }));
-
-        const merged = [...voiceCards, ...mobileCards].sort(
-            (a, b) =>
-                new Date(String((a as { created_at?: string }).created_at || 0)).getTime() -
-                new Date(String((b as { created_at?: string }).created_at || 0)).getTime()
+    private buildMobileFeedItem(
+        m: Record<string, unknown>,
+        linkedVoice: Record<string, unknown> | null
+    ): Record<string, unknown> {
+        const fromVoice = !!(
+            m.converted_from_voice_order_id ||
+            m.order_source === 'voice' ||
+            linkedVoice
         );
+        const channel = fromVoice ? 'voice' : 'cart';
+        const voiceStatus = linkedVoice ? String(linkedVoice.status || '') : '';
+        const needsVoiceDetail = voiceStatus === 'InvoiceCreated';
+        const voiceId = linkedVoice
+            ? String(linkedVoice.id)
+            : m.converted_from_voice_order_id
+              ? String(m.converted_from_voice_order_id)
+              : null;
+        const status =
+            needsVoiceDetail ? 'InvoiceCreated' : String(m.status || 'Pending');
 
         return {
-            items: merged.slice(0, limit),
-            nextCursor: mobile.nextCursor,
-            hasMore: mobile.hasMore || voiceCards.length > 0,
+            ...m,
+            status,
+            order_channel: channel,
+            order_type: channel,
+            detail_kind: needsVoiceDetail ? 'voice' : 'cart',
+            detail_id: needsVoiceDetail && voiceId ? voiceId : String(m.id),
+            voice_order_id: voiceId,
         };
+    }
+
+    /** Notify mobile customer that POS invoice is ready for approval in the app. */
+    private async notifyCustomerInvoiceReady(tenantId: string, orderId: string) {
+        try {
+            const order = await this.getOrderById(tenantId, orderId);
+            if (!order?.customer_id) return;
+            const cust = await this.db.query(
+                `SELECT device_token, phone FROM mobile_customers WHERE id = $1 AND tenant_id = $2`,
+                [order.customer_id, tenantId]
+            );
+            const token = cust[0]?.device_token;
+            const phone = cust[0]?.phone;
+            const label = order.invoice_number || order.order_number;
+            if (token) {
+                console.log(`[voice-order] Push invoice-ready for ${orderId} (${label})`);
+            }
+            if (phone) {
+                console.log(`[voice-order] SMS invoice-ready for ${orderId} (${phone})`);
+            }
+        } catch (e) {
+            console.warn('Voice invoice notification failed:', e);
+        }
     }
 
     async customerApprove(tenantId: string, orderId: string, customerId: string) {

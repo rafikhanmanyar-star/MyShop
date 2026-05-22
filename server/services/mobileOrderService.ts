@@ -1,4 +1,5 @@
 import { getDatabaseService } from './databaseService.js';
+import { toApiInstant } from '../utils/apiTimestamps.js';
 import { getAccountingService } from './accountingService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
@@ -1182,7 +1183,7 @@ export class MobileOrderService {
         const rows = await this.db.query(
             `SELECT o.id, o.order_number, o.status, o.grand_total, o.payment_method,
               o.payment_status, o.delivery_address, o.created_at, o.updated_at,
-              o.estimated_delivery_at,
+              o.estimated_delivery_at, o.order_source, o.converted_from_voice_order_id,
               d.id AS delivery_order_id, d.status AS delivery_status,
               r.name AS rider_name
        FROM mobile_orders o
@@ -1281,6 +1282,16 @@ export class MobileOrderService {
             tax_total = safeNum(order.tax_total) || normalizedItems.reduce((sum, i) => sum + i.tax_amount, 0);
             grand_total = Math.round((subtotal + tax_total + delivery_fee) * 100) / 100;
         }
+        let voice_order_status: string | null = null;
+        const voiceOrderId = order.converted_from_voice_order_id as string | null | undefined;
+        if (voiceOrderId) {
+            const voiceRows = await this.db.query(
+                `SELECT status FROM voice_orders WHERE id = $1 AND tenant_id = $2`,
+                [voiceOrderId, tenantId]
+            );
+            voice_order_status = voiceRows[0]?.status ? String(voiceRows[0].status) : null;
+        }
+
         return enrichOrderWithRiderToDropoff({
             ...order,
             subtotal,
@@ -1290,6 +1301,7 @@ export class MobileOrderService {
             grand_total,
             items: normalizedItems,
             status_history: history,
+            voice_order_status,
         }) as any;
     }
 
@@ -1335,19 +1347,25 @@ export class MobileOrderService {
         }
 
         const orders = await this.db.query(
-            'SELECT id, status, customer_id, payment_method, COALESCE(inventory_deducted, FALSE) AS inventory_deducted FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
+            `SELECT id, status, customer_id, payment_method,
+              COALESCE(inventory_deducted, FALSE) AS inventory_deducted,
+              COALESCE(order_source, 'cart') AS order_source,
+              converted_from_voice_order_id
+             FROM mobile_orders WHERE id = $1 AND tenant_id = $2`,
             [orderId, tenantId]
         );
         if (orders.length === 0) throw new Error('Order not found');
 
-        if (changedByType === 'shop_user') {
+        const shopRiderLockedStatuses = new Set(['OutForDelivery', 'Delivered']);
+        if (changedByType === 'shop_user' && shopRiderLockedStatuses.has(newStatus)) {
             const assigned = await this.db.query(
-                'SELECT 1 FROM delivery_orders WHERE order_id = $1 AND tenant_id = $2 LIMIT 1',
+                `SELECT 1 FROM delivery_orders WHERE order_id = $1 AND tenant_id = $2
+                 AND status NOT IN ('DELIVERED') LIMIT 1`,
                 [orderId, tenantId]
             );
             if (assigned.length > 0) {
                 throw new Error(
-                    'A rider is assigned to this order. Fulfillment status is updated from the rider app only.'
+                    'Dispatch and delivery completion are updated from the rider app. Shop can still confirm, pack, or cancel.'
                 );
             }
         }
@@ -1373,11 +1391,16 @@ export class MobileOrderService {
                 updateFields.push(`delivered_at = NOW()`);
                 // payment_status stays 'Unpaid' — payment is collected separately via collectPayment()
 
+                const skipDeliveryRevenue =
+                    !!orders[0].inventory_deducted ||
+                    String(orders[0].order_source || 'cart') === 'voice' ||
+                    !!orders[0].converted_from_voice_order_id;
+
                 const orderData = await client.query('SELECT grand_total, payment_method, order_number, subtotal, tax_total FROM mobile_orders WHERE id = $1 AND tenant_id = $2', [orderId, tenantId]);
-                if (orderData.length > 0) {
+                if (orderData.length > 0 && !skipDeliveryRevenue) {
                     const { grand_total, order_number, subtotal, tax_total, payment_method } = orderData[0];
 
-                    // Revenue recognition: Debit Accounts Receivable, Credit Revenue + COGS entries
+                    // Revenue recognition: Debit AR, Credit Revenue + COGS (skipped when POS invoice already posted GL)
                     try {
                         await this.postMobileDeliveryToAccounting(client, orderId, tenantId, {
                             orderNumber: order_number,
@@ -1390,8 +1413,11 @@ export class MobileOrderService {
                     } catch (accErr) {
                         console.error('⚠️ Failed to post mobile delivery to accounting:', accErr);
                     }
+                } else if (orderData.length > 0 && skipDeliveryRevenue) {
+                    console.log(`[mobile-order] Skipping delivery GL for ${orderId} (voice/POS-invoiced)`);
+                }
 
-                    // Update budget actuals
+                if (orderData.length > 0) {
                     try {
                         const { getBudgetService } = await import('./budgetService.js');
                         const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1 AND tenant_id = $2', [orderId, tenantId]);
@@ -1438,6 +1464,7 @@ export class MobileOrderService {
                     await this.adjustInventoryForOrder(client, tenantId, orderId, 'deliver');
                 }
             } else if (newStatus === 'Cancelled') {
+                await this.releaseActiveDeliveryAssignment(client, tenantId, orderId);
                 await this.adjustInventoryForOrder(client, tenantId, orderId, 'cancel');
             }
 
@@ -1809,6 +1836,8 @@ export class MobileOrderService {
         return (rows as any[]).map((o: any) =>
             enrichOrderWithRiderToDropoff({
                 ...o,
+                created_at: toApiInstant(o.created_at),
+                updated_at: toApiInstant(o.updated_at),
                 subtotal: safeNum(o.subtotal),
                 tax_total: safeNum(o.tax_total),
                 discount_total: safeNum(o.discount_total),
@@ -1965,6 +1994,36 @@ export class MobileOrderService {
     // ─── Double-entry: Revenue recognition on delivery ──────────────────
     // Debit Accounts Receivable, Credit Revenue; Debit COGS, Credit Inventory
 
+    /** Release rider + delete open delivery_tasks when order is cancelled. */
+    private async releaseActiveDeliveryAssignment(client: any, tenantId: string, orderId: string) {
+        const dels = await client.query(
+            `SELECT rider_id FROM delivery_orders
+             WHERE tenant_id = $1 AND order_id = $2 AND status <> 'DELIVERED'`,
+            [tenantId, orderId]
+        );
+        if (!dels.length) return;
+        await client.query(
+            `DELETE FROM delivery_orders WHERE tenant_id = $1 AND order_id = $2 AND status <> 'DELIVERED'`,
+            [tenantId, orderId]
+        );
+        for (const row of dels as { rider_id: string }[]) {
+            const riderId = row.rider_id;
+            if (!riderId) continue;
+            const remaining = await client.query(
+                `SELECT COUNT(*)::int AS n FROM delivery_orders
+                 WHERE tenant_id = $1 AND rider_id = $2 AND status <> 'DELIVERED'`,
+                [tenantId, riderId]
+            );
+            const n = Number(remaining[0]?.n ?? 0);
+            if (n === 0) {
+                await client.query(
+                    `UPDATE riders SET status = 'AVAILABLE', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+                    [riderId, tenantId]
+                );
+            }
+        }
+    }
+
     private async postMobileDeliveryToAccounting(client: any, orderId: string, tenantId: string, data: {
         orderNumber: string;
         grandTotal: number;
@@ -1973,6 +2032,14 @@ export class MobileOrderService {
         paymentMethod: string;
         customerId: string;
     }) {
+        const existing = await client.query(
+            `SELECT id FROM journal_entries
+             WHERE tenant_id = $1 AND source_module = 'MobileApp' AND source_id = $2
+               AND reference = $3 AND status = 'Posted' LIMIT 1`,
+            [tenantId, orderId, data.orderNumber]
+        );
+        if (existing.length > 0) return;
+
         const journalRes = await client.query(`
             INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
             VALUES ($1, NOW(), $2, $3, 'MobileApp', $4, 'Posted')
@@ -2038,11 +2105,20 @@ export class MobileOrderService {
         bankName: string;
         bankType: string;
     }) {
+        const pmtRef = `PMT-${data.orderNumber}`;
+        const existing = await client.query(
+            `SELECT id FROM journal_entries
+             WHERE tenant_id = $1 AND source_module = 'MobileApp' AND source_id = $2
+               AND reference = $3 AND status = 'Posted' LIMIT 1`,
+            [tenantId, orderId, pmtRef]
+        );
+        if (existing.length > 0) return;
+
         const journalRes = await client.query(`
             INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
             VALUES ($1, NOW(), $2, $3, 'MobileApp', $4, 'Posted')
             RETURNING id
-        `, [tenantId, `PMT-${data.orderNumber}`, `Mobile Payment ${data.orderNumber}`, orderId]);
+        `, [tenantId, pmtRef, `Mobile Payment ${data.orderNumber}`, orderId]);
 
         if (journalRes.length === 0) return;
         const journalId = journalRes[0].id;

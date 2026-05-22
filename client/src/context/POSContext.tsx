@@ -825,16 +825,33 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 );
 
                 const voiceOrderId = sessionStorage.getItem('myshop_pending_voice_order_id');
+                let voiceLink: { mobileOrderId: string; voiceOrderId: string } | undefined;
                 if (voiceOrderId && saleId) {
                     try {
                         const { voiceOrdersApi } = await import('../services/voiceOrdersApi.js');
                         const pm = sessionStorage.getItem('myshop_pending_voice_delivery_mode') === 'pickup' ? 'SelfCollection' : 'COD';
-                        await voiceOrdersApi.linkInvoice(voiceOrderId, String(saleId), { createMobileOrder: true, paymentMethod: pm });
+                        const linked = await voiceOrdersApi.linkInvoice(voiceOrderId, String(saleId), {
+                            createMobileOrder: true,
+                            paymentMethod: pm,
+                        });
                         sessionStorage.removeItem('myshop_pending_voice_order_id');
                         sessionStorage.removeItem('myshop_pending_voice_order_notes');
                         sessionStorage.removeItem('myshop_pending_voice_order_phone');
                         sessionStorage.removeItem('myshop_pending_voice_delivery_mode');
-                        showSaleToast('Sale completed. Voice order linked.', true);
+                        const mobileOrderId = linked?.mobile_order_id;
+                        if (mobileOrderId) {
+                            voiceLink = { mobileOrderId: String(mobileOrderId), voiceOrderId };
+                            setIsPaymentModalOpen(false);
+                            setLastCompletedSale(null);
+                            window.dispatchEvent(
+                                new CustomEvent('myshop:voice-invoice-linked', {
+                                    detail: voiceLink,
+                                })
+                            );
+                            showSaleToast('Sale completed. Opening Order Center for delivery.', true);
+                        } else {
+                            showSaleToast('Sale completed. Voice order linked (no delivery row).', true);
+                        }
                     } catch (linkErr: any) {
                         console.warn('Voice order link failed:', linkErr);
                         const msg = linkErr?.message || linkErr?.error || String(linkErr);
@@ -842,7 +859,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     }
                 }
 
-                return completedSale;
+                return { ...completedSale, voiceLink };
             } catch (error: any) {
                 const canQueueOffline = !isBrowserOnline() || isApiConnectivityFailure(error);
                 if (!canQueueOffline) {

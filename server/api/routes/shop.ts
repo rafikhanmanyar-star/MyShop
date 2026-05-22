@@ -645,7 +645,11 @@ router.post('/sales', checkRole(['admin', 'pos_cashier']), async (req: any, res)
       : String(error ?? 'Internal server error');
     const safeMessage = message || 'Internal server error';
     console.error('POST /shop/sales failed:', safeMessage, error);
-    res.status(500).json({ error: safeMessage });
+    const isClientError =
+      /insufficient stock|deactivated sku|must have at least|customer required|payment account|not found/i.test(
+        safeMessage
+      );
+    res.status(isClientError ? 400 : 500).json({ error: safeMessage });
   }
 });
 
@@ -904,6 +908,7 @@ router.get('/organization', async (req: any, res) => {
       logo_url: row.logo_url?.trim() || null,
       slug: row.slug?.trim() || null,
       branch_name,
+      timezone: row.timezone,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -949,6 +954,32 @@ router.post('/branding', async (req: any, res) => {
     res.json(branding);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Regional settings (shop timezone) ---
+router.get('/regional-settings', checkRole(['admin', 'accountant', 'pos_cashier']), async (req: any, res) => {
+  try {
+    const row = await getTenantManagementService().getTenantById(req.tenantId);
+    if (!row) return res.status(404).json({ error: 'Tenant not found' });
+    res.json({ timezone: row.timezone });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/regional-settings', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const tz = req.body?.timezone;
+    if (!tz || typeof tz !== 'string') {
+      return res.status(400).json({ error: 'timezone is required' });
+    }
+    const row = await getTenantManagementService().updateTenant(req.tenantId, { timezone: tz });
+    res.json({ timezone: row.timezone });
+  } catch (error: any) {
+    const msg = error.message || 'Update failed';
+    if (msg.includes('Invalid IANA')) return res.status(400).json({ error: msg });
+    res.status(400).json({ error: msg });
   }
 });
 

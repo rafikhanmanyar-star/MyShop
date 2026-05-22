@@ -178,6 +178,20 @@ export class RiderDeliveryService {
         if (res.length === 0) {
             throw new Error('Pick up the order before marking on the way.');
         }
+        const m = getMobileOrderService();
+        const row = await this.db.query(`SELECT status FROM mobile_orders WHERE id = $1 AND tenant_id = $2`, [
+            mobileOrderId,
+            tenantId,
+        ]);
+        const st = String(row[0]?.status || '');
+        if (st === 'Packed') {
+            try {
+                await m.updateOrderStatus(tenantId, mobileOrderId, 'OutForDelivery', 'rider', 'rider');
+            } catch (e: any) {
+                const msg = String(e?.message || e);
+                if (!msg.includes('Cannot transition')) throw e;
+            }
+        }
         return { ok: true };
     }
 
@@ -268,7 +282,8 @@ export class RiderDeliveryService {
             tenantId,
         ]);
         const status = row[0]?.status as string;
-        const chain = ['Pending', 'Confirmed', 'Packed', 'OutForDelivery'] as const;
+        /** Shop kitchen steps only — OutForDelivery is set on markOnTheWay */
+        const chain = ['Pending', 'Confirmed', 'Packed'] as const;
         const idx = chain.findIndex((x) => x === status);
         if (idx < 0) return;
 

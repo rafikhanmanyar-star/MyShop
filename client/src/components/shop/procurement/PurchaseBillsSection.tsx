@@ -461,6 +461,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
     const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
     const vendorDropdownRef = useRef<HTMLDivElement>(null);
     const [showAddVendorModal, setShowAddVendorModal] = useState(false);
+    const [addVendorInitialName, setAddVendorInitialName] = useState('');
     const [showAddSkuModal, setShowAddSkuModal] = useState(false);
     const [editBillId, setEditBillId] = useState<string | null>(null);
     const [editingIsDraft, setEditingIsDraft] = useState(false);
@@ -1316,6 +1317,11 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
       setShowForm(false);
     }, [resetFormFields]);
 
+    const openAddVendorModal = useCallback(() => {
+      setAddVendorInitialName(vendorSearch.trim());
+      setShowAddVendorModal(true);
+    }, [vendorSearch]);
+
     const openNewPurchaseBillForm = useCallback(() => {
       resetFormFields();
       setShowForm(true);
@@ -1828,7 +1834,8 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
                         void applyVendorAutoLines(v.id, d);
                       }
                     }}
-                    onAddSupplier={() => setShowAddVendorModal(true)}
+                    onAddSupplier={openAddVendorModal}
+                    preserveSearchOnBlur={showAddVendorModal}
                   />
                   {formErrors.supplier && <p className="mt-1 text-xs font-medium text-destructive">{formErrors.supplier}</p>}
                 </div>
@@ -3050,7 +3057,7 @@ const PurchaseBillsSection = forwardRef<PurchaseBillsSectionHandle, PurchaseBill
         <AddVendorModal
           isOpen={showAddVendorModal}
           onClose={() => setShowAddVendorModal(false)}
-          initialName={vendorSearch}
+          initialName={addVendorInitialName}
           onSaved={(created) => {
             setForm((f) => ({ ...f, supplierId: created.id }));
             setVendorSearch(`${created.name}${created.company_name ? ` (${created.company_name})` : ''}`);

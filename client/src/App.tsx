@@ -10,9 +10,10 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User, ChefHat, FileSpreadsheet, Mic
+  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User, ChefHat, FileSpreadsheet, LayoutGrid
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
+import { ShopTimezoneProvider } from './context/ShopTimezoneContext';
 import { ConnectivityProvider } from './context/ConnectivityContext';
 import { InventoryProvider } from './context/InventoryContext';
 import { LoyaltyProvider } from './context/LoyaltyContext';
@@ -37,6 +38,7 @@ const BIDashboardsPage = lazy(() => import('./components/shop/BIDashboardsPage')
 const AccountingPage = lazy(() => import('./components/shop/AccountingPage'));
 const DailyReportPage = lazy(() => import('./components/shop/accounting/DailyReportPage'));
 const ExpensePage = lazy(() => import('./components/shop/expenses/ExpensePage'));
+const OrderCenterPage = lazy(() => import('./components/shop/OrderCenterPage'));
 const MobileOrdersPage = lazy(() => import('./components/shop/MobileOrdersPage'));
 const VoiceOrdersPage = lazy(() => import('./components/shop/VoiceOrdersPage'));
 const OffersPage = lazy(() => import('./components/shop/OffersPage'));
@@ -82,8 +84,7 @@ const navSections: NavSection[] = [
       { path: '/cashier-dashboard', label: 'Cashier Dashboard', icon: ClipboardList, roles: ['pos_cashier'] },
       { path: '/pos', label: 'POS', icon: ShoppingCart, roles: ['admin', 'pos_cashier'] },
       { path: '/sales-returns', label: 'Sales Return', icon: Undo2, roles: ['admin', 'pos_cashier', 'accountant'] },
-      { path: '/mobile-orders', label: 'Mobile Orders', icon: Smartphone, roles: ['admin', 'pos_cashier'] },
-      { path: '/voice-orders', label: 'Voice Orders', icon: Mic, roles: ['admin', 'pos_cashier'] },
+      { path: '/order-center', label: 'Order Center', icon: LayoutGrid, roles: ['admin', 'pos_cashier'], title: 'Mobile, voice, and delivery orders in one queue' },
       { path: '/offers', label: 'Offers', icon: Tag, roles: ['admin'] },
       { path: '/recipes', label: 'Recipes', icon: ChefHat, roles: ['admin'] },
     ],
@@ -381,8 +382,7 @@ function AppLayout() {
   const [posFullScreen, setPosFullScreen] = useState(false);
   const { pathname } = useLocation();
   const isPosRoute = pathname === '/pos';
-  const isMobileOrdersRoute = pathname === '/mobile-orders';
-  const isVoiceOrdersRoute = pathname === '/voice-orders';
+  const isOrderCenterRoute = pathname === '/order-center' || pathname === '/mobile-orders' || pathname === '/voice-orders';
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const role = user?.role || 'pos_cashier';
@@ -403,6 +403,7 @@ function AppLayout() {
 
   return (
     <BranchProvider>
+      <ShopTimezoneProvider>
       <ConnectivityProvider>
       <AppProvider>
         <ShiftsProvider>
@@ -417,7 +418,7 @@ function AppLayout() {
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onLogout={() => { logout(); navigate('/'); }} />}
         <main className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden transition-all duration-300 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
-          <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isMobileOrdersRoute || isVoiceOrdersRoute ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
+          <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isOrderCenterRoute ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
           {!posFullScreen && !isPosRoute && <AppHeader />}
           <OfflineBanner />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -451,8 +452,9 @@ function AppLayout() {
                 path="/sales-returns"
                 element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <SalesReturnListPage /> : <Navigate to="/" replace />}
               />
-              <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MobileOrdersPage /></div> : <Navigate to="/" replace />} />
-              <Route path="/voice-orders" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><VoiceOrdersPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/order-center" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><OrderCenterPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/mobile-orders" element={<Navigate to="/order-center" replace />} />
+              <Route path="/voice-orders" element={<Navigate to="/order-center" replace />} />
               <Route path="/offers" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><OffersPage /></div> : <Navigate to="/" replace />} />
               <Route path="/recipes" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><RecipesListPage /></div> : <Navigate to="/" replace />} />
               <Route path="/recipes/new" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><RecipeEditPage key="new" /></div> : <Navigate to="/" replace />} />
@@ -515,6 +517,7 @@ function AppLayout() {
         </ShiftsProvider>
       </AppProvider>
       </ConnectivityProvider>
+      </ShopTimezoneProvider>
     </BranchProvider>
   );
 }

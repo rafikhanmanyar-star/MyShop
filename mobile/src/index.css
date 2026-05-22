@@ -486,6 +486,35 @@ img {
   color: #991B1B;
 }
 
+/* ─── Order history channel tags ──────────────────────────── */
+
+.order-channel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.order-channel-cart {
+  background: #E0F2FE;
+  color: #0369A1;
+}
+
+.order-channel-voice {
+  background: #EDE9FE;
+  color: #5B21B6;
+}
+
+.order-history-card {
+  text-decoration: none;
+  color: inherit;
+}
+
 /* ─── Product Grid ────────────────────────────────────────── */
 
 .product-grid {

@@ -48,11 +48,11 @@ export function AppHeaderToolbar({ className = '' }: { className?: string }) {
           navigate('/loyalty?tab=members');
         }
       } else {
-        navigate('/mobile-orders');
+        navigate('/order-center');
       }
       return;
     }
-    navigate(`/mobile-orders?order=${encodeURIComponent(a.orderId)}`);
+    navigate(`/order-center?order=${encodeURIComponent(a.orderId)}&kind=cart`);
   };
 
   return (
@@ -156,7 +156,7 @@ export function AppHeaderToolbar({ className = '' }: { className?: string }) {
               </div>
               <div className="border-t border-gray-100 px-3 py-2 dark:border-gray-700">
                 <Link
-                  to="/mobile-orders"
+                  to="/order-center"
                   className="block text-center text-xs font-semibold text-primary-600 hover:underline dark:text-primary-400"
                   onClick={() => setMenuOpen(false)}
                 >

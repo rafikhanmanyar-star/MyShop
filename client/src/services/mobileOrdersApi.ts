@@ -44,6 +44,10 @@ export interface MobileOrder {
     /** Loyalty tier from linked member (e.g. Silver, Gold). */
     customer_loyalty_tier?: string | null;
     pos_synced: boolean;
+    order_source?: string;
+    converted_from_voice_order_id?: string | null;
+    /** Linked voice order status (e.g. InvoiceCreated until customer approves in app). */
+    voice_order_status?: string | null;
     created_at: string;
     updated_at: string;
     items?: MobileOrderItem[];

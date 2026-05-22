@@ -12,6 +12,7 @@ import mobileRoutes from './routes/mobile.js';
 import riderRoutes from './routes/rider.js';
 import mobileOrdersRoutes from './routes/mobileOrders.js';
 import { shopVoiceOrdersRouter, mobileVoiceOrdersRouter } from './routes/voiceOrders.js';
+import { shopOrderCenterRouter } from './routes/orderCenter.js';
 import accountingRoutes from './routes/accounting.js';
 import expensesRoutes from './routes/expenses.js';
 import procurementRoutes from './routes/procurement.js';
@@ -25,6 +26,7 @@ import platformTenantsRoutes from './routes/platformTenants.js';
 import platformAuthRoutes from './routes/platformAuth.js';
 import { platformAdminMiddleware } from '../middleware/platformAdminMiddleware.js';
 import { runMigrations } from '../scripts/run-migrations.js';
+import { createUploadsMiddleware } from '../middleware/uploadsMiddleware.js';
 import { getPlatformAuthService } from '../services/platformAuthService.js';
 import { getMobileOrderService } from '../services/mobileOrderService.js';
 import { fileURLToPath } from 'url';
@@ -44,7 +46,7 @@ const HOST = '0.0.0.0';
 // (e.g. https://myshop-rider.onrender.com) alongside the mobile and POS dev origins.
 const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5180'];
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5180', 'http://localhost:5190'];
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -67,8 +69,8 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Serve uploaded files (HIGHER PRIORITY)
-app.use('/uploads', express.static(uploadsPath));
+// Serve uploaded files (local disk; optional REMOTE_UPLOADS_ORIGIN fallback for cloud DB + local API dev)
+app.use('/uploads', ...createUploadsMiddleware(uploadsPath));
 console.log('📂 Serving uploads from:', uploadsPath);
 
 // Health check (public)
@@ -112,6 +114,7 @@ const dbService = getDatabaseService();
 app.use('/api/shop/forecast', tenantMiddleware(dbService), forecastRoutes);
 app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRoutes);
 app.use('/api/shop/voice-orders', tenantMiddleware(dbService), shopVoiceOrdersRouter);
+app.use('/api/shop/order-center', tenantMiddleware(dbService), shopOrderCenterRouter);
 app.use('/api/shop/accounting', tenantMiddleware(dbService), accountingRoutes);
 app.use('/api/shop/expenses', tenantMiddleware(dbService), expensesRoutes);
 app.use('/api/shop/procurement/demand', tenantMiddleware(dbService), procurementDemandRoutes);

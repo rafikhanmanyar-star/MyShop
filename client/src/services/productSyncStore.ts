@@ -16,6 +16,7 @@ export interface PendingProductPayload {
   subcategory_id?: string | null;
   retail_price: number;
   cost_price: number;
+  tax_rate?: number;
   unit: string;
   reorder_point: number;
   description?: string | null;

@@ -20,7 +20,7 @@ import { accountingApi } from '../../../services/shopApi';
 import { useBranch } from '../../../context/BranchContext';
 import { CURRENCY } from '../../../constants';
 import { getApiBaseUrl } from '../../../config/apiUrl';
-import { todayLocalYmd } from '../../../utils/calendarDate';
+import { useShopTimezone } from '../../../context/ShopTimezoneContext';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
@@ -171,11 +171,13 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { branches } = useBranch();
+  const { todayYmd } = useShopTimezone();
+  const shopToday = todayYmd();
 
-  const [localDate, setLocalDate] = useState(() => todayLocalYmd());
+  const [localDate, setLocalDate] = useState(() => shopToday);
   const [localBranchId, setLocalBranchId] = useState<string | null>(null);
 
-  const date = urlSync ? searchParams.get('date') || todayLocalYmd() : localDate;
+  const date = urlSync ? searchParams.get('date') || shopToday : localDate;
   const branchParam = urlSync ? searchParams.get('branchId') : localBranchId === null ? null : localBranchId;
   const branchId =
     branchParam === '' || branchParam === 'all' || branchParam == null ? null : branchParam;
@@ -191,7 +193,7 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
       let d: string;
       let br: string | null;
       if (urlSync) {
-        d = searchParams.get('date') || todayLocalYmd();
+        d = searchParams.get('date') || shopToday;
         const bp = searchParams.get('branchId');
         br = bp === '' || bp === 'all' || bp == null ? null : bp;
       } else {

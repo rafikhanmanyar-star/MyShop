@@ -43,6 +43,44 @@ export async function getSellableBatchSum(
 /**
  * Sellable units for reservation / POS: batch-based when batches exist, else legacy shop_inventory.
  */
+/**
+ * Pick a warehouse with enough sellable qty for a POS line.
+ * Prefers branch warehouse (when branch id matches a shop_warehouses row), then any warehouse with stock.
+ */
+export async function resolveWarehouseForSaleDeduction(
+  client: any,
+  tenantId: string,
+  productId: string,
+  quantity: number,
+  branchId?: string | null
+): Promise<string | null> {
+  const warehouses = await client.query(
+    `SELECT id FROM shop_warehouses WHERE tenant_id = $1 ORDER BY name ASC`,
+    [tenantId]
+  );
+  if (!warehouses.length) return null;
+
+  const tryId = async (whId: string) => {
+    const sellable = await getSellableQuantityForWarehouse(client, tenantId, productId, whId);
+    return sellable >= quantity ? whId : null;
+  };
+
+  if (branchId) {
+    const preferred = warehouses.find((w: { id: string }) => w.id === branchId);
+    if (preferred) {
+      const hit = await tryId(branchId);
+      if (hit) return hit;
+    }
+  }
+
+  for (const w of warehouses as { id: string }[]) {
+    if (branchId && w.id === branchId) continue;
+    const hit = await tryId(w.id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 export async function getSellableQuantityForWarehouse(
   client: any,
   tenantId: string,

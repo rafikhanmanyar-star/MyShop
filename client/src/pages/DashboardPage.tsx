@@ -18,14 +18,18 @@ import {
   ArrowRight,
   LineChart,
 } from 'lucide-react';
-import { lastLocalYmdDays } from '../utils/calendarDate';
+import { useShopTimezone } from '../context/ShopTimezoneContext';
 
 const DashboardCharts = lazy(() => import('../components/dashboard/DashboardCharts'));
 
 type LowStockRow = { name: string; qty: string };
 type PendingOrderRow = { id: string; orderNumber: string; customer: string };
 
-function mergeDailyTrend(raw: unknown): { label: string; revenue: number }[] {
+function mergeDailyTrend(
+  raw: unknown,
+  dayKeys: string[],
+  timeZone: string
+): { label: string; revenue: number }[] {
   const r = raw as { pos?: { day?: string; revenue?: string | number }[]; mobile?: { day?: string; revenue?: string | number }[] } | null;
   const pos = Array.isArray(r?.pos) ? r!.pos! : [];
   const mobile = Array.isArray(r?.mobile) ? r!.mobile! : [];
@@ -40,15 +44,12 @@ function mergeDailyTrend(raw: unknown): { label: string; revenue: number }[] {
     if (!key) continue;
     byDay.set(key, (byDay.get(key) || 0) + (parseFloat(String(d.revenue)) || 0));
   }
-  const out: { label: string; revenue: number }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const dt = new Date();
-    dt.setDate(dt.getDate() - i);
-    const key = dt.toISOString().slice(0, 10);
-    const label = dt.toLocaleDateString('en', { weekday: 'short' });
-    out.push({ label, revenue: Math.round((byDay.get(key) || 0) * 100) / 100 });
-  }
-  return out;
+  return dayKeys.map((key) => {
+    const [y, m, day] = key.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, day, 12));
+    const label = dt.toLocaleDateString('en', { weekday: 'short', timeZone });
+    return { label, revenue: Math.round((byDay.get(key) || 0) * 100) / 100 };
+  });
 }
 
 const EMPTY_STATS: DashboardStats = {
@@ -71,6 +72,7 @@ const EMPTY_STATS: DashboardStats = {
 };
 
 export default function DashboardPage() {
+  const { lastYmdDays, timezone } = useShopTimezone();
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
   const [ready, setReady] = useState(false);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
@@ -92,10 +94,10 @@ export default function DashboardPage() {
         const [trendRaw, categoryPerf, profitSummary] = await Promise.all([
           accountingApi.getDailyTrend(7).catch(() => null),
           accountingApi.getCategoryPerformance().catch(() => []),
-          accountingApi.dailyProfitSummary(lastLocalYmdDays(7)).catch(() => null),
+          accountingApi.dailyProfitSummary(lastYmdDays(7)).catch(() => null),
         ]);
         if (cancelled) return;
-        setSalesTrend(mergeDailyTrend(trendRaw));
+        setSalesTrend(mergeDailyTrend(trendRaw, lastYmdDays(7), timezone));
         const catArr = Array.isArray(categoryPerf) ? categoryPerf : [];
         setRevenueBreakdown(
           catArr
@@ -177,7 +179,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [timezone, lastYmdDays]);
 
   const todayLabel = useMemo(
     () =>
@@ -349,7 +351,7 @@ export default function DashboardPage() {
               {'sub' in card && card.sub && <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>}
               {card.mobileLink && stats.mobileOrdersPending > 0 && (
                 <Link
-                  to="/mobile-orders"
+                  to="/order-center"
                   className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-[#4A90E2] hover:underline"
                 >
                   (View orders <ArrowRight className="inline h-3 w-3" />)
@@ -437,7 +439,7 @@ export default function DashboardPage() {
                           <tr key={row.id} className="border-t border-red-200/60 dark:border-red-900/40">
                             <td className="py-1.5 pr-2">
                               <Link
-                                to={`/mobile-orders?order=${encodeURIComponent(row.id)}`}
+                                to={`/order-center?order=${encodeURIComponent(row.id)}&kind=cart`}
                                 className="font-medium text-[#4A90E2] hover:underline"
                               >
                                 {row.orderNumber}
@@ -450,7 +452,7 @@ export default function DashboardPage() {
                     </table>
                   )}
                   <Link
-                    to="/mobile-orders"
+                    to="/order-center"
                     className="mt-2 inline-block text-xs font-medium text-[#4A90E2] hover:underline"
                   >
                     View all mobile orders

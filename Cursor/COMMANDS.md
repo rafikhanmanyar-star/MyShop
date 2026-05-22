@@ -12,13 +12,21 @@ Run the app in development mode for local testing.
 
 | Command | Description |
 |--------|-------------|
-| `npm run dev` | Starts the local API (**http://localhost:3001**), **POS web client** (**http://localhost:5173**), **mobile storefront** (**http://localhost:5175**), and **marketing website** (**http://localhost:5190**). Mobile proxies `/api` to the local API. No Electron or rider. |
+| `npm run dev` | Starts the **local API** (**http://localhost:3001**, PostgreSQL on **Render** via `server/.env` `DATABASE_URL`), **POS web client** (**http://localhost:5173**), **marketing website** (**http://localhost:5190**), **mobile storefront** (**http://localhost:5175**), and **rider app** (**http://localhost:5180**). Frontends proxy `/api` to the local API. No Electron. **On Ctrl+C or exit**, all dev ports are freed automatically; stale ports are cleared before each start. |
+| `npm run dev:stop` | Manually kill anything still listening on dev ports **3001, 5173, 5175, 5180, 5190** (use if a terminal was closed without Ctrl+C and `npm run dev` fails with “address already in use”). |
+| `npm run dev:apps` | Same as `npm run dev` but **without** the POS client (API + website + mobile + rider only). |
 | `npm run electron:dev` | Starts the API server, **mobile** storefront (Vite), **rider** app (Vite), waits for `/api/health`, then launches Electron in dev mode. Open the mobile PWA at **http://localhost:5175** and the rider app at **http://localhost:5180** (both proxy `/api` to `localhost:3001`; local API default port is **3001** so **3000** stays free for other apps). |
 | `npm run dev:mobile` | **Mobile storefront only** (Vite on **http://localhost:5175**). Also started by `npm run dev`. Requires local API (or set proxy target in `mobile/vite.config.ts`). |
 | `npm run dev:website` | **Marketing site only** (Next.js on **http://localhost:5190**) — product showcase + order CTAs. Also started by `npm run dev`. Copy `website/.env.local.example` to `website/.env.local` if needed. |
 | `npm run dev:pos:cloud` | **POS web client only** (Vite on **http://localhost:5173**) talking to the **cloud API** (no local `server`, no Electron, no Git push). Set `VITE_API_URL` in `client/.env.cloud` (copy from `client/.env.cloud.example`) or in `client/.env.local`. The dev server **proxies** `/api` and `/uploads` to that host so the app behaves like a normal local dev build. |
 
-**What it does:** These commands only run dev servers (no installable build, no commit, no push to GitHub). **`npm run dev`** starts the local API, POS web client (**5173**), mobile storefront (**5175**), and marketing website (**5190**). **`npm run electron:dev`** starts the local API, mobile and rider Vite apps, and Electron. **`npm run dev:pos:cloud`** starts only the POS web app against your configured cloud `VITE_API_URL`.
+**What it does:** These commands only run dev servers (no installable build, no commit, no push to GitHub). **`npm run dev`** starts the local API (Render DB), POS web client (**5173**), marketing website (**5190**), mobile storefront (**5175**), and rider app (**5180**). **`npm run electron:dev`** starts the local API, mobile and rider Vite apps, and Electron. **`npm run dev:pos:cloud`** starts only the POS web app against your configured cloud `VITE_API_URL`.
+
+**Database:** `npm run dev` uses `DATABASE_URL` from `server/.env` (copy from `server/.env.local.example` or root `.env.example` — use the Render external URL, not localhost Postgres).
+
+**Uploads (voice audio, product images):** With a cloud DB and local API, files created on Render are not on your PC under `server/uploads`. Add `REMOTE_UPLOADS_ORIGIN=https://myshop-api-9pd4.onrender.com` to `server/.env` (see `server/.env.local.example`) so the local API proxies missing `/uploads/*` from Render. Restart the API after changing `.env`.
+
+**Voice order → delivery flow:** Order Center → voice order → **Create invoice** (opens POS) → add items → complete sale → app opens **Order Center** on the new delivery order (green “From voice” badge). Customer approves the invoice in the mobile app; then in Order Center use **Mark Confirmed** → **Packed** → delivery as usual.
 
 ### Full (with push to GitHub)
 
@@ -28,18 +36,38 @@ Local testing is **run-only**; there is no combined “test and push” command.
 
 ## 2. Database migrations
 
-Apply SQL migrations in `server/migrations/` (e.g. new indexes, schema changes). Requires PostgreSQL connection settings in `server/.env` (same as the API).
+Schema is defined in a **single consolidated file** (`server/migrations/001-consolidated-schema.sql` plus SQLite variant). Historical incremental files live in `server/migrations/archive/`. See `server/migrations/README.md`.
+
+Requires PostgreSQL connection settings in `server/.env` (same as the API).
 
 | Command | Where to run | Description |
 |--------|----------------|-------------|
-| `npm run migrate` | **Repository root** | Runs `server`’s migration runner (`tsx scripts/run-migrations.ts`). Applies any pending `.sql` files in order. |
-| `npm run migrate` | **`server/`** | Same as above (defined in `server/package.json` as `migrate`). |
+| `npm run migrate` | **Repository root** | Runs `server`’s migration runner. Fresh DB: applies consolidated schema once. Existing DB: skips consolidated if legacy migrations or `tenants` already exist. |
+| `npm run migrate` | **`server/`** | Same as above. |
 
-**What it does:** Executes pending migrations once and records them so they are not applied twice. Run after pulling changes that add files under `server/migrations/`.
+**New changes:** add `002-…sql` (and optional `.sqlite.sql`) under `server/migrations/`, then run migrate. Do not edit the consolidated file manually.
 
 ---
 
-## 3. Delete product & related transactions (DB cleanup)
+## 3. Migrate inventory stock between tenants (oBo → obostores)
+
+Copy **on-hand / reserved** quantities and optional **batch** rows from one tenant to another, matched by **SKU**. Use when the catalog already exists on the destination and you only need stock aligned with the source.
+
+| Step | Where to run | Command |
+|------|----------------|---------|
+| List tenants | **`server/`** | `npx tsx scripts/migrate-inventory-between-tenants.ts --list-tenants` |
+| Dry run | **`server/`** | `npm run migrate-inventory` |
+| Apply | **`server/`** | `npm run migrate-inventory -- --execute` |
+| Apply + replace dest batches first | **`server/`** | `npm run migrate-inventory -- --execute --replace-batches` |
+| Single SKU test | **`server/`** | `npm run migrate-inventory -- --execute --sku YOUR-SKU-CODE` |
+
+**Environment (optional):** `FROM_COMPANY_HINT` (default `obo`), `TO_COMPANY_HINT` (default `obostores`), or `--from-id` / `--to-id` for exact tenant IDs. Requires `DATABASE_URL` in `server/.env`.
+
+**Full catalog + stock:** use `npm run migrate-skus -- --with-inventory --update-existing --execute` instead.
+
+---
+
+## 4. Delete product & related transactions (DB cleanup)
 
 One-off script to remove a product and its **POS sales**, **sales returns**, **mobile orders** (lines referencing the product), **purchase bills** (lines referencing the product), **inventory movements / batches**, and **procurement demand draft lines**, then the **`shop_products`** row. Uses the same `DATABASE_URL` as the API (`server/.env`).
 
@@ -57,7 +85,7 @@ One-off script to remove a product and its **POS sales**, **sales returns**, **m
 
 ---
 
-## 4. Fetch marketing website from GitHub
+## 5. Fetch marketing website from GitHub
 
 Pull the latest **`website/`** folder from the remote repo when another teammate has updated the marketing site on GitHub. This does **not** change other folders (client, server, mobile, etc.).
 
@@ -74,7 +102,7 @@ Pull the latest **`website/`** folder from the remote repo when another teammate
 
 ---
 
-## 5. Installable app
+## 6. Installable app
 
 Build the Windows desktop app and optionally bump version, commit, push, and create a GitHub release.
 
@@ -120,7 +148,7 @@ One command runs the PowerShell script that does all steps: bump version, build,
 
 | Action | Build / run only | Full (with push to GitHub) |
 |--------|-------------------|----------------------------|
-| **Local test** | `npm run dev` (API + POS + mobile + website), `npm run electron:dev` (API + mobile + rider + Electron) | — (run-only; use installable release when ready to ship) |
+| **Local test** | `npm run dev` (API + POS + website + mobile + rider), `npm run electron:dev` (API + mobile + rider + Electron) | — (run-only; use installable release when ready to ship) |
 | **POS vs cloud API** | `npm run dev:pos:cloud` | — |
 | **Database migrations** | `npm run migrate` (from repo root or `server/`) | — |
 | **Fetch website from GitHub** | `npm run fetch:website` | — |

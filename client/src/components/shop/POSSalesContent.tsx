@@ -304,6 +304,17 @@ const POSSalesContent: React.FC = () => {
         setVoiceOrderHint(id ? (notes || 'Voice order — add items from transcript') : null);
     }, []);
 
+    useEffect(() => {
+        const onVoiceLinked = (e: Event) => {
+            const detail = (e as CustomEvent<{ mobileOrderId?: string }>).detail;
+            const mobileOrderId = detail?.mobileOrderId;
+            if (!mobileOrderId) return;
+            navigate(`/order-center?order=${encodeURIComponent(mobileOrderId)}&kind=cart`);
+        };
+        window.addEventListener('myshop:voice-invoice-linked', onVoiceLinked);
+        return () => window.removeEventListener('myshop:voice-invoice-linked', onVoiceLinked);
+    }, [navigate]);
+
     const isActive = (state as any).currentPage === 'posSales' || true; // Fallback to true if not managed by AppContext
 
     const setFullScreenEnabled = useCallback((enabled: boolean) => {
