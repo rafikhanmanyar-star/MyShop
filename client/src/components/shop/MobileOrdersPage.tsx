@@ -1601,7 +1601,7 @@ function ReservedStockReportPanel({
 }
 
 // ─── Mobile Users Panel ──────────────────────────────────
-function MobileUsersPanel({
+export function MobileUsersPanel({
     users,
     stats,
     loading,

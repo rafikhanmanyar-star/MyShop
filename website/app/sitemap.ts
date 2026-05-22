@@ -15,6 +15,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       path === '/'
         ? 1
         : path === '/privacy-policy' ||
+            path === '/delete-account' ||
             path === '/terms-and-conditions' ||
             path === '/return-policy'
           ? 0.5

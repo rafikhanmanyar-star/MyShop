@@ -128,6 +128,33 @@ export default function ShopLoader() {
             .finally(() => setLoading(false));
     }, [shopSlug]);
 
+    /** Refresh branding (home promo carousel, colors) from API without reloading the whole shop. */
+    useEffect(() => {
+        if (!shopSlug || !state.shop || !state.settings) return;
+        const shop = state.shop;
+        const settings = state.settings;
+        let cancelled = false;
+        publicApi
+            .getBranding(shopSlug)
+            .then((brandingData) => {
+                if (cancelled) return;
+                const branding = normalizeBrandingFromApi(brandingData);
+                if (!branding) return;
+                dispatch({
+                    type: 'SET_SHOP',
+                    slug: shopSlug,
+                    shop,
+                    settings,
+                    branding,
+                });
+                setShop(shopSlug, { shop, settings, branding }).catch(() => {});
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [shopSlug, state.shop, state.settings]);
+
     if (loading) {
         return (
             <div className="loading-page fade-in">

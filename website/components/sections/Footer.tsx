@@ -13,6 +13,7 @@ import {
 import Logo from '@/components/Logo';
 import {
   footerHelpLinks,
+  footerPolicyLinks,
   footerQuickLinks,
   footerUtilityLinks,
   siteConfig,
@@ -120,6 +121,17 @@ export default function Footer() {
           </div>
 
           <div className="mt-12 border-t border-white/10 pt-6 text-center text-sm text-slate-500">
+            <nav aria-label="Legal policies" className="mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+              {footerPolicyLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="text-slate-400 underline-offset-2 hover:text-white hover:underline"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
             © {new Date().getFullYear()} {siteConfig.brand}. All rights reserved.
           </div>
         </div>

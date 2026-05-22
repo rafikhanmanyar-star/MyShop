@@ -55,9 +55,9 @@ export default function BottomNav() {
                     {icons.orders}
                     <span>Orders</span>
                 </Link>
-                <Link to={`${base}/utilities`} className={utilitiesActive ? 'active' : ''}>
+                <Link to={`${base}/utilities`} className={utilitiesActive ? 'active' : ''} title="Utilities">
                     {icons.utilities}
-                    <span>Utilities</span>
+                    <span>Utils</span>
                 </Link>
             </nav>
         </>

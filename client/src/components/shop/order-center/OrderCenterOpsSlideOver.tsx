@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Map, Bike, Settings, RefreshCw } from 'lucide-react';
+import { X, Map, Bike, Settings, RefreshCw, UserCheck } from 'lucide-react';
 import { useMobileOrders } from '../../../context/MobileOrdersContext';
 import { mobileOrdersApi, type MobileOrder, type PosRidersOverview } from '../../../services/mobileOrdersApi';
 import { MobileOrdersLiveMap } from '../MobileOrdersLiveMap';
@@ -8,8 +8,9 @@ import { MobileSettingsPanel } from '../MobileOrdersPage';
 import { fetchRidersOverview } from './CartRiderAssign';
 import { orderCenterApi } from '../../../services/orderCenterApi';
 import { useOrderCenter } from '../../../context/OrderCenterContext';
+import { OrderCenterMobileUsers } from './OrderCenterMobileUsers';
 
-export type OpsSlideTab = 'map' | 'riders' | 'settings';
+export type OpsSlideTab = 'map' | 'riders' | 'users' | 'settings';
 
 interface Props {
     open: boolean;
@@ -119,10 +120,11 @@ export function OrderCenterOpsSlideOver({
     const tabs: { id: OpsSlideTab; label: string; icon: typeof Map }[] = [
         { id: 'map', label: 'Live map', icon: Map },
         { id: 'riders', label: 'Riders', icon: Bike },
+        { id: 'users', label: 'Mobile users', icon: UserCheck },
         { id: 'settings', label: 'Mobile settings', icon: Settings },
     ];
 
-    const widePanel = tab === 'map';
+    const widePanel = tab === 'map' || tab === 'users';
 
     return (
         <AnimatePresence>
@@ -264,6 +266,12 @@ export function OrderCenterOpsSlideOver({
                                     <p className="text-xs text-muted-foreground leading-relaxed">
                                         Assign riders from the order detail panel when a delivery order is selected. Rider assignment mode is configured under Mobile settings.
                                     </p>
+                                </div>
+                            )}
+
+                            {tab === 'users' && (
+                                <div className="flex-1 min-h-0 overflow-hidden flex flex-col p-4">
+                                    <OrderCenterMobileUsers active={open && tab === 'users'} />
                                 </div>
                             )}
 

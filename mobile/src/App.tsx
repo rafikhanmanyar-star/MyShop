@@ -44,6 +44,7 @@ import { processVoiceOrderQueue } from './services/voiceOrderSyncService';
 import { processPendingProductQueue } from './services/productSyncService';
 import { processMenuPlannerQueue } from './services/menuPlannerSyncQueue';
 import { useHeartbeat } from './hooks/useHeartbeat';
+import FirebaseBootstrap from './components/FirebaseBootstrap';
 
 function HeartbeatReporter() {
   useHeartbeat();
@@ -116,6 +117,7 @@ export default function App() {
   return (
     <AppProvider>
       <OfflineBanner />
+      <FirebaseBootstrap />
       <LoyaltyBootstrap />
       <HeartbeatReporter />
       <SyncOnOnline />

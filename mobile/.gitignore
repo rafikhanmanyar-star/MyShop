@@ -1,3 +1,7 @@
+# Release signing (never commit)
+obostores-release.keystore
+keystore.properties
+
 # Logs
 logs
 *.log

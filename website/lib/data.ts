@@ -268,12 +268,14 @@ export const footerHelpLinks = [
   { label: 'FAQ', href: '/#faq' },
   { label: 'Returns', href: '/return-policy' },
   { label: 'Privacy Policy', href: '/privacy-policy' },
+  { label: 'Delete Account', href: '/delete-account' },
   { label: 'Terms & Conditions', href: '/terms-and-conditions' },
   { label: 'Contact Support', href: '/contact' },
 ] as const;
 
 export const footerPolicyLinks = [
   { label: 'Privacy Policy', href: '/privacy-policy' },
+  { label: 'Delete Account', href: '/delete-account' },
   { label: 'Terms and Conditions', href: '/terms-and-conditions' },
   { label: 'Return Policy', href: '/return-policy' },
   { label: 'FAQ', href: '/#faq' },
