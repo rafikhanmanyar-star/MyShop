@@ -859,9 +859,12 @@ img {
 .page.page--browse.browse-layout {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - var(--header-offset-compact) - var(--bottom-nav-height));
+  flex: 1;
   min-height: 0;
+  max-height: calc(100dvh - var(--header-offset-compact) - var(--bottom-nav-height));
   padding: 0 var(--space-3);
+  padding-bottom: 0;
+  overflow: hidden;
 }
 
 .browse-search-spacer {
@@ -897,11 +900,13 @@ img {
 }
 
 .browse-products-scroll {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
   padding-bottom: calc(var(--space-3) + var(--safe-bottom));
 }
 
@@ -3102,6 +3107,7 @@ img {
   flex-direction: column;
   min-height: 0;
   padding-top: var(--header-offset-compact);
+  overflow: hidden;
 }
 
 .shop-outlet--cart-pad .page {

@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type RefObject } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
     computeCatalogColumnCount,
@@ -8,7 +8,8 @@ import {
 type Props = {
     items: { id: string }[];
     renderCard: (product: { id: string }) => React.ReactNode;
-    scrollElementRef: RefObject<HTMLDivElement | null>;
+    /** Scrollport for the product grid (must be the overflow-y:auto parent). */
+    scrollElement: HTMLDivElement | null;
 };
 
 function useCatalogColumnCount(): number {
@@ -25,17 +26,23 @@ function useCatalogColumnCount(): number {
     return cols;
 }
 
-function VirtualizedProductGrid({ items, renderCard, scrollElementRef }: Props) {
+function VirtualizedProductGrid({ items, renderCard, scrollElement }: Props) {
     const cols = useCatalogColumnCount();
     const rowCount = Math.ceil(items.length / cols);
     const estRow = estimateCatalogRowHeight(cols);
 
     const rowVirtualizer = useVirtualizer({
         count: rowCount,
-        getScrollElement: () => scrollElementRef.current,
+        getScrollElement: () => scrollElement,
         estimateSize: () => estRow,
         overscan: 3,
     });
+
+    useEffect(() => {
+        if (!scrollElement) return;
+        rowVirtualizer.measure();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- remeasure when scrollport or grid shape changes
+    }, [scrollElement, cols, items.length]);
 
     if (items.length === 0) return null;
 

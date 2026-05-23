@@ -45,6 +45,7 @@ export default function Products() {
     const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
     const productsScrollRef = useRef<HTMLDivElement>(null);
+    const [productsScrollEl, setProductsScrollEl] = useState<HTMLDivElement | null>(null);
     /** Next page for API when showUnavailable=true (server returns nextPage). */
     const nextUnavailablePageRef = useRef<number | null>(1);
 
@@ -447,7 +448,7 @@ export default function Products() {
     useEffect(() => {
         if (!hasMore || loadingMore || loading) return;
         const el = loadMoreSentinelRef.current;
-        const root = productsScrollRef.current;
+        const root = productsScrollEl;
         if (!el || !root) return;
         const observer = new IntersectionObserver(
             (entries) => {
@@ -459,7 +460,7 @@ export default function Products() {
         );
         observer.observe(el);
         return () => observer.disconnect();
-    }, [hasMore, loadingMore, loading, loadProducts]);
+    }, [hasMore, loadingMore, loading, loadProducts, productsScrollEl]);
 
     const handleSearchChange = (val: string) => {
         setSearchTerm(val);
@@ -809,7 +810,13 @@ export default function Products() {
             {browseSearchBar ? createPortal(browseSearchBar, document.body) : null}
             <div className="browse-search-spacer" aria-hidden />
 
-            <div ref={productsScrollRef} className="browse-products-scroll">
+            <div
+                ref={(el) => {
+                    productsScrollRef.current = el;
+                    setProductsScrollEl(el);
+                }}
+                className="browse-products-scroll"
+            >
                 <div className="browse-filters-scroll">
                 <div className="filter-chips-row" role="toolbar" aria-label="Quick filters">
                     <button
@@ -1142,7 +1149,7 @@ export default function Products() {
             ) : (
                 <>
                     <VirtualizedProductGrid
-                        scrollElementRef={productsScrollRef}
+                        scrollElement={productsScrollEl}
                         items={displayedProducts}
                         renderCard={(p: any) => {
                             const qty = cartQtyMap.get(p.id) ?? 0;
