@@ -11,9 +11,13 @@ import {
 } from '../offline/runOnlineSyncPipeline';
 
 const OUTBOX_RETRY_MS = 60_000;
-/** Wait for shell to paint before heavy IndexedDB sync; longer on Electron desktop. */
-const INITIAL_SYNC_DELAY_MS =
-  typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron') ? 25_000 : 8_000;
+/** Wait for shell to paint before heavy IndexedDB sync; longer on Electron desktop and in dev. */
+const INITIAL_SYNC_DELAY_MS = (() => {
+  if (typeof navigator === 'undefined') return 8_000;
+  if (navigator.userAgent.includes('Electron')) return 25_000;
+  if (import.meta.env.DEV) return 20_000;
+  return 8_000;
+})();
 
 export function SyncOnOnline() {
   useEffect(() => {

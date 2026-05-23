@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { shopApi, accountingApi } from '../services/shopApi';
 import { getDashboardCache, setDashboardCache, type DashboardStats } from '../services/dashboardOfflineCache';
@@ -76,8 +76,10 @@ const EMPTY_STATS: DashboardStats = {
 };
 
 export default function DashboardPage() {
-  const { lastYmdDays, timezone } = useShopTimezone();
+  const { lastYmdDays, timezone, loading: timezoneLoading } = useShopTimezone();
   const trendDayKeys = useMemo(() => lastYmdDays(7), [lastYmdDays, timezone]);
+  const trendDayKeysKey = trendDayKeys.join(',');
+  const loadGenRef = useRef(0);
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
   const [ready, setReady] = useState(false);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
@@ -89,19 +91,21 @@ export default function DashboardPage() {
   const [profit7d, setProfit7d] = useState<{ totalProfit: number; avgProfitPerDay: number } | null>(null);
 
   useEffect(() => {
+    const gen = loadGenRef.current + 1;
+    loadGenRef.current = gen;
     let cancelled = false;
     const tenantId = getTenantId();
     const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
 
     async function loadCharts() {
-      if (!isOnline || !tenantId) return;
+      if (!isOnline || !tenantId || timezoneLoading) return;
       try {
         const [trendRaw, categoryPerf, profitSummary] = await Promise.all([
           accountingApi.getDailyTrend(7).catch(() => null),
           accountingApi.getCategoryPerformance().catch(() => []),
           accountingApi.dailyProfitSummary(trendDayKeys).catch(() => null),
         ]);
-        if (cancelled) return;
+        if (cancelled || loadGenRef.current !== gen) return;
         setSalesTrend(mergeDailyTrend(trendRaw, trendDayKeys, timezone));
         const catArr = Array.isArray(categoryPerf) ? categoryPerf : [];
         setRevenueBreakdown(
@@ -149,10 +153,10 @@ export default function DashboardPage() {
         /* IndexedDB unavailable or blocked — continue with empty/cached UI */
       }
 
-      if (!cancelled) setReady(true);
+      if (!cancelled && loadGenRef.current === gen) setReady(true);
 
-      if (!isOnline || !tenantId) {
-        if (!cancelled) {
+      if (!isOnline || !tenantId || timezoneLoading) {
+        if (!cancelled && loadGenRef.current === gen) {
           setChartsLoaded(false);
           setProfit7d(null);
         }
@@ -167,7 +171,7 @@ export default function DashboardPage() {
           OVERVIEW_FETCH_TIMEOUT_MS,
           null
         );
-        if (cancelled || !overview) return;
+        if (cancelled || loadGenRef.current !== gen || !overview) return;
         setStats(overview.stats);
         setLowStockRows(overview.lowStockRows);
         setPendingOrderRows(overview.pendingOrders);
@@ -197,7 +201,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [timezone, trendDayKeys]);
+  }, [timezone, trendDayKeysKey, timezoneLoading]);
 
   const todayLabel = useMemo(
     () =>
