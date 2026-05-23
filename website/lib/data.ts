@@ -12,7 +12,7 @@ export const siteConfig = {
   url: 'https://www.obostore.com',
   /** Live grocery PWA / shop (Install CTA destination) */
   shopUrl: 'https://obostores-shop.pages.dev/',
-  logo: '/logo.png',
+  logo: '/logo-brand.png',
   schemaAddress: 'FMC B-17 Kohsar Plaza Main Boulevard, Islamabad, Pakistan',
   schemaAreaServed: ['B-17 Islamabad', 'FMC B-17', 'Kohsar Plaza', 'Main Boulevard'] as const,
   openingHours: '09:00-23:00',
@@ -23,8 +23,8 @@ export const siteConfig = {
   region: 'Islamabad Capital Territory',
   postalCode: '44000',
   countryCode: 'PK',
-  phone: '+92 300 1234567',
-  phoneE164: '+923001234567',
+  phone: '+92 330 9089380',
+  phoneE164: '+923309089380',
   email: 'support@obostore.com',
   promoCode: 'OBOFIRST',
   themeColor: '#1F7A63',
@@ -62,6 +62,7 @@ export const navLinks = [
   { label: 'Features', href: '/features' },
   { label: 'Utilities', href: '/utilities' },
   { label: 'About Us', href: '/about' },
+  { label: 'FAQ', href: '/#faq' },
   { label: 'Contact', href: '/contact' },
 ] as const;
 

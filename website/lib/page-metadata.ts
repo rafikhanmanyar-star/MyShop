@@ -11,9 +11,9 @@ type PageMetadataInput = {
 };
 
 const defaultOgImage = {
-  url: absoluteUrl('/images/hero-app-mockup-red.png'),
-  width: 909,
-  height: 755,
+  url: absoluteUrl('/images/hero-home.png'),
+  width: 685,
+  height: 617,
   alt: 'oBo Store grocery delivery app for B-17 Islamabad',
 };
 

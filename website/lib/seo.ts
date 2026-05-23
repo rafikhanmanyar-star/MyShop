@@ -13,8 +13,8 @@ export type BreadcrumbItem = {
 const logoImageObject = () => ({
   '@type': 'ImageObject' as const,
   url: absoluteUrl(siteConfig.logo),
-  width: 512,
-  height: 512,
+  width: 167,
+  height: 170,
 });
 
 const postalAddress = {
@@ -224,9 +224,9 @@ export const seoConfig = {
     description: siteConfig.ogDescription,
     images: [
       {
-        url: '/images/hero-app-mockup-red.png',
-        width: 909,
-        height: 755,
+        url: '/images/hero-home.png',
+        width: 685,
+        height: 617,
         alt: 'oBo Store grocery delivery app for B-17 Islamabad',
       },
     ],
@@ -235,7 +235,7 @@ export const seoConfig = {
     card: 'summary_large_image' as const,
     title: siteConfig.title,
     description: siteConfig.ogDescription,
-    images: ['/images/hero-app-mockup-red.png'],
+    images: ['/images/hero-home.png'],
   },
   icons: {
     icon: [

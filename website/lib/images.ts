@@ -1,16 +1,16 @@
 /** Optimized image assets — alt text must match visible content for SEO */
 export const siteImages = {
   heroAppMockup: {
-    src: '/images/hero-app-mockup-red.png',
+    src: '/images/hero-home.png',
     alt: 'oBo Store grocery delivery app with live order tracking for B-17 Islamabad',
-    width: 909,
-    height: 755,
+    width: 685,
+    height: 617,
   },
   heroPwaOrdering: {
-    src: '/images/hero-app-mockup-red.png',
+    src: '/images/hero-home.png',
     alt: 'Smart grocery shopping app Pakistan — oBo Store PWA ordering screen',
-    width: 909,
-    height: 755,
+    width: 685,
+    height: 617,
   },
   trackingFeature: {
     src: '/images/tracking-feature.webp',
