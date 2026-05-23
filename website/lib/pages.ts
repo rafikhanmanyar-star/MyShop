@@ -4,49 +4,51 @@ export const pageMeta = {
     path: '/',
     title: 'oBo Store | Smart Grocery Store in B-17 Islamabad',
     description:
-      'Install oBo Store PWA to order groceries, snacks, drinks, dairy, frozen items, and household essentials from FMC B-17 Kohsar Plaza Main Boulevard with fast delivery and real-time tracking.',
+      'Order groceries, snacks, drinks, dairy, frozen items, and household essentials from oBo Store in B-17 Islamabad. Install our smart PWA for fast delivery, real-time tracking, secure ordering, and smart shopping utilities.',
+    ogDescription:
+      'Fast grocery delivery and smart shopping in B-17 Islamabad. Order snacks, dairy, frozen items, and household essentials with real-time tracking.',
   },
   features: {
     path: '/features',
-    title: 'Features | oBo Store Grocery PWA Islamabad',
+    title: 'Grocery App Features | oBo Store B-17 Islamabad',
     description:
-      'Explore oBo Store features including fast delivery, real-time tracking, smart offers, easy returns, secure ordering, and low prices in B-17 Islamabad.',
+      'Explore oBo Store features: fast grocery delivery in B-17 Islamabad, real-time tracking, smart offers, secure ordering, easy returns, and low prices from FMC Kohsar Plaza.',
   },
   utilities: {
     path: '/utilities',
-    title: 'Smart Grocery Utilities | oBo Store',
+    title: 'Smart Grocery Utilities | oBo Store Islamabad',
     description:
-      'Plan smarter with oBo Store utilities including budget planner, weekly menu planner, grocery reminders, smart recipes, family shared cart, and shopping planning.',
+      'Plan smarter with oBo Store utilities: budget planner, weekly menu planner, grocery reminders, smart recipes, family shared cart, and shopping planning for B-17 Islamabad.',
   },
   about: {
     path: '/about',
-    title: 'About oBo Store | Trusted Grocery Store in B-17 Islamabad',
+    title: 'About oBo Store | Grocery Store in B-17 Islamabad',
     description:
-      'oBo Store is a trusted grocery and household essentials store at FMC B-17 Kohsar Plaza Main Boulevard, serving customers with fast delivery, low prices, and smart shopping tools.',
+      'Learn about oBo Store — a trusted grocery store at FMC B-17 Kohsar Plaza Main Boulevard, Islamabad. Fast delivery, fair prices, and smart shopping tools for local families.',
   },
   contact: {
     path: '/contact',
     title: 'Contact oBo Store | FMC B-17 Kohsar Plaza Islamabad',
     description:
-      'Contact oBo Store for groceries, snacks, drinks, dairy, frozen items, and household essentials at FMC B-17 Kohsar Plaza Main Boulevard, Islamabad.',
+      'Contact oBo Store for grocery orders and support at FMC B-17 Kohsar Plaza Main Boulevard, Islamabad. Call, email, or visit our store in B-17.',
   },
   privacyPolicy: {
     path: '/privacy-policy',
     title: 'Privacy Policy | oBo Store',
     description:
-      'Learn how oBo Store protects your data, privacy, and shopping information.',
+      'Read how oBo Store collects, uses, and protects your personal data, order information, and privacy when you shop online or in store.',
   },
   terms: {
     path: '/terms-and-conditions',
     title: 'Terms and Conditions | oBo Store',
     description:
-      'Read the terms and conditions for using the oBo Store website and PWA.',
+      'Terms and conditions for using the oBo Store website, smart grocery PWA, delivery service, and in-store shopping at FMC B-17 Kohsar Plaza.',
   },
   returnPolicy: {
     path: '/return-policy',
     title: 'Return Policy | oBo Store',
     description:
-      'Read the oBo Store return policy for eligible grocery, household, dairy, and frozen products.',
+      'oBo Store return policy for eligible grocery, dairy, frozen, and household products. Learn how to request returns in B-17 Islamabad.',
   },
 } as const;
 

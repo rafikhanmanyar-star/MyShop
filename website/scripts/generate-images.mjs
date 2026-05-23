@@ -13,6 +13,7 @@ const publicDir = path.join(__dirname, '../public');
 const iconSvg = path.join(publicDir, 'icons/icon-512.svg');
 
 const brand = '#DC2626';
+const brandGreen = '#1F7A63';
 const accent = '#F59E0B';
 const dark = '#1E293B';
 const muted = '#64748B';
@@ -165,6 +166,13 @@ console.log('Created mstile-310x150.png');
 
 await sharp(iconBuffer).resize(32, 32).png().toFile(path.join(publicDir, 'favicon.ico'));
 console.log('Created favicon.ico');
+
+const heroPngPath = path.join(outDir, 'hero-app-mockup-red.png');
+await sharp(Buffer.from(phoneMockupSvg()))
+  .resize(909, 755, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+  .png({ quality: 90 })
+  .toFile(heroPngPath);
+console.log('Created hero-app-mockup-red.png');
 
 for (const asset of assets) {
   const outPath = path.join(outDir, asset.file);

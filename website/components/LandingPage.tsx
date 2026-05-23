@@ -2,6 +2,7 @@
 
 import SkipLink from '@/components/SkipLink';
 import Hero from '@/components/sections/Hero';
+import BusinessOverview from '@/components/sections/BusinessOverview';
 import TrustStrip from '@/components/sections/TrustStrip';
 import TopFeatures from '@/components/sections/TopFeatures';
 import SmartUtilities from '@/components/sections/SmartUtilities';
@@ -22,6 +23,7 @@ export default function LandingPage() {
       <Navbar />
       <main id="main-content" tabIndex={-1}>
         <Hero />
+        <BusinessOverview />
         <TrustStrip />
         <TopFeatures />
         <SmartUtilities variant="banner" />

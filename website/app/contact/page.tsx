@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import BreadcrumbJsonLd from '@/components/BreadcrumbJsonLd';
 import FaqJsonLd from '@/components/FaqJsonLd';
 import SiteShell from '@/components/SiteShell';
 import StoreSection from '@/components/sections/StoreSection';
@@ -6,11 +6,17 @@ import LocalFaqSection from '@/components/sections/LocalFaqSection';
 import { createPageMetadata } from '@/lib/page-metadata';
 import { pageMeta } from '@/lib/pages';
 
-export const metadata: Metadata = createPageMetadata(pageMeta.contact);
+export const metadata = createPageMetadata(pageMeta.contact);
 
 export default function ContactPage() {
   return (
     <SiteShell>
+      <BreadcrumbJsonLd
+        items={[
+          { name: 'Home', path: '/' },
+          { name: 'Contact', path: '/contact' },
+        ]}
+      />
       <FaqJsonLd />
       <StoreSection
         headingLevel="h1"
