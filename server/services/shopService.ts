@@ -110,6 +110,10 @@ const inventorySkuListCache = new Map<string, { expiresAt: number; payload: unkn
 const INV_SKU_CACHE_TTL_MS = 25_000;
 const INV_SKU_CACHE_MAX_KEYS = 40;
 
+/** Short-lived cache for dashboard overview KPIs (expensive multi-table aggregate for large tenants). */
+const dashboardOverviewCache = new Map<string, { expiresAt: number; payload: unknown }>();
+const DASHBOARD_OVERVIEW_CACHE_TTL_MS = 60_000; // 60 s — dashboard stats are not real-time
+
 function touchInventorySkuCacheSize() {
   while (inventorySkuListCache.size > INV_SKU_CACHE_MAX_KEYS) {
     const first = inventorySkuListCache.keys().next().value;
@@ -1602,6 +1606,7 @@ export class ShopService {
     notifyDailyReportUpdated(tenantId).catch(() => {});
     notifyDailyReportUpdated(tenantId, 'sale_created').catch(() => {});
     invalidateInventorySkuListCache(tenantId);
+    this.invalidateDashboardOverviewCache(tenantId);
 
     return result;
   }
@@ -3133,6 +3138,22 @@ export class ShopService {
    * Aggregated dashboard KPIs + alert rows in one round-trip (replaces loading full product/sales/inventory lists on the client).
    */
   async getDashboardOverview(tenantId: string) {
+    const cacheKey = tenantId;
+    const hit = dashboardOverviewCache.get(cacheKey);
+    if (hit && hit.expiresAt > Date.now()) {
+      return hit.payload as Awaited<ReturnType<typeof this._computeDashboardOverview>>;
+    }
+    const result = await this._computeDashboardOverview(tenantId);
+    dashboardOverviewCache.set(cacheKey, { expiresAt: Date.now() + DASHBOARD_OVERVIEW_CACHE_TTL_MS, payload: result });
+    return result;
+  }
+
+  /** Bust the dashboard overview cache for a tenant (call after a sale is recorded). */
+  invalidateDashboardOverviewCache(tenantId: string) {
+    dashboardOverviewCache.delete(tenantId);
+  }
+
+  private async _computeDashboardOverview(tenantId: string) {
     const [statsRows, lowStockRows, pendingRows] = await Promise.all([
       this.db.query(
         `

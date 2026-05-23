@@ -527,8 +527,8 @@ const MIRROR_STORE_NAMES = [
   'sync_terminals',
   'sync_loyalty_members',
   'sync_singletons',
-  'sync_queue',
-  'sync_conflicts',
+  // NOTE: sync_queue intentionally excluded — it holds pending offline sales that must not be lost.
+  // NOTE: sync_conflicts excluded — stale conflicts are harmless; clearing them is a separate operation.
 ] as const;
 
 export async function getOfflineMirrorTenantId(): Promise<string | null> {

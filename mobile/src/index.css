@@ -3126,12 +3126,6 @@ img {
   flex-direction: column;
   min-height: 0;
   padding-top: var(--header-offset-compact);
-  overflow: hidden;
-}
-
-/* Home scrolls in the outlet; sticky search pins below header padding (not viewport). */
-.shop-outlet--home,
-.shop-outlet:has(.page--home) {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;

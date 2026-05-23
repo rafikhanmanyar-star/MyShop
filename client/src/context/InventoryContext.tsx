@@ -388,11 +388,18 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (!routeNeedsCatalog(pathname)) return;
         if (catalogFetchStartedRef.current) return;
 
+        // Guard BEFORE the async timer fires so re-navigation during a slow obo fetch
+        // doesn't start a second concurrent fetch (large catalogs take 10-20 s).
+        catalogFetchStartedRef.current = true;
         let cancelled = false;
         const startDelayMs = pathname === '/pos' ? 80 : 350;
 
         const fetchData = async () => {
-            if (cancelled) return;
+            if (cancelled) {
+                // Effect was cleaned up before the fetch started — allow a future attempt.
+                catalogFetchStartedRef.current = false;
+                return;
+            }
 
             const mapWarehouseRows = (warehousesList: any[]): Warehouse[] =>
                 warehousesList.map((w: any) => ({
@@ -441,7 +448,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     await new Promise((r) => setTimeout(r, 120));
                 }
 
-                if (cancelled) return;
+                if (cancelled) {
+                    catalogFetchStartedRef.current = false;
+                    return;
+                }
 
                 const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
                 console.log('🔄 [InventoryContext] Fetching warehouses + inventory SKUs (single request)...');
@@ -489,7 +499,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 }
 
                 applyCatalogItems(await mergePending(mappedItems));
-                catalogFetchStartedRef.current = true;
+                // ref was already set to true at effect start; nothing to do here
 
             } catch (error: any) {
                 console.error('Failed to fetch inventory data:', error);
@@ -503,7 +513,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                                 setWarehouses(mapWarehouseRows(localWhRows));
                             }
                             setItems(await mergePending(mappedLocal));
-                            catalogFetchStartedRef.current = true;
                             return;
                         }
                         const pending = await getAllPendingProducts();
@@ -527,10 +536,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                             warehouseStock: {},
                         }));
                         setItems(pendingAsItems);
-                        catalogFetchStartedRef.current = true;
                     } catch (e) {
                         console.error('Failed to load offline inventory:', e);
+                        catalogFetchStartedRef.current = false; // allow retry on total failure
                     }
+                } else {
+                    // Non-retryable error — reset so the user can try again by re-navigating
+                    catalogFetchStartedRef.current = false;
                 }
             }
         };
