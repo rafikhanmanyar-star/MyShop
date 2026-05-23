@@ -127,6 +127,7 @@ function mapServerProductToItem(p: any): InventoryItem {
         damaged: 0,
         costPrice: parseFloat(p.cost_price || '0'),
         retailPrice: parseFloat(p.retail_price || '0'),
+        taxRate: parseFloat(p.tax_rate || '0') || 0,
         reorderPoint: p.reorder_point || 10,
         imageUrl: getFullImageUrl(p.image_url) || undefined,
         description: p.mobile_description || p.description || undefined,
@@ -313,6 +314,7 @@ function mergeLegacyProductsInventory(products: any[], inventory: any[]): Invent
         damaged: 0,
         costPrice: parseFloat(p.cost_price || '0'),
         retailPrice: parseFloat(p.retail_price || '0'),
+        taxRate: parseFloat(p.tax_rate || '0') || 0,
         reorderPoint: p.reorder_point || 10,
         imageUrl: getFullImageUrl(p.image_url) || undefined,
         description: p.mobile_description || p.description || undefined,
@@ -522,7 +524,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const refreshItems = useCallback(async () => {
         try {
             console.log('🔄 [InventoryContext] Refreshing products/items...');
-            const skuPack = await shopApi.getInventorySkus({ page: 1, limit: 10000 });
+            const skuPack = await shopApi.getInventorySkus({ page: 1, limit: 10000, skipCache: true });
             let mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
             if (mappedItems.length === 0) {
                 try {
@@ -706,6 +708,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 item.category !== 'General' && item.subcategoryId ? item.subcategoryId : null,
             retail_price: item.retailPrice,
             cost_price: item.costPrice,
+            tax_rate: item.taxRate ?? 0,
             unit: item.unit,
             reorder_point: item.reorderPoint,
             description: item.description || null,
@@ -832,6 +835,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }
             if (updates.retailPrice !== undefined) payload.retail_price = updates.retailPrice;
             if (updates.costPrice !== undefined) payload.cost_price = updates.costPrice;
+            if (updates.taxRate !== undefined) payload.tax_rate = updates.taxRate;
             if (updates.unit) payload.unit = updates.unit;
             if (updates.reorderPoint !== undefined) payload.reorder_point = updates.reorderPoint;
             if (updates.imageUrl !== undefined) payload.image_url = updates.imageUrl;

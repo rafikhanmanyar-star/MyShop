@@ -1,4 +1,5 @@
 import { getDatabaseService } from './databaseService.js';
+import { toApiInstant } from '../utils/apiTimestamps.js';
 import { getAccountingService } from './accountingService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
@@ -9,6 +10,11 @@ import { invalidateInventorySkuListCache } from './shopService.js';
 import { tryAutoAssignRiderForMobileOrder, manuallyAssignRiderForMobileOrder } from './deliveryAssignment.js';
 import { haversineDistanceKm } from '../utils/haversine.js';
 import { getDrivingDurationSeconds } from './googleDirectionsEtaService.js';
+import {
+    getBundleTitle,
+    getRecipeCompanionKeywords,
+    getRecommendationSubtitle,
+} from '../utils/productRecommendationRules.js';
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -518,10 +524,11 @@ export class MobileOrderService {
     async getProductDetailForMobile(tenantId: string, productId: string) {
         const stockExpr = mobileProductSellableStockSql();
         const rows = await this.db.query(
-            `SELECT p.*, c.name as category_name, b.name as brand_name,
+            `SELECT p.*, c.name as category_name, sc.name as subcategory_name, b.name as brand_name,
               ${stockExpr} as available_stock
        FROM shop_products p
        LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
+       LEFT JOIN categories sc ON p.subcategory_id = sc.id AND sc.tenant_id = $1
        LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
        WHERE p.id = $2 AND p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
          AND COALESCE(p.mobile_price, p.retail_price) > 0`,
@@ -565,6 +572,8 @@ export class MobileOrderService {
             image_url: r.image_url ?? null,
             category_id: r.category_id ?? null,
             category_name: r.category_name ?? null,
+            subcategory_id: (r as any).subcategory_id ?? null,
+            subcategory_name: (r as any).subcategory_name ?? null,
             available_stock: stockNum,
             stock: stockNum,
             description: r.mobile_description ?? (r as any).description ?? null,
@@ -578,10 +587,14 @@ export class MobileOrderService {
     }
 
     /**
-     * Recommendations: rank same-category products first, then fill with related cross-category
-     * products using brand/unit/name/category keyword matches, and finally popular sellable items.
+     * PDP recommendations — priority order:
+     * 1) Frequently bought together (order co-occurrence)
+     * 2) Same-recipe ingredients (recipe_ingredients graph)
+     * 3) Recipe-family companion keywords (rice → oil, masala, …)
+     * 4) Same subcategory / category / brand / name keywords
+     * 5) Popular sellable fallback
      */
-    async getProductRecommendationsForMobile(tenantId: string, productId: string, limit = 6) {
+    async getProductRecommendationsForMobile(tenantId: string, productId: string, limit = 12) {
         const stockSubquery = mobileProductSellableStockSql();
         const meta = await this.db.query(
             `SELECT p.category_id, p.subcategory_id, p.brand_id, p.name, p.mobile_description, p.unit,
@@ -598,22 +611,81 @@ export class MobileOrderService {
          AND COALESCE(p.sales_deactivated, FALSE) = FALSE`,
             [tenantId, productId]
         );
-        if (meta.length === 0) return [];
+        if (meta.length === 0) {
+            return { items: [], subtitle: null, bundle: null };
+        }
 
+        const productName = String(meta[0]?.name ?? '');
+        const categoryName = meta[0]?.category_name ?? null;
         const categoryId = meta[0]?.category_id ?? null;
         const subcategoryId = meta[0]?.subcategory_id ?? null;
         const brandId = meta[0]?.brand_id ?? null;
         const unit = meta[0]?.unit ?? null;
         const currentPrice = safeNum(meta[0]?.price);
-        const keywords = getRecommendationKeywords(
-            meta[0]?.name,
-            meta[0]?.mobile_description,
-            meta[0]?.category_name,
-            meta[0]?.brand_name,
-            unit
+
+        const recipeKeywords = getRecipeCompanionKeywords(productName, categoryName);
+        const keywords = [
+            ...new Set([
+                ...recipeKeywords,
+                ...getRecommendationKeywords(
+                    meta[0]?.name,
+                    meta[0]?.mobile_description,
+                    meta[0]?.category_name,
+                    meta[0]?.brand_name,
+                    unit
+                ),
+            ]),
+        ].slice(0, 16);
+
+        const coPurchaseRows = await this.db.query(
+            `SELECT oi2.product_id::text AS id, COUNT(*)::int AS freq
+       FROM mobile_order_items oi1
+       JOIN mobile_order_items oi2
+         ON oi1.order_id = oi2.order_id AND oi1.tenant_id = oi2.tenant_id
+       JOIN shop_products p ON p.id = oi2.product_id AND p.tenant_id = oi1.tenant_id
+       WHERE oi1.tenant_id = $1
+         AND oi1.product_id::text = $2
+         AND oi2.product_id::text != $2
+         AND p.is_active = TRUE
+         AND p.mobile_visible = TRUE
+         AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+         AND COALESCE(p.mobile_price, p.retail_price) > 0
+       GROUP BY oi2.product_id
+       ORDER BY freq DESC
+       LIMIT 20`,
+            [tenantId, productId]
         );
-        const safeLimit = Math.min(Math.max(limit, 6), 12);
-        const poolSize = Math.min(60, Math.max(safeLimit * 8, 24));
+        const coPurchaseIds = coPurchaseRows.map((r: { id: string }) => String(r.id));
+        const hasCoPurchase = coPurchaseIds.length > 0;
+
+        let recipeCompanionIds: string[] = [];
+        try {
+            const recipeRows = await this.db.query(
+                `SELECT ri2.product_id::text AS id, COUNT(DISTINCT ri2.recipe_id)::int AS recipes
+         FROM recipe_ingredients ri1
+         JOIN recipe_ingredients ri2
+           ON ri1.recipe_id = ri2.recipe_id AND ri1.tenant_id = ri2.tenant_id
+         JOIN shop_products p ON p.id = ri2.product_id AND p.tenant_id = ri1.tenant_id
+         WHERE ri1.tenant_id = $1
+           AND ri1.product_id::text = $2
+           AND ri2.product_id IS NOT NULL
+           AND ri2.product_id::text != $2
+           AND p.is_active = TRUE
+           AND p.mobile_visible = TRUE
+           AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+           AND COALESCE(p.mobile_price, p.retail_price) > 0
+         GROUP BY ri2.product_id
+         ORDER BY recipes DESC
+         LIMIT 20`,
+                [tenantId, productId]
+            );
+            recipeCompanionIds = recipeRows.map((r: { id: string }) => String(r.id));
+        } catch {
+            recipeCompanionIds = [];
+        }
+
+        const safeLimit = Math.min(Math.max(limit, 8), 16);
+        const poolSize = Math.min(80, Math.max(safeLimit * 8, 32));
 
         const relatedQuery = `
       WITH scored AS (
@@ -625,6 +697,8 @@ export class MobileOrderService {
                COALESCE(NULLIF(p.brand, ''), b.name) as brand_name,
                ${stockSubquery} as available_stock,
                (
+                 CASE WHEN p.id::text = ANY($9::text[]) THEN 220 ELSE 0 END +
+                 CASE WHEN p.id::text = ANY($10::text[]) THEN 170 ELSE 0 END +
                  CASE WHEN $3::text IS NOT NULL AND p.subcategory_id::text = $3 THEN 100 ELSE 0 END +
                  CASE WHEN $4::text IS NOT NULL AND p.category_id::text = $4 THEN 75 ELSE 0 END +
                  CASE WHEN $5::text IS NOT NULL AND p.brand_id::text = $5 THEN 35 ELSE 0 END +
@@ -636,7 +710,7 @@ export class MobileOrderService {
                       OR COALESCE(p.mobile_description, '') ILIKE '%' || kw || '%'
                       OR COALESCE(c.name, '') ILIKE '%' || kw || '%'
                       OR COALESCE(p.brand, b.name, '') ILIKE '%' || kw || '%'
-                 ) * 12, 48) +
+                 ) * 14, 56) +
                  CASE
                    WHEN $7::numeric > 0 THEN GREATEST(0, 12 - LEAST(12, ABS(COALESCE(p.mobile_price, p.retail_price) - $7::numeric) / $7::numeric * 12))
                    ELSE 0
@@ -659,7 +733,7 @@ export class MobileOrderService {
       FROM scored
       WHERE relevance_score > 0
       ORDER BY relevance_score DESC, COALESCE(total_sales, 0) DESC, COALESCE(rating_avg, 0) DESC, RANDOM()
-      LIMIT $9
+      LIMIT $11
     `;
 
         let rows = await this.db.query(relatedQuery, [
@@ -671,6 +745,8 @@ export class MobileOrderService {
             unit,
             currentPrice,
             keywords,
+            coPurchaseIds.length > 0 ? coPurchaseIds : ['__none__'],
+            recipeCompanionIds.length > 0 ? recipeCompanionIds : ['__none__'],
             poolSize,
         ]);
 
@@ -705,7 +781,7 @@ export class MobileOrderService {
 
         rows = rows.slice(0, safeLimit);
         const LOW_STOCK_THRESHOLD = 5;
-        return rows.map((row: any) => {
+        const items = rows.map((row: any) => {
             const stock = parseFloat(row.available_stock) || 0;
             const isPre = Boolean(row.is_pre_order);
             return {
@@ -719,6 +795,19 @@ export class MobileOrderService {
                 rating_avg: parseFloat(row.rating_avg) || 0,
             };
         });
+
+        const subtitle = getRecommendationSubtitle(productName, categoryName, hasCoPurchase);
+        const bundleTitle = getBundleTitle(productName, categoryName);
+        let bundle: { title: string; product_ids: string[]; total_price: number } | null = null;
+        if (bundleTitle && items.length >= 3) {
+            const bundleIds = items.slice(0, Math.min(6, items.length)).map((r: { id: string }) => String(r.id));
+            const totalPrice = items
+                .slice(0, bundleIds.length)
+                .reduce((sum: number, r: { price: number }) => sum + safeNum(r.price), 0);
+            bundle = { title: bundleTitle, product_ids: bundleIds, total_price: totalPrice };
+        }
+
+        return { items, subtitle, bundle };
     }
 
     async getCategoriesForMobile(tenantId: string) {
@@ -1157,6 +1246,18 @@ export class MobileOrderService {
 
         const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
         notifyDailyReportUpdated(tenantId).catch(() => {});
+
+        const ord = placed?.order as { id?: string; order_number?: string; rider_id?: string } | undefined;
+        if (ord?.rider_id && ord.id) {
+            const { getPushNotificationService } = await import('./pushNotificationService.js');
+            void getPushNotificationService().notifyRiderNewAssignment(
+                tenantId,
+                ord.rider_id,
+                String(ord.order_number || ord.id.slice(0, 8)),
+                ord.id
+            );
+        }
+
         return placed;
     }
 
@@ -1182,7 +1283,7 @@ export class MobileOrderService {
         const rows = await this.db.query(
             `SELECT o.id, o.order_number, o.status, o.grand_total, o.payment_method,
               o.payment_status, o.delivery_address, o.created_at, o.updated_at,
-              o.estimated_delivery_at,
+              o.estimated_delivery_at, o.order_source, o.converted_from_voice_order_id,
               d.id AS delivery_order_id, d.status AS delivery_status,
               r.name AS rider_name
        FROM mobile_orders o
@@ -1281,6 +1382,16 @@ export class MobileOrderService {
             tax_total = safeNum(order.tax_total) || normalizedItems.reduce((sum, i) => sum + i.tax_amount, 0);
             grand_total = Math.round((subtotal + tax_total + delivery_fee) * 100) / 100;
         }
+        let voice_order_status: string | null = null;
+        const voiceOrderId = order.converted_from_voice_order_id as string | null | undefined;
+        if (voiceOrderId) {
+            const voiceRows = await this.db.query(
+                `SELECT status FROM voice_orders WHERE id = $1 AND tenant_id = $2`,
+                [voiceOrderId, tenantId]
+            );
+            voice_order_status = voiceRows[0]?.status ? String(voiceRows[0].status) : null;
+        }
+
         return enrichOrderWithRiderToDropoff({
             ...order,
             subtotal,
@@ -1290,6 +1401,7 @@ export class MobileOrderService {
             grand_total,
             items: normalizedItems,
             status_history: history,
+            voice_order_status,
         }) as any;
     }
 
@@ -1335,19 +1447,25 @@ export class MobileOrderService {
         }
 
         const orders = await this.db.query(
-            'SELECT id, status, customer_id, payment_method, COALESCE(inventory_deducted, FALSE) AS inventory_deducted FROM mobile_orders WHERE id = $1 AND tenant_id = $2',
+            `SELECT id, status, customer_id, payment_method,
+              COALESCE(inventory_deducted, FALSE) AS inventory_deducted,
+              COALESCE(order_source, 'cart') AS order_source,
+              converted_from_voice_order_id
+             FROM mobile_orders WHERE id = $1 AND tenant_id = $2`,
             [orderId, tenantId]
         );
         if (orders.length === 0) throw new Error('Order not found');
 
-        if (changedByType === 'shop_user') {
+        const shopRiderLockedStatuses = new Set(['OutForDelivery', 'Delivered']);
+        if (changedByType === 'shop_user' && shopRiderLockedStatuses.has(newStatus)) {
             const assigned = await this.db.query(
-                'SELECT 1 FROM delivery_orders WHERE order_id = $1 AND tenant_id = $2 LIMIT 1',
+                `SELECT 1 FROM delivery_orders WHERE order_id = $1 AND tenant_id = $2
+                 AND status NOT IN ('DELIVERED') LIMIT 1`,
                 [orderId, tenantId]
             );
             if (assigned.length > 0) {
                 throw new Error(
-                    'A rider is assigned to this order. Fulfillment status is updated from the rider app only.'
+                    'Dispatch and delivery completion are updated from the rider app. Shop can still confirm, pack, or cancel.'
                 );
             }
         }
@@ -1373,11 +1491,16 @@ export class MobileOrderService {
                 updateFields.push(`delivered_at = NOW()`);
                 // payment_status stays 'Unpaid' — payment is collected separately via collectPayment()
 
+                const skipDeliveryRevenue =
+                    !!orders[0].inventory_deducted ||
+                    String(orders[0].order_source || 'cart') === 'voice' ||
+                    !!orders[0].converted_from_voice_order_id;
+
                 const orderData = await client.query('SELECT grand_total, payment_method, order_number, subtotal, tax_total FROM mobile_orders WHERE id = $1 AND tenant_id = $2', [orderId, tenantId]);
-                if (orderData.length > 0) {
+                if (orderData.length > 0 && !skipDeliveryRevenue) {
                     const { grand_total, order_number, subtotal, tax_total, payment_method } = orderData[0];
 
-                    // Revenue recognition: Debit Accounts Receivable, Credit Revenue + COGS entries
+                    // Revenue recognition: Debit AR, Credit Revenue + COGS (skipped when POS invoice already posted GL)
                     try {
                         await this.postMobileDeliveryToAccounting(client, orderId, tenantId, {
                             orderNumber: order_number,
@@ -1390,8 +1513,11 @@ export class MobileOrderService {
                     } catch (accErr) {
                         console.error('⚠️ Failed to post mobile delivery to accounting:', accErr);
                     }
+                } else if (orderData.length > 0 && skipDeliveryRevenue) {
+                    console.log(`[mobile-order] Skipping delivery GL for ${orderId} (voice/POS-invoiced)`);
+                }
 
-                    // Update budget actuals
+                if (orderData.length > 0) {
                     try {
                         const { getBudgetService } = await import('./budgetService.js');
                         const orderItems = await client.query('SELECT product_id, quantity, subtotal FROM mobile_order_items WHERE order_id = $1 AND tenant_id = $2', [orderId, tenantId]);
@@ -1438,6 +1564,7 @@ export class MobileOrderService {
                     await this.adjustInventoryForOrder(client, tenantId, orderId, 'deliver');
                 }
             } else if (newStatus === 'Cancelled') {
+                await this.releaseActiveDeliveryAssignment(client, tenantId, orderId);
                 await this.adjustInventoryForOrder(client, tenantId, orderId, 'cancel');
             }
 
@@ -1460,6 +1587,14 @@ export class MobileOrderService {
         }
         const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
         notifyDailyReportUpdated(tenantId).catch(() => {});
+
+        try {
+            const { getVoiceOrderService } = await import('./voiceOrderService.js');
+            await getVoiceOrderService().syncStatusFromMobileOrder(tenantId, orderId, newStatus);
+        } catch (syncErr) {
+            console.warn('Voice order status sync skipped:', syncErr);
+        }
+
         return result;
     }
 
@@ -1498,6 +1633,15 @@ export class MobileOrderService {
 
         const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');
         notifyDailyReportUpdated(tenantId).catch(() => {});
+
+        const ord = await this.db.query(
+            `SELECT order_number FROM mobile_orders WHERE id = $1 AND tenant_id = $2`,
+            [orderId, tenantId]
+        );
+        const orderNumber = String(ord[0]?.order_number || orderId.slice(0, 8));
+        const { getPushNotificationService } = await import('./pushNotificationService.js');
+        void getPushNotificationService().notifyRiderNewAssignment(tenantId, riderId, orderNumber, orderId);
+
         return { success: true, orderId };
     }
 
@@ -1801,6 +1945,8 @@ export class MobileOrderService {
         return (rows as any[]).map((o: any) =>
             enrichOrderWithRiderToDropoff({
                 ...o,
+                created_at: toApiInstant(o.created_at),
+                updated_at: toApiInstant(o.updated_at),
                 subtotal: safeNum(o.subtotal),
                 tax_total: safeNum(o.tax_total),
                 discount_total: safeNum(o.discount_total),
@@ -1957,6 +2103,36 @@ export class MobileOrderService {
     // ─── Double-entry: Revenue recognition on delivery ──────────────────
     // Debit Accounts Receivable, Credit Revenue; Debit COGS, Credit Inventory
 
+    /** Release rider + delete open delivery_tasks when order is cancelled. */
+    private async releaseActiveDeliveryAssignment(client: any, tenantId: string, orderId: string) {
+        const dels = await client.query(
+            `SELECT rider_id FROM delivery_orders
+             WHERE tenant_id = $1 AND order_id = $2 AND status <> 'DELIVERED'`,
+            [tenantId, orderId]
+        );
+        if (!dels.length) return;
+        await client.query(
+            `DELETE FROM delivery_orders WHERE tenant_id = $1 AND order_id = $2 AND status <> 'DELIVERED'`,
+            [tenantId, orderId]
+        );
+        for (const row of dels as { rider_id: string }[]) {
+            const riderId = row.rider_id;
+            if (!riderId) continue;
+            const remaining = await client.query(
+                `SELECT COUNT(*)::int AS n FROM delivery_orders
+                 WHERE tenant_id = $1 AND rider_id = $2 AND status <> 'DELIVERED'`,
+                [tenantId, riderId]
+            );
+            const n = Number(remaining[0]?.n ?? 0);
+            if (n === 0) {
+                await client.query(
+                    `UPDATE riders SET status = 'AVAILABLE', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+                    [riderId, tenantId]
+                );
+            }
+        }
+    }
+
     private async postMobileDeliveryToAccounting(client: any, orderId: string, tenantId: string, data: {
         orderNumber: string;
         grandTotal: number;
@@ -1965,6 +2141,14 @@ export class MobileOrderService {
         paymentMethod: string;
         customerId: string;
     }) {
+        const existing = await client.query(
+            `SELECT id FROM journal_entries
+             WHERE tenant_id = $1 AND source_module = 'MobileApp' AND source_id = $2
+               AND reference = $3 AND status = 'Posted' LIMIT 1`,
+            [tenantId, orderId, data.orderNumber]
+        );
+        if (existing.length > 0) return;
+
         const journalRes = await client.query(`
             INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
             VALUES ($1, NOW(), $2, $3, 'MobileApp', $4, 'Posted')
@@ -2030,11 +2214,20 @@ export class MobileOrderService {
         bankName: string;
         bankType: string;
     }) {
+        const pmtRef = `PMT-${data.orderNumber}`;
+        const existing = await client.query(
+            `SELECT id FROM journal_entries
+             WHERE tenant_id = $1 AND source_module = 'MobileApp' AND source_id = $2
+               AND reference = $3 AND status = 'Posted' LIMIT 1`,
+            [tenantId, orderId, pmtRef]
+        );
+        if (existing.length > 0) return;
+
         const journalRes = await client.query(`
             INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
             VALUES ($1, NOW(), $2, $3, 'MobileApp', $4, 'Posted')
             RETURNING id
-        `, [tenantId, `PMT-${data.orderNumber}`, `Mobile Payment ${data.orderNumber}`, orderId]);
+        `, [tenantId, pmtRef, `Mobile Payment ${data.orderNumber}`, orderId]);
 
         if (journalRes.length === 0) return;
         const journalId = journalRes[0].id;

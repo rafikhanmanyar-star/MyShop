@@ -65,6 +65,16 @@ export default function VoiceOrderDetail() {
                 <div style={{ marginBottom: 16, padding: 16, borderRadius: 12, border: '2px solid var(--primary)' }}>
                     <h3 style={{ margin: '0 0 8px' }}>Invoice {order.invoice_number}</h3>
                     <p style={{ fontSize: 22, fontWeight: 800 }}>Rs. {Number(order.invoice_grand_total || 0).toLocaleString()}</p>
+                    {Array.isArray(order.invoice_items) && order.invoice_items.length > 0 && (
+                        <ul style={{ marginTop: 12, fontSize: 14, paddingLeft: 0, listStyle: 'none' }}>
+                            {order.invoice_items.map((line: any, i: number) => (
+                                <li key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                    <span>{line.product_name} ×{line.quantity}</span>
+                                    <span>Rs. {Number(line.subtotal || 0).toLocaleString()}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                     {order.status === 'InvoiceCreated' && (
                         <button type="button" className="btn btn-primary btn-full" style={{ marginTop: 12 }} onClick={async () => {
                             try {

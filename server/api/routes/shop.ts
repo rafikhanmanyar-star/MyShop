@@ -71,6 +71,15 @@ router.get('/sync/changes', checkRole(['admin', 'pos_cashier', 'accountant']), a
   }
 });
 
+router.get('/dashboard/overview', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
+  try {
+    const data = await getShopService().getDashboardOverview(req.tenantId);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/public-test', (_req, res) => {
   res.json({ message: 'Shop routes are working' });
 });
@@ -537,6 +546,10 @@ router.get('/inventory/skus', async (req: any, res) => {
     const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined;
     const sortDirRaw = typeof req.query.sortDir === 'string' ? req.query.sortDir.toLowerCase() : '';
     const sortDir = sortDirRaw === 'desc' ? 'desc' : 'asc';
+    const skipCache =
+      req.query.skipCache === '1' ||
+      req.query.skipCache === 'true' ||
+      req.query.refresh === '1';
     const result = await getShopService().listInventorySkus(req.tenantId, {
       page,
       limit,
@@ -544,6 +557,7 @@ router.get('/inventory/skus', async (req: any, res) => {
       stockFilter,
       sortBy,
       sortDir,
+      skipCache,
     });
     res.setHeader('X-Response-Time-Ms', String(Date.now() - t0));
     res.json({ ...result, routeMs: Date.now() - t0 });
@@ -631,7 +645,11 @@ router.post('/sales', checkRole(['admin', 'pos_cashier']), async (req: any, res)
       : String(error ?? 'Internal server error');
     const safeMessage = message || 'Internal server error';
     console.error('POST /shop/sales failed:', safeMessage, error);
-    res.status(500).json({ error: safeMessage });
+    const isClientError =
+      /insufficient stock|deactivated sku|must have at least|customer required|payment account|not found/i.test(
+        safeMessage
+      );
+    res.status(isClientError ? 400 : 500).json({ error: safeMessage });
   }
 });
 
@@ -868,6 +886,35 @@ router.delete('/users/:id', checkRole(['admin']), async (req: any, res) => {
   }
 });
 
+// --- Organization profile for sidebar / header (any authenticated shop user) ---
+router.get('/organization', async (req: any, res) => {
+  try {
+    const row = await getTenantManagementService().getTenantById(req.tenantId);
+    if (!row) return res.status(404).json({ error: 'Organization not found' });
+
+    let branch_name: string | null = null;
+    if (req.branchId) {
+      const branches = await getShopService().getBranches(req.tenantId);
+      const branch = (branches as { id: string; name: string }[]).find((b) => b.id === req.branchId);
+      branch_name = branch?.name?.trim() || null;
+    }
+
+    res.json({
+      id: row.id,
+      name: row.name?.trim() || '',
+      company_name: row.company_name?.trim() || '',
+      phone: row.phone?.trim() || null,
+      address: row.address?.trim() || null,
+      logo_url: row.logo_url?.trim() || null,
+      slug: row.slug?.trim() || null,
+      branch_name,
+      timezone: row.timezone,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- Current organization (tenant row); admin can view/edit own tenant ---
 router.get('/tenant', checkRole(['admin']), async (req: any, res) => {
   try {
@@ -907,6 +954,32 @@ router.post('/branding', async (req: any, res) => {
     res.json(branding);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Regional settings (shop timezone) ---
+router.get('/regional-settings', checkRole(['admin', 'accountant', 'pos_cashier']), async (req: any, res) => {
+  try {
+    const row = await getTenantManagementService().getTenantById(req.tenantId);
+    if (!row) return res.status(404).json({ error: 'Tenant not found' });
+    res.json({ timezone: row.timezone });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/regional-settings', checkRole(['admin']), async (req: any, res) => {
+  try {
+    const tz = req.body?.timezone;
+    if (!tz || typeof tz !== 'string') {
+      return res.status(400).json({ error: 'timezone is required' });
+    }
+    const row = await getTenantManagementService().updateTenant(req.tenantId, { timezone: tz });
+    res.json({ timezone: row.timezone });
+  } catch (error: any) {
+    const msg = error.message || 'Update failed';
+    if (msg.includes('Invalid IANA')) return res.status(400).json({ error: msg });
+    res.status(400).json({ error: msg });
   }
 });
 

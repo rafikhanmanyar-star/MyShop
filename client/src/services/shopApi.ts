@@ -1,4 +1,11 @@
 import { apiClient } from './apiClient';
+import type { DashboardStats } from './dashboardOfflineCache';
+
+export interface DashboardOverviewResponse {
+  stats: DashboardStats;
+  lowStockRows: { name: string; qty: string }[];
+  pendingOrders: { id: string; orderNumber: string; customer: string }[];
+}
 
 export interface ShopBranch {
   id: string;
@@ -49,6 +56,9 @@ export interface ShopBankAccount {
   id: string;
   name: string;
   code?: string;
+  /** Linked chart of accounts row id */
+  chart_account_id?: string;
+  chartAccountId?: string;
   /** Chart of accounts code (e.g. AST-100, AST-101) when linked */
   chart_code?: string;
   account_type: string;
@@ -79,10 +89,42 @@ export interface ProductApiResult {
   data?: Record<string, unknown>;
 }
 
-/** Mobile home hero carousel — edited under POS → Mobile branding */
+/** Preset tap targets for mobile home ads (POS → Mobile branding). */
+export type HomePromoLinkType =
+  | 'none'
+  | 'products'
+  | 'offers'
+  | 'deals'
+  | 'recipes'
+  | 'voice_order'
+  | 'budget'
+  | 'utilities'
+  | 'feedback'
+  | 'custom';
+
+/** Mobile home ad carousel slide — edited under POS → Mobile branding */
 export interface HomePromoSlide {
   image_url: string;
+  link_type?: HomePromoLinkType;
   link_url?: string | null;
+  title?: string | null;
+}
+
+/** Sidebar / header company display (GET /shop/organization) */
+export interface OrganizationProfile {
+  id: string;
+  name: string;
+  company_name: string;
+  phone: string | null;
+  address: string | null;
+  logo_url: string | null;
+  slug: string | null;
+  branch_name: string | null;
+  timezone?: string;
+}
+
+export interface RegionalSettings {
+  timezone: string;
 }
 
 export interface TenantBranding {
@@ -97,6 +139,8 @@ export interface TenantBranding {
   theme_mode: string;
   /** Parsed JSON array from tenant_branding.home_promo_slides */
   home_promo_slides?: HomePromoSlide[];
+  /** Seconds between carousel slides (3–30) */
+  home_promo_interval_seconds?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -109,6 +153,7 @@ export const shopApi = {
         ? `/shop/sync/changes?since=${encodeURIComponent(since)}`
         : '/shop/sync/changes'
     ),
+  getDashboardOverview: () => apiClient.get<DashboardOverviewResponse>('/shop/dashboard/overview'),
 
   getBranches: () => apiClient.get<ShopBranch[]>('/shop/branches'),
   createBranch: (data: any) => apiClient.post('/shop/branches', data),
@@ -165,6 +210,8 @@ export const shopApi = {
     stockFilter?: string;
     sortBy?: string;
     sortDir?: 'asc' | 'desc';
+    /** Bypass server SKU list cache after procurement / adjustments */
+    skipCache?: boolean;
   }) => {
     const q = new URLSearchParams();
     if (params?.page != null) q.set('page', String(params.page));
@@ -173,6 +220,7 @@ export const shopApi = {
     if (params?.stockFilter) q.set('stockFilter', params.stockFilter);
     if (params?.sortBy) q.set('sortBy', params.sortBy);
     if (params?.sortDir) q.set('sortDir', params.sortDir);
+    if (params?.skipCache) q.set('skipCache', '1');
     const qs = q.toString();
     return apiClient.get<{
       items: any[];
@@ -223,6 +271,12 @@ export const shopApi = {
     apiClient.post<ShopVendor>('/shop/vendors', data),
   updateVendor: (id: string, data: Partial<ShopVendor>) => apiClient.put(`/shop/vendors/${id}`, data),
   deleteVendor: (id: string) => apiClient.delete(`/shop/vendors/${id}`),
+
+  getOrganization: () => apiClient.get<OrganizationProfile>('/shop/organization'),
+
+  getRegionalSettings: () => apiClient.get<RegionalSettings>('/shop/regional-settings'),
+  updateRegionalSettings: (data: RegionalSettings) =>
+    apiClient.put<RegionalSettings>('/shop/regional-settings', data),
 
   getBranding: () => apiClient.get<TenantBranding>('/shop/branding'),
   updateBranding: (data: Partial<TenantBranding>) => apiClient.post<TenantBranding>('/shop/branding', data),

@@ -4,10 +4,21 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import { installSuppressNumberInputWheel } from './utils/suppressNumberInputWheel'
+import { applySafeAreaInsets } from './utils/safeAreaInsets'
 import { queryClient } from './queryClient'
 import './index.css'
+import { bootstrapThemeFromStorage } from './theme/themeStorage'
+import { applyThemeTokens } from './theme/applyThemeTokens'
+import { preloadProductCardFonts } from './theme/loadProductCardFonts'
+
+bootstrapThemeFromStorage()
+applyThemeTokens(
+  document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+)
+preloadProductCardFonts()
 
 installSuppressNumberInputWheel()
+applySafeAreaInsets()
 
 // When the app is installed (PWA standalone), the launch URL is often just "/" and the shop slug is lost.
 // Redirect to the last used shop so the app can load inventories.

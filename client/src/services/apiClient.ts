@@ -97,23 +97,40 @@ class ApiClient {
       const body = isFormData ? data : (data ? JSON.stringify(data) : undefined);
       const response = await fetch(url, { ...options, headers, body });
 
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        if (!response.ok) {
-          const statusMessages: Record<number, string> = {
-            502: 'API server is unreachable or restarting (bad gateway). Please try again shortly.',
-            503: 'API server is temporarily unavailable. It may be restarting—please try again in a moment.',
-            504: 'Request timed out. The API server may be slow or restarting.',
-          };
-          const friendlyMsg = statusMessages[response.status]
-            || `Server returned an unexpected response (HTTP ${response.status}).`;
-          const connectivity = response.status === 502 || response.status === 503 || response.status === 504;
-          throw { error: friendlyMsg, message: friendlyMsg, status: response.status, connectivity };
+      const contentType = response.headers.get('content-type') || '';
+      const rawText = await response.text();
+      let responseData: Record<string, unknown> = {};
+      if (rawText.trim()) {
+        try {
+          responseData = JSON.parse(rawText) as Record<string, unknown>;
+        } catch {
+          if (!response.ok) {
+            const statusMessages: Record<number, string> = {
+              502: 'API server is unreachable or restarting (bad gateway). Please try again shortly.',
+              503: 'API server is temporarily unavailable. It may be restarting—please try again in a moment.',
+              504: 'Request timed out. The API server may be slow or restarting.',
+            };
+            const fallback =
+              statusMessages[response.status]
+              || `Server returned an unexpected response (HTTP ${response.status}).`;
+            const msg = rawText.length < 400 ? rawText.trim() : fallback;
+            const connectivity = response.status === 502 || response.status === 503 || response.status === 504;
+            throw { error: msg, message: msg, status: response.status, connectivity };
+          }
+          return {} as T;
         }
-        return {} as T;
+      } else if (!contentType.includes('application/json') && !response.ok) {
+        const statusMessages: Record<number, string> = {
+          502: 'API server is unreachable or restarting (bad gateway). Please try again shortly.',
+          503: 'API server is temporarily unavailable. It may be restarting—please try again in a moment.',
+          504: 'Request timed out. The API server may be slow or restarting.',
+        };
+        const friendlyMsg =
+          statusMessages[response.status]
+          || `Server returned an unexpected response (HTTP ${response.status}).`;
+        const connectivity = response.status === 502 || response.status === 503 || response.status === 504;
+        throw { error: friendlyMsg, message: friendlyMsg, status: response.status, connectivity };
       }
-
-      const responseData = await response.json();
 
       if (response.status === 401) {
         const hadToken = !!this.token;
@@ -123,16 +140,22 @@ class ApiClient {
             window.dispatchEvent(new CustomEvent('auth:expired', { detail: responseData }));
           }
         }
-        throw { error: responseData.error || 'Unauthorized', message: responseData.message, status: 401 };
+        throw {
+          error: (responseData.error as string) || 'Unauthorized',
+          message: responseData.message as string | undefined,
+          status: 401,
+        };
       }
 
       if (!response.ok) {
         const connectivity =
           response.status === 502 || response.status === 503 || response.status === 504;
         const errText =
-          responseData.message || responseData.error || 'Request failed';
+          (responseData.message as string)
+          || (responseData.error as string)
+          || 'Request failed';
         throw {
-          error: responseData.error || responseData.message || 'Request failed',
+          error: (responseData.error as string) || (responseData.message as string) || 'Request failed',
           message: errText,
           status: response.status,
           lockedBy: responseData.lockedBy,

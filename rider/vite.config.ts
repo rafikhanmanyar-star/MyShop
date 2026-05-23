@@ -21,8 +21,8 @@ export default defineConfig({
         name: 'MyShop Rider',
         short_name: 'Rider',
         description: 'Delivery tasks for MyShop — sign in with your shop slug and phone.',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        theme_color: '#06c167',
+        background_color: '#f4f6f8',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
@@ -51,6 +51,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2}'],
+        importScripts: ['/push-listener.js'],
         navigateFallback: 'index.html',
         navigateFallbackAllowlist: [/^\//],
         navigateFallbackDenylist: [/^\/api\//],

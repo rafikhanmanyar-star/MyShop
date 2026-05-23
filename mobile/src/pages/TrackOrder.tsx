@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { GoogleMap, Marker, Polyline, useJsApiLoader } from '@react-google-maps/api';
-import { customerApi } from '../api';
+import { customerApi, getApiBaseUrl } from '../api';
 import { useApp } from '../context/AppContext';
+import { OrderChatPanel } from '../components/OrderChatPanel';
 
 const mapContainerStyle = { width: '100%', height: 300 };
 
@@ -88,6 +89,7 @@ export default function TrackOrder() {
     const [loading, setLoading] = useState(true);
     const [etaMin, setEtaMin] = useState<number | null>(null);
     const [etaLabel, setEtaLabel] = useState<string | null>(null);
+    const [chatRevision, setChatRevision] = useState(0);
 
     const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined)?.trim() || '';
 
@@ -116,6 +118,24 @@ export default function TrackOrder() {
         const t = window.setInterval(() => void loadOrder(), 8_000);
         return () => clearInterval(t);
     }, [state.isLoggedIn, id, loadOrder]);
+
+    useEffect(() => {
+        if (!state.isLoggedIn || !id) return;
+        const token = localStorage.getItem('mobile_token');
+        if (!token) return;
+        const qs = new URLSearchParams({ access_token: token });
+        const url = `${getApiBaseUrl()}/mobile/orders/${encodeURIComponent(id)}/stream?${qs.toString()}`;
+        const es = new EventSource(url);
+        es.onmessage = (ev) => {
+            try {
+                const d = JSON.parse(ev.data);
+                if (d.source === 'chat_message') setChatRevision((r) => r + 1);
+            } catch {
+                /* ignore */
+            }
+        };
+        return () => es.close();
+    }, [id, state.isLoggedIn]);
 
     const fetchEta = useCallback(async () => {
         if (!id) return;
@@ -232,7 +252,11 @@ export default function TrackOrder() {
                 <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No delivery coordinates on this order.</p>
             )}
 
-            <Link to={`/${shopSlug}/orders/${id}`} className="btn btn-outline" style={{ display: 'inline-block' }}>
+            {!isPickup && id && order.status !== 'Cancelled' ? (
+                <OrderChatPanel orderId={id} refreshToken={chatRevision} />
+            ) : null}
+
+            <Link to={`/${shopSlug}/orders/${id}`} className="btn btn-outline" style={{ display: 'inline-block', marginTop: 12 }}>
                 Order details
             </Link>
         </div>

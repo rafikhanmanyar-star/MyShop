@@ -28,6 +28,8 @@ export interface SupplierSelectProps {
   onOpenChange: (open: boolean) => void;
   onSelect: (v: VendorOption) => void;
   onAddSupplier: () => void;
+  /** When true, blur does not clear typed search (e.g. while add-vendor modal is open). */
+  preserveSearchOnBlur?: boolean;
 }
 
 export default function SupplierSelect({
@@ -42,6 +44,7 @@ export default function SupplierSelect({
   onOpenChange,
   onSelect,
   onAddSupplier,
+  preserveSearchOnBlur = false,
 }: SupplierSelectProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   useClickOutside(containerRef, () => onOpenChange(false), vendorDropdownOpen && !disabled);
@@ -92,7 +95,9 @@ export default function SupplierSelect({
         onBlur={(e) => {
           if (containerRef.current?.contains(e.relatedTarget as Node)) return;
           onOpenChange(false);
-          if (!supplierId && vendorSearch !== vendorDisplayName) onVendorSearchChange('');
+          if (!preserveSearchOnBlur && !supplierId && vendorSearch !== vendorDisplayName) {
+            onVendorSearchChange('');
+          }
           if (supplierId && !vendorSearch) onVendorSearchChange(vendorDisplayName);
         }}
         placeholder="Search supplier by name or company..."

@@ -21,6 +21,7 @@ import {
     Camera,
     Archive,
     Mic,
+    Globe,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ICONS } from '../../constants';
@@ -36,6 +37,7 @@ import { VoiceOrderSettingsPanel } from './VoiceOrdersPage';
 import DataExportImportSection from './settings/DataExportImportSection';
 import BackupRestoreSection from './settings/BackupRestoreSection';
 import { BranchConfigurationSection } from './settings/BranchConfigurationSection';
+import { RegionalSettingsSection } from './settings/RegionalSettingsSection';
 import { useSettingsEditLock } from '../../hooks/useSettingsEditLock';
 import { getFullImageUrl } from '../../config/apiUrl';
 
@@ -708,7 +710,7 @@ const SettingsContent: React.FC = () => {
     const { user } = useAuth();
     const settingsLock = useSettingsEditLock(user?.userId, user?.name || user?.username || 'User');
     const isCashier = user?.role === 'pos_cashier';
-    const [activeTab, setActiveTab] = useState<'coa' | 'users' | 'mobileBranding' | 'voiceOrders' | 'branchConfig' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
+    const [activeTab, setActiveTab] = useState<'coa' | 'users' | 'mobileBranding' | 'voiceOrders' | 'branchConfig' | 'regional' | 'pos' | 'app' | 'data'>(isCashier ? 'app' : 'coa');
 
     const [posSettings, setPosSettings] = useState({
         auto_print_receipt: true,
@@ -1158,6 +1160,7 @@ const SettingsContent: React.FC = () => {
         { id: 'mobileBranding' as const, label: 'Mobile branding', icon: <Smartphone /> },
         { id: 'voiceOrders' as const, label: 'Voice orders', icon: <Mic /> },
         { id: 'branchConfig' as const, label: 'Branch configuration', icon: <MapPin /> },
+        { id: 'regional' as const, label: 'Regional', icon: <Globe /> },
         { id: 'pos' as const, label: 'POS Preferences', icon: <Printer /> },
         { id: 'data' as const, label: 'Data', icon: ICONS.trash },
         { id: 'app' as const, label: 'App', icon: ICONS.download },
@@ -1202,6 +1205,10 @@ const SettingsContent: React.FC = () => {
 
                 {!isCashier && activeTab === 'branchConfig' && (
                     <BranchConfigurationSection />
+                )}
+
+                {!isCashier && activeTab === 'regional' && (
+                    <RegionalSettingsSection />
                 )}
 
                 {!isCashier && activeTab === 'coa' && (

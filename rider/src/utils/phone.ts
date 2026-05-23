@@ -10,3 +10,9 @@ export function normalizePakistanPhone(input: string): string | null {
 export function isValidPkPhoneDisplay(input: string): boolean {
   return normalizePakistanPhone(input) != null;
 }
+
+export function whatsappCustomerUrl(phone?: string | null): string | null {
+  const n = phone ? normalizePakistanPhone(phone) : null;
+  if (!n) return null;
+  return `https://wa.me/${n}`;
+}

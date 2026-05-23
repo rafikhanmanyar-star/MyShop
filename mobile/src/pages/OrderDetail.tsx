@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { customerApi, getApiBaseUrl } from '../api';
+import { OrderChatPanel } from '../components/OrderChatPanel';
 
 const DELIVERY_STEPS = ['Pending', 'Confirmed', 'Packed', 'OutForDelivery', 'Delivered'];
 const PICKUP_STEPS = ['Pending', 'Confirmed', 'Packed', 'Delivered'];
@@ -55,6 +56,7 @@ export default function OrderDetail() {
     const [order, setOrder] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [cancelling, setCancelling] = useState(false);
+    const [chatRevision, setChatRevision] = useState(0);
 
     const loadOrder = useCallback(async () => {
         if (!id) return;
@@ -93,7 +95,10 @@ export default function OrderDetail() {
         es.onmessage = (ev) => {
             try {
                 const d = JSON.parse(ev.data);
-                if (d.type === 'order_updated') void loadOrder();
+                if (d.type === 'order_updated' || d.source === 'chat_message') {
+                    void loadOrder();
+                    if (d.source === 'chat_message') setChatRevision((r) => r + 1);
+                }
             } catch {
                 /* ignore non-JSON */
             }
@@ -252,6 +257,15 @@ export default function OrderDetail() {
                         Track live on map
                     </Link>
                 </div>
+            )}
+
+            {!isPickup && order.status !== 'Cancelled' && (
+                <OrderChatPanel
+                    orderId={order.id}
+                    refreshToken={chatRevision}
+                    disabled={order.status === 'Cancelled'}
+                    onNewMessage={() => setChatRevision((r) => r + 1)}
+                />
             )}
 
             {!isPickup && order.delivery_order_id && order.status !== 'Cancelled' && order.status !== 'Delivered' && (

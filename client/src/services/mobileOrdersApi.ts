@@ -44,6 +44,10 @@ export interface MobileOrder {
     /** Loyalty tier from linked member (e.g. Silver, Gold). */
     customer_loyalty_tier?: string | null;
     pos_synced: boolean;
+    order_source?: string;
+    converted_from_voice_order_id?: string | null;
+    /** Linked voice order status (e.g. InvoiceCreated until customer approves in app). */
+    voice_order_status?: string | null;
     created_at: string;
     updated_at: string;
     items?: MobileOrderItem[];
@@ -121,6 +125,13 @@ export interface PosRidersOverview {
     };
 }
 
+export interface HomePromoSlide {
+    image_url: string;
+    link_type?: 'none' | 'products' | 'offers' | 'deals' | 'recipes' | 'voice_order' | 'budget' | 'utilities' | 'feedback' | 'custom';
+    link_url?: string | null;
+    title?: string | null;
+}
+
 export interface ShopBranding {
     slug: string | null;
     logo_url: string | null;
@@ -138,6 +149,8 @@ export interface ShopBranding {
     branchId?: string | null;
     branch_name?: string | null;
     branch_location?: string | null;
+    home_promo_slides?: HomePromoSlide[];
+    home_promo_interval_seconds?: number;
 }
 
 export interface MobileOnlineUser {

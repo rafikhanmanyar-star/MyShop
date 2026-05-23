@@ -44,7 +44,7 @@ export default function TermsAndConditionsPage() {
       />
       <LegalDocument
         title="Terms and Conditions"
-        intro="These terms govern your use of the oBo Store website and progressive web app (PWA). Please read them before placing an order."
+        intro="These terms govern your use of the oBo Store website, progressive web app (PWA), and OBO Stores Android app on Google Play. Please read them before placing an order."
         sections={sections}
       />
     </SiteShell>

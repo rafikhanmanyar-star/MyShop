@@ -108,6 +108,10 @@ export function RiderWorkProvider({ children }: { children: React.ReactNode }) {
           orderId?: string;
           riderId?: string;
         };
+        if (d.type === 'chat_message' && d.orderId) {
+          bumpDeliveryFeed();
+          return;
+        }
         if (d.type !== 'order_updated') return;
 
         const isNewAssign = d.source === 'delivery_insert' && d.orderId && d.riderId === riderId;

@@ -1,28 +1,37 @@
+import { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { NewOrderModal } from './NewOrderModal';
 import { RiderBottomNav } from './RiderBottomNav';
 import { RiderTopBar } from './RiderTopBar';
 import { RiderWorkProvider } from '../context/RiderWorkContext';
 import { useRiderGeolocation } from '../hooks/useRiderGeolocation';
+import { startOfflineSyncListener } from '../lib/offlineSync';
 
 function GeolocationRunner() {
-  const { geoError } = useRiderGeolocation();
+  const { geoError, gpsDisabled } = useRiderGeolocation();
   if (!geoError) return null;
-  return <div className="rider-geo-warn">{geoError}</div>;
+  return (
+    <div className="rider-geo-warn" role="alert">
+      {geoError}
+      {gpsDisabled ? ' Enable GPS in your device settings.' : null}
+    </div>
+  );
 }
 
 function RiderShell() {
   const loc = useLocation();
-  const compactTop = loc.pathname.startsWith('/order/');
+  const hideChrome = loc.pathname.startsWith('/order/') || loc.pathname === '/login';
+
+  useEffect(() => startOfflineSyncListener(), []);
 
   return (
-    <div className="rider-app">
-      <RiderTopBar compactOnline={compactTop} />
+    <div className="rider-app rider-app--enterprise">
+      {!hideChrome ? <RiderTopBar /> : null}
       <GeolocationRunner />
       <main className="rider-app__main">
         <Outlet />
       </main>
-      <RiderBottomNav />
+      {!hideChrome ? <RiderBottomNav /> : null}
       <NewOrderModal />
     </div>
   );

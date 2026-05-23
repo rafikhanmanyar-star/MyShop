@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "526603950809",
+    "project_id": "obostores-6786c",
+    "storage_bucket": "obostores-6786c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:526603950809:android:a837015832fce8b5c13cc8",
+        "android_client_info": {
+          "package_name": "com.obostores.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbI_maw30UK0I-1Dacs4-TLWpD8Gmt0og"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

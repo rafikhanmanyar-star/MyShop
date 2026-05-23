@@ -20,7 +20,7 @@ function bucketWhere(bucket?: RiderOrderBucket): string {
         ) `;
     }
     if (bucket === 'completed') {
-        return ` AND d.status = 'DELIVERED' `;
+        return ` AND d.status IN ('DELIVERED', 'FAILED') `;
     }
     return '';
 }
@@ -44,10 +44,12 @@ export class RiderDeliveryService {
 
         const rows = await this.db.query(
             `SELECT d.id AS delivery_order_id, d.status AS delivery_status, d.assigned_at, d.accepted_at, d.picked_at, d.delivered_at,
+              d.arrived_at, d.cod_expected, d.cod_collected,
               o.id AS order_id, o.order_number, o.status AS order_status, o.grand_total,
               o.delivery_address, o.delivery_lat, o.delivery_lng, o.distance_km AS branch_to_customer_km,
-              o.estimated_delivery_at, o.payment_method, o.created_at,
-              COALESCE(NULLIF(TRIM(c.name), ''), c.phone, 'Customer') AS customer_name
+              o.estimated_delivery_at, o.payment_method, o.delivery_notes, o.created_at,
+              COALESCE(NULLIF(TRIM(c.name), ''), c.phone, 'Customer') AS customer_name,
+              (SELECT COUNT(*)::int FROM mobile_order_items i WHERE i.order_id = o.id AND i.tenant_id = o.tenant_id) AS item_count
        FROM delivery_orders d
        INNER JOIN mobile_orders o ON o.id = d.order_id AND o.tenant_id = d.tenant_id
        LEFT JOIN mobile_customers c ON c.id = o.customer_id AND c.tenant_id = o.tenant_id
@@ -98,6 +100,7 @@ export class RiderDeliveryService {
     async getDetailForRider(tenantId: string, riderId: string, mobileOrderId: string) {
         const rows = await this.db.query(
             `SELECT d.id AS delivery_order_id, d.status AS delivery_status, d.assigned_at, d.accepted_at, d.picked_at, d.delivered_at,
+              d.arrived_at, d.cod_expected, d.cod_collected, d.delivery_proof_type,
               o.id AS order_id, o.order_number, o.status AS order_status, o.grand_total,
               o.delivery_address, o.delivery_lat, o.delivery_lng, o.distance_km AS branch_to_customer_km,
               o.delivery_notes, o.estimated_delivery_at, o.payment_method, o.created_at,
@@ -178,6 +181,20 @@ export class RiderDeliveryService {
         if (res.length === 0) {
             throw new Error('Pick up the order before marking on the way.');
         }
+        const m = getMobileOrderService();
+        const row = await this.db.query(`SELECT status FROM mobile_orders WHERE id = $1 AND tenant_id = $2`, [
+            mobileOrderId,
+            tenantId,
+        ]);
+        const st = String(row[0]?.status || '');
+        if (st === 'Packed') {
+            try {
+                await m.updateOrderStatus(tenantId, mobileOrderId, 'OutForDelivery', 'rider', 'rider');
+            } catch (e: any) {
+                const msg = String(e?.message || e);
+                if (!msg.includes('Cannot transition')) throw e;
+            }
+        }
         return { ok: true };
     }
 
@@ -230,9 +247,33 @@ export class RiderDeliveryService {
         return { ok: true };
     }
 
-    async markDelivered(tenantId: string, riderId: string, mobileOrderId: string) {
+    async markArrived(tenantId: string, riderId: string, mobileOrderId: string) {
+        const res = await this.db.query(
+            `UPDATE delivery_orders
+       SET arrived_at = COALESCE(arrived_at, NOW()), updated_at = NOW()
+       WHERE tenant_id = $1 AND rider_id = $2 AND order_id = $3
+         AND status IN ('PICKED', 'ON_THE_WAY')
+       RETURNING id`,
+            [tenantId, riderId, mobileOrderId]
+        );
+        if (res.length === 0) throw new Error('Order is not in an active delivery state.');
+        return { ok: true };
+    }
+
+    async markDelivered(
+        tenantId: string,
+        riderId: string,
+        mobileOrderId: string,
+        opts?: {
+            proofType?: string;
+            proofData?: string;
+            codCollected?: number;
+        }
+    ) {
         const chk = await this.db.query(
-            `SELECT d.status FROM delivery_orders d
+            `SELECT d.status, o.grand_total, o.payment_method
+       FROM delivery_orders d
+       INNER JOIN mobile_orders o ON o.id = d.order_id AND o.tenant_id = d.tenant_id
        WHERE d.tenant_id = $1 AND d.rider_id = $2 AND d.order_id = $3`,
             [tenantId, riderId, mobileOrderId]
         );
@@ -242,11 +283,33 @@ export class RiderDeliveryService {
             throw new Error('Mark the order as picked before completing delivery.');
         }
 
+        const pm = String(chk[0].payment_method || '').toLowerCase();
+        const isCod = pm.includes('cod') || pm === 'cash' || pm === '';
+        const expected = safeNum(chk[0].grand_total);
+        const collected =
+            opts?.codCollected != null && Number.isFinite(Number(opts.codCollected))
+                ? Number(opts.codCollected)
+                : isCod
+                  ? expected
+                  : null;
+
         await this.db.query(
             `UPDATE delivery_orders
-       SET status = 'DELIVERED', delivered_at = NOW(), updated_at = NOW()
+       SET status = 'DELIVERED', delivered_at = NOW(), updated_at = NOW(),
+           cod_expected = COALESCE(cod_expected, $4),
+           cod_collected = $5,
+           delivery_proof_type = $6,
+           delivery_proof_data = $7
        WHERE tenant_id = $1 AND rider_id = $2 AND order_id = $3`,
-            [tenantId, riderId, mobileOrderId]
+            [
+                tenantId,
+                riderId,
+                mobileOrderId,
+                isCod ? expected : null,
+                collected,
+                opts?.proofType || null,
+                opts?.proofData || null,
+            ]
         );
 
         const m = getMobileOrderService();
@@ -260,6 +323,134 @@ export class RiderDeliveryService {
         return { ok: true };
     }
 
+    async markFailed(
+        tenantId: string,
+        riderId: string,
+        mobileOrderId: string,
+        body: { reason: string; notes?: string; proofData?: string }
+    ) {
+        const reason = String(body.reason || '').trim();
+        if (!reason) throw new Error('Failure reason is required.');
+
+        const res = await this.db.query(
+            `UPDATE delivery_orders
+       SET status = 'FAILED', failed_at = NOW(), failed_reason = $4, failed_notes = $5,
+           delivery_proof_type = 'failed_photo', delivery_proof_data = $6, updated_at = NOW()
+       WHERE tenant_id = $1 AND rider_id = $2 AND order_id = $3
+         AND status IN ('ASSIGNED', 'PICKED', 'ON_THE_WAY')
+       RETURNING id`,
+            [
+                tenantId,
+                riderId,
+                mobileOrderId,
+                reason,
+                body.notes?.trim() || null,
+                body.proofData || null,
+            ]
+        );
+        if (res.length === 0) throw new Error('Cannot mark this delivery as failed.');
+
+        const remaining = await this.db.query(
+            `SELECT COUNT(*)::int AS n FROM delivery_orders
+       WHERE tenant_id = $1 AND rider_id = $2 AND status NOT IN ('DELIVERED', 'FAILED')`,
+            [tenantId, riderId]
+        );
+        if ((remaining[0]?.n ?? 0) === 0) {
+            await this.db.execute(
+                `UPDATE riders SET status = 'AVAILABLE', updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+                [riderId, tenantId]
+            );
+        }
+        return { ok: true };
+    }
+
+    async getDashboardSummary(tenantId: string, riderId: string) {
+        const rider = await this.db.query(
+            `SELECT name, status, current_latitude, current_longitude FROM riders WHERE id = $1 AND tenant_id = $2`,
+            [riderId, tenantId]
+        );
+        const counts = await this.db.query(
+            `SELECT
+         SUM(CASE WHEN status = 'ASSIGNED' AND accepted_at IS NULL THEN 1 ELSE 0 END)::int AS assigned_pending,
+         SUM(CASE WHEN status = 'ASSIGNED' AND accepted_at IS NOT NULL THEN 1 ELSE 0 END)::int AS pickup_pending,
+         SUM(CASE WHEN status IN ('PICKED', 'ON_THE_WAY') THEN 1 ELSE 0 END)::int AS deliveries_pending,
+         SUM(CASE WHEN status = 'DELIVERED' AND delivered_at >= CURRENT_DATE THEN 1 ELSE 0 END)::int AS delivered_today,
+         SUM(CASE WHEN status = 'DELIVERED' AND delivered_at >= CURRENT_DATE THEN COALESCE(cod_collected, cod_expected, 0) ELSE 0 END)::numeric AS cod_collected_today,
+         SUM(CASE WHEN status IN ('PICKED', 'ON_THE_WAY', 'ASSIGNED') AND accepted_at IS NOT NULL
+           AND (
+             LOWER(COALESCE(o.payment_method, '')) LIKE '%cod%'
+             OR LOWER(COALESCE(o.payment_method, '')) IN ('cash', '')
+           )
+           THEN COALESCE(d.cod_expected, o.grand_total, 0) ELSE 0 END)::numeric AS cod_pending
+       FROM delivery_orders d
+       INNER JOIN mobile_orders o ON o.id = d.order_id AND o.tenant_id = d.tenant_id
+       WHERE d.tenant_id = $1 AND d.rider_id = $2`,
+            [tenantId, riderId]
+        );
+        const c = counts[0] || {};
+        return {
+            rider: rider[0] || null,
+            assigned_pending: c.assigned_pending ?? 0,
+            pickup_pending: c.pickup_pending ?? 0,
+            deliveries_pending: c.deliveries_pending ?? 0,
+            delivered_today: c.delivered_today ?? 0,
+            cod_collected_today: safeNum(c.cod_collected_today),
+            cod_pending: safeNum(c.cod_pending),
+        };
+    }
+
+    async getCashSummary(tenantId: string, riderId: string) {
+        const rows = await this.db.query(
+            `SELECT d.order_id, d.status, d.cod_expected, d.cod_collected, d.delivered_at,
+              o.order_number, o.grand_total, o.payment_method
+       FROM delivery_orders d
+       INNER JOIN mobile_orders o ON o.id = d.order_id AND o.tenant_id = d.tenant_id
+       WHERE d.tenant_id = $1 AND d.rider_id = $2
+         AND (
+           d.status IN ('PICKED', 'ON_THE_WAY', 'ASSIGNED')
+           OR (d.status = 'DELIVERED' AND d.delivered_at >= CURRENT_DATE - INTERVAL '7 days')
+         )
+       ORDER BY d.updated_at DESC
+       LIMIT 100`,
+            [tenantId, riderId]
+        );
+
+        let pending = 0;
+        let collectedToday = 0;
+        const items: Array<{
+            order_id: string;
+            order_number: string;
+            status: string;
+            expected: number;
+            collected: number | null;
+        }> = [];
+
+        for (const r of rows as any[]) {
+            const pm = String(r.payment_method || '').toLowerCase();
+            const isCod = pm.includes('cod') || pm === 'cash' || pm === '';
+            if (!isCod) continue;
+            const expected = safeNum(r.cod_expected ?? r.grand_total);
+            const collected = r.cod_collected != null ? safeNum(r.cod_collected) : null;
+            if (r.status === 'DELIVERED') {
+                const deliveredAt = r.delivered_at ? new Date(r.delivered_at) : null;
+                if (deliveredAt && deliveredAt.toDateString() === new Date().toDateString()) {
+                    collectedToday += collected ?? expected;
+                }
+            } else {
+                pending += expected;
+            }
+            items.push({
+                order_id: r.order_id,
+                order_number: r.order_number,
+                status: r.status,
+                expected,
+                collected,
+            });
+        }
+
+        return { cod_pending: pending, cod_collected_today: collectedToday, orders: items };
+    }
+
     /** Advance Pending → … → OutForDelivery so the shop sees the order out with the rider. */
     private async advanceMobileOrderTowardDelivery(tenantId: string, mobileOrderId: string) {
         const m = getMobileOrderService();
@@ -268,7 +459,8 @@ export class RiderDeliveryService {
             tenantId,
         ]);
         const status = row[0]?.status as string;
-        const chain = ['Pending', 'Confirmed', 'Packed', 'OutForDelivery'] as const;
+        /** Shop kitchen steps only — OutForDelivery is set on markOnTheWay */
+        const chain = ['Pending', 'Confirmed', 'Packed'] as const;
         const idx = chain.findIndex((x) => x === status);
         if (idx < 0) return;
 

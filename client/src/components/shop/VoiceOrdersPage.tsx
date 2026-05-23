@@ -1,12 +1,15 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useVoiceOrders } from '../../context/VoiceOrdersContext';
 import { voiceOrdersApi, VoiceOrder } from '../../services/voiceOrdersApi';
 import { getFullImageUrl } from '../../config/apiUrl';
 import {
-    Mic, RefreshCw, Play, Pause, Volume2, Download, FileText, ShoppingCart,
+    Mic, RefreshCw, FileText, ShoppingCart,
     Clock, User, Phone, MapPin, Check, X, ChevronRight,
 } from 'lucide-react';
+import { VoiceAudioPlayer } from './order-center/VoiceAudioPlayer';
+import { useShopTimezone } from '../../context/ShopTimezoneContext';
+import { formatOrderTime } from '../../utils/orderTimeFormat';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
     Pending: { label: 'Pending', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' },
@@ -20,76 +23,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
     Cancelled: { label: 'Cancelled', color: 'bg-slate-100 text-slate-600' },
 };
 
-const FILTERS = ['All', 'Pending', 'Received', 'Preparing', 'InvoiceCreated'];
-
-function VoiceAudioPlayer({ src, duration }: { src: string; duration?: number }) {
-    const audioRef = useRef<HTMLAudioElement>(null);
-    const [playing, setPlaying] = useState(false);
-    const [rate, setRate] = useState(1);
-    const [progress, setProgress] = useState(0);
-    const [vol, setVol] = useState(1);
-
-    useEffect(() => {
-        const a = audioRef.current;
-        if (!a) return;
-        a.playbackRate = rate;
-        a.volume = vol;
-    }, [rate, vol]);
-
-    const toggle = () => {
-        const a = audioRef.current;
-        if (!a) return;
-        if (playing) {
-            a.pause();
-            setPlaying(false);
-        } else {
-            void a.play();
-            setPlaying(true);
-        }
-    };
-
-    return (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 bg-slate-50 dark:bg-slate-900/50">
-            <audio
-                ref={audioRef}
-                src={src}
-                onTimeUpdate={() => {
-                    const a = audioRef.current;
-                    if (a && a.duration) setProgress((a.currentTime / a.duration) * 100);
-                }}
-                onEnded={() => setPlaying(false)}
-            />
-            <div className="flex items-center gap-2 mb-2">
-                <button type="button" onClick={toggle} className="p-2 rounded-full bg-primary-600 text-white">
-                    {playing ? <Pause size={18} /> : <Play size={18} />}
-                </button>
-                <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-primary-500 transition-all" style={{ width: `${progress}%` }} />
-                </div>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                    {duration ? `${Math.round(duration)}s` : ''}
-                </span>
-            </div>
-            <div className="flex flex-wrap gap-2 items-center text-xs">
-                {[1, 1.5, 2].map((r) => (
-                    <button
-                        key={r}
-                        type="button"
-                        className={`px-2 py-1 rounded ${rate === r ? 'bg-primary-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}
-                        onClick={() => setRate(r)}
-                    >
-                        {r}x
-                    </button>
-                ))}
-                <Volume2 size={14} className="ml-2" />
-                <input type="range" min={0} max={1} step={0.1} value={vol} onChange={(e) => setVol(parseFloat(e.target.value))} className="w-20" />
-                <a href={src} download className="ml-auto flex items-center gap-1 text-primary-600 hover:underline">
-                    <Download size={14} /> Save
-                </a>
-            </div>
-        </div>
-    );
-}
+const FILTERS = ['All', 'Pending', 'Received', 'Preparing', 'InvoiceCreated', 'Accepted', 'OutForDelivery'];
 
 export function VoiceOrderSettingsPanel({ onBack }: { onBack?: () => void }) {
     const [settings, setSettings] = useState<any>(null);
@@ -162,10 +96,11 @@ export function VoiceOrderSettingsPanel({ onBack }: { onBack?: () => void }) {
 }
 
 export default function VoiceOrdersPage() {
-    const { orders, loading, loadOrders, refreshOrders } = useVoiceOrders();
+    const { timezone } = useShopTimezone();
+    const { orders, loading, loadOrders, refreshOrders, setListStatusFilter } = useVoiceOrders();
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
-    const [filter, setFilter] = useState('Pending');
+    const [filter, setFilter] = useState('All');
     const [detail, setDetail] = useState<VoiceOrder | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
 
@@ -182,20 +117,29 @@ export default function VoiceOrdersPage() {
         }
     }, []);
 
+    const statusParam = filter === 'All' ? undefined : filter;
+
     useEffect(() => {
-        void loadOrders(filter === 'All' ? undefined : filter);
-    }, [filter, loadOrders]);
+        setListStatusFilter(statusParam);
+        void loadOrders(statusParam);
+    }, [filter, loadOrders, setListStatusFilter, statusParam]);
 
     useEffect(() => {
         if (selectedId) void loadDetail(selectedId);
         else setDetail(null);
     }, [selectedId, loadDetail]);
 
+    useEffect(() => {
+        if (!selectedId) return;
+        const row = orders.find((o) => o.id === selectedId);
+        if (row) void loadDetail(selectedId);
+    }, [orders, selectedId, loadDetail]);
+
     const openOrder = (id: string) => setSearchParams({ order: id });
 
     const markReceived = async (id: string) => {
         await voiceOrdersApi.updateStatus(id, 'Received');
-        refreshOrders();
+        refreshOrders(statusParam);
         if (selectedId === id) void loadDetail(id);
     };
 
@@ -209,13 +153,12 @@ export default function VoiceOrdersPage() {
         navigate('/pos');
     };
 
-    const fmtTime = (d: string) => new Date(d).toLocaleString('en-PK', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
 
     return (
         <div className="flex flex-col h-full min-h-0 bg-slate-50 dark:bg-slate-950">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
                 <h1 className="text-xl font-bold flex items-center gap-2"><Mic className="text-primary-600" /> Voice Orders</h1>
-                <button type="button" onClick={refreshOrders} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                <button type="button" onClick={() => refreshOrders(statusParam)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
                     <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
                 </button>
             </div>
@@ -253,7 +196,7 @@ export default function VoiceOrdersPage() {
                                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${cfg.color}`}>{cfg.label}</span>
                                     </div>
                                     <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                                        <Clock size={12} /> {fmtTime(o.created_at)}
+                                        <Clock size={12} /> {formatOrderTime(o.created_at, timezone)}
                                     </div>
                                     <div className="text-xs mt-1 flex items-center gap-1 text-muted-foreground">
                                         <Phone size={12} /> {o.customer_phone}
@@ -325,9 +268,16 @@ export default function VoiceOrdersPage() {
                                     </button>
                                 )}
                                 {detail.created_invoice_id && (
-                                    <p className="text-sm text-emerald-700 dark:text-emerald-300 font-medium">
-                                        Linked invoice: {detail.invoice_number} — Rs. {Number(detail.invoice_grand_total || 0).toLocaleString()}
-                                    </p>
+                                    <div className="text-sm text-emerald-700 dark:text-emerald-300 font-medium space-y-2">
+                                        <p>Linked invoice: {detail.invoice_number} — Rs. {Number(detail.invoice_grand_total || 0).toLocaleString()}</p>
+                                        {(detail as VoiceOrder & { invoice_items?: { product_name: string; quantity: number; subtotal: number }[] }).invoice_items?.length ? (
+                                            <ul className="text-xs space-y-1 text-slate-700 dark:text-slate-300 font-normal">
+                                                {((detail as any).invoice_items as any[]).map((line, i) => (
+                                                    <li key={i}>• {line.product_name} ×{line.quantity} — Rs. {Number(line.subtotal || 0).toLocaleString()}</li>
+                                                ))}
+                                            </ul>
+                                        ) : null}
+                                    </div>
                                 )}
                                 {detail.mobile_order_id && (
                                     <a href={`/mobile-orders?order=${encodeURIComponent(detail.mobile_order_id)}`} className="btn btn-secondary">

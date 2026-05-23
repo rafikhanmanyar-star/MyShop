@@ -36,6 +36,8 @@ export interface InventoryItem {
     damaged: number;
     costPrice: number;
     retailPrice: number;
+    /** Tax rate % (0–100) when set from SKU form */
+    taxRate?: number;
     reorderPoint: number;
     imageUrl?: string;
     /** Product description shown in the mobile app when user opens the product. */

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { shopApi, ShopVendor } from '../../../services/shopApi';
 import { useAppContext } from '../../../context/AppContext';
 import Modal from '../../ui/Modal';
@@ -42,13 +42,15 @@ export default function AddVendorModal({ isOpen, onClose, onSaved, initialName =
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
 
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !wasOpenRef.current) {
       setForm({
         ...defaultForm,
         name: initialName.trim(),
       });
     }
+    wasOpenRef.current = isOpen;
   }, [isOpen, initialName]);
 
   const handleSubmit = useCallback(async () => {

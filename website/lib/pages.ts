@@ -36,7 +36,7 @@ export const pageMeta = {
     path: '/privacy-policy',
     title: 'Privacy Policy | oBo Store',
     description:
-      'Read how oBo Store collects, uses, and protects your personal data, order information, and privacy when you shop online or in store.',
+      'Privacy Policy for oBo Store website, grocery app (PWA), and OBO Stores Android app on Google Play — data collection, Firebase, location, orders, and your rights.',
   },
   terms: {
     path: '/terms-and-conditions',
@@ -50,6 +50,12 @@ export const pageMeta = {
     description:
       'oBo Store return policy for eligible grocery, dairy, frozen, and household products. Learn how to request returns in B-17 Islamabad.',
   },
+  deleteAccount: {
+    path: '/delete-account',
+    title: 'Delete Account & Data | oBo Store',
+    description:
+      'Request deletion of your oBo Store / OBO Stores app account and personal data. Official account deletion URL for Google Play.',
+  },
 } as const;
 
 export type PageKey = keyof typeof pageMeta;
@@ -62,6 +68,7 @@ export const sitemapPaths = [
   '/about',
   '/contact',
   '/privacy-policy',
+  '/delete-account',
   '/terms-and-conditions',
   '/return-policy',
 ] as const;

@@ -1,4 +1,9 @@
 import { getDatabaseService } from './databaseService.js';
+import {
+  invalidateTenantTimezoneCache,
+  isValidIanaTimezone,
+  normalizeShopTimezone,
+} from '../utils/shopTimezone.js';
 
 export type TenantRow = {
   id: string;
@@ -11,6 +16,7 @@ export type TenantRow = {
   logo_url: string | null;
   brand_color: string | null;
   settings: Record<string, unknown> | null;
+  timezone: string | null;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -25,6 +31,7 @@ const PATCHABLE = [
   'logo_url',
   'brand_color',
   'settings',
+  'timezone',
 ] as const;
 
 type Patchable = (typeof PATCHABLE)[number];
@@ -54,7 +61,7 @@ export class TenantManagementService {
     );
     const total = Number(countRows[0]?.n ?? 0) || 0;
     const tenants = (await this.db.query(
-      `SELECT id, name, company_name, email, phone, address, slug, logo_url, brand_color, settings,
+      `SELECT id, name, company_name, email, phone, address, slug, logo_url, brand_color, settings, timezone,
               created_at, updated_at
        FROM tenants
        ORDER BY created_at ASC
@@ -66,7 +73,7 @@ export class TenantManagementService {
 
   async getTenantById(id: string): Promise<TenantRow | null> {
     const rows = (await this.db.query(
-      `SELECT id, name, company_name, email, phone, address, slug, logo_url, brand_color, settings,
+      `SELECT id, name, company_name, email, phone, address, slug, logo_url, brand_color, settings, timezone,
               created_at, updated_at
        FROM tenants WHERE id = $1`,
       [id]
@@ -97,6 +104,7 @@ export class TenantManagementService {
     return {
       ...row,
       settings: parseSettings(row.settings as unknown),
+      timezone: normalizeShopTimezone(row.timezone),
     };
   }
 
@@ -178,6 +186,14 @@ export class TenantManagementService {
       push('settings', settingsVal);
     }
 
+    if (patch.timezone !== undefined) {
+      const tz = normalizeShopTimezone(String(patch.timezone || ''));
+      if (!isValidIanaTimezone(tz)) {
+        throw new Error('Invalid IANA timezone');
+      }
+      push('timezone', tz);
+    }
+
     if (sets.length === 0) {
       return existing;
     }
@@ -194,6 +210,8 @@ export class TenantManagementService {
       `UPDATE tenants SET ${sets.join(', ')} WHERE id = $${i}`,
       params
     );
+
+    invalidateTenantTimezoneCache(tenantId);
 
     const updated = await this.getTenantById(tenantId);
     if (!updated) throw new Error('Tenant not found after update');

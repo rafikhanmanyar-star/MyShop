@@ -2,6 +2,8 @@ import type { MetadataRoute } from 'next';
 import { siteConfig } from '@/lib/data';
 import { sitemapPaths } from '@/lib/pages';
 
+export const dynamic = 'force-static';
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();
 
@@ -13,6 +15,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       path === '/'
         ? 1
         : path === '/privacy-policy' ||
+            path === '/delete-account' ||
             path === '/terms-and-conditions' ||
             path === '/return-policy'
           ? 0.5

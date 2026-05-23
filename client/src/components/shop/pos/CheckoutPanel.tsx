@@ -2,9 +2,15 @@ import React, { useState, forwardRef, useImperativeHandle, useCallback } from 'r
 import { usePOS } from '../../../context/POSContext';
 import { ICONS, CURRENCY } from '../../../constants';
 import { POSPaymentMethod } from '../../../types/pos';
-import { shopApi, ShopBankAccount } from '../../../services/shopApi';
 import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 import { showAppToast } from '../../../utils/appToast';
+import { usePayFromAccounts } from '../../../hooks/usePayFromAccounts';
+import {
+    formatPayFromAccountLabel,
+    payFromAccountsForPosMethod,
+    pickDefaultPayFromAccountId,
+    resolvePayFromAccountForPos,
+} from '../../../utils/payFromAccounts';
 import CustomerSelectionModal from './CustomerSelectionModal';
 import type { CheckoutPanelHandle } from './usePosKeyboard';
 import { BadgeCheck } from 'lucide-react';
@@ -34,9 +40,9 @@ const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, 
     // Payment state
     const [tenderAmount, setTenderAmount] = useState('0');
     const [selectedMethod, setSelectedMethod] = useState<POSPaymentMethod>(POSPaymentMethod.CASH);
-    const [bankAccounts, setBankAccounts] = useState<ShopBankAccount[]>([]);
-    const [selectedBankId, setSelectedBankId] = useState<string>('');
+    const [selectedChartAccountId, setSelectedChartAccountId] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const { payFromAccounts, loading: payFromLoading, reload: reloadPayFrom } = usePayFromAccounts();
 
     React.useEffect(() => {
         setTenderAmount(grandTotal.toString());
@@ -57,39 +63,38 @@ const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, 
         return () => window.removeEventListener('keydown', onKey, true);
     }, [isDiscountOpen, applyGlobalDiscount]);
 
+    const accountsForMethod = React.useCallback(
+        (method: POSPaymentMethod) => payFromAccountsForPosMethod(payFromAccounts, method),
+        [payFromAccounts]
+    );
+
+    const resolvedReceiveAccount = React.useMemo(
+        () => resolvePayFromAccountForPos(payFromAccounts, selectedMethod, selectedChartAccountId),
+        [payFromAccounts, selectedMethod, selectedChartAccountId]
+    );
+
     React.useEffect(() => {
-        const loadBanks = async () => {
-            try {
-                const list = await shopApi.getBankAccounts(true);
-                setBankAccounts(Array.isArray(list) ? list : []);
-                setSelectedBankId(prev => (list?.length && (!prev || !list.some((b: ShopBankAccount) => b.id === prev))) ? list[0].id : prev);
-            } catch (e) {
-                setBankAccounts([]);
-                if (isApiConnectivityFailure(e)) {
-                    showAppToast(userMessageForApiError(e, 'Could not load bank accounts.'), 'error');
-                }
-            }
-        };
-        loadBanks();
-    }, []);
+        if (payFromAccounts.length === 0) return;
+        const resolved = resolvePayFromAccountForPos(payFromAccounts, selectedMethod, selectedChartAccountId);
+        if (resolved && resolved.id !== selectedChartAccountId) {
+            setSelectedChartAccountId(resolved.id);
+        }
+    }, [payFromAccounts, selectedMethod, selectedChartAccountId]);
 
     const handleMethodSelect = (method: POSPaymentMethod) => {
         setSelectedMethod(method);
-        if (method === POSPaymentMethod.CASH) {
-            const cashBank = bankAccounts.find(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'));
-            if (cashBank) setSelectedBankId(cashBank.id);
-        } else if (method === POSPaymentMethod.KHATA) {
-            setSelectedBankId('');
+        if (method === POSPaymentMethod.KHATA) {
+            setSelectedChartAccountId('');
             setTenderAmount(grandTotal.toString());
         } else {
-            const firstOnline = bankAccounts.find(b => b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash'));
-            if (firstOnline) setSelectedBankId(firstOnline.id);
-            else setSelectedBankId('');
+            setSelectedChartAccountId(pickDefaultPayFromAccountId(accountsForMethod(method)));
         }
     };
 
     const isKhata = selectedMethod === POSPaymentMethod.KHATA;
     const khataRequiresCustomer = isKhata && (!customer || customer.id === 'walk-in');
+    const needsReceiveAccount = !isKhata;
+    const canCompletePayment = !needsReceiveAccount || Boolean(resolvedReceiveAccount);
 
     const tenderNum = parseFloat(tenderAmount) || 0;
     const changeReturn =
@@ -111,15 +116,34 @@ const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, 
                 setIsProcessing(false);
                 return;
             }
-            const bank = !isKhata ? bankAccounts.find(b => b.id === selectedBankId) : undefined;
+            let acc = !isKhata ? resolvedReceiveAccount : undefined;
+            if (!isKhata && !acc) {
+                const fresh = payFromAccounts.length > 0 ? payFromAccounts : await reloadPayFrom();
+                acc = resolvePayFromAccountForPos(fresh, selectedMethod, selectedChartAccountId);
+                if (acc) setSelectedChartAccountId(acc.id);
+            }
+            if (!isKhata && !acc) {
+                alert(
+                    payFromAccounts.length === 0 && !payFromLoading
+                        ? 'No cash or bank account is set up. Add Asset accounts in Settings → Chart of Accounts, then try again.'
+                        : 'Payment accounts are still loading. Wait a moment and try again.'
+                );
+                setIsProcessing(false);
+                return;
+            }
             const directPaymentObj = {
                 id: crypto.randomUUID(),
                 method: selectedMethod,
                 amount: isKhata ? grandTotal : amount,
-                bankAccountId: bank?.id,
-                bankAccountName: bank?.name
+                chartAccountId: acc?.id,
+                chartAccountName: acc?.name,
             };
-            addPayment(selectedMethod, isKhata ? grandTotal : amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
+            addPayment(
+                selectedMethod,
+                isKhata ? grandTotal : amount,
+                undefined,
+                acc ? { chartAccountId: acc.id, name: acc.name } : undefined
+            );
 
             await completeSale(directPaymentObj);
 
@@ -139,8 +163,11 @@ const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, 
         selectedMethod,
         isKhata,
         customer,
-        bankAccounts,
-        selectedBankId,
+        payFromAccounts,
+        payFromLoading,
+        reloadPayFrom,
+        resolvedReceiveAccount,
+        selectedChartAccountId,
         addPayment,
         completeSale,
         posSettings,
@@ -455,6 +482,41 @@ const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, 
                                     </p>
                                 )}
 
+                                {!isKhata && payFromLoading && payFromAccounts.length === 0 && (
+                                    <p className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600 dark:border-slate-600 dark:bg-slate-800/50 dark:text-slate-400">
+                                        Loading payment accounts…
+                                    </p>
+                                )}
+                                {!isKhata && !payFromLoading && payFromAccounts.length === 0 && (
+                                    <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                                        Set up cash or bank accounts in Settings → Chart of Accounts.
+                                    </p>
+                                )}
+                                {!isKhata && payFromAccounts.length > 0 && (
+                                    <div>
+                                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                                            {selectedMethod === POSPaymentMethod.CASH ? 'Cash account' : 'Receive into'}
+                                        </p>
+                                        <select
+                                            className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                                            value={selectedChartAccountId}
+                                            onChange={(e) => setSelectedChartAccountId(e.target.value)}
+                                            aria-label={
+                                                selectedMethod === POSPaymentMethod.CASH
+                                                    ? 'Cash account from chart of accounts'
+                                                    : 'Online payment account from chart of accounts'
+                                            }
+                                        >
+                                            <option value="">Select account…</option>
+                                            {accountsForMethod(selectedMethod).map((acc) => (
+                                                <option key={acc.id} value={acc.id}>
+                                                    {formatPayFromAccountLabel(acc)}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
                                 {!isKhata && (
                                     <div>
                                         <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-slate-500">Received</p>
@@ -519,7 +581,12 @@ const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, 
                                 <button
                                     type="button"
                                     id="pos-complete-sale-btn"
-                                    disabled={isProcessing || (!isKhata && parseFloat(tenderAmount) < grandTotal) || khataRequiresCustomer}
+                                    disabled={
+                                        isProcessing ||
+                                        (!isKhata && parseFloat(tenderAmount) < grandTotal) ||
+                                        khataRequiresCustomer ||
+                                        (needsReceiveAccount && (!canCompletePayment || payFromLoading))
+                                    }
                                     onClick={handleComplete}
                                     className={`flex w-full items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-bold transition-all ${
                                         !isProcessing && ((isKhata && !khataRequiresCustomer) || parseFloat(tenderAmount) >= grandTotal)
@@ -528,7 +595,15 @@ const CheckoutPanel = forwardRef<CheckoutPanelHandle>(function CheckoutPanel(_, 
                                     }`}
                                 >
                                     {React.cloneElement(ICONS.check as React.ReactElement, { size: 18 })}
-                                    {isProcessing ? 'Processing…' : khataRequiresCustomer ? 'Select customer' : 'Complete · F12'}
+                                    {isProcessing
+                                        ? 'Processing…'
+                                        : khataRequiresCustomer
+                                          ? 'Select customer'
+                                          : needsReceiveAccount && payFromLoading && !resolvedReceiveAccount
+                                            ? 'Loading accounts…'
+                                            : needsReceiveAccount && !resolvedReceiveAccount
+                                              ? 'No payment account'
+                                              : 'Complete · F12'}
                                 </button>
                             </div>
                         ) : null}

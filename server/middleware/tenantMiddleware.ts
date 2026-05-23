@@ -66,6 +66,13 @@ export function tenantMiddleware(db: IDatabaseService) {
         const row = result[0];
 
         if (row.user_tenant_id !== decoded.tenantId) {
+          const { logTenantSecurityAlert } = await import('../services/tenantResolver.js');
+          logTenantSecurityAlert('admin_jwt_user_tenant_mismatch', {
+            userId: decoded.userId,
+            jwtTenantId: decoded.tenantId,
+            userTenantId: row.user_tenant_id,
+            path: req.path,
+          });
           return res.status(403).json({ error: 'Tenant mismatch', code: 'TENANT_MISMATCH' });
         }
 

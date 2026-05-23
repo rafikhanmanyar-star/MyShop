@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ensureMicrophoneForRecording } from '../permissions/microphonePermission';
+import { openAppSettings } from '../permissions/permissionService';
+import type { PermissionStatus } from '../permissions/types';
+import PermissionDeniedBanner from './permissions/PermissionDeniedBanner';
 
 export type VoiceRecorderResult = {
     blob: Blob;
@@ -25,6 +29,13 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
     const analyserRef = useRef<AnalyserNode | null>(null);
     const animRef = useRef<number>(0);
     const resultRef = useRef<VoiceRecorderResult | null>(null);
+    /** Wall-clock seconds while recording — React `elapsed` in onstop is stale (closure). */
+    const elapsedRef = useRef(0);
+    const recordingStartedAtRef = useRef<number | null>(null);
+
+    const [micDenied, setMicDenied] = useState(false);
+    const [micStatus, setMicStatus] = useState<PermissionStatus>('unknown');
+    const [micMessage, setMicMessage] = useState<string | undefined>();
 
     const stopTracks = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -62,6 +73,22 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
         if (previewUrl) URL.revokeObjectURL(previewUrl);
     }, [previewUrl]);
 
+    const measureDurationFromUrl = (url: string): Promise<number> =>
+        new Promise((resolve) => {
+            const audio = new Audio();
+            const done = (sec: number) => {
+                audio.src = '';
+                resolve(sec);
+            };
+            audio.preload = 'metadata';
+            audio.onloadedmetadata = () => {
+                const d = audio.duration;
+                done(Number.isFinite(d) && d > 0 ? d : 0);
+            };
+            audio.onerror = () => done(0);
+            audio.src = url;
+        });
+
     const pickMime = (): string => {
         const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
         for (const t of types) {
@@ -72,6 +99,22 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
 
     const startRecording = async () => {
         try {
+            const perm = await ensureMicrophoneForRecording();
+            setMicStatus(perm.status);
+            setMicMessage(perm.message);
+            if (perm.status !== 'granted') {
+                setMicDenied(true);
+                return;
+            }
+            setMicDenied(false);
+
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
+            }
+            resultRef.current = null;
+            onRecordingReady(null);
+
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
             const mime = pickMime();
@@ -79,14 +122,31 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
             chunksRef.current = [];
             rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
             rec.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: mime });
-                const url = URL.createObjectURL(blob);
-                setPreviewUrl(url);
-                const dur = elapsed;
-                resultRef.current = { blob, mimeType: mime, durationSeconds: dur, url };
-                setState('preview');
-                onRecordingReady(resultRef.current);
-                stopTracks();
+                void (async () => {
+                    const blob = new Blob(chunksRef.current, { type: mime });
+                    const url = URL.createObjectURL(blob);
+                    setPreviewUrl(url);
+
+                    let dur = elapsedRef.current;
+                    if (recordingStartedAtRef.current != null) {
+                        const wallSec = (Date.now() - recordingStartedAtRef.current) / 1000;
+                        dur = Math.max(dur, wallSec);
+                    }
+                    try {
+                        const metaSec = await measureDurationFromUrl(url);
+                        if (metaSec > 0) dur = Math.max(dur, metaSec);
+                    } catch { /* use wall / tick duration */ }
+
+                    dur = Math.round(dur * 10) / 10;
+                    if (dur < 0.1 && blob.size > 0) dur = 1;
+
+                    resultRef.current = { blob, mimeType: mime, durationSeconds: dur, url };
+                    setElapsed(Math.max(0, Math.ceil(dur)));
+                    setState('preview');
+                    onRecordingReady(resultRef.current);
+                    stopTracks();
+                    recordingStartedAtRef.current = null;
+                })();
             };
             mediaRef.current = rec;
             const ctx = new AudioContext();
@@ -97,19 +157,22 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
             analyserRef.current = analyser;
             rec.start(200);
             setState('recording');
+            elapsedRef.current = 0;
+            recordingStartedAtRef.current = Date.now();
             setElapsed(0);
             timerRef.current = setInterval(() => {
-                setElapsed((s) => {
-                    const next = s + 1;
-                    if (next >= maxSeconds) {
-                        stopRecording();
-                    }
-                    return next;
-                });
+                const next = elapsedRef.current + 1;
+                elapsedRef.current = next;
+                setElapsed(next);
+                if (next >= maxSeconds) {
+                    stopRecording();
+                }
             }, 1000);
             drawWave();
         } catch {
-            alert('Microphone access is required for voice orders.');
+            setMicDenied(true);
+            setMicStatus('denied');
+            setMicMessage('Microphone access is required for voice orders.');
         }
     };
 
@@ -126,11 +189,10 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
             mediaRef.current.resume();
             setState('recording');
             timerRef.current = setInterval(() => {
-                setElapsed((s) => {
-                    const next = s + 1;
-                    if (next >= maxSeconds) stopRecording();
-                    return next;
-                });
+                const next = elapsedRef.current + 1;
+                elapsedRef.current = next;
+                setElapsed(next);
+                if (next >= maxSeconds) stopRecording();
             }, 1000);
         }
     };
@@ -145,6 +207,8 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
         if (previewUrl) URL.revokeObjectURL(previewUrl);
         setPreviewUrl(null);
         resultRef.current = null;
+        elapsedRef.current = 0;
+        recordingStartedAtRef.current = null;
         setElapsed(0);
         setState('idle');
         onRecordingReady(null);
@@ -155,6 +219,16 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
 
     return (
         <div className="voice-recorder" style={{ padding: 16, borderRadius: 16, background: 'var(--surface-elevated, #f8fafc)', border: '1px solid var(--border-subtle)' }}>
+            {micDenied ? (
+                <PermissionDeniedBanner
+                    kind="microphone"
+                    status={micStatus === 'unavailable' ? 'denied' : micStatus}
+                    message={micMessage}
+                    onRetry={() => void startRecording()}
+                    onOpenSettings={() => void openAppSettings()}
+                    compact
+                />
+            ) : null}
             <canvas ref={canvasRef} width={320} height={48} style={{ width: '100%', height: 48, borderRadius: 8, marginBottom: 12, background: 'rgba(0,0,0,0.04)' }} />
             <div style={{ textAlign: 'center', fontSize: 28, fontWeight: 700, fontVariantNumeric: 'tabular-nums', marginBottom: 8 }}>
                 {state === 'idle' ? '0:00' : fmt(elapsed)}

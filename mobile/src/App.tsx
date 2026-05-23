@@ -23,6 +23,8 @@ import BudgetDashboard from './pages/BudgetDashboard';
 import BudgetCreation from './pages/BudgetCreation';
 import BudgetDetail from './pages/BudgetDetail';
 import AccountSettings from './pages/AccountSettings';
+import LoyaltyHistory from './pages/LoyaltyHistory';
+import LoyaltyBenefits from './pages/LoyaltyBenefits';
 import NotificationsPage from './pages/NotificationsPage';
 import RecipeHome from './pages/RecipeHome';
 import RecipeDetail from './pages/RecipeDetail';
@@ -33,15 +35,22 @@ import RecipePickerPage from './pages/menuPlanner/RecipePickerPage';
 import ShoppingListPage from './pages/menuPlanner/ShoppingListPage';
 import MenuTemplatesPage from './pages/menuPlanner/MenuTemplatesPage';
 import NutritionSummaryPage from './pages/menuPlanner/NutritionSummaryPage';
+import FeedbackPage from './pages/FeedbackPage';
+import FeedbackHistoryPage from './pages/FeedbackHistoryPage';
 import UtilitiesHubPage from './pages/UtilitiesHubPage';
+import CheckForUpdatesPage from './pages/CheckForUpdatesPage';
+import AppearanceThemePage from './pages/AppearanceThemePage';
+import { ThemeProvider } from './theme';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
+import AppUpdateBootstrap from './components/updates/AppUpdateBootstrap';
 import OfflineBanner from './components/OfflineBanner';
 import { processOrderQueue, subscribeToOnline } from './services/orderSyncService';
 import { processVoiceOrderQueue } from './services/voiceOrderSyncService';
 import { processPendingProductQueue } from './services/productSyncService';
 import { processMenuPlannerQueue } from './services/menuPlannerSyncQueue';
 import { useHeartbeat } from './hooks/useHeartbeat';
+import FirebaseBootstrap from './components/FirebaseBootstrap';
 
 function HeartbeatReporter() {
   useHeartbeat();
@@ -112,11 +121,14 @@ function SyncOnOnline() {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <AppProvider>
       <OfflineBanner />
+      <FirebaseBootstrap />
       <LoyaltyBootstrap />
       <HeartbeatReporter />
       <SyncOnOnline />
+      <AppUpdateBootstrap />
       <Routes>
         {/* Shop slug entry point — loads shop branding */}
         <Route path="/:shopSlug" element={<ShopLoader />}>
@@ -137,10 +149,16 @@ export default function App() {
           <Route path="voice-orders" element={<VoiceOrders />} />
           <Route path="voice-orders/:id" element={<VoiceOrderDetail />} />
           <Route path="account" element={<AccountSettings />} />
+          <Route path="loyalty/history" element={<LoyaltyHistory />} />
+          <Route path="loyalty/benefits" element={<LoyaltyBenefits />} />
           <Route path="notifications" element={<NotificationsPage />} />
 
           {/* Budget Feature */}
           <Route path="utilities" element={<UtilitiesHubPage />} />
+          <Route path="utilities/appearance" element={<AppearanceThemePage />} />
+          <Route path="utilities/updates" element={<CheckForUpdatesPage />} />
+          <Route path="feedback" element={<FeedbackPage />} />
+          <Route path="feedback/history" element={<FeedbackHistoryPage />} />
           <Route path="budget" element={<BudgetDashboard />} />
           <Route path="budget/create" element={<BudgetCreation />} />
           <Route path="budget/:id" element={<BudgetDetail />} />
@@ -165,5 +183,6 @@ export default function App() {
       <PWAInstallPrompt />
       <PWAReloadPrompt />
     </AppProvider>
+    </ThemeProvider>
   );
 }

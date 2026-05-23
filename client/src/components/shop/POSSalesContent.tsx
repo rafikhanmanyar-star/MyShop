@@ -206,9 +206,20 @@ const POSSalesContent: React.FC = () => {
         navigate(location.pathname, { replace: true, state: null });
     }, [location.state, location.pathname, navigate, setSearchQuery, setIsSalesHistoryModalOpen]);
 
-    /** Refresh catalog when opening POS again (inventory may have changed on other pages). */
+    /** Refresh stock when opening POS or returning from procurement / inventory. */
     useEffect(() => {
-        void refreshItems().catch(() => {});
+        const refresh = () => void refreshItems().catch(() => {});
+        refresh();
+        const onRealtime = () => refresh();
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') refresh();
+        };
+        window.addEventListener('shop:realtime', onRealtime as EventListener);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            window.removeEventListener('shop:realtime', onRealtime as EventListener);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
     }, [refreshItems]);
 
     const useStackedLayout = layoutRowWidth > 0 && layoutRowWidth < STACK_LAYOUT_BELOW_PX;
@@ -293,6 +304,17 @@ const POSSalesContent: React.FC = () => {
         setVoiceOrderHint(id ? (notes || 'Voice order — add items from transcript') : null);
     }, []);
 
+    useEffect(() => {
+        const onVoiceLinked = (e: Event) => {
+            const detail = (e as CustomEvent<{ mobileOrderId?: string }>).detail;
+            const mobileOrderId = detail?.mobileOrderId;
+            if (!mobileOrderId) return;
+            navigate(`/order-center?order=${encodeURIComponent(mobileOrderId)}&kind=cart`);
+        };
+        window.addEventListener('myshop:voice-invoice-linked', onVoiceLinked);
+        return () => window.removeEventListener('myshop:voice-invoice-linked', onVoiceLinked);
+    }, [navigate]);
+
     const isActive = (state as any).currentPage === 'posSales' || true; // Fallback to true if not managed by AppContext
 
     const setFullScreenEnabled = useCallback((enabled: boolean) => {
@@ -304,12 +326,12 @@ const POSSalesContent: React.FC = () => {
         setFullScreenEnabled(!isFullScreen);
     }, [isFullScreen, setFullScreenEnabled]);
 
-    // If we leave the POS page while full screen is enabled, always restore normal layout
+    // Unmounting POS (navigate away) must clear app-level fullscreen so sidebar/header return.
     useEffect(() => {
-        if (!isActive && isFullScreen) {
+        return () => {
             setFullScreenEnabled(false);
-        }
-    }, [isActive, isFullScreen, setFullScreenEnabled]);
+        };
+    }, [setFullScreenEnabled]);
 
     usePosKeyboard({
         enabled: isActive,

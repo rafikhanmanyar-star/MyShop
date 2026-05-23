@@ -10,9 +10,10 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User, ChefHat, FileSpreadsheet, Mic
+  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User, ChefHat, FileSpreadsheet, LayoutGrid, MessageSquare
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
+import { ShopTimezoneProvider } from './context/ShopTimezoneContext';
 import { ConnectivityProvider } from './context/ConnectivityContext';
 import { InventoryProvider } from './context/InventoryContext';
 import { LoyaltyProvider } from './context/LoyaltyContext';
@@ -25,6 +26,8 @@ import AppHeader from './components/AppHeader';
 import { InventoryPageHeaderProvider } from './context/InventoryPageHeaderContext';
 import { ProcurementPageHeaderProvider } from './context/ProcurementPageHeaderContext';
 import { useAutoLogout } from './hooks/useAutoLogout';
+import { shopApi, type OrganizationProfile } from './services/shopApi';
+import { getFullImageUrl } from './config/apiUrl';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
 const InventoryPage = lazy(() => import('./components/shop/InventoryPage'));
@@ -35,6 +38,7 @@ const BIDashboardsPage = lazy(() => import('./components/shop/BIDashboardsPage')
 const AccountingPage = lazy(() => import('./components/shop/AccountingPage'));
 const DailyReportPage = lazy(() => import('./components/shop/accounting/DailyReportPage'));
 const ExpensePage = lazy(() => import('./components/shop/expenses/ExpensePage'));
+const OrderCenterPage = lazy(() => import('./components/shop/OrderCenterPage'));
 const MobileOrdersPage = lazy(() => import('./components/shop/MobileOrdersPage'));
 const VoiceOrdersPage = lazy(() => import('./components/shop/VoiceOrdersPage'));
 const OffersPage = lazy(() => import('./components/shop/OffersPage'));
@@ -49,6 +53,7 @@ const SalesReturnListPage = lazy(() => import('./components/shop/salesReturns/Sa
 const SalesReturnCreatePage = lazy(() => import('./components/shop/salesReturns/SalesReturnCreatePage'));
 const SalesReturnDetailPage = lazy(() => import('./components/shop/salesReturns/SalesReturnDetailPage'));
 const ShopRealtimeBridge = lazy(() => import('./components/shop/ShopRealtimeBridge'));
+const CustomerFeedbackPage = lazy(() => import('./components/shop/customerFeedback/CustomerFeedbackPage'));
 
 /** Remount editor when :id changes so form state does not leak between recipes */
 function RecipeEditRouteById() {
@@ -80,8 +85,7 @@ const navSections: NavSection[] = [
       { path: '/cashier-dashboard', label: 'Cashier Dashboard', icon: ClipboardList, roles: ['pos_cashier'] },
       { path: '/pos', label: 'POS', icon: ShoppingCart, roles: ['admin', 'pos_cashier'] },
       { path: '/sales-returns', label: 'Sales Return', icon: Undo2, roles: ['admin', 'pos_cashier', 'accountant'] },
-      { path: '/mobile-orders', label: 'Mobile Orders', icon: Smartphone, roles: ['admin', 'pos_cashier'] },
-      { path: '/voice-orders', label: 'Voice Orders', icon: Mic, roles: ['admin', 'pos_cashier'] },
+      { path: '/order-center', label: 'Order Center', icon: LayoutGrid, roles: ['admin', 'pos_cashier'], title: 'Mobile, voice, and delivery orders in one queue' },
       { path: '/offers', label: 'Offers', icon: Tag, roles: ['admin'] },
       { path: '/recipes', label: 'Recipes', icon: ChefHat, roles: ['admin'] },
     ],
@@ -97,6 +101,7 @@ const navSections: NavSection[] = [
     section: 'CUSTOMERS',
     items: [
       { path: '/loyalty', label: 'Loyalty', icon: Users, roles: ['admin'] },
+      { path: '/customer-feedback', label: 'Customer Feedback', icon: MessageSquare, roles: ['admin', 'pos_cashier'] },
       { path: '/khata', label: 'Khata Ledger', icon: Receipt, roles: ['admin', 'pos_cashier', 'accountant'] },
     ],
   },
@@ -137,10 +142,53 @@ function getUserInitials(name: string) {
     .slice(0, 2);
 }
 
+function organizationDisplayTitle(org: OrganizationProfile | null): string {
+  if (!org) return 'MyShop';
+  const company = org.company_name?.trim();
+  if (company) return company;
+  return org.name?.trim() || 'MyShop';
+}
+
+function organizationDisplaySubtitle(org: OrganizationProfile | null): string | null {
+  if (!org) return null;
+  const branch = org.branch_name?.trim();
+  if (branch) return branch;
+  const phone = org.phone?.trim();
+  if (phone) return phone;
+  const address = org.address?.trim();
+  if (address) return address.length > 48 ? `${address.slice(0, 45)}…` : address;
+  const name = org.name?.trim();
+  const company = org.company_name?.trim();
+  if (name && company && name !== company) return name;
+  return null;
+}
+
 function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onToggle: () => void; onLogout: () => void }) {
   const { user } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [organization, setOrganization] = useState<OrganizationProfile | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    shopApi
+      .getOrganization()
+      .then((data) => {
+        if (!cancelled) setOrganization(data);
+      })
+      .catch(() => {
+        if (!cancelled) setOrganization(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const companyTitle = organizationDisplayTitle(organization);
+  const companySubtitle = organizationDisplaySubtitle(organization);
+  const logoUrl = organization?.logo_url
+    ? getFullImageUrl(organization.logo_url) || organization.logo_url
+    : null;
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -166,25 +214,46 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
       className={`fixed inset-y-0 left-0 z-30 flex flex-col border-r border-white/10 bg-[#0056b3] shadow-sm transition-all duration-300 ease-in-out ${collapsed ? 'w-20' : 'w-72'}`}
     >
       {/* Header: Logo + Toggle — same brand blue as POS category chips */}
-      <div className="flex h-20 shrink-0 items-center justify-between border-b border-white/10 bg-[#0056b3] px-5">
+      <div className={`flex shrink-0 items-center justify-between border-b border-white/10 bg-[#0056b3] ${collapsed ? 'h-20 px-2' : 'min-h-20 px-5 py-3'}`}>
         {!collapsed && (
-          <div className="group flex cursor-pointer items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 shadow-md transition-transform duration-200 group-hover:scale-105">
-              <Store className="h-[1.125rem] w-[1.125rem] text-white" />
+          <div className="group flex min-w-0 flex-1 cursor-default items-center gap-2.5" title={companySubtitle ? `${companyTitle} — ${companySubtitle}` : companyTitle}>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/20 shadow-md transition-transform duration-200 group-hover:scale-105">
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <Store className="h-[1.125rem] w-[1.125rem] text-white" />
+              )}
             </div>
-            <div className="flex flex-col">
-              <span className="text-lg font-extrabold leading-none tracking-tight text-white">MyShop</span>
-              <span className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-blue-200/80">The Digital Atelier</span>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-lg font-extrabold leading-tight tracking-tight text-white" title={companyTitle}>
+                {companyTitle}
+              </span>
+              {companySubtitle ? (
+                <span
+                  className="truncate text-[0.65rem] font-medium leading-snug text-blue-200/90"
+                  title={companySubtitle}
+                >
+                  {companySubtitle}
+                </span>
+              ) : null}
             </div>
           </div>
         )}
         {collapsed && (
           <button
             onClick={onToggle}
-            className="group flex w-full items-center justify-center rounded-lg py-3 text-blue-100 transition-colors duration-200 hover:bg-white/10 hover:text-white"
-            title="Open sidebar"
+            className="group flex w-full flex-col items-center justify-center gap-1 rounded-lg py-2 text-blue-100 transition-colors duration-200 hover:bg-white/10 hover:text-white"
+            title={companySubtitle ? `${companyTitle} — ${companySubtitle}` : companyTitle}
+            aria-label="Open sidebar"
           >
-            <ChevronRight className="h-6 w-6 transition-transform group-hover:translate-x-0.5" />
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-white/20 shadow-md">
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-xs font-bold text-white">{companyTitle.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+            <ChevronRight className="h-5 w-5 transition-transform group-hover:translate-x-0.5" />
           </button>
         )}
         {!collapsed && (
@@ -315,8 +384,7 @@ function AppLayout() {
   const [posFullScreen, setPosFullScreen] = useState(false);
   const { pathname } = useLocation();
   const isPosRoute = pathname === '/pos';
-  const isMobileOrdersRoute = pathname === '/mobile-orders';
-  const isVoiceOrdersRoute = pathname === '/voice-orders';
+  const isOrderCenterRoute = pathname === '/order-center' || pathname === '/mobile-orders' || pathname === '/voice-orders';
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const role = user?.role || 'pos_cashier';
@@ -333,10 +401,18 @@ function AppLayout() {
     return () => window.removeEventListener('pos:fullscreen', handlePosFullScreen as EventListener);
   }, []);
 
+  // Leaving POS must restore sidebar/header — fullscreen flag lives in AppLayout, not on the POS route.
+  useEffect(() => {
+    if (pathname !== '/pos' && posFullScreen) {
+      setPosFullScreen(false);
+    }
+  }, [pathname, posFullScreen]);
+
   useEffect(() => installElectronFocusRecovery(), []);
 
   return (
     <BranchProvider>
+      <ShopTimezoneProvider>
       <ConnectivityProvider>
       <AppProvider>
         <ShiftsProvider>
@@ -351,7 +427,7 @@ function AppLayout() {
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onLogout={() => { logout(); navigate('/'); }} />}
         <main className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden transition-all duration-300 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
-          <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isMobileOrdersRoute || isVoiceOrdersRoute ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
+          <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isOrderCenterRoute ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
           {!posFullScreen && !isPosRoute && <AppHeader />}
           <OfflineBanner />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -385,8 +461,9 @@ function AppLayout() {
                 path="/sales-returns"
                 element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <SalesReturnListPage /> : <Navigate to="/" replace />}
               />
-              <Route path="/mobile-orders" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MobileOrdersPage /></div> : <Navigate to="/" replace />} />
-              <Route path="/voice-orders" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><VoiceOrdersPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/order-center" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><OrderCenterPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/mobile-orders" element={<Navigate to="/order-center" replace />} />
+              <Route path="/voice-orders" element={<Navigate to="/order-center" replace />} />
               <Route path="/offers" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><OffersPage /></div> : <Navigate to="/" replace />} />
               <Route path="/recipes" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><RecipesListPage /></div> : <Navigate to="/" replace />} />
               <Route path="/recipes/new" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><RecipeEditPage key="new" /></div> : <Navigate to="/" replace />} />
@@ -406,6 +483,7 @@ function AppLayout() {
                 }
               />
               <Route path="/loyalty" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><LoyaltyPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/customer-feedback" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><CustomerFeedbackPage /></div> : <Navigate to="/" replace />} />
               <Route path="/khata" element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <KhataPage /> : <Navigate to="/" replace />} />
               <Route path="/multi-store" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MultiStorePage /></div> : <Navigate to="/" replace />} />
               <Route path="/shifts" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><ShiftsAdminPage /></div> : <Navigate to="/" replace />} />
@@ -449,6 +527,7 @@ function AppLayout() {
         </ShiftsProvider>
       </AppProvider>
       </ConnectivityProvider>
+      </ShopTimezoneProvider>
     </BranchProvider>
   );
 }

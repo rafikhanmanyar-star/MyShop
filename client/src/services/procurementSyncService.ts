@@ -12,6 +12,7 @@ import {
   type PendingProcurementAction,
 } from './procurementSyncStore';
 import { setProcurementCache, getProcurementCache, getTenantId } from './procurementOfflineCache';
+import { notifyShopInventoryChanged } from '../utils/shopInventoryEvents';
 
 export function isOnline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine;
@@ -55,6 +56,7 @@ export async function createPurchaseBillOfflineFirst(payload: any): Promise<{
     try {
       const result = await procurementApi.createPurchaseBill(payload);
       await refreshProcurementCache();
+      if (!payload?.saveAsDraft) notifyShopInventoryChanged({ source: 'procurement_bill' });
       return { synced: true, result };
     } catch (err: any) {
       if (!isOnline() || isRetryableError(err)) {
@@ -105,6 +107,7 @@ export async function processPendingProcurementQueue(): Promise<{
       switch (item.action as PendingProcurementAction) {
         case 'create_purchase_bill':
           await procurementApi.createPurchaseBill(item.payload);
+          if (!item.payload?.saveAsDraft) notifyShopInventoryChanged({ source: 'procurement_bill_sync' });
           break;
         case 'record_supplier_payment':
           await procurementApi.recordSupplierPayment(item.payload);
@@ -120,7 +123,10 @@ export async function processPendingProcurementQueue(): Promise<{
       failed++;
     }
   }
-  if (succeeded > 0) await refreshProcurementCache();
+  if (succeeded > 0) {
+    await refreshProcurementCache();
+    notifyShopInventoryChanged({ source: 'procurement_queue' });
+  }
   return { processed: pending.length, succeeded, failed };
 }
 

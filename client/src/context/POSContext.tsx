@@ -101,7 +101,12 @@ interface POSContextType {
     setCustomer: (customer: POSCustomer | null) => void;
 
     payments: POSPayment[];
-    addPayment: (method: POSPaymentMethod, amount: number, reference?: string, bankAccount?: { id: string; name: string }) => void;
+    addPayment: (
+        method: POSPaymentMethod,
+        amount: number,
+        reference?: string,
+        payFrom?: { chartAccountId: string; name: string; bankAccountId?: string }
+    ) => void;
     removePayment: (paymentId: string) => void;
 
     heldSales: POSHeldSale[];
@@ -110,6 +115,10 @@ interface POSContextType {
 
     /** Unit price of the most recently added cart line (for POS summary strip). */
     lastAddedUnitPrice: number | null;
+
+    /** Keyboard-highlighted catalog product (shown in cart payable strip). */
+    focusedCatalogProduct: { name: string; unitPrice: number } | null;
+    setFocusedCatalogProduct: (product: { name: string; unitPrice: number } | null) => void;
 
     subtotal: number;
     taxTotal: number;
@@ -159,6 +168,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { state } = useAppContext(); // Access app state for print settings
     const [cart, setCart] = useState<POSCartItem[]>([]);
     const [lastAddedUnitPrice, setLastAddedUnitPrice] = useState<number | null>(null);
+    const [focusedCatalogProduct, setFocusedCatalogProduct] = useState<{ name: string; unitPrice: number } | null>(null);
     const [customer, setCustomer] = useState<POSCustomer | null>(null);
     const [payments, setPayments] = useState<POSPayment[]>([]);
     const [heldSales, setHeldSales] = useState<POSHeldSale[]>([]);
@@ -370,6 +380,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             apiClient.setBranchId(branchId);
             setCart([]);
             setLastAddedUnitPrice(null);
+            setFocusedCatalogProduct(null);
             setPayments([]);
             setCustomer(null);
             setHeldSales([]);
@@ -590,14 +601,21 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCustomer(null);
     }, []);
 
-    const addPayment = useCallback((method: POSPaymentMethod, amount: number, reference?: string, bankAccount?: { id: string; name: string }) => {
+    const addPayment = useCallback((
+        method: POSPaymentMethod,
+        amount: number,
+        reference?: string,
+        payFrom?: { chartAccountId: string; name: string; bankAccountId?: string }
+    ) => {
         setPayments(prev => [...prev, {
             id: crypto.randomUUID(),
             method,
             amount,
             reference,
-            bankAccountId: bankAccount?.id,
-            bankAccountName: bankAccount?.name
+            chartAccountId: payFrom?.chartAccountId,
+            chartAccountName: payFrom?.name,
+            bankAccountId: payFrom?.bankAccountId,
+            bankAccountName: payFrom?.bankAccountId ? payFrom?.name : undefined,
         }]);
     }, []);
 
@@ -807,22 +825,41 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 );
 
                 const voiceOrderId = sessionStorage.getItem('myshop_pending_voice_order_id');
+                let voiceLink: { mobileOrderId: string; voiceOrderId: string } | undefined;
                 if (voiceOrderId && saleId) {
                     try {
                         const { voiceOrdersApi } = await import('../services/voiceOrdersApi.js');
                         const pm = sessionStorage.getItem('myshop_pending_voice_delivery_mode') === 'pickup' ? 'SelfCollection' : 'COD';
-                        await voiceOrdersApi.linkInvoice(voiceOrderId, String(saleId), { createMobileOrder: true, paymentMethod: pm });
+                        const linked = await voiceOrdersApi.linkInvoice(voiceOrderId, String(saleId), {
+                            createMobileOrder: true,
+                            paymentMethod: pm,
+                        });
                         sessionStorage.removeItem('myshop_pending_voice_order_id');
                         sessionStorage.removeItem('myshop_pending_voice_order_notes');
                         sessionStorage.removeItem('myshop_pending_voice_order_phone');
                         sessionStorage.removeItem('myshop_pending_voice_delivery_mode');
-                        showSaleToast('Sale completed. Voice order linked.', true);
-                    } catch (linkErr) {
+                        const mobileOrderId = linked?.mobile_order_id;
+                        if (mobileOrderId) {
+                            voiceLink = { mobileOrderId: String(mobileOrderId), voiceOrderId };
+                            setIsPaymentModalOpen(false);
+                            setLastCompletedSale(null);
+                            window.dispatchEvent(
+                                new CustomEvent('myshop:voice-invoice-linked', {
+                                    detail: voiceLink,
+                                })
+                            );
+                            showSaleToast('Sale completed. Opening Order Center for delivery.', true);
+                        } else {
+                            showSaleToast('Sale completed. Voice order linked (no delivery row).', true);
+                        }
+                    } catch (linkErr: any) {
                         console.warn('Voice order link failed:', linkErr);
+                        const msg = linkErr?.message || linkErr?.error || String(linkErr);
+                        alert(`Sale saved, but voice order link failed: ${msg}`);
                     }
                 }
 
-                return completedSale;
+                return { ...completedSale, voiceLink };
             } catch (error: any) {
                 const canQueueOffline = !isBrowserOnline() || isApiConnectivityFailure(error);
                 if (!canQueueOffline) {
@@ -936,6 +973,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const value = {
         cart,
         lastAddedUnitPrice,
+        focusedCatalogProduct,
+        setFocusedCatalogProduct,
         addToCart,
         removeFromCart,
         updateCartItem,

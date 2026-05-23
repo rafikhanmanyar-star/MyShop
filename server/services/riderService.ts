@@ -1,4 +1,5 @@
 import { getDatabaseService } from './databaseService.js';
+import { notifyMobileOrderUpdated } from './realtimeOrderNotify.js';
 
 export type RiderStatus = 'AVAILABLE' | 'BUSY' | 'OFFLINE';
 
@@ -61,6 +62,33 @@ export class RiderService {
             [latitude, longitude, riderId, tenantId]
         );
         if (res.length === 0) throw new Error('Rider not found');
+
+        void notifyMobileOrderUpdated({
+            tenantId,
+            riderId,
+            source: 'rider_location',
+            latitude,
+            longitude,
+        });
+    }
+
+    async listLiveLocations(tenantId: string) {
+        const rows = await this.db.query(
+            `SELECT id, name, phone_number, status, current_latitude, current_longitude, updated_at
+       FROM riders
+       WHERE tenant_id = $1 AND is_active = TRUE
+         AND current_latitude IS NOT NULL AND current_longitude IS NOT NULL`,
+            [tenantId]
+        );
+        return rows.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            phone_number: r.phone_number,
+            status: r.status,
+            latitude: r.current_latitude != null ? parseFloat(String(r.current_latitude)) : null,
+            longitude: r.current_longitude != null ? parseFloat(String(r.current_longitude)) : null,
+            updated_at: r.updated_at,
+        }));
     }
 
     /**

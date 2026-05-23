@@ -4,7 +4,10 @@ import { useApp } from '../context/AppContext';
 import { customerApi } from '../api';
 import { useOnline } from '../hooks/useOnline';
 import { placeOrderOfflineFirst } from '../services/orderSyncService';
-import { getCurrentGeoPosition, reverseGeocodeApprox, haversineDistanceKm } from '../utils/deliveryLocation';
+import { getCurrentGeoPosition, reverseGeocodeApprox, validateCustomerAgainstBranch } from '../utils/deliveryLocation';
+import { openAppSettings } from '../permissions/permissionService';
+import { LocationServicesPrompt } from '../components/permissions/LocationServicesPrompt';
+import PermissionDeniedBanner from '../components/permissions/PermissionDeniedBanner';
 import GoogleMapPickerModal from '../components/GoogleMapPickerModal';
 import OsmMapPickerModal from '../components/OsmMapPickerModal';
 
@@ -58,6 +61,9 @@ export default function Checkout() {
     const permanentLatRef = useRef<number | null>(null);
     const permanentLngRef = useRef<number | null>(null);
     const [suggestions, setSuggestions] = useState<DeliverySuggestion[]>([]);
+    const [rangeValidation, setRangeValidation] = useState<{ withinRange: boolean; message: string } | null>(null);
+    const [locationError, setLocationError] = useState<string | null>(null);
+    const [gpsDisabled, setGpsDisabled] = useState(false);
 
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
     const useGoogleMaps = Boolean(mapsApiKey && String(mapsApiKey).trim());
@@ -70,15 +76,25 @@ export default function Checkout() {
 
     /** Home delivery only: false if pin is outside branch radius (toast shown). Self collection skips this. */
     const checkDeliveryPinAllowed = (lat: number, lng: number): boolean => {
-        if (paymentMethod === 'SelfCollection') return true;
+        if (paymentMethod === 'SelfCollection') {
+            setRangeValidation(null);
+            return true;
+        }
         const area = state.shop?.delivery_area;
         if (!area) return true;
-        const d = haversineDistanceKm(lat, lng, area.branch_latitude, area.branch_longitude);
-        if (d <= area.max_delivery_km) return true;
+        const result = validateCustomerAgainstBranch(
+            lat,
+            lng,
+            area.branch_latitude,
+            area.branch_longitude,
+            area.max_delivery_km
+        );
+        setRangeValidation({ withinRange: result.withinRange, message: result.message });
+        if (result.withinRange) return true;
         const x =
-            area.max_delivery_km % 1 === 0
-                ? String(area.max_delivery_km)
-                : (Math.round(area.max_delivery_km * 10) / 10).toString();
+            result.maxRadiusKm % 1 === 0
+                ? String(result.maxRadiusKm)
+                : (Math.round(result.maxRadiusKm * 10) / 10).toString();
         showToast(
             `You are outside our delivery area. Please select a location within ${x} km of the branch.`
         );
@@ -226,6 +242,8 @@ export default function Checkout() {
 
     const handleUseGps = async () => {
         setLocating(true);
+        setLocationError(null);
+        setGpsDisabled(false);
         try {
             const pos = await getCurrentGeoPosition();
             if (!checkDeliveryPinAllowed(pos.latitude, pos.longitude)) return;
@@ -242,7 +260,11 @@ export default function Checkout() {
                 await persistPermanentToProfile(nextAddr, pos.latitude, pos.longitude);
             }
         } catch (e: unknown) {
-            showToast(e instanceof Error ? e.message : 'Could not get location');
+            const msg = e instanceof Error ? e.message : 'Could not get location';
+            setLocationError(msg);
+            const disabled = (e as Error & { locationServicesDisabled?: boolean }).locationServicesDisabled === true;
+            setGpsDisabled(disabled);
+            showToast(msg);
         } finally {
             setLocating(false);
         }
@@ -689,6 +711,24 @@ export default function Checkout() {
                             </button>
                         )}
                     </div>
+                    {gpsDisabled ? <LocationServicesPrompt /> : null}
+                    {locationError && !gpsDisabled ? (
+                        <PermissionDeniedBanner
+                            kind="location"
+                            status="denied"
+                            message={locationError}
+                            onRetry={() => void handleUseGps()}
+                            onOpenSettings={() => void openAppSettings()}
+                            compact
+                        />
+                    ) : null}
+                    {rangeValidation && deliveryLat != null && deliveryLng != null && !isPickup ? (
+                        <p
+                            className={`delivery-range-badge ${rangeValidation.withinRange ? 'delivery-range-badge--ok' : 'delivery-range-badge--bad'}`}
+                        >
+                            {rangeValidation.withinRange ? '✓ Within delivery range' : '✗ Outside delivery range'}
+                        </p>
+                    ) : null}
                     {deliveryLat != null && deliveryLng != null && (
                         <p style={{ fontSize: 12, color: 'var(--accent)', marginTop: 8, marginBottom: 0 }}>
                             Delivery pin set ({deliveryLat.toFixed(5)}, {deliveryLng.toFixed(5)})

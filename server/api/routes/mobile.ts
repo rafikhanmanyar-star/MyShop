@@ -11,6 +11,7 @@ import {
 } from '../../services/mobileOrderBranchRouting.js';
 import { getOfferService } from '../../services/offerService.js';
 import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/mobileMiddleware.js';
+import { mobileTenantGuard } from '../../middleware/mobileTenantGuard.js';
 import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
 import { getRecipeService } from '../../services/recipeService.js';
 import { getWeeklyMenuPlannerService } from '../../services/weeklyMenuPlannerService.js';
@@ -32,6 +33,22 @@ const productUploadStorage = multer.diskStorage({
     },
 });
 const productUpload = multer({ storage: productUploadStorage });
+
+const feedbackUploadStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+        const uploadDir = path.resolve(process.cwd(), 'uploads/feedback');
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+    },
+    filename: (_req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'feedback-' + uniqueSuffix + path.extname(file.originalname || '.jpg'));
+    },
+});
+const feedbackUpload = multer({
+    storage: feedbackUploadStorage,
+    limits: { fileSize: 8 * 1024 * 1024 },
+});
 
 console.log('✅ Mobile router initialized');
 
@@ -128,12 +145,28 @@ router.get('/notifications/stream', mobileAuthMiddleware(db), async (req: any, r
             res.write(`data: ${JSON.stringify({ type: 'order_event', payload })}\n\n`);
         };
 
+        const forwardIfCustomerFeedback = (payload: any) => {
+            if (!payload || payload.tenantId !== req.tenantId) return;
+            if (payload.customerId !== req.customerId) return;
+            res.write(`data: ${JSON.stringify({ type: 'feedback_event', payload })}\n\n`);
+        };
+
         if (pool) {
             try {
                 pgClient = await pool.connect();
                 await pgClient.query('LISTEN mobile_order_updated');
                 await pgClient.query('LISTEN new_mobile_order');
+                await pgClient.query('LISTEN customer_feedback_updated');
                 pgClient.on('notification', (msg: any) => {
+                    if (msg.channel === 'customer_feedback_updated') {
+                        try {
+                            const payload = JSON.parse(msg.payload);
+                            forwardIfCustomerFeedback(payload);
+                        } catch (e) {
+                            console.error('[mobile notifications SSE] feedback parse error:', e);
+                        }
+                        return;
+                    }
                     if (msg.channel !== 'mobile_order_updated' && msg.channel !== 'new_mobile_order') return;
                     try {
                         const payload = JSON.parse(msg.payload);
@@ -154,6 +187,7 @@ router.get('/notifications/stream', mobileAuthMiddleware(db), async (req: any, r
             if (pgClient) {
                 pgClient.query('UNLISTEN mobile_order_updated').catch(() => {});
                 pgClient.query('UNLISTEN new_mobile_order').catch(() => {});
+                pgClient.query('UNLISTEN customer_feedback_updated').catch(() => {});
                 pgClient.release();
             }
         });
@@ -658,6 +692,7 @@ router.get('/:shopSlug/info', publicTenantMiddleware(db), async (req: any, res) 
 
         res.json({
             shop: {
+                id: req.tenantId,
                 name: req.shop.name,
                 company_name: req.shop.company_name,
                 logo_url: logoUrl,
@@ -886,8 +921,14 @@ router.get('/:shopSlug/offers/:id', publicTenantMiddleware(db), async (req: any,
 // Product recommendations (related sellable products) — register before /products/:id
 router.get('/:shopSlug/products/:id/recommendations', publicTenantMiddleware(db), async (req: any, res) => {
     try {
-        const items = await getMobileOrderService().getProductRecommendationsForMobile(req.tenantId, req.params.id, 6);
-        res.json({ items });
+        const limitRaw = parseInt(String(req.query.limit ?? '12'), 10);
+        const limit = Number.isFinite(limitRaw) ? limitRaw : 12;
+        const result = await getMobileOrderService().getProductRecommendationsForMobile(
+            req.tenantId,
+            req.params.id,
+            limit
+        );
+        res.json(result);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -1193,8 +1234,23 @@ const loyaltyPointsHandler = async (req: any, res: express.Response) => {
 router.get('/loyalty-points', mobileAuthMiddleware(db), loyaltyPointsHandler);
 router.get('/user/loyalty-points', mobileAuthMiddleware(db), loyaltyPointsHandler);
 
+router.get('/loyalty-history', mobileAuthMiddleware(db), async (req: any, res: express.Response) => {
+    try {
+        const { getShopService } = await import('../../services/shopService.js');
+        const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 50;
+        const items = await getShopService().getLoyaltyHistoryForMobileCustomer(
+            req.tenantId,
+            req.customerId,
+            limit
+        );
+        res.json({ items });
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 // Place order — shop and branch are the same entity: server uses tenant's default (first) branch when branchId omitted
-router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
+router.post('/orders', mobileAuthMiddleware(db), mobileTenantGuard(db), async (req: any, res) => {
     try {
         const result = await getMobileOrderService().placeOrder(req.tenantId, {
             customerId: req.customerId,
@@ -1221,7 +1277,7 @@ router.post('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
 });
 
 /** Validates cart + branch routing + schedule rules without reserving inventory (same demand as POST /orders). */
-router.post('/orders/checkout-preflight', mobileAuthMiddleware(db), async (req: any, res) => {
+router.post('/orders/checkout-preflight', mobileAuthMiddleware(db), mobileTenantGuard(db), async (req: any, res) => {
     try {
         await getMobileOrderService().preflightCheckout(req.tenantId, {
             customerId: req.customerId,
@@ -1325,16 +1381,64 @@ router.get('/orders/:id/delivery-eta', mobileAuthMiddleware(db), async (req: any
     }
 });
 
-// Order history
+// Order history (cart + voice awaiting invoice + delivery orders)
 router.get('/orders', mobileAuthMiddleware(db), async (req: any, res) => {
     try {
-        const result = await getMobileOrderService().getCustomerOrders(
+        const { getVoiceOrderService } = await import('../../services/voiceOrderService.js');
+        const result = await getVoiceOrderService().getCustomerOrderFeed(
             req.tenantId,
             req.customerId,
             req.query.cursor as string,
             parseInt(req.query.limit as string) || 20
         );
         res.json(result);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delivery chat (customer ↔ rider / shop)
+router.get('/orders/:id/chat', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getDeliveryChatService } = await import('../../services/deliveryChatService.js');
+        const messages = await getDeliveryChatService().listMessages(
+            req.tenantId,
+            req.params.id,
+            100,
+            { customerId: req.customerId }
+        );
+        res.json({ messages });
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.post('/orders/:id/chat', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { body } = req.body;
+        const { getDeliveryChatService } = await import('../../services/deliveryChatService.js');
+        const msg = await getDeliveryChatService().sendMessage(
+            req.tenantId,
+            req.params.id,
+            'customer',
+            req.customerId,
+            body,
+            { customerId: req.customerId }
+        );
+        res.json(msg);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.get('/orders/chat-threads', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getDeliveryChatService } = await import('../../services/deliveryChatService.js');
+        const threads = await getDeliveryChatService().listThreadsForCustomer(
+            req.tenantId,
+            req.customerId
+        );
+        res.json({ threads });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -1462,6 +1566,79 @@ router.get('/budget-alerts', mobileAuthMiddleware(db), async (req: any, res) => 
         res.json(result);
     } catch (error: any) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  CUSTOMER FEEDBACK                                               ║
+// ╚══════════════════════════════════════════════════════════════════╝
+
+router.post('/feedback/upload', mobileAuthMiddleware(db), feedbackUpload.single('image'), (req: any, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    res.json({ url: `/uploads/feedback/${req.file.filename}` });
+});
+
+router.get('/feedback', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getCustomerFeedbackService } = await import('../../services/customerFeedbackService.js');
+        const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 30;
+        const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+        const items = await getCustomerFeedbackService().listCustomerFeedback(
+            req.tenantId,
+            req.customerId,
+            { limit, offset }
+        );
+        res.json({ items });
+    } catch (error: any) {
+        res.status(error.statusCode || 500).json({ error: error.message });
+    }
+});
+
+router.get('/feedback/:id', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getCustomerFeedbackService } = await import('../../services/customerFeedbackService.js');
+        const item = await getCustomerFeedbackService().getFeedbackById(
+            req.tenantId,
+            req.params.id,
+            req.customerId
+        );
+        res.json(item);
+    } catch (error: any) {
+        res.status(error.statusCode || 404).json({ error: error.message });
+    }
+});
+
+router.post('/feedback', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getCustomerFeedbackService } = await import('../../services/customerFeedbackService.js');
+        const body = req.body || {};
+        const item = await getCustomerFeedbackService().submitFeedback(req.tenantId, req.customerId, {
+            feedbackType: body.feedbackType,
+            message: body.message,
+            orderId: body.orderId,
+            overallRating: body.overallRating,
+            deliveryRating: body.deliveryRating,
+            productQualityRating: body.productQualityRating,
+            productRequest: body.productRequest,
+            attachmentUrls: body.attachmentUrls,
+        });
+        res.status(201).json(item);
+    } catch (error: any) {
+        res.status(error.statusCode || 400).json({ error: error.message });
+    }
+});
+
+router.post('/feedback/:id/reply', mobileAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { getCustomerFeedbackService } = await import('../../services/customerFeedbackService.js');
+        const item = await getCustomerFeedbackService().replyToFeedback(req.tenantId, req.params.id, {
+            authorType: 'customer',
+            authorId: req.customerId,
+            message: req.body?.message,
+        });
+        res.json(item);
+    } catch (error: any) {
+        res.status(error.statusCode || 400).json({ error: error.message });
     }
 });
 

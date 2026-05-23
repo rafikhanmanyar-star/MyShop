@@ -3,6 +3,7 @@ import Link from 'next/link';
 type LegalSection = {
   heading: string;
   paragraphs: string[];
+  listItems?: string[];
 };
 
 type LegalDocumentProps = {
@@ -16,8 +17,10 @@ export default function LegalDocument({
   title,
   intro,
   sections,
-  lastUpdated = 'May 2026',
+  lastUpdated = 'May 22, 2026',
 }: LegalDocumentProps) {
+  const lastUpdatedIso = '2026-05-22';
+
   return (
     <article className="py-12 sm:py-16">
       <div className="section-container mx-auto max-w-3xl">
@@ -35,7 +38,7 @@ export default function LegalDocument({
 
         <h1 className="text-3xl font-bold text-text-dark sm:text-4xl">{title}</h1>
         <p className="mt-2 text-sm text-muted">
-          <time dateTime="2026-05-01">Last updated: {lastUpdated}</time>
+          <time dateTime={lastUpdatedIso}>Last updated: {lastUpdated}</time>
         </p>
         <p className="mt-6 text-base leading-relaxed text-muted">{intro}</p>
 
@@ -48,6 +51,13 @@ export default function LegalDocument({
                   {paragraph}
                 </p>
               ))}
+              {section.listItems && section.listItems.length > 0 && (
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted">
+                  {section.listItems.map((item) => (
+                    <li key={item.slice(0, 48)}>{item}</li>
+                  ))}
+                </ul>
+              )}
             </section>
           ))}
         </div>

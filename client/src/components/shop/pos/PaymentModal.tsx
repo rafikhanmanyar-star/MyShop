@@ -3,9 +3,15 @@ import Modal from '../../ui/Modal';
 import { usePOS } from '../../../context/POSContext';
 import { POSPaymentMethod } from '../../../types/pos';
 import { ICONS, CURRENCY } from '../../../constants';
-import { shopApi, ShopBankAccount } from '../../../services/shopApi';
 import { isApiConnectivityFailure, userMessageForApiError } from '../../../utils/apiConnectivity';
 import { showAppToast } from '../../../utils/appToast';
+import { usePayFromAccounts } from '../../../hooks/usePayFromAccounts';
+import {
+    formatPayFromAccountLabel,
+    payFromAccountsForPosMethod,
+    pickDefaultPayFromAccountId,
+    resolvePayFromAccountForPos,
+} from '../../../utils/payFromAccounts';
 
 const PaymentModal: React.FC = () => {
     const {
@@ -26,28 +32,38 @@ const PaymentModal: React.FC = () => {
 
     const [tenderAmount, setTenderAmount] = useState('0');
     const [selectedMethod, setSelectedMethod] = useState<POSPaymentMethod>(POSPaymentMethod.CASH);
-    const [bankAccounts, setBankAccounts] = useState<ShopBankAccount[]>([]);
-    const [selectedBankId, setSelectedBankId] = useState<string>('');
+    const [selectedChartAccountId, setSelectedChartAccountId] = useState('');
+    const { payFromAccounts, loading: payFromLoading, reload: reloadPayFrom } = usePayFromAccounts();
 
     const isKhata = selectedMethod === POSPaymentMethod.KHATA;
     const khataRequiresCustomer = isKhata && (!customer || customer.id === 'walk-in');
 
-    const loadBanks = useCallback(async () => {
-        try {
-            const list = await shopApi.getBankAccounts(true);
-            setBankAccounts(Array.isArray(list) ? list : []);
-            setSelectedBankId(prev => (list?.length && (!prev || !list.some((b: ShopBankAccount) => b.id === prev))) ? list[0].id : prev);
-        } catch (e) {
-            setBankAccounts([]);
-            if (isApiConnectivityFailure(e)) {
-                showAppToast(userMessageForApiError(e, 'Could not load bank accounts for checkout.'), 'error');
-            }
-        }
-    }, []);
+    const accountsForMethod = useCallback(
+        (method: POSPaymentMethod) => payFromAccountsForPosMethod(payFromAccounts, method),
+        [payFromAccounts]
+    );
+
+    const pickDefaultForMethod = useCallback(
+        (method: POSPaymentMethod) => pickDefaultPayFromAccountId(accountsForMethod(method)),
+        [accountsForMethod]
+    );
+
+    const resolvedReceiveAccount = React.useMemo(
+        () => resolvePayFromAccountForPos(payFromAccounts, selectedMethod, selectedChartAccountId),
+        [payFromAccounts, selectedMethod, selectedChartAccountId]
+    );
 
     useEffect(() => {
-        if (isPaymentModalOpen) loadBanks();
-    }, [isPaymentModalOpen, loadBanks]);
+        if (isPaymentModalOpen) void reloadPayFrom();
+    }, [isPaymentModalOpen, reloadPayFrom]);
+
+    useEffect(() => {
+        if (!isPaymentModalOpen || payFromAccounts.length === 0) return;
+        const resolved = resolvePayFromAccountForPos(payFromAccounts, selectedMethod, selectedChartAccountId);
+        if (resolved && resolved.id !== selectedChartAccountId) {
+            setSelectedChartAccountId(resolved.id);
+        }
+    }, [isPaymentModalOpen, payFromAccounts, selectedMethod, selectedChartAccountId]);
 
     useEffect(() => {
         if (isPaymentModalOpen) {
@@ -58,8 +74,27 @@ const PaymentModal: React.FC = () => {
     const handleAddPayment = async () => {
         const amount = parseFloat(tenderAmount);
         if (amount > 0) {
-            const bank = !isKhata ? bankAccounts.find(b => b.id === selectedBankId) : undefined;
-            addPayment(selectedMethod, amount, undefined, bank ? { id: bank.id, name: bank.name } : undefined);
+            let acc = !isKhata ? resolvedReceiveAccount : undefined;
+            if (!isKhata && !acc) {
+                const fresh = payFromAccounts.length > 0 ? payFromAccounts : await reloadPayFrom();
+                acc = resolvePayFromAccountForPos(fresh, selectedMethod, selectedChartAccountId);
+                if (acc) setSelectedChartAccountId(acc.id);
+            }
+            if (!isKhata && !acc) {
+                showAppToast(
+                    payFromAccounts.length === 0 && !payFromLoading
+                        ? 'No cash or bank account is set up in Chart of Accounts.'
+                        : 'Payment accounts are still loading. Try again in a moment.',
+                    'error'
+                );
+                return;
+            }
+            addPayment(
+                selectedMethod,
+                amount,
+                undefined,
+                acc ? { chartAccountId: acc.id, name: acc.name } : undefined
+            );
             setTenderAmount('0');
         }
     };
@@ -108,15 +143,10 @@ const PaymentModal: React.FC = () => {
                                             key={method}
                                             onClick={() => {
                                                 setSelectedMethod(method);
-                                                if (method === POSPaymentMethod.CASH) {
-                                                    const cashBank = bankAccounts.find(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'));
-                                                    if (cashBank) setSelectedBankId(cashBank.id);
-                                                } else if (method === POSPaymentMethod.KHATA) {
-                                                    setSelectedBankId('');
+                                                if (method === POSPaymentMethod.KHATA) {
+                                                    setSelectedChartAccountId('');
                                                 } else {
-                                                    const firstOnline = bankAccounts.find(b => b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash'));
-                                                    if (firstOnline) setSelectedBankId(firstOnline.id);
-                                                    else setSelectedBankId('');
+                                                    setSelectedChartAccountId(pickDefaultForMethod(method));
                                                 }
                                             }}
                                             className={`flex flex-col items-center justify-center p-6 rounded-3xl border-2 transition-all relative group overflow-hidden ${selectedMethod === method
@@ -153,17 +183,26 @@ const PaymentModal: React.FC = () => {
                                     </div>
                                     <select
                                         className="block w-full rounded-[1.25rem] border-2 border-slate-50 bg-[#f8fafc] pl-14 pr-6 py-3 text-sm font-semibold text-slate-800 transition-all outline-none focus:bg-white focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5 appearance-none"
-                                        value={selectedBankId}
-                                        onChange={e => setSelectedBankId(e.target.value)}
-                                        disabled={selectedMethod === POSPaymentMethod.CASH && bankAccounts.some(b => b.account_type === 'Cash' || b.name.toLowerCase().includes('cash'))}
+                                        value={selectedChartAccountId}
+                                        onChange={(e) => setSelectedChartAccountId(e.target.value)}
+                                        disabled={accountsForMethod(selectedMethod).length === 0}
                                     >
-                                        <option value="">{selectedMethod === POSPaymentMethod.CASH ? 'Primary Cash Account' : 'Choose Online Account'}</option>
-                                        {bankAccounts
-                                            .filter(b => selectedMethod === POSPaymentMethod.CASH ? (b.account_type === 'Cash' || b.name.toLowerCase().includes('cash')) : (b.account_type !== 'Cash' && !b.name.toLowerCase().includes('cash')))
-                                            .map(b => (
-                                                <option key={b.id} value={b.id}>{b.name}{b.chart_code ? ` — ${b.chart_code}` : b.code ? ` — ${b.code}` : ''}</option>
-                                            ))}
+                                        <option value="">
+                                            {selectedMethod === POSPaymentMethod.CASH
+                                                ? 'Select cash account'
+                                                : 'Select online / bank account'}
+                                        </option>
+                                        {accountsForMethod(selectedMethod).map((acc) => (
+                                            <option key={acc.id} value={acc.id}>
+                                                {formatPayFromAccountLabel(acc)}
+                                            </option>
+                                        ))}
                                     </select>
+                                    {payFromAccounts.length === 0 && (
+                                        <p className="mt-2 text-xs text-amber-700">
+                                            Add cash or bank Asset accounts in Settings → Chart of Accounts.
+                                        </p>
+                                    )}
                                     <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">
                                         {ICONS.chevronDown}
                                     </div>
@@ -203,7 +242,10 @@ const PaymentModal: React.FC = () => {
 
                             <button
                                 onClick={handleAddPayment}
-                                disabled={parseFloat(tenderAmount) <= 0}
+                                disabled={
+                                    parseFloat(tenderAmount) <= 0 ||
+                                    (!isKhata && (payFromLoading || !resolvedReceiveAccount))
+                                }
                                 className="w-full py-5 pos-gradient-dark hover:opacity-95 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-[1.5rem] font-semibold text-xl transition-all shadow-none shadow-none-200 uppercase tracking-[0.2em] relative overflow-hidden group"
                             >
                                 <div className="absolute inset-x-0 h-px top-0 bg-white/20"></div>

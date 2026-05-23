@@ -1,10 +1,8 @@
-/** Today's calendar date in the browser's local timezone (YYYY-MM-DD), for date inputs and daily reports. */
+import { todayYmdInTimezone } from './shopTimezone';
+
+/** Today's calendar date in the browser's local timezone (YYYY-MM-DD). */
 export function todayLocalYmd(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return todayYmdInTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
 }
 
 /** Last N calendar days in local timezone (oldest first), including today. */
@@ -21,3 +19,5 @@ export function lastLocalYmdDays(count: number): string[] {
   }
   return out;
 }
+
+export { todayYmdInTimezone, lastYmdDaysInTimezone } from './shopTimezone';

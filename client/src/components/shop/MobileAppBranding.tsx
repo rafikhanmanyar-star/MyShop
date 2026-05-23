@@ -1,19 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { shopApi, TenantBranding, HomePromoSlide } from '../../services/shopApi';
+import { shopApi, TenantBranding } from '../../services/shopApi';
 import Card from '../ui/Card';
 import Input from '../ui/Input';
 import Button from '../ui/Button';
 import { getFullImageUrl } from '../../config/apiUrl';
+import { clampHomePromoIntervalSeconds } from '../../utils/homePromoLinks';
+import HomePromoAdsEditor from './HomePromoAdsEditor';
 
 export default function MobileAppBranding() {
     const [branding, setBranding] = useState<TenantBranding | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
-    const [promoUploading, setPromoUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const promoFileRef = useRef<HTMLInputElement>(null);
-    const promoPickIndexRef = useRef(0);
 
     useEffect(() => {
         loadBranding();
@@ -26,6 +25,7 @@ export default function MobileAppBranding() {
             setBranding({
                 ...data,
                 home_promo_slides: Array.isArray(data.home_promo_slides) ? data.home_promo_slides : [],
+                home_promo_interval_seconds: clampHomePromoIntervalSeconds(data.home_promo_interval_seconds),
             });
         } catch (error) {
             console.error('Failed to load branding', error);
@@ -64,55 +64,6 @@ export default function MobileAppBranding() {
         }
     };
 
-    const updateSlide = (index: number, patch: Partial<HomePromoSlide>) => {
-        setBranding((prev) => {
-            if (!prev) return prev;
-            const cur = prev.home_promo_slides ?? [];
-            const next = [...cur];
-            next[index] = { ...(next[index] || { image_url: '', link_url: null }), ...patch };
-            return { ...prev, home_promo_slides: next };
-        });
-    };
-
-    const removeSlide = (index: number) => {
-        setBranding((prev) => {
-            if (!prev) return prev;
-            const cur = prev.home_promo_slides ?? [];
-            return { ...prev, home_promo_slides: cur.filter((_, i) => i !== index) };
-        });
-    };
-
-    const addSlideRow = () => {
-        setBranding((prev) => {
-            if (!prev) return prev;
-            const cur = prev.home_promo_slides ?? [];
-            if (cur.length >= 6) return prev;
-            return { ...prev, home_promo_slides: [...cur, { image_url: '', link_url: '' }] };
-        });
-    };
-
-    const pickPromoImage = (index: number) => {
-        promoPickIndexRef.current = index;
-        promoFileRef.current?.click();
-    };
-
-    const handlePromoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        e.target.value = '';
-        if (!file || !branding) return;
-        const index = promoPickIndexRef.current;
-        try {
-            setPromoUploading(true);
-            const res = await shopApi.uploadImage(file);
-            updateSlide(index, { image_url: res.imageUrl });
-        } catch (error) {
-            console.error('Promo upload failed', error);
-            alert('Failed to upload advertisement image.');
-        } finally {
-            setPromoUploading(false);
-        }
-    };
-
     if (loading) {
         return <div className="p-8 text-muted-foreground">Loading branding settings...</div>;
     }
@@ -120,8 +71,6 @@ export default function MobileAppBranding() {
     if (!branding) {
         return <div className="p-8 text-rose-500">Failed to load branding settings.</div>;
     }
-
-    const slides: HomePromoSlide[] = branding.home_promo_slides ?? [];
 
     return (
         <div className="space-y-6">
@@ -178,76 +127,15 @@ export default function MobileAppBranding() {
                         </div>
                     </Card>
 
-                    <Card className="p-6">
-                        <h3 className="text-lg font-bold text-foreground mb-2 tracking-tight">Home promotional banners</h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                            Images shown in the mobile app home hero (carousel). Upload full-width artwork (e.g. delivery promo). Optional link opens when the customer taps the slide (use{' '}
-                            <code className="text-xs bg-muted px-1 rounded">https://</code> for external sites).
-                        </p>
-                        <input
-                            type="file"
-                            ref={promoFileRef}
-                            onChange={handlePromoUpload}
-                            className="hidden"
-                            accept="image/*"
+                    <Card className="p-0 overflow-hidden border-0 shadow-none bg-transparent">
+                        <HomePromoAdsEditor
+                            variant="card"
+                            value={{
+                                home_promo_slides: branding.home_promo_slides,
+                                home_promo_interval_seconds: branding.home_promo_interval_seconds,
+                            }}
+                            onChange={(patch) => setBranding({ ...branding, ...patch })}
                         />
-                        <div className="space-y-4">
-                            {slides.length === 0 ? (
-                                <p className="text-sm text-muted-foreground italic">No slides yet — add one to replace the default delivery banner.</p>
-                            ) : (
-                                slides.map((slide, idx) => (
-                                    <div
-                                        key={idx}
-                                        className="flex flex-col sm:flex-row gap-4 p-4 rounded-2xl border-2 border-border bg-muted/40"
-                                    >
-                                        <div className="w-full sm:w-36 aspect-[16/9] rounded-xl bg-card border border-border overflow-hidden flex-shrink-0 flex items-center justify-center">
-                                            {slide.image_url ? (
-                                                <img
-                                                    src={getFullImageUrl(slide.image_url)}
-                                                    alt=""
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground px-2 text-center">No image</span>
-                                            )}
-                                        </div>
-                                        <div className="flex-1 space-y-3 min-w-0">
-                                            <div className="flex flex-wrap gap-2">
-                                                <Button
-                                                    type="button"
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    disabled={promoUploading}
-                                                    onClick={() => pickPromoImage(idx)}
-                                                >
-                                                    {promoUploading ? 'Uploading…' : slide.image_url ? 'Replace image' : 'Upload image'}
-                                                </Button>
-                                                <Button type="button" variant="outline" size="sm" onClick={() => removeSlide(idx)}>
-                                                    Remove
-                                                </Button>
-                                            </div>
-                                            <Input
-                                                label="Image URL (optional)"
-                                                placeholder="/uploads/..."
-                                                value={slide.image_url || ''}
-                                                onChange={(e) => updateSlide(idx, { image_url: e.target.value })}
-                                            />
-                                            <Input
-                                                label="Tap-through link (optional)"
-                                                placeholder="https://example.com/sale or /slug/products"
-                                                value={slide.link_url || ''}
-                                                onChange={(e) =>
-                                                    updateSlide(idx, { link_url: e.target.value.trim() || null })
-                                                }
-                                            />
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                            <Button type="button" variant="outline" onClick={addSlideRow} disabled={slides.length >= 6}>
-                                Add slide ({slides.length}/6)
-                            </Button>
-                        </div>
                     </Card>
 
                     {/* Color Theme */}
@@ -353,9 +241,9 @@ export default function MobileAppBranding() {
                             <div className="flex-1 p-6 space-y-6 overflow-y-auto">
                                 {/* Promo carousel preview */}
                                 <div className="rounded-2xl overflow-hidden border border-border bg-slate-100 aspect-[16/9] flex items-center justify-center relative">
-                                    {slides[0]?.image_url ? (
+                                    {branding.home_promo_slides?.[0]?.image_url ? (
                                         <img
-                                            src={getFullImageUrl(slides[0].image_url)}
+                                            src={getFullImageUrl(branding.home_promo_slides[0].image_url)}
                                             alt=""
                                             className="w-full h-full object-cover"
                                         />

@@ -1,7 +1,7 @@
 # Cloudflare Pages — build settings for this app (monorepo: set Root directory = website in the dashboard)
 name = "obostores-website"
 compatibility_date = "2024-11-01"
-pages_build_output_dir = "dist"
+pages_build_output_dir = "out"
 
 [vars]
 # Override in Cloudflare dashboard → Settings → Environment variables

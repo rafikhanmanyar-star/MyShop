@@ -20,8 +20,13 @@ export interface VoiceOrder {
     created_invoice_id?: string;
     invoice_number?: string;
     invoice_grand_total?: number;
-    mobile_order_id?: string;
+    mobile_order_id?: string | null;
     mobile_order_number?: string;
+    invoice_items?: { product_name: string; product_sku?: string; quantity: number; subtotal: number }[];
+    cancelled_reason?: string;
+    cancelled_note?: string;
+    cancelled_by?: string;
+    cancelled_at?: string;
     created_at: string;
     updated_at: string;
     status_history?: { to_status: string; created_at: string; note?: string }[];
@@ -44,8 +49,10 @@ export const voiceOrdersApi = {
     get: (id: string) => apiClient.get<VoiceOrder>(`/shop/voice-orders/${encodeURIComponent(id)}`),
     updateStatus: (id: string, status: string, note?: string) =>
         apiClient.post(`/shop/voice-orders/${encodeURIComponent(id)}/status`, { status, note }),
+    cancel: (id: string, body: { reason: string; note?: string; notifyCustomer?: boolean }) =>
+        apiClient.post<VoiceOrder>(`/shop/order-center/voice/${encodeURIComponent(id)}/cancel`, body),
     linkInvoice: (id: string, saleId: string, opts?: { createMobileOrder?: boolean; paymentMethod?: string }) =>
-        apiClient.post(`/shop/voice-orders/${encodeURIComponent(id)}/link-invoice`, {
+        apiClient.post<VoiceOrder>(`/shop/voice-orders/${encodeURIComponent(id)}/link-invoice`, {
             saleId,
             ...opts,
         }),

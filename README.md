@@ -27,7 +27,7 @@ MyShop/
   │   │   └── routes/       # Auth & Shop routes
   │   ├── services/         # DB, Auth, Shop services
   │   ├── middleware/       # Tenant middleware
-  │   ├── migrations/       # PostgreSQL schema
+  │   ├── migrations/       # Consolidated schema (+ archive of legacy increments)
   │   └── package.json
   ├── render.yaml      # Render deployment config
   └── .env.example     # Environment template
@@ -83,6 +83,24 @@ npm run electron
 ```
 
 Use `npm run electron` whenever you want to start the app. If you change server or client code, run `npm run build` again before `npm run electron`.
+
+### Full local dev stack (`npm run dev`)
+
+From the repo root (API uses **Render PostgreSQL** via `DATABASE_URL` in `server/.env`):
+
+```bash
+npm run dev
+```
+
+| Service | URL |
+|--------|-----|
+| API | http://localhost:3001 |
+| POS web client | http://localhost:5173 |
+| Marketing website | http://localhost:5190 |
+| Mobile storefront | http://localhost:5175 |
+| Rider app | http://localhost:5180 |
+
+Without POS: `npm run dev:apps`
 
 ### Alternative: Run in browser (development)
 

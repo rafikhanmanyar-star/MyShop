@@ -57,92 +57,12 @@ export async function getDashboardCache(tenantId: string): Promise<CachedDashboa
   });
 }
 
-function getTodayStart() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
 /** Fetch dashboard data from API and write to cache. Call when back online. */
 export async function refreshDashboardCache(tenantId: string): Promise<void> {
   try {
     const { shopApi } = await import('./shopApi');
-    const { mobileOrdersApi } = await import('./mobileOrdersApi');
-    const { getShopCategoriesOfflineFirst } = await import('./categoriesOfflineCache');
-    const [
-      products,
-      sales,
-      loyaltyMembers,
-      inventory,
-      branches,
-      terminals,
-      categories,
-      vendors,
-      mobileOrders,
-      salesReturns,
-    ] = await Promise.all([
-      shopApi.getProducts().catch(() => []),
-      shopApi.getSales().catch(() => []),
-      shopApi.getLoyaltyMembers().catch(() => []),
-      shopApi.getInventory().catch(() => []),
-      shopApi.getBranches().catch(() => []),
-      shopApi.getTerminals().catch(() => []),
-      getShopCategoriesOfflineFirst().catch(() => []),
-      shopApi.getVendors().catch(() => []),
-      mobileOrdersApi.getOrders().catch(() => []),
-      shopApi.getSalesReturns().catch(() => []),
-    ]);
-    const salesList = (sales as any[]) || [];
-    const totalRevenue = salesList.reduce(
-      (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
-      0
-    );
-    const retList = (salesReturns as any[]) || [];
-    const totalReturns = retList.reduce(
-      (sum: number, r: any) => sum + parseFloat(r.totalReturnAmount ?? r.total_return_amount ?? 0),
-      0
-    );
-    const netRevenue = Math.max(0, totalRevenue - totalReturns);
-    const invList = (inventory as any[]) || [];
-    const lowStockItems = invList.filter(
-      (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 10
-    ).length;
-    const outOfStockItems = invList.filter(
-      (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 0
-    ).length;
-    const todayStart = getTodayStart();
-    const todaySales = salesList.filter((s: any) => {
-      const t = new Date(s.created_at ?? s.createdAt ?? 0).getTime();
-      return t >= todayStart;
-    });
-    const todayRevenue = todaySales.reduce(
-      (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
-      0
-    );
-    const mobileList = (mobileOrders as any[]) || [];
-    const mobileOrdersPending = mobileList.filter(
-      (o: any) => String(o.status ?? '').toLowerCase() === 'pending'
-    ).length;
-    const totalSalesCount = salesList.length;
-    const stats: DashboardStats = {
-      totalProducts: (products as any[]).length,
-      totalSales: totalSalesCount,
-      totalRevenue,
-      totalReturns,
-      netRevenue,
-      totalCustomers: (loyaltyMembers as any[]).length,
-      lowStockItems,
-      outOfStockItems,
-      branchesCount: (branches as any[]).length,
-      terminalsCount: (terminals as any[]).length,
-      categoriesCount: (categories as any[]).length,
-      vendorsCount: (vendors as any[]).length,
-      todaySalesCount: todaySales.length,
-      todayRevenue,
-      avgOrderValue: totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0,
-      mobileOrdersPending,
-    };
-    await setDashboardCache(tenantId, stats);
+    const overview = await shopApi.getDashboardOverview();
+    await setDashboardCache(tenantId, overview.stats);
   } catch {
     // ignore
   }

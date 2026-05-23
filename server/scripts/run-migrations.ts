@@ -9,6 +9,9 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/** Single-file schema for fresh installs; incremental history lives in migrations/archive/. */
+const CONSOLIDATED_MIGRATION = '001-consolidated-schema.sql';
+
 export async function runMigrations() {
   if (process.env.DISABLE_MIGRATIONS === 'true') {
     console.log('⏭️ Migrations disabled via DISABLE_MIGRATIONS=true');
@@ -35,6 +38,28 @@ export async function runMigrations() {
     .filter(f => !f.includes('.sqlite.sql'))
     .sort();
 
+  /** Existing DBs that ran incremental migrations must not re-apply the consolidated schema. */
+  async function shouldSkipConsolidatedForLegacyDb(): Promise<boolean> {
+    const legacy = await db.query(
+      'SELECT 1 FROM schema_migrations WHERE name <> $1 LIMIT 1',
+      [CONSOLIDATED_MIGRATION]
+    );
+    if (legacy.length > 0) return true;
+
+    if (dbType === 'sqlite') {
+      const tables = await db.query(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tenants' LIMIT 1"
+      );
+      return tables.length > 0;
+    }
+
+    const tables = await db.query(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'tenants' LIMIT 1`
+    );
+    return tables.length > 0;
+  }
+
   for (const file of files) {
     let migrationFile = file;
     if (dbType === 'sqlite') {
@@ -52,6 +77,15 @@ export async function runMigrations() {
     const rows = await db.query('SELECT name FROM schema_migrations WHERE name = $1', [file]);
     if (rows.length > 0) {
       console.log(`⏭️ Already applied: ${file}`);
+      continue;
+    }
+
+    if (file === CONSOLIDATED_MIGRATION && (await shouldSkipConsolidatedForLegacyDb())) {
+      console.log(`⏭️ Skipping consolidated schema (legacy database detected)`);
+      await db.execute(
+        'INSERT INTO schema_migrations (name, execution_time_ms) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING',
+        [file, 0]
+      );
       continue;
     }
 

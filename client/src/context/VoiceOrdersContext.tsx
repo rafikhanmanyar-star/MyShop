@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { voiceOrdersApi, VoiceOrder } from '../services/voiceOrdersApi';
 import { getApiBaseUrl } from '../config/apiUrl';
 import { useAuth } from './AuthContext';
@@ -16,7 +16,8 @@ interface VoiceOrdersContextType {
     bellAlerts: VoiceOrderBellAlert[];
     sseConnected: boolean;
     loadOrders: (status?: string) => Promise<void>;
-    refreshOrders: () => void;
+    refreshOrders: (status?: string) => void;
+    setListStatusFilter: (status?: string) => void;
     dismissBellAlert: (id: string) => void;
     clearBellAlerts: () => void;
 }
@@ -31,11 +32,14 @@ export function VoiceOrdersProvider({ children }: { children: React.ReactNode })
     const [loading, setLoading] = useState(false);
     const [bellAlerts, setBellAlerts] = useState<VoiceOrderBellAlert[]>([]);
     const [sseConnected, setSseConnected] = useState(false);
+    const listStatusFilterRef = useRef<string | undefined>(undefined);
 
     const loadOrders = useCallback(async (status?: string) => {
+        if (status !== undefined) listStatusFilterRef.current = status;
+        const effective = listStatusFilterRef.current;
         setLoading(true);
         try {
-            const data = await voiceOrdersApi.list(status);
+            const data = await voiceOrdersApi.list(effective);
             setOrders(Array.isArray(data) ? data : []);
         } catch {
             setOrders([]);
@@ -44,8 +48,12 @@ export function VoiceOrdersProvider({ children }: { children: React.ReactNode })
         }
     }, []);
 
-    const refreshOrders = useCallback(() => {
-        void loadOrders();
+    const setListStatusFilter = useCallback((status?: string) => {
+        listStatusFilterRef.current = status;
+    }, []);
+
+    const refreshOrders = useCallback((status?: string) => {
+        void loadOrders(status);
     }, [loadOrders]);
 
     const dismissBellAlert = useCallback((id: string) => {
@@ -57,7 +65,10 @@ export function VoiceOrdersProvider({ children }: { children: React.ReactNode })
     useEffect(() => {
         const role = user?.role;
         if (!role || !ROLES.includes(role)) return;
-        void loadOrders();
+        const poll = setInterval(() => {
+            void loadOrders();
+        }, 12000);
+        return () => clearInterval(poll);
     }, [user?.role, loadOrders]);
 
     useEffect(() => {
@@ -131,6 +142,7 @@ export function VoiceOrdersProvider({ children }: { children: React.ReactNode })
                 sseConnected,
                 loadOrders,
                 refreshOrders,
+                setListStatusFilter,
                 dismissBellAlert,
                 clearBellAlerts,
             }}

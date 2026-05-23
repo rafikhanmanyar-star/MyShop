@@ -6,6 +6,7 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#4F46E5" />
+  <meta name="color-scheme" content="light dark" />
   <meta name="description" content="Order from your favorite shop — browse products, add to cart, and get delivery!" />
 
   <!-- PWA Meta Tags -->
@@ -23,13 +24,33 @@
   <link rel="icon" type="image/svg+xml" href="/icons/icon-192.svg" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
 
-  <!-- Fonts -->
+  <!-- Fonts: Inter (Latin) + Noto Sans Arabic (Urdu) — display=swap for fast first paint -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-    rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
 
   <title>oBo stores</title>
+  <!-- Apply theme before paint — must match src/theme/themeStorage.ts -->
+  <script>
+    (function () {
+      try {
+        var k = 'myshop_theme_preference';
+        var pref = localStorage.getItem(k);
+        var resolved;
+        if (pref === 'dark') resolved = 'dark';
+        else if (pref === 'light') resolved = 'light';
+        else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          resolved = 'dark';
+        else resolved = 'light';
+        var root = document.documentElement;
+        root.setAttribute('data-theme', resolved);
+        root.style.colorScheme = resolved;
+      } catch (e) {}
+    })();
+  </script>
 </head>
 
 <body>

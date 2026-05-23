@@ -6,12 +6,21 @@ import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const firebaseWebStub = join(__dirname, 'src/stubs/firebase-web-stub.ts')
 // Use client app version so mobile and client display the same version on release
 const clientPkg = JSON.parse(readFileSync(join(__dirname, '../client/package.json'), 'utf-8'))
 
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(clientPkg.version || '0.0.0'),
+  },
+  resolve: {
+    alias: {
+      // Android uses native Firebase; web/PWA build stubs optional firebase/* imports from Capacitor plugins.
+      'firebase/analytics': firebaseWebStub,
+      'firebase/app': firebaseWebStub,
+      'firebase/messaging': firebaseWebStub,
+    },
   },
   plugins: [
     react(),

@@ -1,23 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import { shopApi, accountingApi } from '../services/shopApi';
-import { getShopCategoriesOfflineFirst } from '../services/categoriesOfflineCache';
 import { getDashboardCache, setDashboardCache, type DashboardStats } from '../services/dashboardOfflineCache';
 import { getTenantId } from '../services/posOfflineDb';
-import { mobileOrdersApi } from '../services/mobileOrdersApi';
 import Card from '../components/ui/Card';
 import DailyReportSummaryPanel from '../components/shop/accounting/DailyReportSummaryPanel';
 import { CURRENCY, ICONS } from '../constants';
@@ -33,28 +18,22 @@ import {
   ArrowRight,
   LineChart,
 } from 'lucide-react';
-import { lastLocalYmdDays } from '../utils/calendarDate';
+import { useShopTimezone } from '../context/ShopTimezoneContext';
+import { promiseWithTimeout } from '../utils/promiseTimeout';
 
-const CHART_BLUE = '#4A90E2';
-const DONUT_COLORS = ['#4A90E2', '#50C878', '#F6C23E', '#E74A3B', '#9B59B6', '#17A2B8', '#6C757D'];
+const CACHE_READ_TIMEOUT_MS = 4_000;
+const OVERVIEW_FETCH_TIMEOUT_MS = 45_000;
 
-const tooltipStyle = {
-  backgroundColor: 'var(--card)',
-  border: '1px solid var(--border)',
-  borderRadius: '8px',
-  color: 'var(--card-foreground)',
-} as const;
-
-function getTodayStart() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
+const DashboardCharts = lazy(() => import('../components/dashboard/DashboardCharts'));
 
 type LowStockRow = { name: string; qty: string };
 type PendingOrderRow = { id: string; orderNumber: string; customer: string };
 
-function mergeDailyTrend(raw: unknown): { label: string; revenue: number }[] {
+function mergeDailyTrend(
+  raw: unknown,
+  dayKeys: string[],
+  timeZone: string
+): { label: string; revenue: number }[] {
   const r = raw as { pos?: { day?: string; revenue?: string | number }[]; mobile?: { day?: string; revenue?: string | number }[] } | null;
   const pos = Array.isArray(r?.pos) ? r!.pos! : [];
   const mobile = Array.isArray(r?.mobile) ? r!.mobile! : [];
@@ -69,43 +48,38 @@ function mergeDailyTrend(raw: unknown): { label: string; revenue: number }[] {
     if (!key) continue;
     byDay.set(key, (byDay.get(key) || 0) + (parseFloat(String(d.revenue)) || 0));
   }
-  const out: { label: string; revenue: number }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const dt = new Date();
-    dt.setDate(dt.getDate() - i);
-    const key = dt.toISOString().slice(0, 10);
-    const label = dt.toLocaleDateString('en', { weekday: 'short' });
-    out.push({ label, revenue: Math.round((byDay.get(key) || 0) * 100) / 100 });
-  }
-  return out;
+  return dayKeys.map((key) => {
+    const [y, m, day] = key.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, day, 12));
+    const label = dt.toLocaleDateString('en', { weekday: 'short', timeZone });
+    return { label, revenue: Math.round((byDay.get(key) || 0) * 100) / 100 };
+  });
 }
 
-function isMobileOrderPending(o: Record<string, unknown>) {
-  const status = String(o.status ?? '').toLowerCase();
-  /** Match Mobile Orders page: only fulfillment status Pending (not unpaid payment on cancelled/confirmed, etc.). */
-  return status === 'pending';
-}
+const EMPTY_STATS: DashboardStats = {
+  totalProducts: 0,
+  totalSales: 0,
+  totalRevenue: 0,
+  totalReturns: 0,
+  netRevenue: 0,
+  totalCustomers: 0,
+  lowStockItems: 0,
+  outOfStockItems: 0,
+  branchesCount: 0,
+  terminalsCount: 0,
+  categoriesCount: 0,
+  vendorsCount: 0,
+  todaySalesCount: 0,
+  todayRevenue: 0,
+  avgOrderValue: 0,
+  mobileOrdersPending: 0,
+};
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>({
-    totalProducts: 0,
-    totalSales: 0,
-    totalRevenue: 0,
-    totalReturns: 0,
-    netRevenue: 0,
-    totalCustomers: 0,
-    lowStockItems: 0,
-    outOfStockItems: 0,
-    branchesCount: 0,
-    terminalsCount: 0,
-    categoriesCount: 0,
-    vendorsCount: 0,
-    todaySalesCount: 0,
-    todayRevenue: 0,
-    avgOrderValue: 0,
-    mobileOrdersPending: 0,
-  });
-  const [loading, setLoading] = useState(true);
+  const { lastYmdDays, timezone } = useShopTimezone();
+  const trendDayKeys = useMemo(() => lastYmdDays(7), [lastYmdDays, timezone]);
+  const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
+  const [ready, setReady] = useState(false);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [lowStockRows, setLowStockRows] = useState<LowStockRow[]>([]);
   const [pendingOrderRows, setPendingOrderRows] = useState<PendingOrderRow[]>([]);
@@ -115,168 +89,99 @@ export default function DashboardPage() {
   const [profit7d, setProfit7d] = useState<{ totalProfit: number; avgProfitPerDay: number } | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const tenantId = getTenantId();
     const isOnline = typeof navigator !== 'undefined' && navigator.onLine;
 
-    async function load() {
+    async function loadCharts() {
+      if (!isOnline || !tenantId) return;
       try {
-        if (isOnline && tenantId) {
-          const [
-            products,
-            sales,
-            loyaltyMembers,
-            inventory,
-            branches,
-            terminals,
-            categories,
-            vendors,
-            mobileOrders,
-            salesReturns,
-            trendRaw,
-            categoryPerf,
-            profitSummary,
-          ] = await Promise.all([
-            shopApi.getProducts().catch(() => []),
-            shopApi.getSales().catch(() => []),
-            shopApi.getLoyaltyMembers().catch(() => []),
-            shopApi.getInventory().catch(() => []),
-            shopApi.getBranches().catch(() => []),
-            shopApi.getTerminals().catch(() => []),
-            getShopCategoriesOfflineFirst().catch(() => []),
-            shopApi.getVendors().catch(() => []),
-            mobileOrdersApi.getOrders().catch(() => []),
-            shopApi.getSalesReturns().catch(() => []),
-            accountingApi.getDailyTrend(7).catch(() => null),
-            accountingApi.getCategoryPerformance().catch(() => []),
-            accountingApi.dailyProfitSummary(lastLocalYmdDays(7)).catch(() => null),
-          ]);
-
-          const salesList = (sales as any[]) || [];
-          const totalRevenue = salesList.reduce(
-            (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
-            0
-          );
-          const retList = (salesReturns as any[]) || [];
-          const totalReturns = retList.reduce(
-            (sum: number, r: any) => sum + parseFloat(r.totalReturnAmount ?? r.total_return_amount ?? 0),
-            0
-          );
-          const netRevenue = Math.max(0, totalRevenue - totalReturns);
-          const invList = (inventory as any[]) || [];
-          const productList = (products as any[]) || [];
-          const productNameById = new Map<string, string>(
-            productList.map((p: any) => [String(p.id), String(p.name ?? p.sku ?? 'Item')])
-          );
-
-          const lowStockRowsBuilt: LowStockRow[] = invList
-            .map((i: any) => {
-              const q = parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0);
-              const pid = String(i.product_id ?? i.productId ?? '');
-              return {
-                q,
-                name: productNameById.get(pid) || 'Unknown',
-              };
-            })
-            .filter((row) => row.q > 0 && row.q <= 10)
-            .sort((a, b) => a.q - b.q)
-            .slice(0, 6)
-            .map((row) => ({ name: row.name, qty: row.q % 1 === 0 ? String(row.q) : row.q.toFixed(1) }));
-
-          setLowStockRows(lowStockRowsBuilt);
-
-          const lowStockItems = invList.filter(
-            (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 10
-          ).length;
-          const outOfStockItems = invList.filter(
-            (i: any) => parseFloat(i.quantity_on_hand ?? i.quantityOnHand ?? 0) <= 0
-          ).length;
-
-          const todayStart = getTodayStart();
-          const todaySales = salesList.filter((s: any) => {
-            const t = new Date(s.created_at ?? s.createdAt ?? 0).getTime();
-            return t >= todayStart;
-          });
-          const todayRevenue = todaySales.reduce(
-            (sum: number, s: any) => sum + parseFloat(s.grandTotal ?? s.grand_total ?? 0),
-            0
-          );
-
-          const mobileList = (mobileOrders as any[]) || [];
-          const mobileOrdersPending = mobileList.filter((o: any) => isMobileOrderPending(o)).length;
-
-          const pendingRows: PendingOrderRow[] = mobileList
-            .filter((o: any) => isMobileOrderPending(o))
-            .slice(0, 6)
-            .map((o: any) => ({
-              id: String(o.id),
-              orderNumber: String(o.order_number ?? o.orderNumber ?? '—'),
-              customer: String(o.customer_name ?? o.customerName ?? '—'),
-            }));
-          setPendingOrderRows(pendingRows);
-
-          const totalSalesCount = salesList.length;
-          const nextStats: DashboardStats = {
-            totalProducts: (products as any[]).length,
-            totalSales: totalSalesCount,
-            totalRevenue,
-            totalReturns,
-            netRevenue,
-            totalCustomers: (loyaltyMembers as any[]).length,
-            lowStockItems,
-            outOfStockItems,
-            branchesCount: (branches as any[]).length,
-            terminalsCount: (terminals as any[]).length,
-            categoriesCount: (categories as any[]).length,
-            vendorsCount: (vendors as any[]).length,
-            todaySalesCount: todaySales.length,
-            todayRevenue,
-            avgOrderValue: totalSalesCount > 0 ? totalRevenue / totalSalesCount : 0,
-            mobileOrdersPending,
-          };
-          setStats(nextStats);
-          setCachedAt(null);
-          await setDashboardCache(tenantId, nextStats);
-
-          const merged = mergeDailyTrend(trendRaw);
-          setSalesTrend(merged);
-          const catArr = Array.isArray(categoryPerf) ? categoryPerf : [];
-          const pie = catArr
-            .map((c: any) => ({
+        const [trendRaw, categoryPerf, profitSummary] = await Promise.all([
+          accountingApi.getDailyTrend(7).catch(() => null),
+          accountingApi.getCategoryPerformance().catch(() => []),
+          accountingApi.dailyProfitSummary(trendDayKeys).catch(() => null),
+        ]);
+        if (cancelled) return;
+        setSalesTrend(mergeDailyTrend(trendRaw, trendDayKeys, timezone));
+        const catArr = Array.isArray(categoryPerf) ? categoryPerf : [];
+        setRevenueBreakdown(
+          catArr
+            .map((c: { category?: string; revenue?: string | number }) => ({
               name: String(c.category ?? 'Uncategorized'),
-              value: Math.max(0, parseFloat(c.revenue) || 0),
+              value: Math.max(0, parseFloat(String(c.revenue)) || 0),
             }))
             .filter((x) => x.value > 0)
             .sort((a, b) => b.value - a.value)
-            .slice(0, 7);
-          setRevenueBreakdown(pie);
-          if (profitSummary && typeof profitSummary === 'object') {
-            setProfit7d({
-              totalProfit: Number(profitSummary.totalProfit) || 0,
-              avgProfitPerDay: Number(profitSummary.avgProfitPerDay) || 0,
-            });
-          } else {
-            setProfit7d(null);
-          }
-          setChartsLoaded(true);
-          return;
+            .slice(0, 7)
+        );
+        if (profitSummary && typeof profitSummary === 'object') {
+          setProfit7d({
+            totalProfit: Number(profitSummary.totalProfit) || 0,
+            avgProfitPerDay: Number(profitSummary.avgProfitPerDay) || 0,
+          });
+        } else {
+          setProfit7d(null);
         }
+        setChartsLoaded(true);
+      } catch {
+        if (!cancelled) {
+          setChartsLoaded(false);
+          setProfit7d(null);
+        }
+      }
+    }
 
+    async function load() {
+      try {
         if (tenantId) {
-          const cached = await getDashboardCache(tenantId);
+          const cached = await promiseWithTimeout(
+            getDashboardCache(tenantId),
+            CACHE_READ_TIMEOUT_MS,
+            null
+          );
+          if (cancelled) return;
           if (cached?.stats) {
             setStats(cached.stats);
             setCachedAt(cached.cachedAt || null);
           }
         }
+      } catch {
+        /* IndexedDB unavailable or blocked — continue with empty/cached UI */
+      }
 
+      if (!cancelled) setReady(true);
+
+      if (!isOnline || !tenantId) {
+        if (!cancelled) {
+          setChartsLoaded(false);
+          setProfit7d(null);
+        }
+        return;
+      }
+
+      loadCharts();
+
+      try {
+        const overview = await promiseWithTimeout(
+          shopApi.getDashboardOverview(),
+          OVERVIEW_FETCH_TIMEOUT_MS,
+          null
+        );
+        if (cancelled || !overview) return;
+        setStats(overview.stats);
+        setLowStockRows(overview.lowStockRows);
+        setPendingOrderRows(overview.pendingOrders);
         setCachedAt(null);
-        setChartsLoaded(false);
-        setProfit7d(null);
+        await setDashboardCache(tenantId, overview.stats).catch(() => {});
       } catch (err) {
         console.error('Failed to load dashboard:', err);
-        if (tenantId) {
+        if (!cancelled && tenantId) {
           try {
-            const cached = await getDashboardCache(tenantId);
+            const cached = await promiseWithTimeout(
+              getDashboardCache(tenantId),
+              CACHE_READ_TIMEOUT_MS,
+              null
+            );
             if (cached?.stats) {
               setStats(cached.stats);
               setCachedAt(cached.cachedAt || null);
@@ -285,14 +190,14 @@ export default function DashboardPage() {
             setCachedAt(null);
           }
         }
-        setChartsLoaded(false);
-        setProfit7d(null);
-      } finally {
-        setLoading(false);
       }
     }
+
     load();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [timezone, trendDayKeys]);
 
   const todayLabel = useMemo(
     () =>
@@ -377,10 +282,18 @@ export default function DashboardPage() {
     },
   ];
 
-  if (loading) {
+  if (!ready) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
+      <div className="-mx-4 min-h-full bg-[#F8F9FA] px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:bg-background">
+        <div className="space-y-8">
+          <div className="h-8 w-48 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-700" />
+          <div className="h-40 animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-24 animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -439,7 +352,6 @@ export default function DashboardPage() {
             </p>
           </div>
 
-        {/* KPI grid — 2×4 */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           {kpiCards.map((card) => (
             <div
@@ -457,7 +369,7 @@ export default function DashboardPage() {
               {'sub' in card && card.sub && <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>}
               {card.mobileLink && stats.mobileOrdersPending > 0 && (
                 <Link
-                  to="/mobile-orders"
+                  to="/order-center"
                   className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-[#4A90E2] hover:underline"
                 >
                   (View orders <ArrowRight className="inline h-3 w-3" />)
@@ -470,103 +382,23 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Charts + Alerts */}
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card className="border border-gray-100 bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:shadow-none" padding="none">
-              <div className="border-b border-gray-100 px-5 py-4 dark:border-gray-700">
-                <h2 className="text-base font-semibold text-[#212529] dark:text-foreground">Daily Sales Trends</h2>
-                <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">Last 7 days (POS + mobile)</p>
+          <Suspense
+            fallback={
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />
+                <div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />
               </div>
-              <div className="p-4 pt-2">
-                {!chartsLoaded || salesTrend.length === 0 ? (
-                  <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
-                    {cachedAt ? 'Charts need an online connection.' : 'No trend data yet.'}
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <AreaChart data={salesTrend} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="dashAreaFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={CHART_BLUE} stopOpacity={0.35} />
-                          <stop offset="95%" stopColor={CHART_BLUE} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.6} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
-                      <YAxis
-                        tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))}
-                      />
-                      <Tooltip
-                        formatter={(v: number) => [`${CURRENCY} ${v.toLocaleString()}`, 'Revenue']}
-                        contentStyle={tooltipStyle}
-                        labelStyle={{ color: 'var(--muted-foreground)' }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="revenue"
-                        stroke={CHART_BLUE}
-                        strokeWidth={2}
-                        fillOpacity={1}
-                        fill="url(#dashAreaFill)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </Card>
+            }
+          >
+            <DashboardCharts
+              chartsLoaded={chartsLoaded}
+              cachedAt={cachedAt}
+              salesTrend={salesTrend}
+              revenueBreakdown={revenueBreakdown}
+            />
+          </Suspense>
 
-            <Card className="border border-gray-100 bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:shadow-none" padding="none">
-              <div className="border-b border-gray-100 px-5 py-4 dark:border-gray-700">
-                <h2 className="text-base font-semibold text-[#212529] dark:text-foreground">Revenue Breakdown</h2>
-                <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">By product category</p>
-              </div>
-              <div className="p-4 pt-2">
-                {!chartsLoaded || revenueBreakdown.length === 0 ? (
-                  <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
-                    {cachedAt ? 'Charts need an online connection.' : 'No category data yet.'}
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie
-                        data={revenueBreakdown}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={58}
-                        outerRadius={88}
-                        paddingAngle={2}
-                        dataKey="value"
-                        nameKey="name"
-                        label={({ name, percent }) =>
-                          `${String(name).slice(0, 10)}${String(name).length > 10 ? '…' : ''} ${(percent * 100).toFixed(0)}%`
-                        }
-                      >
-                        {revenueBreakdown.map((_, i) => (
-                          <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(v: number) => [`${CURRENCY} ${v.toLocaleString()}`, 'Revenue']}
-                        contentStyle={tooltipStyle}
-                      />
-                      <Legend
-                        layout="horizontal"
-                        verticalAlign="bottom"
-                        wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-                        formatter={(value) => <span className="text-muted-foreground">{value}</span>}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </Card>
-          </div>
-
-          {/* Alerts column */}
           <Card
             className="border border-gray-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:shadow-none xl:sticky xl:top-4"
             padding="none"
@@ -625,7 +457,7 @@ export default function DashboardPage() {
                           <tr key={row.id} className="border-t border-red-200/60 dark:border-red-900/40">
                             <td className="py-1.5 pr-2">
                               <Link
-                                to={`/mobile-orders?order=${encodeURIComponent(row.id)}`}
+                                to={`/order-center?order=${encodeURIComponent(row.id)}&kind=cart`}
                                 className="font-medium text-[#4A90E2] hover:underline"
                               >
                                 {row.orderNumber}
@@ -638,7 +470,7 @@ export default function DashboardPage() {
                     </table>
                   )}
                   <Link
-                    to="/mobile-orders"
+                    to="/order-center"
                     className="mt-2 inline-block text-xs font-medium text-[#4A90E2] hover:underline"
                   >
                     View all mobile orders

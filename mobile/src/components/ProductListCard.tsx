@@ -1,7 +1,15 @@
-import { useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import CachedImage from './CachedImage';
+import { memo, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getProductImagePath } from '../api';
+import ProductImage from './productCard/ProductImage';
+import ProductCardAddButton from './productCard/ProductCardAddButton';
+import ProductCardPriceSection from './productCard/ProductCardPriceSection';
+import {
+    getProductStock,
+    getProductVariantLabel,
+    originalListPrice,
+    stockLabel as buildStockLabel,
+} from './productCard/productCardUtils';
 
 export type ProductListProduct = {
     id: string;
@@ -19,6 +27,10 @@ export type ProductListProduct = {
     is_out_of_stock?: boolean;
     tax_rate?: number | string;
     sku?: string;
+    unit?: string | null;
+    size?: string | number | null;
+    weight?: string | number | null;
+    weight_unit?: string | null;
     rating_avg?: number;
     rating_count?: number;
     total_sales?: number;
@@ -33,38 +45,39 @@ type Props = {
     formatPrice: (p: number | string | null | undefined) => string;
     /** Grey out + disable add (out of stock row when showing unavailable) */
     unavailableStyle?: boolean;
+    /** `compact` — home rails & browse grid (high density). */
+    density?: 'default' | 'compact';
+    /** `grid` — catalog grid; `rail` — horizontal PDP/home scroll cells */
+    layout?: 'grid' | 'rail';
     onAddOne: (product: ProductListProduct) => void;
     onChangeQty: (productId: string, quantity: number) => void;
     isFavorite?: boolean;
     onToggleFavorite?: (productId: string) => void;
 };
 
-function getStock(p: ProductListProduct): number {
-    const s = p.stock ?? p.available_stock ?? 0;
-    return typeof s === 'string' ? parseFloat(s) || 0 : s;
-}
-
-export default function ProductListCard({
+function ProductListCard({
     product: p,
     shopSlug,
     cartQty,
     formatPrice,
     unavailableStyle = false,
+    density = 'default',
+    layout = 'grid',
     onAddOne,
     onChangeQty,
     isFavorite = false,
     onToggleFavorite,
 }: Props) {
     const navigate = useNavigate();
+    const location = useLocation();
     const suppressClick = useRef(false);
-    const stock = getStock(p);
+    const stock = getProductStock(p);
     const canPurchase = stock > 0 || Boolean(p.is_pre_order);
     const maxOrderQty = stock > 0 ? stock : p.is_pre_order ? 99 : 0;
-    const showStepper = cartQty > 0 && canPurchase && !unavailableStyle;
 
     const openDetail = () => {
         suppressClick.current = true;
-        navigate(`/${shopSlug}/products/${p.id}`);
+        navigate(`/${shopSlug}/products/${p.id}`, { state: { from: location.pathname } });
         window.setTimeout(() => {
             suppressClick.current = false;
         }, 400);
@@ -76,31 +89,17 @@ export default function ProductListCard({
     };
 
     const imgPath = getProductImagePath(p);
+    const variantLabel = getProductVariantLabel(p);
+    const orig = originalListPrice(p);
+    const label = buildStockLabel(p, stock, unavailableStyle);
+    const outOfStock = stock <= 0 && !p.is_pre_order;
 
-    const stockLabel = () => {
-        if (unavailableStyle && p.is_out_of_stock !== false && stock <= 0 && !p.is_pre_order) {
-            return 'Out of stock';
-        }
-        if (p.is_pre_order && stock <= 0) {
-            return 'Pre-order';
-        }
-        if (stock <= 0) return 'Out of stock';
-        if (p.is_low_stock === true || (stock > 0 && stock <= 5)) {
-            return `Only ${Math.floor(stock)} left`;
-        }
-        return 'In Stock';
-    };
-
-    const orig =
-        p.original_price != null && p.original_price > p.price
-            ? p.original_price
-            : p.is_on_sale && (p.list_price ?? 0) > p.price
-              ? p.list_price
-              : undefined;
+    const densityClass = density === 'compact' ? 'product-card--density-compact' : '';
+    const layoutClass = layout === 'rail' ? 'product-card--rail' : '';
 
     return (
         <div
-            className={`product-card product-card--list ${unavailableStyle ? 'product-card--unavailable' : ''}`}
+            className={`product-card product-card--list product-card--v2 ${densityClass} ${layoutClass} ${unavailableStyle ? 'product-card--unavailable' : ''}`}
             role="button"
             tabIndex={0}
             onClick={handleCardClick}
@@ -111,51 +110,59 @@ export default function ProductListCard({
                 }
             }}
         >
-            {onToggleFavorite ? (
-                <button
-                    type="button"
-                    className={`product-card__fav ${isFavorite ? 'product-card__fav--on' : ''}`}
-                    aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleFavorite(p.id);
-                    }}
-                >
-                    {isFavorite ? '♥' : '♡'}
-                </button>
-            ) : null}
-            {p.is_on_sale && (p.discount_percentage ?? 0) > 0 && (
-                <div className="discount-badge">-{Math.round(Number(p.discount_percentage))}%</div>
-            )}
-            <div className="image-wrap image-wrap--list">
-                <CachedImage path={imgPath} alt={p.name} loading="lazy" fallbackLabel={p.name} />
+            <div className="product-card__media">
+                {onToggleFavorite ? (
+                    <button
+                        type="button"
+                        className={`product-card__fav ${isFavorite ? 'product-card__fav--on' : ''}`}
+                        aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleFavorite(p.id);
+                        }}
+                    >
+                        {isFavorite ? '♥' : '♡'}
+                    </button>
+                ) : null}
+                {p.is_on_sale && (p.discount_percentage ?? 0) > 0 && (
+                    <div className="discount-badge discount-badge--card">
+                        -{Math.round(Number(p.discount_percentage))}%
+                    </div>
+                )}
+                <ProductImage path={imgPath} alt={p.name} layout={layout} />
             </div>
-            <div className="info">
-                <div className="name">{p.name}</div>
-                <div className="price-row">
-                    {orig != null && orig > p.price ? (
-                        <span className="price price--was">{formatPrice(orig)}</span>
-                    ) : null}
-                    <span className="price price--dominant">{formatPrice(p.price)}</span>
-                </div>
-                {(Number(p.rating_avg) > 0 || Number(p.rating_count) > 0 || Number(p.total_sales) > 0) && (
+
+            <div className="product-card__body">
+                <div className="product-card__name">{p.name}</div>
+                {variantLabel ? <div className="product-card__variant">{variantLabel}</div> : null}
+
+                <ProductCardPriceSection
+                    price={formatPrice(p.price)}
+                    wasPrice={orig != null && orig > p.price ? formatPrice(orig) : undefined}
+                    stockLabel={label}
+                    outOfStock={outOfStock}
+                />
+
+                {(Number(p.rating_avg) > 0 || Number(p.total_sales) > 0) && density !== 'compact' ? (
                     <div className="product-card__meta">
                         {Number(p.rating_avg) > 0 ? (
                             <span>
                                 ★ {Number(p.rating_avg).toFixed(1)}
-                                {Number(p.rating_count) > 0 ? ` (${Number(p.rating_count).toLocaleString()})` : ''}
+                                {Number(p.rating_count) > 0
+                                    ? ` (${Number(p.rating_count).toLocaleString()})`
+                                    : ''}
                             </span>
                         ) : null}
                         {Number(p.total_sales) > 0 ? (
-                            <span>{Number(p.total_sales) >= 1000 ? `${(Number(p.total_sales) / 1000).toFixed(1)}k` : Number(p.total_sales)} sold</span>
+                            <span>
+                                {Number(p.total_sales) >= 1000
+                                    ? `${(Number(p.total_sales) / 1000).toFixed(1)}k`
+                                    : Number(p.total_sales)}{' '}
+                                sold
+                            </span>
                         ) : null}
                     </div>
-                )}
-                <div
-                    className={`stock-line ${stock <= 0 && !p.is_pre_order ? 'out' : ''}`}
-                >
-                    {stockLabel()}
-                </div>
+                ) : null}
             </div>
 
             <div
@@ -163,39 +170,28 @@ export default function ProductListCard({
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
             >
-                {showStepper ? (
-                    <div className="qty-stepper" role="group" aria-label="Quantity">
-                        <button
-                            type="button"
-                            className="qty-stepper__btn"
-                            aria-label="Decrease quantity"
-                            disabled={unavailableStyle}
-                            onClick={() => onChangeQty(p.id, cartQty - 1)}
-                        >
-                            −
-                        </button>
-                        <span className="qty-stepper__val">{cartQty}</span>
-                        <button
-                            type="button"
-                            className="qty-stepper__btn"
-                            aria-label="Increase quantity"
-                            disabled={unavailableStyle || cartQty >= maxOrderQty}
-                            onClick={() => onChangeQty(p.id, cartQty + 1)}
-                        >
-                            +
-                        </button>
-                    </div>
-                ) : (
-                    <button
-                        type="button"
-                        className="add-btn add-btn--compact"
-                        disabled={unavailableStyle || !canPurchase}
-                        onClick={() => canPurchase && !unavailableStyle && onAddOne(p)}
-                    >
-                        {!canPurchase || unavailableStyle ? 'Unavailable' : '+ Add'}
-                    </button>
-                )}
+                <ProductCardAddButton
+                    cartQty={cartQty}
+                    maxOrderQty={maxOrderQty}
+                    canPurchase={canPurchase}
+                    unavailableStyle={unavailableStyle}
+                    onAddOne={() => onAddOne(p)}
+                    onChangeQty={(q) => onChangeQty(p.id, q)}
+                />
             </div>
         </div>
     );
 }
+
+/** Memoized to avoid re-renders during scroll when unrelated parent state changes. */
+export default memo(ProductListCard, (prev, next) =>
+    prev.product.id === next.product.id &&
+    prev.cartQty === next.cartQty &&
+    prev.unavailableStyle === next.unavailableStyle &&
+    prev.density === next.density &&
+    prev.layout === next.layout &&
+    prev.isFavorite === next.isFavorite &&
+    prev.product.price === next.product.price &&
+    prev.product.name === next.product.name &&
+    getProductStock(prev.product) === getProductStock(next.product),
+);

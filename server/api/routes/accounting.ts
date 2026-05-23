@@ -4,6 +4,7 @@ import { getCoaSeedService } from '../../services/coaSeedService.js';
 import { getDailyReportService } from '../../services/dailyReportService.js';
 import { getDatabaseService } from '../../services/databaseService.js';
 import { checkRole } from '../../middleware/roleMiddleware.js';
+import { tenantTodayYmd } from '../../utils/shopTimezone.js';
 
 const router = express.Router();
 
@@ -349,7 +350,7 @@ router.get('/reports/daily/stream', checkRole(['admin', 'accountant']), async (r
 
 router.get('/reports/daily/summary', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const date = (req.query.date as string) || (await tenantTodayYmd(req.tenantId));
         const raw = (req.query.branchId as string) || '';
         const branchId = raw && raw !== 'all' ? raw : null;
         const data = await getDailyReportService().getSummary(req.tenantId, date, branchId);
@@ -379,7 +380,7 @@ router.get('/reports/daily/profit-summary', checkRole(['admin', 'accountant']), 
 
 router.get('/reports/daily/inventory-out', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const date = (req.query.date as string) || (await tenantTodayYmd(req.tenantId));
         const raw = (req.query.branchId as string) || '';
         const branchId = raw && raw !== 'all' ? raw : null;
         const rows = await getDailyReportService().getInventoryOutDetail(req.tenantId, date, branchId);
@@ -392,7 +393,7 @@ router.get('/reports/daily/inventory-out', checkRole(['admin', 'accountant']), a
 
 router.get('/reports/daily/inventory-in', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const date = (req.query.date as string) || (await tenantTodayYmd(req.tenantId));
         const raw = (req.query.branchId as string) || '';
         const branchId = raw && raw !== 'all' ? raw : null;
         const rows = await getDailyReportService().getInventoryInDetail(req.tenantId, date, branchId);
@@ -405,7 +406,7 @@ router.get('/reports/daily/inventory-in', checkRole(['admin', 'accountant']), as
 
 router.get('/reports/daily/expenses', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const date = (req.query.date as string) || (await tenantTodayYmd(req.tenantId));
         const raw = (req.query.branchId as string) || '';
         const branchId = raw && raw !== 'all' ? raw : null;
         const rows = await getDailyReportService().getExpensesDetail(req.tenantId, date, branchId);
@@ -418,7 +419,7 @@ router.get('/reports/daily/expenses', checkRole(['admin', 'accountant']), async 
 
 router.get('/reports/daily/products-created', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const date = (req.query.date as string) || (await tenantTodayYmd(req.tenantId));
         const rows = await getDailyReportService().getProductsCreated(req.tenantId, date);
         res.json({ rows });
     } catch (error: any) {
@@ -429,7 +430,7 @@ router.get('/reports/daily/products-created', checkRole(['admin', 'accountant'])
 
 router.get('/reports/daily/khata', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
+        const date = (req.query.date as string) || (await tenantTodayYmd(req.tenantId));
         const rows = await getDailyReportService().getKhataDetail(req.tenantId, date);
         res.json({ rows });
     } catch (error: any) {

@@ -1,6 +1,6 @@
 /** In-app notification inbox (order SSE + budget alerts), persisted per shop slug. */
 
-export type NotificationKind = 'order' | 'budget';
+export type NotificationKind = 'order' | 'budget' | 'feedback';
 
 export interface CustomerNotificationItem {
     id: string;
@@ -10,6 +10,7 @@ export interface CustomerNotificationItem {
     createdAt: string;
     read: boolean;
     orderId?: string;
+    feedbackId?: string;
     /** Budget alert stable key for dedupe */
     budgetKey?: string;
 }
@@ -141,6 +142,26 @@ export function clearAll(shopSlug: string) {
     saveRaw(shopSlug, []);
 }
 
+export function appendFeedbackNotification(
+    shopSlug: string,
+    partial: Omit<CustomerNotificationItem, 'read' | 'kind'> & { read?: boolean }
+) {
+    appendOrderNotification(shopSlug, { ...partial, kind: 'feedback' });
+}
+
+export function formatFeedbackEventMessage(payload: Record<string, unknown>): { title: string; body: string } {
+    const event = String(payload.event || '');
+    const preview = payload.messagePreview != null ? String(payload.messagePreview) : '';
+    if (event === 'staff_reply') {
+        return { title: 'Feedback reply', body: preview || 'The shop responded to your feedback.' };
+    }
+    if (event === 'status_updated') {
+        const status = String(payload.status || '');
+        return { title: 'Feedback update', body: status ? `Status: ${status.replace(/_/g, ' ')}` : 'Your feedback status changed.' };
+    }
+    return { title: 'Feedback received', body: 'Thanks — we received your feedback.' };
+}
+
 /** Map server SSE / PG payload to inbox lines (labels aligned with OrderDetail). */
 export function formatOrderEventMessage(payload: Record<string, unknown>): { title: string; body: string } {
     const source = String(payload.source || '');
@@ -185,6 +206,20 @@ export function formatOrderEventMessage(payload: Record<string, unknown>): { tit
         };
     }
 
+    if (source === 'chat_message') {
+        const preview = payload.messagePreview != null ? String(payload.messagePreview) : '';
+        const who =
+            payload.senderRole === 'rider'
+                ? 'Rider'
+                : payload.senderRole === 'shop'
+                  ? 'Shop'
+                  : 'New message';
+        return {
+            title: orderNumber ? `${who} · #${orderNumber}` : who,
+            body: preview || 'You have a new chat message.',
+        };
+    }
+
     if (deliveryStatus && source.startsWith('delivery')) {
         const label = deliveryLabels[deliveryStatus.toUpperCase()] || deliveryStatus.replace(/_/g, ' ');
         return {
@@ -211,5 +246,14 @@ export function makeOrderNotificationId(payload: Record<string, unknown>, channe
     const st = String(payload.status || '');
     const ds = String(payload.deliveryStatus || '');
     const src = String(payload.source || '');
-    return `ord-${oid}-${channel}-${src}-${st}-${ds}-${Date.now()}`;
+    const preview = String(payload.messagePreview || '').slice(0, 40);
+    return `ord-${oid}-${channel}-${src}-${st}-${ds}-${preview}`;
+}
+
+export function makeFeedbackNotificationId(payload: Record<string, unknown>, channel: string) {
+    const fid = String(payload.feedbackId || '');
+    const event = String(payload.event || '');
+    const status = String(payload.status || '');
+    const preview = String(payload.messagePreview || '').slice(0, 40);
+    return `fb-${fid}-${channel}-${event}-${status}-${preview}`;
 }

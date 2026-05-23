@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">OBO Stores</string>
+    <string name="title_activity_main">OBO Stores</string>
+    <string name="package_name">com.obostores.customer</string>
+    <string name="custom_url_scheme">com.obostores.customer</string>
+</resources>

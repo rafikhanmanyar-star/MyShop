@@ -12,8 +12,10 @@ import mobileRoutes from './routes/mobile.js';
 import riderRoutes from './routes/rider.js';
 import mobileOrdersRoutes from './routes/mobileOrders.js';
 import { shopVoiceOrdersRouter, mobileVoiceOrdersRouter } from './routes/voiceOrders.js';
+import { shopOrderCenterRouter } from './routes/orderCenter.js';
 import accountingRoutes from './routes/accounting.js';
 import expensesRoutes from './routes/expenses.js';
+import customerFeedbackRoutes from './routes/customerFeedback.js';
 import procurementRoutes from './routes/procurement.js';
 import procurementDemandRoutes from './routes/procurementDemand.js';
 import shiftsRoutes from './routes/shifts.js';
@@ -25,8 +27,10 @@ import platformTenantsRoutes from './routes/platformTenants.js';
 import platformAuthRoutes from './routes/platformAuth.js';
 import { platformAdminMiddleware } from '../middleware/platformAdminMiddleware.js';
 import { runMigrations } from '../scripts/run-migrations.js';
+import { createUploadsMiddleware } from '../middleware/uploadsMiddleware.js';
 import { getPlatformAuthService } from '../services/platformAuthService.js';
 import { getMobileOrderService } from '../services/mobileOrderService.js';
+import { evaluateVersionCheck } from '../services/appVersionService.js';
 import { fileURLToPath } from 'url';
 import fs from 'node:fs';
 
@@ -44,7 +48,7 @@ const HOST = '0.0.0.0';
 // (e.g. https://myshop-rider.onrender.com) alongside the mobile and POS dev origins.
 const corsOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5180'];
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5180', 'http://localhost:5190'];
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -67,8 +71,8 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Serve uploaded files (HIGHER PRIORITY)
-app.use('/uploads', express.static(uploadsPath));
+// Serve uploaded files (local disk; optional REMOTE_UPLOADS_ORIGIN fallback for cloud DB + local API dev)
+app.use('/uploads', ...createUploadsMiddleware(uploadsPath));
 console.log('📂 Serving uploads from:', uploadsPath);
 
 // Health check (public)
@@ -89,6 +93,46 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/test', (_req, res) => {
   res.json({ message: 'API is working' });
+});
+
+/** Public mobile app version policy (Play Store in-app updates + force-update gate). */
+app.get('/api/app-version', (req, res) => {
+  const currentVersion = String(req.query.currentVersion ?? req.query.version ?? '').trim();
+  const buildRaw = req.query.build ?? req.query.versionCode;
+  const currentBuild =
+    buildRaw != null && buildRaw !== '' ? parseInt(String(buildRaw), 10) : undefined;
+
+  const policyOnly = req.query.policyOnly === '1' || req.query.policyOnly === 'true';
+
+  if (!currentVersion && !policyOnly) {
+    res.status(400).json({ error: 'currentVersion query parameter is required' });
+    return;
+  }
+
+  const evaluation = currentVersion
+    ? evaluateVersionCheck({
+        currentVersion,
+        currentBuild: Number.isFinite(currentBuild) ? currentBuild : undefined,
+      })
+    : null;
+
+  const policy = evaluation?.policy ?? evaluateVersionCheck({ currentVersion: '0.0.0' }).policy;
+
+  res.json({
+    latestVersion: policy.latestVersion,
+    minimumSupportedVersion: policy.minimumSupportedVersion,
+    forceUpdate: policy.forceUpdate,
+    releaseNotes: policy.releaseNotes,
+    ...(policy.minimumAndroidVersionCode != null
+      ? { minimumAndroidVersionCode: policy.minimumAndroidVersionCode }
+      : {}),
+    ...(evaluation
+      ? {
+          updateAvailable: evaluation.updateAvailable,
+          forceUpdateRequired: evaluation.forceUpdateRequired,
+        }
+      : {}),
+  });
 });
 
 // Public routes (no auth required)
@@ -112,8 +156,10 @@ const dbService = getDatabaseService();
 app.use('/api/shop/forecast', tenantMiddleware(dbService), forecastRoutes);
 app.use('/api/shop/mobile-orders', tenantMiddleware(dbService), mobileOrdersRoutes);
 app.use('/api/shop/voice-orders', tenantMiddleware(dbService), shopVoiceOrdersRouter);
+app.use('/api/shop/order-center', tenantMiddleware(dbService), shopOrderCenterRouter);
 app.use('/api/shop/accounting', tenantMiddleware(dbService), accountingRoutes);
 app.use('/api/shop/expenses', tenantMiddleware(dbService), expensesRoutes);
+app.use('/api/shop/customer-feedback', tenantMiddleware(dbService), customerFeedbackRoutes);
 app.use('/api/shop/procurement/demand', tenantMiddleware(dbService), procurementDemandRoutes);
 app.use('/api/shop/procurement', tenantMiddleware(dbService), procurementRoutes);
 app.use('/api/shop/shifts', tenantMiddleware(dbService), shiftsRoutes);

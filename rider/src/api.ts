@@ -12,7 +12,6 @@ function getApiBaseUrl(): string {
 
 const API_BASE = `${getApiBaseUrl()}/rider`;
 
-/** Stage 11: EventSource URL (token in query; browsers cannot set Authorization on EventSource). */
 export function getRiderStreamUrl(): string {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('rider_token') : null;
   const qs = new URLSearchParams();
@@ -62,8 +61,13 @@ export type RiderOrderRow = {
   distance_km?: number | null;
   accepted_at?: string | null;
   created_at: string;
-  /** Customer-requested delivery time (ISO) */
   estimated_delivery_at?: string | null;
+  payment_method?: string | null;
+  delivery_notes?: string | null;
+  item_count?: number;
+  cod_expected?: number | null;
+  cod_collected?: number | null;
+  arrived_at?: string | null;
 };
 
 export type RiderOrdersResponse = {
@@ -71,13 +75,48 @@ export type RiderOrdersResponse = {
   hasMore: boolean;
 };
 
+export type RiderSummary = {
+  assigned_pending: number;
+  pickup_pending: number;
+  deliveries_pending: number;
+  delivered_today: number;
+  cod_collected_today: number;
+  cod_pending: number;
+  rider?: { name?: string; status?: string };
+};
+
+export type RiderCashSummary = {
+  cod_pending: number;
+  cod_collected_today: number;
+  orders: Array<{
+    order_id: string;
+    order_number: string;
+    status: string;
+    expected: number;
+    collected: number | null;
+  }>;
+};
+
+export type DeliveryProofPayload = {
+  proofType?: 'otp' | 'signature' | 'photo' | 'qr';
+  proofData?: string;
+  codCollected?: number;
+};
+
+export type FailedDeliveryPayload = {
+  reason: string;
+  notes?: string;
+  proofData?: string;
+};
+
 export const riderApi = {
   login: (body: { phone: string; password: string; shopSlug: string }) =>
     request('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   getMe: () => request('/me') as Promise<RiderProfile>,
+  getSummary: () => request('/summary') as Promise<RiderSummary>,
+  getCashSummary: () => request('/cash-summary') as Promise<RiderCashSummary>,
   postLocation: (body: { latitude: number; longitude: number }) =>
     request('/location', { method: 'POST', body: JSON.stringify(body) }),
-  /** Online = AVAILABLE, Offline = OFFLINE */
   postStatus: (body: { status: 'AVAILABLE' | 'OFFLINE' }) =>
     request('/status', { method: 'POST', body: JSON.stringify(body) }),
   getOrders: (opts?: { bucket?: RiderOrderBucket; limit?: number; offset?: number }) => {
@@ -95,8 +134,85 @@ export const riderApi = {
     request(`/orders/${encodeURIComponent(orderId)}/picked`, { method: 'POST', body: '{}' }),
   onTheWay: (orderId: string) =>
     request(`/orders/${encodeURIComponent(orderId)}/on-the-way`, { method: 'POST', body: '{}' }),
-  delivered: (orderId: string) =>
-    request(`/orders/${encodeURIComponent(orderId)}/delivered`, { method: 'POST', body: '{}' }),
+  arrived: (orderId: string) =>
+    request(`/orders/${encodeURIComponent(orderId)}/arrived`, { method: 'POST', body: '{}' }),
+  delivered: (orderId: string, body?: DeliveryProofPayload) =>
+    request(`/orders/${encodeURIComponent(orderId)}/delivered`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
+  failed: (orderId: string, body: FailedDeliveryPayload) =>
+    request(`/orders/${encodeURIComponent(orderId)}/failed`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   reject: (orderId: string) =>
     request(`/orders/${encodeURIComponent(orderId)}/reject`, { method: 'POST', body: '{}' }),
+
+  getAnalytics: (days = 7) =>
+    request(`/analytics?days=${days}`) as Promise<RiderAnalytics>,
+
+  getOptimizedRoute: () => request('/route/optimize') as Promise<OptimizedRoute>,
+
+  getPushPublicKey: () => request('/push/vapid-public-key') as Promise<{ publicKey: string | null }>,
+
+  subscribePush: (subscription: PushSubscriptionJSON) =>
+    request('/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription }) }),
+
+  getChatThreads: () => request('/chat/threads') as Promise<{ threads: ChatThread[] }>,
+
+  getChatMessages: (orderId: string) =>
+    request(`/chat/${encodeURIComponent(orderId)}`) as Promise<{ messages: ChatMessage[] }>,
+
+  sendChatMessage: (orderId: string, body: string) =>
+    request(`/chat/${encodeURIComponent(orderId)}`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    }) as Promise<ChatMessage>,
+};
+
+export type ChatMessage = {
+  id: string;
+  sender_role: 'rider' | 'shop' | 'customer';
+  sender_id: string | null;
+  body: string;
+  created_at: string;
+};
+
+export type ChatThread = {
+  order_id: string;
+  order_number: string;
+  customer_name: string;
+  delivery_status: string;
+  last_message?: string | null;
+  last_message_at?: string | null;
+};
+
+export type RiderAnalytics = {
+  period_days: number;
+  delivered_today: number;
+  total_deliveries: number;
+  completed: number;
+  failed: number;
+  success_rate: number;
+  cod_collected: number;
+  avg_delivery_minutes: number | null;
+  distance_km: number;
+  customer_rating: number | null;
+  daily: Array<{ day: string; deliveries: number; cod: number }>;
+};
+
+export type OptimizedRoute = {
+  stops: Array<{
+    order_id: string;
+    order_number: string;
+    sequence: number;
+    customer_name: string;
+    delivery_address: string;
+    leg_km: number | null;
+    leg_minutes: number | null;
+  }>;
+  total_km: number;
+  total_minutes: number;
+  origin?: { lat: number; lng: number };
 };

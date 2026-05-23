@@ -19,6 +19,10 @@ interface CachedImageProps {
     fallbackLabel?: string;
     /** Extra classes for the fallback label block (e.g. hero size on product detail). */
     fallbackClassName?: string;
+    /** Fires when the underlying img finishes loading (for smart fit detection). */
+    onLoad?: React.ReactEventHandler<HTMLImageElement>;
+    /** Fires when image, text fallback, or icon placeholder is shown. */
+    onReady?: () => void;
 }
 
 /** Renders an img that uses local cached blob when available, so images load offline. */
@@ -31,6 +35,8 @@ export default function CachedImage({
     fallbackToPlaceholder = true,
     fallbackLabel,
     fallbackClassName,
+    onLoad,
+    onReady,
 }: CachedImageProps) {
     const src = useImageUrl(path);
     const [error, setError] = useState(false);
@@ -42,6 +48,10 @@ export default function CachedImage({
     const useNameFallback = Boolean(fallbackLabel?.trim());
     const showFallback = useNameFallback && (!path || !src || error);
     const showIconFallback = !useNameFallback && fallbackToPlaceholder && (!path || !src || error);
+
+    useEffect(() => {
+        if (showFallback || showIconFallback) onReady?.();
+    }, [showFallback, showIconFallback, onReady]);
 
     if (showFallback) {
         return (
@@ -71,6 +81,7 @@ export default function CachedImage({
             className={className}
             style={style}
             loading={loading}
+            onLoad={onLoad}
             onError={() => setError(true)}
         />
     );

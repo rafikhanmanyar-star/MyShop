@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { ICONS } from '../../../constants';
 
 export type CatalogFilterId = 'all' | 'fast' | 'recent' | 'favorites' | 'promotions' | 'low-stock';
@@ -11,32 +11,6 @@ const FILTER_CHIPS: { id: CatalogFilterId; label: string }[] = [
     { id: 'promotions', label: 'Promotions' },
     { id: 'low-stock', label: 'Low stock' },
 ];
-
-const POS_RECENT_SEARCHES_KEY = 'pos-recent-searches';
-const MAX_RECENT_SEARCHES = 8;
-
-function loadRecentSearches(): string[] {
-    try {
-        const raw = localStorage.getItem(POS_RECENT_SEARCHES_KEY);
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed.filter((s) => typeof s === 'string').slice(0, MAX_RECENT_SEARCHES) : [];
-    } catch {
-        return [];
-    }
-}
-
-function saveRecentSearch(query: string) {
-    const q = query.trim();
-    if (!q || q.length < 2) return;
-    try {
-        const prev = loadRecentSearches().filter((s) => s.toLowerCase() !== q.toLowerCase());
-        const next = [q, ...prev].slice(0, MAX_RECENT_SEARCHES);
-        localStorage.setItem(POS_RECENT_SEARCHES_KEY, JSON.stringify(next));
-    } catch {
-        /* ignore */
-    }
-}
 
 type ProductCatalogHeaderProps = {
     localQuery: string;
@@ -57,35 +31,7 @@ export default function ProductCatalogHeader({
     showFastMovingStrip,
     onToggleFastMovingStrip,
 }: ProductCatalogHeaderProps) {
-    const [suggestionsOpen, setSuggestionsOpen] = useState(false);
-    const [recentSearches, setRecentSearches] = useState<string[]>(loadRecentSearches);
     const wrapperRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        setRecentSearches(loadRecentSearches());
-    }, [localQuery]);
-
-    useEffect(() => {
-        const onDocDown = (e: MouseEvent) => {
-            if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-                setSuggestionsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', onDocDown);
-        return () => document.removeEventListener('mousedown', onDocDown);
-    }, []);
-
-    const commitSearch = useCallback(
-        (q: string) => {
-            onQueryChange(q);
-            saveRecentSearch(q);
-            setRecentSearches(loadRecentSearches());
-            setSuggestionsOpen(false);
-        },
-        [onQueryChange]
-    );
-
-    const showSuggestions = suggestionsOpen && !localQuery && recentSearches.length > 0;
 
     return (
         <div
@@ -111,15 +57,6 @@ export default function ProductCatalogHeader({
                         placeholder="Search or scan barcode… (F1)"
                         value={localQuery}
                         onChange={(e) => onQueryChange(e.target.value)}
-                        onFocus={() => setSuggestionsOpen(true)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && localQuery.trim()) {
-                                saveRecentSearch(localQuery);
-                                setSuggestionsOpen(false);
-                            }
-                        }}
-                        aria-expanded={showSuggestions}
-                        aria-controls="pos-search-suggestions"
                     />
                     <div className="absolute inset-y-0 right-3 flex items-center gap-2">
                         {localQuery ? (
@@ -135,31 +72,6 @@ export default function ProductCatalogHeader({
                         <span className="kbd-tag">F1</span>
                     </div>
                 </div>
-
-                {showSuggestions ? (
-                    <ul
-                        id="pos-search-suggestions"
-                        role="listbox"
-                        className="absolute left-4 right-4 top-[calc(100%-4px)] z-40 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800"
-                    >
-                        <li className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            Recent searches
-                        </li>
-                        {recentSearches.map((term) => (
-                            <li key={term}>
-                                <button
-                                    type="button"
-                                    role="option"
-                                    className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700/80"
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => commitSearch(term)}
-                                >
-                                    {term}
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                ) : null}
             </div>
 
             <div className="pos-filter-chips-scroll flex gap-2 overflow-x-auto px-4 pb-3 no-scrollbar">
@@ -196,5 +108,3 @@ export default function ProductCatalogHeader({
         </div>
     );
 }
-
-export { saveRecentSearch, POS_RECENT_SEARCHES_KEY };

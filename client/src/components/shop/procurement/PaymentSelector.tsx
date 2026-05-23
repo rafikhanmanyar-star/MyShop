@@ -1,5 +1,6 @@
 import React from 'react';
 import Select from '../../ui/Select';
+import { formatPayFromAccountLabel, type PayFromAccountOption } from '../../../utils/payFromAccounts';
 
 export type PaymentStatus = 'Credit' | 'Paid' | 'Partial';
 
@@ -9,9 +10,9 @@ export interface PaymentSelectorProps {
   paidAmount: number;
   onPaidAmountChange: (n: number) => void;
   totalAmount: number;
-  bankAccountId: string;
-  onBankAccountChange: (id: string) => void;
-  bankAccounts: { id: string; name: string }[];
+  chartAccountId: string;
+  onChartAccountChange: (id: string) => void;
+  payFromAccounts: PayFromAccountOption[];
   disabled?: boolean;
 }
 
@@ -27,18 +28,18 @@ export default function PaymentSelector({
   paidAmount,
   onPaidAmountChange,
   totalAmount,
-  bankAccountId,
-  onBankAccountChange,
-  bankAccounts,
+  chartAccountId,
+  onChartAccountChange,
+  payFromAccounts,
   disabled,
 }: PaymentSelectorProps) {
-  const showBankFields = value === 'Paid' || value === 'Partial';
+  const showPayFrom = value === 'Paid' || value === 'Partial';
 
   return (
     <div
-      className={`grid grid-cols-1 gap-2 xl:items-end ${showBankFields ? 'xl:grid-cols-4' : ''}`}
+      className={`grid grid-cols-1 gap-2 xl:items-end ${showPayFrom ? 'xl:grid-cols-4' : ''}`}
     >
-      <div className={`min-w-0 ${showBankFields ? 'xl:col-span-2' : ''}`}>
+      <div className={`min-w-0 ${showPayFrom ? 'xl:col-span-2' : ''}`}>
         <label className="label mb-0.5 block">Payment</label>
         <div className="flex flex-wrap gap-0.5 rounded-lg border border-border bg-card p-0.5">
           {segments.map((s) => {
@@ -88,17 +89,28 @@ export default function PaymentSelector({
           />
         </div>
       )}
-      {showBankFields && (
+      {showPayFrom && (
         <div>
-          <label className="label mb-0.5 block">Bank account</label>
-          <Select value={bankAccountId} onChange={(e) => onBankAccountChange(e.target.value)} className="w-full">
-            <option value="">Cash</option>
-            {bankAccounts.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </Select>
+          <label className="label mb-0.5 block">Pay from</label>
+          {payFromAccounts.length > 0 ? (
+            <Select
+              value={chartAccountId}
+              onChange={(e) => onChartAccountChange(e.target.value)}
+              className="w-full"
+              disabled={disabled}
+            >
+              <option value="">Select account…</option>
+              {payFromAccounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {formatPayFromAccountLabel(acc)}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Add a cash or bank Asset account in Settings → Chart of Accounts.
+            </p>
+          )}
         </div>
       )}
     </div>

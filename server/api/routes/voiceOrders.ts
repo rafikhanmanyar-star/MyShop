@@ -144,6 +144,23 @@ shopVoiceOrdersRouter.get('/:id', checkRole(['admin', 'pos_cashier']), async (re
     }
 });
 
+shopVoiceOrdersRouter.post('/:id/cancel', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
+    try {
+        const { reason, note, notifyCustomer } = req.body;
+        if (!reason) return res.status(400).json({ error: 'reason required' });
+        const order = await getVoiceOrderService().cancelVoiceOrder(req.tenantId, req.params.id, {
+            reason,
+            note,
+            notifyCustomer: !!notifyCustomer,
+            changedBy: req.userId || 'shop_user',
+            changedByType: 'shop_user',
+        });
+        res.json(order);
+    } catch (e: any) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
 shopVoiceOrdersRouter.post('/:id/status', checkRole(['admin', 'pos_cashier']), async (req: any, res) => {
     try {
         const { status, note } = req.body;

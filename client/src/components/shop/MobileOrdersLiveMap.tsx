@@ -32,14 +32,26 @@ function courierProgressIndex(ds: string | null | undefined): number {
 
 const STEPS = ['Picked up', 'On the way', 'Arriving soon'] as const;
 
+type LivePos = Record<string, { lat: number; lng: number; status?: string }>;
+
 type InnerProps = {
     apiKey: string;
     branding: ShopBranding | null;
     selectedOrder: MobileOrder | null;
     riders: PosRidersOverview['riders'];
+    liveRiderPositions?: LivePos;
 };
 
-function MobileOrdersLiveMapInner({ apiKey, branding, selectedOrder, riders }: InnerProps) {
+function riderPosition(
+    r: PosRidersOverview['riders'][0],
+    live?: LivePos
+): { lat: number; lng: number } | null {
+    const liveP = live?.[r.id];
+    if (liveP) return { lat: liveP.lat, lng: liveP.lng };
+    return parseLatLng(r.current_latitude, r.current_longitude);
+}
+
+function MobileOrdersLiveMapInner({ apiKey, branding, selectedOrder, riders, liveRiderPositions }: InnerProps) {
     const { isLoaded, loadError } = useJsApiLoader({
         id: 'pos-mobile-orders-google-maps',
         googleMapsApiKey: apiKey,
@@ -66,13 +78,19 @@ function MobileOrdersLiveMapInner({ apiKey, branding, selectedOrder, riders }: I
         [selectedOrder?.delivery_lat, selectedOrder?.delivery_lng]
     );
 
-    const orderRider = useMemo(
-        () =>
-            selectedOrder
-                ? parseLatLng(selectedOrder.rider_latitude, selectedOrder.rider_longitude)
-                : null,
-        [selectedOrder?.rider_latitude, selectedOrder?.rider_longitude]
-    );
+    const orderRider = useMemo(() => {
+        if (!selectedOrder) return null;
+        const rid = selectedOrder.rider_id;
+        if (rid && liveRiderPositions?.[rid]) {
+            return { lat: liveRiderPositions[rid].lat, lng: liveRiderPositions[rid].lng };
+        }
+        return parseLatLng(selectedOrder.rider_latitude, selectedOrder.rider_longitude);
+    }, [
+        selectedOrder?.rider_id,
+        selectedOrder?.rider_latitude,
+        selectedOrder?.rider_longitude,
+        liveRiderPositions,
+    ]);
 
     const center = useMemo(() => {
         if (customer) return customer;
@@ -137,7 +155,7 @@ function MobileOrdersLiveMapInner({ apiKey, branding, selectedOrder, riders }: I
         if (customer) extend(customer);
         if (orderRider) extend(orderRider);
         riders.forEach((r) => {
-            const p = parseLatLng(r.current_latitude, r.current_longitude);
+            const p = riderPosition(r, liveRiderPositions);
             if (p) extend(p);
         });
         if (n >= 2) {
@@ -203,7 +221,7 @@ function MobileOrdersLiveMapInner({ apiKey, branding, selectedOrder, riders }: I
                     />
                 ) : null}
                 {riders.map((r) => {
-                    const p = parseLatLng(r.current_latitude, r.current_longitude);
+                    const p = riderPosition(r, liveRiderPositions);
                     if (!p) return null;
                     const letter = (r.name || '?').trim().slice(0, 1).toUpperCase();
                     return (
@@ -317,6 +335,7 @@ export function MobileOrdersLiveMap({
     branding,
     selectedOrder,
     riders,
+    liveRiderPositions,
 }: Omit<InnerProps, 'apiKey'>) {
     const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined)?.trim();
     if (!apiKey) {
@@ -331,5 +350,13 @@ export function MobileOrdersLiveMap({
             </div>
         );
     }
-    return <MobileOrdersLiveMapInner apiKey={apiKey} branding={branding} selectedOrder={selectedOrder} riders={riders} />;
+    return (
+        <MobileOrdersLiveMapInner
+            apiKey={apiKey}
+            branding={branding}
+            selectedOrder={selectedOrder}
+            riders={riders}
+            liveRiderPositions={liveRiderPositions}
+        />
+    );
 }

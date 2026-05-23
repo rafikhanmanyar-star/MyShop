@@ -1,4 +1,5 @@
 import { getDatabaseService } from './databaseService.js';
+import { calendarDayBoundsForTenant } from '../utils/shopTimezone.js';
 
 export interface DailyReportSummary {
   date: string;
@@ -30,16 +31,9 @@ export interface DailyReportSummary {
   netProfitDaily: number;
 }
 
-function dayRangeUtc(dateStr: string): { start: string; end: string } {
-  const start = new Date(`${dateStr}T00:00:00.000Z`);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-
 export class DailyReportService {
   async getSummary(tenantId: string, dateStr: string, branchId: string | null): Promise<DailyReportSummary> {
-    const { start, end } = dayRangeUtc(dateStr);
+    const { start, end } = await calendarDayBoundsForTenant(tenantId, dateStr);
     const db = getDatabaseService();
 
     const pos = await db.query<{ s: string }>(
@@ -274,7 +268,7 @@ export class DailyReportService {
 
   async getKhataDetail(tenantId: string, dateStr: string) {
     const db = getDatabaseService();
-    const { start, end } = dayRangeUtc(dateStr);
+    const { start, end } = await calendarDayBoundsForTenant(tenantId, dateStr);
     return db.query(
       `SELECT k.id,
               k.created_at::text AS created_at,
@@ -294,7 +288,7 @@ export class DailyReportService {
 
   async getInventoryOutDetail(tenantId: string, dateStr: string, branchId: string | null) {
     const db = getDatabaseService();
-    const { start, end } = dayRangeUtc(dateStr);
+    const { start, end } = await calendarDayBoundsForTenant(tenantId, dateStr);
     return db.query(
       `SELECT m.product_id AS item_id,
               p.name AS item_name,
@@ -314,7 +308,7 @@ export class DailyReportService {
 
   async getInventoryInDetail(tenantId: string, dateStr: string, branchId: string | null) {
     const db = getDatabaseService();
-    const { start, end } = dayRangeUtc(dateStr);
+    const { start, end } = await calendarDayBoundsForTenant(tenantId, dateStr);
     return db.query(
       `SELECT m.product_id AS item_id,
               p.name AS item_name,
@@ -355,7 +349,7 @@ export class DailyReportService {
 
   async getProductsCreated(tenantId: string, dateStr: string) {
     const db = getDatabaseService();
-    const { start, end } = dayRangeUtc(dateStr);
+    const { start, end } = await calendarDayBoundsForTenant(tenantId, dateStr);
     return db.query(
       `SELECT p.sku,
               p.name AS product_name,

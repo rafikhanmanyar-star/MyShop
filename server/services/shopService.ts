@@ -6,7 +6,20 @@ import { insertSystemLog } from './systemLogService.js';
 import { COA } from '../constants/accountCodes.js';
 import { fetchUnitCostForProduct } from '../utils/productUnitCost.js';
 import { parsePakistanMobile, pakistanMobileDigitsToE164 } from '../utils/pakistanMobile.js';
-import { deductInventoryFefo, insertReturnRestockBatch } from './inventoryBatchService.js';
+import {
+  deductInventoryFefo,
+  getSellableQuantityForWarehouse,
+  insertReturnRestockBatch,
+  resolveWarehouseForSaleDeduction,
+} from './inventoryBatchService.js';
+import {
+  clampHomePromoIntervalSeconds,
+  homePromoSlidesToStoredJson,
+  parseHomePromoSlides,
+  preserveHomePromoSlidesStored,
+} from './homePromoSlides.js';
+
+export { parseHomePromoSlides } from './homePromoSlides.js';
 
 /** Strip absolute URLs (e.g. http://localhost:3001/uploads/...) to relative paths for DB storage. */
 function normalizeImageUrl(url: string | null | undefined): string | null {
@@ -16,49 +29,6 @@ function normalizeImageUrl(url: string | null | undefined): string | null {
     try { return new URL(trimmed).pathname; } catch { return trimmed; }
   }
   return trimmed;
-}
-
-/** Mobile home promo carousel (stored as JSON text / tenant_branding.home_promo_slides). */
-export function parseHomePromoSlides(raw: unknown): { image_url: string; link_url: string | null }[] {
-  if (raw == null || raw === '') return [];
-  let arr: unknown[] = [];
-  if (typeof raw === 'string') {
-    try {
-      const p = JSON.parse(raw);
-      arr = Array.isArray(p) ? p : [];
-    } catch {
-      return [];
-    }
-  } else if (Array.isArray(raw)) {
-    arr = raw;
-  } else {
-    return [];
-  }
-  const out: { image_url: string; link_url: string | null }[] = [];
-  for (const x of arr) {
-    if (!x || typeof x !== 'object') continue;
-    const img = normalizeImageUrl(String((x as { image_url?: string }).image_url || '').trim()) || '';
-    if (!img) continue;
-    const linkRaw = (x as { link_url?: unknown }).link_url;
-    const link =
-      linkRaw == null || String(linkRaw).trim() === '' ? null : String(linkRaw).trim();
-    out.push({ image_url: img, link_url: link });
-    if (out.length >= 10) break;
-  }
-  return out;
-}
-
-function homePromoSlidesToStoredJson(input: unknown): string {
-  return JSON.stringify(parseHomePromoSlides(input));
-}
-
-function preserveHomePromoSlidesStored(existingRaw: unknown): string {
-  if (existingRaw == null || existingRaw === '') return '[]';
-  if (typeof existingRaw === 'string') {
-    const t = existingRaw.trim();
-    return t || '[]';
-  }
-  return homePromoSlidesToStoredJson(existingRaw);
 }
 
 function trimTextField(val: unknown): string | null {
@@ -1399,7 +1369,11 @@ export class ShopService {
     if (!saleData?.items?.length) {
       throw new Error('Sale must have at least one item');
     }
-    const saleProductIds = [...new Set(saleData.items.map((i) => i.productId))];
+    let customerId = saleData.customerId ?? null;
+    if (customerId === 'walk-in' || customerId === '') customerId = null;
+    const salePayload = { ...saleData, customerId };
+
+    const saleProductIds = [...new Set(salePayload.items.map((i) => i.productId))];
     const blockedForSale = await this.db.query(
       `SELECT name FROM shop_products WHERE tenant_id = $1 AND id = ANY($2::text[]) AND COALESCE(sales_deactivated, FALSE) = TRUE`,
       [tenantId, saleProductIds]
@@ -1410,25 +1384,25 @@ export class ShopService {
         `Cannot sell deactivated SKU(s): ${names}. Open the product in Inventory and turn off "Deactivate for sales" to sell it again.`
       );
     }
-    const paymentDetails = Array.isArray(saleData.paymentDetails) ? saleData.paymentDetails : [];
-    const barcodeValue = `SALE|${tenantId}|${saleData.saleNumber}`;
+    const paymentDetails = Array.isArray(salePayload.paymentDetails) ? salePayload.paymentDetails : [];
+    const barcodeValue = `SALE|${tenantId}|${salePayload.saleNumber}`;
 
-    let resolvedLoyaltyMemberId: string | null = saleData.loyaltyMemberId ?? null;
-    if (!resolvedLoyaltyMemberId && saleData.customerId) {
+    let resolvedLoyaltyMemberId: string | null = salePayload.loyaltyMemberId ?? null;
+    if (!resolvedLoyaltyMemberId && customerId) {
       const lm = await this.db.query(
         'SELECT id FROM shop_loyalty_members WHERE tenant_id = $1 AND customer_id = $2 LIMIT 1',
-        [tenantId, saleData.customerId]
+        [tenantId, customerId]
       );
       if (lm.length > 0) resolvedLoyaltyMemberId = lm[0].id as string;
     }
 
     const existingSale = await this.db.query<{ id: string; barcode_value: string | null }>(
       `SELECT id, barcode_value FROM shop_sales WHERE tenant_id = $1 AND sale_number = $2 LIMIT 1`,
-      [tenantId, saleData.saleNumber]
+      [tenantId, salePayload.saleNumber]
     );
     if (existingSale.length > 0) {
       const row = existingSale[0];
-      const bc = row.barcode_value || `SALE|${tenantId}|${saleData.saleNumber}`;
+      const bc = row.barcode_value || `SALE|${tenantId}|${salePayload.saleNumber}`;
       return { id: row.id, barcode_value: bc, duplicate: true as const };
     }
 
@@ -1443,60 +1417,79 @@ export class ShopService {
         RETURNING id
       `, [
         tenantId,
-        saleData.branchId ?? null,
-        saleData.terminalId ?? null,
-        saleData.userId ?? null,
-        saleData.customerId ?? null,
+        salePayload.branchId ?? null,
+        salePayload.terminalId ?? null,
+        salePayload.userId ?? null,
+        customerId,
         resolvedLoyaltyMemberId,
-        saleData.saleNumber,
-        saleData.subtotal,
-        saleData.taxTotal,
-        saleData.discountTotal,
-        saleData.grandTotal,
-        saleData.totalPaid,
-        saleData.changeDue,
-        saleData.paymentMethod ?? 'Cash',
+        salePayload.saleNumber,
+        salePayload.subtotal,
+        salePayload.taxTotal,
+        salePayload.discountTotal,
+        salePayload.grandTotal,
+        salePayload.totalPaid,
+        salePayload.changeDue,
+        salePayload.paymentMethod ?? 'Cash',
         JSON.stringify(paymentDetails),
-        saleData.shiftId ?? null,
+        salePayload.shiftId ?? null,
         barcodeValue
       ]);
 
       const saleId = saleRes[0].id;
 
       const itemsWithCost: ShopSaleItem[] = [];
-      for (const item of saleData.items) {
+      for (const item of salePayload.items) {
         const fallbackUnitCost = await fetchUnitCostForProduct(client, tenantId, item.productId);
 
-        let warehouseId: string | null = null;
-        if (saleData.branchId) {
-          const branchWh = await client.query(
-            'SELECT id FROM shop_warehouses WHERE id = $1 AND tenant_id = $2 LIMIT 1',
-            [saleData.branchId, tenantId]
-          );
-          if (branchWh.length > 0) warehouseId = branchWh[0].id;
-        }
-        if (!warehouseId) {
-          const whRes = await client.query('SELECT id FROM shop_warehouses WHERE tenant_id = $1 LIMIT 1', [tenantId]);
-          if (whRes.length > 0) warehouseId = whRes[0].id;
-        }
+        const warehouseId = await resolveWarehouseForSaleDeduction(
+          client,
+          tenantId,
+          item.productId,
+          item.quantity,
+          salePayload.branchId ?? null
+        );
 
-        let unitCostForLine = fallbackUnitCost;
-        if (warehouseId) {
-          try {
-            const fefo = await deductInventoryFefo(
+        if (!warehouseId) {
+          const productRows = await client.query(
+            'SELECT name FROM shop_products WHERE tenant_id = $1 AND id = $2 LIMIT 1',
+            [tenantId, item.productId]
+          );
+          const productName = productRows[0]?.name || item.productId;
+          let totalSellable = 0;
+          const whRows = await client.query(
+            'SELECT id FROM shop_warehouses WHERE tenant_id = $1',
+            [tenantId]
+          );
+          for (const wh of whRows as { id: string }[]) {
+            totalSellable += await getSellableQuantityForWarehouse(
               client,
               tenantId,
               item.productId,
-              warehouseId,
-              item.quantity,
-              saleId
+              wh.id
             );
-            if (fefo.weightedUnitCost != null && fefo.weightedUnitCost > 0) {
-              unitCostForLine = fefo.weightedUnitCost;
-            }
-          } catch (e: any) {
-            throw new Error(e?.message || String(e));
           }
+          const rounded = Math.max(0, Math.round(totalSellable * 100) / 100);
+          throw new Error(
+            `Insufficient stock for "${productName}". Sellable across all warehouses: ${rounded}, requested: ${item.quantity}. ` +
+              'Transfer stock to your POS branch warehouse in Inventory, or reduce quantity.'
+          );
+        }
+
+        let unitCostForLine = fallbackUnitCost;
+        try {
+          const fefo = await deductInventoryFefo(
+            client,
+            tenantId,
+            item.productId,
+            warehouseId,
+            item.quantity,
+            saleId
+          );
+          if (fefo.weightedUnitCost != null && fefo.weightedUnitCost > 0) {
+            unitCostForLine = fefo.weightedUnitCost;
+          }
+        } catch (e: any) {
+          throw new Error(e?.message || String(e));
         }
 
         itemsWithCost.push({ ...item, unitCostAtSale: unitCostForLine });
@@ -1514,12 +1507,12 @@ export class ShopService {
           await client.query(`
             INSERT INTO shop_inventory_movements (tenant_id, product_id, warehouse_id, type, quantity, reference_id, user_id, unit_cost, total_cost)
             VALUES ($1, $2, $3, 'Sale', $4, $5, $6, $7, $8)
-          `, [tenantId, item.productId, warehouseId, -item.quantity, saleId, saleData.userId, unitCost, totalCost]);
+          `, [tenantId, item.productId, warehouseId, -item.quantity, saleId, salePayload.userId, unitCost, totalCost]);
         }
       }
 
       if (resolvedLoyaltyMemberId) {
-        const pointsEarned = Math.floor(saleData.grandTotal / 100);
+        const pointsEarned = Math.floor(salePayload.grandTotal / 100);
         await client.query(`
           UPDATE shop_loyalty_members
           SET points_balance = points_balance + $1,
@@ -1527,35 +1520,45 @@ export class ShopService {
               total_spend = total_spend + $2,
               visit_count = visit_count + 1
           WHERE id = $3 AND tenant_id = $4
-        `, [pointsEarned, saleData.grandTotal, resolvedLoyaltyMemberId, tenantId]);
+        `, [pointsEarned, salePayload.grandTotal, resolvedLoyaltyMemberId, tenantId]);
         await client.query(`UPDATE shop_sales SET points_earned = $1 WHERE id = $2 AND tenant_id = $3`, [pointsEarned, saleId, tenantId]);
       }
 
-      if (saleData.paymentDetails && Array.isArray(saleData.paymentDetails)) {
+      if (salePayload.paymentDetails && Array.isArray(salePayload.paymentDetails)) {
         // Only record the actual sale amount (grandTotal) in bank accounts, not the full tendered amount.
         // If customer pays 1000 for a 250 item, only 250 goes into the cash account.
         // The 750 change/refund is physical cash returned and should NOT inflate the books.
-        let remainingToAllocate = saleData.grandTotal;
-        for (const payment of saleData.paymentDetails) {
-          if (payment.bankAccountId && remainingToAllocate > 0) {
-            const effectiveAmount = Math.min(payment.amount, remainingToAllocate);
-            remainingToAllocate -= effectiveAmount;
+        let remainingToAllocate = salePayload.grandTotal;
+        for (const payment of salePayload.paymentDetails) {
+          if (remainingToAllocate <= 0) break;
+          const effectiveAmount = Math.min(payment.amount, remainingToAllocate);
+          remainingToAllocate -= effectiveAmount;
+          let bankId = payment.bankAccountId as string | undefined;
+          if (!bankId && payment.chartAccountId) {
+            const linked = await client.query(
+              `SELECT id FROM shop_bank_accounts
+               WHERE tenant_id = $1 AND chart_account_id = $2 AND is_active = TRUE LIMIT 1`,
+              [tenantId, payment.chartAccountId]
+            );
+            if (linked.length > 0) bankId = linked[0].id;
+          }
+          if (bankId) {
             await client.query(`
               UPDATE shop_bank_accounts 
               SET balance = COALESCE(balance, 0) + $1, updated_at = NOW() 
               WHERE id = $2 AND tenant_id = $3
-            `, [effectiveAmount, payment.bankAccountId, tenantId]);
+            `, [effectiveAmount, bankId, tenantId]);
           }
         }
       }
 
-      await this.postSaleToAccounting(client, saleId, tenantId, { ...saleData, items: itemsWithCost });
+      await this.postSaleToAccounting(client, saleId, tenantId, { ...salePayload, items: itemsWithCost });
 
       // --- UPDATE BUDGET ACTUALS (if customer linked) ---
-      if (saleData.customerId) {
+      if (customerId) {
         try {
           const { getBudgetService } = await import('./budgetService.js');
-          await getBudgetService().updateActualsFromOrder(client, tenantId, saleData.customerId, saleData.items.map(i => ({
+          await getBudgetService().updateActualsFromOrder(client, tenantId, customerId, salePayload.items.map(i => ({
             productId: i.productId,
             quantity: i.quantity,
             subtotal: i.subtotal
@@ -1566,12 +1569,12 @@ export class ShopService {
       }
 
       // --- Khata / Credit: add debit entry to khata_ledger (customer credit system)
-      const isKhata = (saleData.paymentMethod || '').toLowerCase().includes('khata');
-      if (isKhata && saleData.customerId && saleData.grandTotal > 0) {
+      const isKhata = (salePayload.paymentMethod || '').toLowerCase().includes('khata');
+      if (isKhata && customerId && salePayload.grandTotal > 0) {
         await client.query(
           `INSERT INTO khata_ledger (tenant_id, customer_id, order_id, type, amount, note)
            VALUES ($1, $2, $3, 'debit', $4, $5)`,
-          [tenantId, saleData.customerId, saleId, saleData.grandTotal, `Sale ${saleData.saleNumber}`]
+          [tenantId, customerId, saleId, salePayload.grandTotal, `Sale ${salePayload.saleNumber}`]
         );
       }
 
@@ -1639,7 +1642,18 @@ export class ShopService {
         remainingToAllocate -= effectiveAmount;
 
         let debitAccId;
-        if (p.bankAccountId) {
+        if (p.chartAccountId) {
+          const accRows = await client.query(
+            `SELECT id, type, code FROM accounts
+             WHERE id = $1 AND tenant_id = $2 AND COALESCE(is_active, TRUE) = TRUE`,
+            [p.chartAccountId, tenantId]
+          );
+          if (accRows.length === 0) throw new Error('Payment account not found in Chart of Accounts.');
+          if (accRows[0].type !== 'Asset') {
+            throw new Error('POS payment account must be an Asset account from Chart of Accounts.');
+          }
+          debitAccId = p.chartAccountId;
+        } else if (p.bankAccountId) {
           const [bank] = await client.query(
             'SELECT name, account_type, chart_account_id FROM shop_bank_accounts WHERE id = $1 AND tenant_id = $2',
             [p.bankAccountId, tenantId]
@@ -2034,6 +2048,7 @@ export class ShopService {
     points_value: number;
     redemption_ratio: number;
     last_updated: string | null;
+    tier: string | null;
   }> {
     const mcRows = await this.db.query(
       `SELECT COALESCE(c.phone_number, mc.phone) AS phone
@@ -2049,9 +2064,10 @@ export class ShopService {
 
     let totalPoints = 0;
     let lastUpdated: string | null = null;
+    let tier: string | null = null;
     if (phone) {
       const memberRows = await this.db.query(
-        `SELECT m.points_balance, m.updated_at
+        `SELECT m.points_balance, m.updated_at, m.tier
          FROM shop_loyalty_members m
          INNER JOIN contacts c ON c.id = m.customer_id AND c.tenant_id = m.tenant_id
          WHERE m.tenant_id = $1
@@ -2071,6 +2087,7 @@ export class ShopService {
         totalPoints = Math.max(0, parseInt(String(memberRows[0].points_balance), 10) || 0);
         const u = memberRows[0].updated_at;
         lastUpdated = u ? new Date(u).toISOString() : null;
+        tier = memberRows[0].tier ? String(memberRows[0].tier) : null;
       }
     }
 
@@ -2090,7 +2107,44 @@ export class ShopService {
       points_value: pointsValue,
       redemption_ratio: ratio,
       last_updated: lastUpdated,
+      tier,
     };
+  }
+
+  /** Delivered mobile orders that earned loyalty points for this customer. */
+  async getLoyaltyHistoryForMobileCustomer(
+    tenantId: string,
+    mobileCustomerId: string,
+    limit: number = 50
+  ): Promise<
+    Array<{
+      order_id: string;
+      order_number: string;
+      status: string;
+      grand_total: number;
+      points_earned: number;
+      created_at: string;
+    }>
+  > {
+    const safeLimit = Math.min(Math.max(1, Math.floor(limit) || 50), 100);
+    const rows = await this.db.query(
+      `SELECT o.id, o.order_number, o.status, o.grand_total,
+              COALESCE(o.points_earned, 0)::int AS points_earned, o.created_at
+       FROM mobile_orders o
+       WHERE o.tenant_id = $1 AND o.customer_id = $2 AND COALESCE(o.points_earned, 0) > 0
+       ORDER BY o.created_at DESC
+       LIMIT $3`,
+      [tenantId, mobileCustomerId, safeLimit]
+    );
+    return rows.map((r: any) => ({
+      order_id: String(r.id),
+      order_number: String(r.order_number),
+      status: String(r.status),
+      grand_total: parseFloat(String(r.grand_total)) || 0,
+      points_earned: parseInt(String(r.points_earned), 10) || 0,
+      created_at:
+        r.created_at instanceof Date ? r.created_at.toISOString() : new Date(r.created_at).toISOString(),
+    }));
   }
 
   /**
@@ -2567,27 +2621,40 @@ export class ShopService {
         [tenantId]
       );
       const row = defaultRes[0];
-      return { ...row, home_promo_slides: parseHomePromoSlides(row.home_promo_slides) };
+      return this.formatTenantBrandingRow(row);
     }
     const row = res[0];
-    return { ...row, home_promo_slides: parseHomePromoSlides(row.home_promo_slides) };
+    return this.formatTenantBrandingRow(row);
+  }
+
+  private formatTenantBrandingRow(row: any) {
+    return {
+      ...row,
+      home_promo_slides: parseHomePromoSlides(row.home_promo_slides),
+      home_promo_interval_seconds: clampHomePromoIntervalSeconds(row.home_promo_interval_seconds),
+    };
   }
 
   async updateTenantBranding(tenantId: string, data: any) {
-    const existingSlides = await this.db.query(
-      `SELECT home_promo_slides FROM tenant_branding WHERE tenant_id = $1`,
+    const existing = await this.db.query(
+      `SELECT home_promo_slides, home_promo_interval_seconds FROM tenant_branding WHERE tenant_id = $1`,
       [tenantId]
     );
     const slidesStored =
       data.home_promo_slides !== undefined
         ? homePromoSlidesToStoredJson(data.home_promo_slides)
-        : preserveHomePromoSlidesStored(existingSlides[0]?.home_promo_slides);
+        : preserveHomePromoSlidesStored(existing[0]?.home_promo_slides);
+    const intervalSec =
+      data.home_promo_interval_seconds !== undefined
+        ? clampHomePromoIntervalSeconds(data.home_promo_interval_seconds)
+        : clampHomePromoIntervalSeconds(existing[0]?.home_promo_interval_seconds);
 
     const res = await this.db.query(
       `INSERT INTO tenant_branding (
         tenant_id, logo_url, logo_dark_url, primary_color, secondary_color,
-        accent_color, font_family, theme_mode, address, lat, lng, home_promo_slides, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+        accent_color, font_family, theme_mode, address, lat, lng,
+        home_promo_slides, home_promo_interval_seconds, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
       ON CONFLICT (tenant_id) DO UPDATE SET
         logo_url = EXCLUDED.logo_url,
         logo_dark_url = EXCLUDED.logo_dark_url,
@@ -2600,16 +2667,17 @@ export class ShopService {
         lat = EXCLUDED.lat,
         lng = EXCLUDED.lng,
         home_promo_slides = EXCLUDED.home_promo_slides,
+        home_promo_interval_seconds = EXCLUDED.home_promo_interval_seconds,
         updated_at = NOW()
       RETURNING *`,
       [
         tenantId, data.logo_url, data.logo_dark_url, data.primary_color,
         data.secondary_color, data.accent_color, data.font_family, data.theme_mode,
-        data.address, data.lat, data.lng, slidesStored
+        data.address, data.lat, data.lng, slidesStored, intervalSec
       ]
     );
     const row = res[0];
-    return { ...row, home_promo_slides: parseHomePromoSlides(row.home_promo_slides) };
+    return this.formatTenantBrandingRow(row);
   }
 
   // --- POS Settings ---
@@ -3041,6 +3109,114 @@ export class ShopService {
       [tenantId, userId]
     );
     await notifyDailyReportUpdated(tenantId, 'settings_edit_lock_changed');
+  }
+
+  /**
+   * Aggregated dashboard KPIs + alert rows in one round-trip (replaces loading full product/sales/inventory lists on the client).
+   */
+  async getDashboardOverview(tenantId: string) {
+    const [statsRows, lowStockRows, pendingRows] = await Promise.all([
+      this.db.query(
+        `
+        WITH sales_union AS (
+          SELECT grand_total, created_at FROM shop_sales WHERE tenant_id = $1
+          UNION ALL
+          SELECT grand_total, created_at FROM mobile_orders
+            WHERE tenant_id = $1 AND status = 'Delivered'
+        )
+        SELECT
+          (SELECT COUNT(*)::int FROM shop_products
+            WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE) AS "totalProducts",
+          (SELECT COUNT(*)::int FROM sales_union) AS "totalSales",
+          (SELECT COALESCE(SUM(grand_total::numeric), 0)::float8 FROM sales_union) AS "totalRevenue",
+          (SELECT COALESCE(SUM(total_return_amount::numeric), 0)::float8
+            FROM shop_sales_returns WHERE tenant_id = $1) AS "totalReturns",
+          (SELECT COUNT(*)::int FROM shop_loyalty_members WHERE tenant_id = $1) AS "totalCustomers",
+          (SELECT COUNT(*)::int FROM shop_inventory i
+            WHERE i.tenant_id = $1
+              AND COALESCE(i.quantity_on_hand, 0) > 0
+              AND COALESCE(i.quantity_on_hand, 0) <= 10) AS "lowStockItems",
+          (SELECT COUNT(*)::int FROM shop_inventory i
+            WHERE i.tenant_id = $1 AND COALESCE(i.quantity_on_hand, 0) <= 0) AS "outOfStockItems",
+          (SELECT COUNT(*)::int FROM shop_branches WHERE tenant_id = $1) AS "branchesCount",
+          (SELECT COUNT(*)::int FROM shop_terminals WHERE tenant_id = $1) AS "terminalsCount",
+          (SELECT COUNT(*)::int FROM categories
+            WHERE tenant_id = $1 AND type = 'product' AND deleted_at IS NULL) AS "categoriesCount",
+          (SELECT COUNT(*)::int FROM shop_vendors WHERE tenant_id = $1) AS "vendorsCount",
+          (SELECT COUNT(*)::int FROM sales_union WHERE created_at >= CURRENT_DATE) AS "todaySalesCount",
+          (SELECT COALESCE(SUM(grand_total::numeric), 0)::float8 FROM sales_union
+            WHERE created_at >= CURRENT_DATE) AS "todayRevenue",
+          (SELECT COUNT(*)::int FROM mobile_orders
+            WHERE tenant_id = $1 AND LOWER(COALESCE(status, '')) = 'pending') AS "mobileOrdersPending"
+        `,
+        [tenantId]
+      ),
+      this.db.query(
+        `
+        SELECT
+          COALESCE(p.name, p.sku, 'Item') AS name,
+          i.quantity_on_hand AS qty
+        FROM shop_inventory i
+        JOIN shop_products p ON p.id = i.product_id AND p.tenant_id = $1
+        WHERE i.tenant_id = $1
+          AND COALESCE(i.quantity_on_hand, 0) > 0
+          AND COALESCE(i.quantity_on_hand, 0) <= 10
+        ORDER BY i.quantity_on_hand ASC
+        LIMIT 6
+        `,
+        [tenantId]
+      ),
+      this.db.query(
+        `
+        SELECT o.id, o.order_number AS "orderNumber", COALESCE(mc.name, '—') AS customer
+        FROM mobile_orders o
+        LEFT JOIN mobile_customers mc ON mc.id = o.customer_id AND mc.tenant_id = $1
+        WHERE o.tenant_id = $1 AND LOWER(COALESCE(o.status, '')) = 'pending'
+        ORDER BY o.created_at DESC
+        LIMIT 6
+        `,
+        [tenantId]
+      ),
+    ]);
+
+    const row = statsRows[0] || {};
+    const totalRevenue = Number(row.totalRevenue) || 0;
+    const totalReturns = Number(row.totalReturns) || 0;
+    const totalSales = Number(row.totalSales) || 0;
+    const netRevenue = Math.max(0, totalRevenue - totalReturns);
+
+    return {
+      stats: {
+        totalProducts: Number(row.totalProducts) || 0,
+        totalSales,
+        totalRevenue,
+        totalReturns,
+        netRevenue,
+        totalCustomers: Number(row.totalCustomers) || 0,
+        lowStockItems: Number(row.lowStockItems) || 0,
+        outOfStockItems: Number(row.outOfStockItems) || 0,
+        branchesCount: Number(row.branchesCount) || 0,
+        terminalsCount: Number(row.terminalsCount) || 0,
+        categoriesCount: Number(row.categoriesCount) || 0,
+        vendorsCount: Number(row.vendorsCount) || 0,
+        todaySalesCount: Number(row.todaySalesCount) || 0,
+        todayRevenue: Number(row.todayRevenue) || 0,
+        avgOrderValue: totalSales > 0 ? totalRevenue / totalSales : 0,
+        mobileOrdersPending: Number(row.mobileOrdersPending) || 0,
+      },
+      lowStockRows: lowStockRows.map((r: { name: string; qty: string | number }) => {
+        const q = parseFloat(String(r.qty)) || 0;
+        return {
+          name: String(r.name),
+          qty: q % 1 === 0 ? String(q) : q.toFixed(1),
+        };
+      }),
+      pendingOrders: pendingRows.map((r: { id: string; orderNumber: string; customer: string }) => ({
+        id: String(r.id),
+        orderNumber: String(r.orderNumber ?? '—'),
+        customer: String(r.customer ?? '—'),
+      })),
+    };
   }
 }
 

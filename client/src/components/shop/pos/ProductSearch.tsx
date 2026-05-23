@@ -16,7 +16,7 @@ import ProductCatalogHeader, { CatalogFilterId } from './ProductCatalogHeader';
 import ProductGrid from './ProductGrid';
 import ProductGridSkeleton from './ProductGridSkeleton';
 import ProductCard from './ProductCard';
-import { computePosCatalogColumnCount } from './posProductCardUtils';
+import { computeBranchStockForPos, computePosCatalogColumnCount } from './posProductCardUtils';
 import {
     loadFavoriteProductIds,
     loadRecentProductIds,
@@ -139,73 +139,6 @@ function mapInventoryItemToPOS(item: InventoryItem): POSProduct {
     };
 }
 
-/** On-hand vs sellable at a branch. "Expired" only when shortfall is not fully explained by reservations. */
-function computeBranchStockForPos(
-    inv: InventoryItem | undefined,
-    selectedBranchId: string | null
-): {
-    branchOnHand: number;
-    branchSellable: number;
-    onlyExpiredStock: boolean;
-    /** No POS sellable units because everything at this branch is reserved (e.g. mobile). */
-    branchFullyReserved: boolean;
-} {
-    if (!inv) {
-        return { branchOnHand: 0, branchSellable: 0, onlyExpiredStock: false, branchFullyReserved: false };
-    }
-    const whStock = inv.warehouseStock || {};
-    const whSell = inv.warehouseSellable || {};
-    const whRes = inv.warehouseReserved || {};
-    const hasWhSell = Object.keys(whSell).length > 0;
-    const nWh = Object.keys(whStock).length;
-
-    const branchOnHand = selectedBranchId
-        ? Math.max(0, Number(whStock[selectedBranchId] ?? 0))
-        : Math.max(0, Number(inv.onHand ?? 0));
-
-    /** Reserved qty attributed to this branch (mobile orders, etc.) */
-    let branchReserved = 0;
-    if (selectedBranchId != null && selectedBranchId !== '') {
-        if (Object.prototype.hasOwnProperty.call(whRes, selectedBranchId)) {
-            branchReserved = Math.max(0, Number(whRes[selectedBranchId]));
-        } else if (
-            Object.keys(whRes).length === 0 &&
-            Object.keys(whStock).length === 1 &&
-            Object.keys(whStock)[0] === selectedBranchId
-        ) {
-            branchReserved = Math.max(0, Number(inv.reserved ?? 0));
-        }
-    } else {
-        branchReserved = Math.max(0, Number(inv.reserved ?? 0));
-    }
-
-    let branchSellable: number;
-    if (!selectedBranchId) {
-        branchSellable = Math.max(0, Number(inv.sellableOnHand ?? inv.available ?? 0));
-    } else if (hasWhSell) {
-        branchSellable = Math.max(0, Number(whSell[selectedBranchId] ?? 0));
-    } else if (nWh <= 1) {
-        const oh = Math.max(0, Number(whStock[selectedBranchId] ?? inv.onHand ?? 0));
-        const tot = Math.max(0, Number(inv.sellableOnHand ?? inv.available ?? 0));
-        branchSellable = Math.min(oh, tot);
-    } else {
-        branchSellable = Math.max(0, Number(whStock[selectedBranchId] ?? 0));
-    }
-
-    const eps = 1e-6;
-    /** All units at this branch/on aggregate are reserved → not an expiry labeling issue */
-    const branchFullyReserved =
-        branchOnHand > eps && branchSellable <= eps && branchReserved + eps >= branchOnHand;
-
-    const onlyExpiredStock =
-        branchOnHand > eps &&
-        branchSellable <= eps &&
-        !branchFullyReserved &&
-        (hasWhSell || nWh <= 1);
-
-    return { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved };
-}
-
 /** When catalog is API-backed but inventory row is missing, still open the SKU editor from grid data. */
 function posProductToInventoryStub(p: POSProduct): InventoryItem {
     return {
@@ -298,6 +231,7 @@ const ProductSearch: React.FC = () => {
         addToCart,
         searchQuery,
         setSearchQuery,
+        setFocusedCatalogProduct,
         selectedBranchId,
         isDenseMode,
         isPaymentModalOpen,
@@ -774,6 +708,15 @@ const ProductSearch: React.FC = () => {
         recentProductIds,
         favoriteProductIds,
     ]);
+
+    useEffect(() => {
+        if (keyboardIndex >= 0 && filteredProducts[keyboardIndex]) {
+            const p = filteredProducts[keyboardIndex];
+            setFocusedCatalogProduct({ name: p.name, unitPrice: p.price });
+        } else {
+            setFocusedCatalogProduct(null);
+        }
+    }, [keyboardIndex, filteredProducts, setFocusedCatalogProduct]);
 
     // Keyboard navigation
     useEffect(() => {

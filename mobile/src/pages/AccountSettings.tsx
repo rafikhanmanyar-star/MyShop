@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { authApi, customerApi } from '../api';
+import { isNativeAndroid, triggerTestCrash } from '../services/firebaseNative';
+import PermissionStatusSection from '../components/permissions/PermissionStatusSection';
 
 interface Profile {
     id: string;
@@ -314,6 +316,25 @@ export default function AccountSettings() {
                         {pwSaving ? <span className="spinner" style={{ width: 20, height: 20 }} /> : 'Update password'}
                     </button>
                 </form>
+
+                <PermissionStatusSection />
+
+                {import.meta.env.DEV && isNativeAndroid() && (
+                    <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px dashed var(--border-light)' }}>
+                        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Developer tools</h2>
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>
+                            Native Android only. Sends a test crash to Firebase Crashlytics.
+                        </p>
+                        <button
+                            type="button"
+                            className="btn btn-full"
+                            style={{ padding: 14, fontSize: 14, background: '#b91c1c', color: '#fff' }}
+                            onClick={() => void triggerTestCrash()}
+                        >
+                            Test Crashlytics crash
+                        </button>
+                    </div>
+                )}
 
                 <p className="app-version-foot">App version {__APP_VERSION__}</p>
             </div>

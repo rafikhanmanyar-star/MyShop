@@ -4,6 +4,10 @@ import { riderAuthMiddleware } from '../../middleware/riderMiddleware.js';
 import { getRiderAuthService } from '../../services/riderAuthService.js';
 import { getRiderDeliveryService } from '../../services/riderDeliveryService.js';
 import { getRiderService } from '../../services/riderService.js';
+import { getDeliveryChatService } from '../../services/deliveryChatService.js';
+import { getRiderRouteOptimizationService } from '../../services/riderRouteOptimizationService.js';
+import { getRiderAnalyticsService } from '../../services/riderAnalyticsService.js';
+import { getPushNotificationService } from '../../services/pushNotificationService.js';
 
 const router = express.Router();
 const db = getDatabaseService();
@@ -65,6 +69,24 @@ router.post('/auth/login', async (req: any, res) => {
     }
 });
 
+router.get('/summary', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const out = await getRiderDeliveryService().getDashboardSummary(req.tenantId, req.riderId);
+        res.json(out);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/cash-summary', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const out = await getRiderDeliveryService().getCashSummary(req.tenantId, req.riderId);
+        res.json(out);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.get('/orders', riderAuthMiddleware(db), async (req: any, res) => {
     try {
         const q = req.query as Record<string, string | undefined>;
@@ -107,6 +129,26 @@ router.get('/stream', riderAuthMiddleware(db), async (req: any, res) => {
     let pgClient: any = null;
 
     const forwardIfRelevant = (payload: Record<string, unknown>) => {
+        if (payload.source === 'rider_location' && payload.riderId === riderId) {
+            res.write(`data: ${JSON.stringify({ type: 'rider_location', ...payload })}\n\n`);
+            return;
+        }
+        if (payload.source === 'chat_message') {
+            void (async () => {
+                try {
+                    const rows = await db.query(
+                        `SELECT 1 FROM delivery_orders WHERE tenant_id = $1 AND rider_id = $2 AND order_id = $3 LIMIT 1`,
+                        [tenantId, riderId, payload.orderId]
+                    );
+                    if (rows.length > 0) {
+                        res.write(`data: ${JSON.stringify({ type: 'chat_message', ...payload })}\n\n`);
+                    }
+                } catch {
+                    /* ignore */
+                }
+            })();
+            return;
+        }
         if (payload.riderId === riderId) {
             res.write(`data: ${JSON.stringify({ type: 'order_updated', ...payload })}\n\n`);
             return;
@@ -210,9 +252,142 @@ router.post('/orders/:orderId/reject', riderAuthMiddleware(db), async (req: any,
     }
 });
 
+router.post('/orders/:orderId/arrived', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const out = await getRiderDeliveryService().markArrived(
+            req.tenantId,
+            req.riderId,
+            req.params.orderId
+        );
+        res.json(out);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
 router.post('/orders/:orderId/delivered', riderAuthMiddleware(db), async (req: any, res) => {
     try {
-        const out = await getRiderDeliveryService().markDelivered(req.tenantId, req.riderId, req.params.orderId);
+        const { proofType, proofData, codCollected } = req.body || {};
+        const out = await getRiderDeliveryService().markDelivered(
+            req.tenantId,
+            req.riderId,
+            req.params.orderId,
+            {
+                proofType,
+                proofData,
+                codCollected: codCollected != null ? Number(codCollected) : undefined,
+            }
+        );
+        res.json(out);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.get('/analytics', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const days = req.query.days ? parseInt(String(req.query.days), 10) : 7;
+        const out = await getRiderAnalyticsService().getRiderAnalytics(req.tenantId, req.riderId, days);
+        res.json(out);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/route/optimize', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const me = await getRiderService().getById(req.tenantId, req.riderId);
+        const lat =
+            me?.current_latitude != null ? parseFloat(String(me.current_latitude)) : NaN;
+        const lng =
+            me?.current_longitude != null ? parseFloat(String(me.current_longitude)) : NaN;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return res.status(400).json({ error: 'Enable GPS to optimize your route.' });
+        }
+        const out = await getRiderRouteOptimizationService().optimizeForRider(
+            req.tenantId,
+            req.riderId,
+            lat,
+            lng
+        );
+        res.json(out);
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/push/vapid-public-key', (_req, res) => {
+    res.json({ publicKey: getPushNotificationService().getPublicKey() });
+});
+
+router.post('/push/subscribe', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { subscription } = req.body;
+        if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+            return res.status(400).json({ error: 'Invalid push subscription' });
+        }
+        await getPushNotificationService().upsertSubscription(
+            req.tenantId,
+            'rider',
+            req.riderId,
+            subscription,
+            req.headers['user-agent'] as string
+        );
+        res.json({ ok: true });
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.get('/chat/threads', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const threads = await getDeliveryChatService().listThreadsForRider(req.tenantId, req.riderId);
+        res.json({ threads });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/chat/:orderId', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const messages = await getDeliveryChatService().listMessages(
+            req.tenantId,
+            req.params.orderId,
+            100,
+            { riderId: req.riderId }
+        );
+        res.json({ messages });
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.post('/chat/:orderId', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { body } = req.body;
+        const msg = await getDeliveryChatService().sendMessage(
+            req.tenantId,
+            req.params.orderId,
+            'rider',
+            req.riderId,
+            body,
+            { riderId: req.riderId }
+        );
+        res.json(msg);
+    } catch (error: any) {
+        res.status(400).json({ error: error.message });
+    }
+});
+
+router.post('/orders/:orderId/failed', riderAuthMiddleware(db), async (req: any, res) => {
+    try {
+        const { reason, notes, proofData } = req.body || {};
+        const out = await getRiderDeliveryService().markFailed(
+            req.tenantId,
+            req.riderId,
+            req.params.orderId,
+            { reason, notes, proofData }
+        );
         res.json(out);
     } catch (error: any) {
         res.status(400).json({ error: error.message });

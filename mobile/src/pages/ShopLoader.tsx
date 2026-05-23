@@ -8,6 +8,7 @@ import FloatingCartBar from '../components/FloatingCartBar';
 import CustomerNotificationsBridge from '../components/CustomerNotificationsBridge';
 import OrderAcceptanceClosedBanner from '../components/OrderAcceptanceClosedBanner';
 import OrderAcceptanceClosedLoginModal from '../components/OrderAcceptanceClosedLoginModal';
+import PermissionOnboardingModal from '../components/permissions/PermissionOnboardingModal';
 import { getShop, setShop } from '../services/offlineCache';
 import { syncCatalogForShop } from '../services/catalogSync';
 import type { TenantBranding, HomePromoSlide } from '../context/AppContext';
@@ -21,6 +22,7 @@ const DEFAULT_BRANDING: TenantBranding = {
     font_family: 'system-ui',
     theme_mode: 'light',
     home_promo_slides: [],
+    home_promo_interval_seconds: 5,
 };
 
 function normalizeBrandingFromApi(raw: unknown): TenantBranding | null {
@@ -35,7 +37,13 @@ function normalizeBrandingFromApi(raw: unknown): TenantBranding | null {
         }
     }
     if (!Array.isArray(slides)) slides = [];
-    return { ...b, home_promo_slides: slides as HomePromoSlide[] };
+    const intervalRaw = (b as { home_promo_interval_seconds?: unknown }).home_promo_interval_seconds;
+    const intervalSec = Number(intervalRaw);
+    const home_promo_interval_seconds =
+        Number.isFinite(intervalSec) && intervalSec >= 3 && intervalSec <= 30
+            ? Math.round(intervalSec)
+            : 5;
+    return { ...b, home_promo_slides: slides as HomePromoSlide[], home_promo_interval_seconds };
 }
 
 function applyBranding(shopData: { shop: { company_name?: string; name: string; brand_color?: string } }, brandingData: { primary_color?: string; secondary_color?: string; accent_color?: string } | null) {
@@ -59,15 +67,23 @@ export default function ShopLoader() {
     const { state, dispatch, cartCount } = useApp();
     // Hide over Utilities flows so list actions (e.g. My Menu) aren’t covered above the tab bar.
     const base = shopSlug ? `/${shopSlug}` : '';
+    const productsPath = `${base}/products`;
+    const isHomePage = pathname === base || pathname === `${base}/`;
+    const isBrowsePage =
+        pathname === productsPath || pathname.startsWith(`${productsPath}?`);
     const hideFloatingCart =
         !!shopSlug &&
         (pathname === `${base}/utilities` ||
+            pathname.startsWith(`${base}/utilities/`) ||
+            pathname.startsWith(`${base}/feedback`) ||
             pathname.startsWith(`${base}/budget`) ||
             pathname.startsWith(`${base}/recipes`) ||
             pathname.startsWith(`${base}/my-menu`) ||
-            pathname.startsWith(`${base}/menu-planner`));
+            pathname.startsWith(`${base}/menu-planner`) ||
+            pathname.startsWith(`${base}/products/`));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [permissionOnboarding, setPermissionOnboarding] = useState(true);
 
     useEffect(() => {
         if (!shopSlug) return;
@@ -121,6 +137,33 @@ export default function ShopLoader() {
             .finally(() => setLoading(false));
     }, [shopSlug]);
 
+    /** Refresh branding (home promo carousel, colors) from API without reloading the whole shop. */
+    useEffect(() => {
+        if (!shopSlug || !state.shop || !state.settings) return;
+        const shop = state.shop;
+        const settings = state.settings;
+        let cancelled = false;
+        publicApi
+            .getBranding(shopSlug)
+            .then((brandingData) => {
+                if (cancelled) return;
+                const branding = normalizeBrandingFromApi(brandingData);
+                if (!branding) return;
+                dispatch({
+                    type: 'SET_SHOP',
+                    slug: shopSlug,
+                    shop,
+                    settings,
+                    branding,
+                });
+                setShop(shopSlug, { shop, settings, branding }).catch(() => {});
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [shopSlug, state.shop, state.settings]);
+
     if (loading) {
         return (
             <div className="loading-page fade-in">
@@ -162,23 +205,29 @@ export default function ShopLoader() {
         );
     }
 
+    const outletClass = [
+        'shop-outlet',
+        isHomePage ? 'shop-outlet--home' : '',
+        isBrowsePage ? 'shop-outlet--browse' : '',
+        cartCount > 0 && !hideFloatingCart ? 'shop-outlet--cart-pad' : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+
     return (
-        <>
+        <div className="shop-shell">
             <CustomerNotificationsBridge />
             <Header />
             <OrderAcceptanceClosedLoginModal />
             <OrderAcceptanceClosedBanner />
-            <div
-                className={
-                    cartCount > 0 && !hideFloatingCart
-                        ? 'shop-outlet shop-outlet--cart-pad'
-                        : 'shop-outlet'
-                }
-            >
+            <div className={outletClass}>
                 <Outlet />
             </div>
             {!hideFloatingCart && <FloatingCartBar />}
             <BottomNav />
-        </>
+            {permissionOnboarding ? (
+                <PermissionOnboardingModal onComplete={() => setPermissionOnboarding(false)} />
+            ) : null}
+        </div>
     );
 }

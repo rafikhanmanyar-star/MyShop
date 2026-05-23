@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "next dev --turbopack -p 5190",
-    "build": "npm run generate:images && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "generate:images": "node scripts/generate-images.mjs"
