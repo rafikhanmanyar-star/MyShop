@@ -550,6 +550,10 @@ router.get('/inventory/skus', async (req: any, res) => {
       req.query.skipCache === '1' ||
       req.query.skipCache === 'true' ||
       req.query.refresh === '1';
+    const forPos =
+      req.query.forPos === '1' ||
+      req.query.forPos === 'true' ||
+      req.query.pos === '1';
     const result = await getShopService().listInventorySkus(req.tenantId, {
       page,
       limit,
@@ -558,6 +562,7 @@ router.get('/inventory/skus', async (req: any, res) => {
       sortBy,
       sortDir,
       skipCache,
+      forPos,
     });
     res.setHeader('X-Response-Time-Ms', String(Date.now() - t0));
     res.json({ ...result, routeMs: Date.now() - t0 });

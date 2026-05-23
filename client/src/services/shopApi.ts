@@ -212,6 +212,8 @@ export const shopApi = {
     sortDir?: 'asc' | 'desc';
     /** Bypass server SKU list cache after procurement / adjustments */
     skipCache?: boolean;
+    /** Faster POS catalog (large tenants like oBo grocery). */
+    forPos?: boolean;
   }) => {
     const q = new URLSearchParams();
     if (params?.page != null) q.set('page', String(params.page));
@@ -221,6 +223,7 @@ export const shopApi = {
     if (params?.sortBy) q.set('sortBy', params.sortBy);
     if (params?.sortDir) q.set('sortDir', params.sortDir);
     if (params?.skipCache) q.set('skipCache', '1');
+    if (params?.forPos) q.set('forPos', '1');
     const qs = q.toString();
     return apiClient.get<{
       items: any[];

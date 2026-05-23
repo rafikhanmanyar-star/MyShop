@@ -980,6 +980,8 @@ export class ShopService {
       skipCache?: boolean;
       /** When set, only rows whose product or related inventory row changed after this ISO timestamp (for incremental sync). */
       updatedSince?: string;
+      /** POS catalog load: skip expensive per-product expiry aggregation. */
+      forPos?: boolean;
     } = {}
   ) {
     const t0 = Date.now();
@@ -989,6 +991,7 @@ export class ShopService {
     const searchRaw = (options.search ?? '').trim();
     const stockFilter = (options.stockFilter ?? 'all').toLowerCase();
     const skipCache = options.skipCache === true;
+    const forPos = options.forPos === true;
     const updatedSince =
       options.updatedSince && !Number.isNaN(Date.parse(options.updatedSince))
         ? options.updatedSince
@@ -1023,7 +1026,7 @@ export class ShopService {
     const orderExpr = INVENTORY_SKU_SORT_SQL[sortKey];
     const sortDirSql = options.sortDir === 'desc' ? 'DESC' : 'ASC';
 
-    const cacheKey = `${tenantId}:${page}:${limit}:${searchRaw}:${stockFilter}:${updatedSince || '—'}:${sortKey}:${sortDirSql}`;
+    const cacheKey = `${tenantId}:${page}:${limit}:${searchRaw}:${stockFilter}:${updatedSince || '—'}:${sortKey}:${sortDirSql}:${forPos ? 'pos' : 'full'}`;
     if (!skipCache && !updatedSince) {
       const hit = inventorySkuListCache.get(cacheKey);
       if (hit && hit.expiresAt > Date.now()) {
@@ -1067,6 +1070,30 @@ export class ShopService {
       p++;
     }
 
+    const includeExpiryAgg = !forPos || stockFilter === 'near_expiry';
+    const nearestExpiryCte = includeExpiryAgg
+      ? `,
+      nearest_expiry AS (
+        SELECT product_id,
+          MIN(expiry_date) FILTER (
+            WHERE expiry_date IS NOT NULL AND expiry_date >= CURRENT_DATE
+          ) AS nearest_expiry
+        FROM inventory_batches
+        WHERE tenant_id = $1 AND quantity_remaining > 0
+        GROUP BY product_id
+      )`
+      : '';
+    const filteredFrom = includeExpiryAgg
+      ? `SELECT pa.*, ne.nearest_expiry
+        FROM pa
+        LEFT JOIN nearest_expiry ne ON ne.product_id = pa.id
+        WHERE TRUE
+          ${stockClause}`
+      : `SELECT pa.*, NULL::date AS nearest_expiry
+        FROM pa
+        WHERE TRUE
+          ${stockClause}`;
+
     const sql = `
       WITH batch_sellable AS (
         SELECT tenant_id, product_id, warehouse_id,
@@ -1103,16 +1130,7 @@ export class ShopService {
         LEFT JOIN batch_wh bw
           ON bw.tenant_id = i.tenant_id AND bw.product_id = i.product_id AND bw.warehouse_id = i.warehouse_id
         WHERE i.tenant_id = $1
-      ),
-      nearest_expiry AS (
-        SELECT product_id,
-          MIN(expiry_date) FILTER (
-            WHERE expiry_date IS NOT NULL AND expiry_date >= CURRENT_DATE
-          ) AS nearest_expiry
-        FROM inventory_batches
-        WHERE tenant_id = $1 AND quantity_remaining > 0
-        GROUP BY product_id
-      ),
+      )${nearestExpiryCte},
       inv_agg AS (
         SELECT
           ie.product_id,
@@ -1174,11 +1192,7 @@ export class ShopService {
           ${searchClause}
       ),
       filtered AS (
-        SELECT pa.*, ne.nearest_expiry
-        FROM pa
-        LEFT JOIN nearest_expiry ne ON ne.product_id = pa.id
-        WHERE TRUE
-          ${stockClause}
+        ${filteredFrom}
       ),
       counted AS (
         SELECT f.*, COUNT(*) OVER ()::int AS __total
@@ -3031,6 +3045,7 @@ export class ShopService {
       page: 1,
       limit: 10000,
       skipCache: true,
+      forPos: true,
     });
 
     return {

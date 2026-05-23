@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useCallback, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useRef, startTransition } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
     InventoryItem,
@@ -357,6 +357,15 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const refreshInFlightRef = useRef<Promise<void> | null>(null);
     const lastRefreshAtRef = useRef(0);
     const MIN_REFRESH_INTERVAL_MS = 30_000;
+    const LARGE_CATALOG_THRESHOLD = 200;
+
+    const applyCatalogItems = useCallback((next: InventoryItem[]) => {
+        if (next.length >= LARGE_CATALOG_THRESHOLD) {
+            startTransition(() => setItems(next));
+        } else {
+            setItems(next);
+        }
+    }, []);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [movements, setMovements] = useState<StockMovement[]>([]);
@@ -428,9 +437,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     const whLocal = mapWarehouseRows(localWhRows);
                     if (whLocal.length > 0) setWarehouses(whLocal);
                     const mappedLocal = localRows.map((r) => mapSkuRowToInventoryItem(r));
-                    setItems(await mergePending(mappedLocal));
-                    // Let Electron paint POS/inventory UI before downloading thousands of SKUs again.
-                    await new Promise((r) => setTimeout(r, hadLocalMirror ? 2800 : 0));
+                    applyCatalogItems(await mergePending(mappedLocal));
+                    await new Promise((r) => setTimeout(r, 120));
                 }
 
                 if (cancelled) return;
@@ -439,7 +447,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 console.log('🔄 [InventoryContext] Fetching warehouses + inventory SKUs (single request)...');
                 const [warehousesList, skuPack] = await Promise.all([
                     shopApi.getWarehouses(),
-                    shopApi.getInventorySkus({ page: 1, limit: 10000 }),
+                    shopApi.getInventorySkus({ page: 1, limit: 10000, forPos: true }),
                 ]);
 
                 if (import.meta.env.DEV && skuPack) {
@@ -480,7 +488,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     }
                 }
 
-                setItems(await mergePending(mappedItems));
+                applyCatalogItems(await mergePending(mappedItems));
                 catalogFetchStartedRef.current = true;
 
             } catch (error: any) {
