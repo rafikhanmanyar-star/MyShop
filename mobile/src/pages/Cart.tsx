@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { customerApi } from '../api';
 import CachedImage from '../components/CachedImage';
@@ -41,6 +41,7 @@ function OrderModeTabs({ mode, onChange }: { mode: OrderMode; onChange: (m: Orde
 export default function Cart() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const { state, dispatch, cartTotal, cartTax, cartCount } = useApp();
     const online = useOnline();
     const [searchParams] = useSearchParams();
@@ -87,7 +88,7 @@ export default function Cart() {
 
     const openProductDetail = (productId: string) => {
         if (!shopSlug) return;
-        navigate(`/${shopSlug}/products/${productId}`);
+        navigate(`/${shopSlug}/products/${productId}`, { state: { from: location.pathname } });
     };
 
     const openOfferDetail = (offerId: string) => {

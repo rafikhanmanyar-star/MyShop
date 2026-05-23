@@ -6,6 +6,11 @@ export const DEV_PORTS = [3001, 5173, 5175, 5180, 5190];
 
 import { execSync } from 'node:child_process';
 import { platform } from 'node:os';
+import { killOrphanedDevProcesses } from './dev-process-utils.mjs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 function killPidsWindows(pids) {
     for (const pid of pids) {
@@ -56,4 +61,5 @@ export function freeDevPorts(ports = DEV_PORTS) {
         if (isWin) freePortWindows(port);
         else freePortUnix(port);
     }
+    killOrphanedDevProcesses(projectRoot);
 }

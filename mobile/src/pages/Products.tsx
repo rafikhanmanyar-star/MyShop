@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useApp } from '../context/AppContext';
 import { publicApi, getProductImagePath } from '../api';
@@ -15,7 +15,8 @@ import GlobalSearchBar from '../features/search/GlobalSearchBar';
 import { SearchSuggestionsPanel, type SuggestionPick } from '../features/search/SearchSuggestionsPanel';
 import { addRecentSearch, getRecentSearches } from '../features/search/recentSearchesStorage';
 import { getSearchSessionId } from '../features/search/searchSession';
-import { getFavoriteIds, toggleFavoriteId } from '../features/search/favoritesStorage';
+import { useFavorites } from '../hooks/useFavorites';
+import { favoritesApi } from '../api';
 
 const LIST_LIMIT = 12;
 const DEFAULT_LOW_PRICE_MAX = '500';
@@ -23,6 +24,7 @@ const DEFAULT_LOW_PRICE_MAX = '500';
 export default function Products() {
     const { shopSlug } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
     const { dispatch, showToast, state } = useApp();
     const online = useOnline();
@@ -39,7 +41,7 @@ export default function Products() {
     const [offlineCatalogMissing, setOfflineCatalogMissing] = useState(false);
     const [searchFocused, setSearchFocused] = useState(false);
     const [categorySheetOpen, setCategorySheetOpen] = useState(false);
-    const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
+    const { favoriteIds, isFavorite, toggleFavorite } = useFavorites(shopSlug);
 
     const searchPageRef = useRef(1);
     const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,6 +74,7 @@ export default function Products() {
         filterLowPrice: searchParams.get('filterLowPrice') === 'true',
         lowPriceMax: searchParams.get('lowPriceMax') || DEFAULT_LOW_PRICE_MAX,
         filterDeals: searchParams.get('filterDeals') === 'true' || searchParams.get('onSale') === 'true',
+        filterMyFav: searchParams.get('filterMyFav') === 'true',
     };
 
     /** Explicit `sortBy` in the URL wins; with an active text search default to relevance when unset. */
@@ -83,11 +86,6 @@ export default function Products() {
         if (browse === 'new') return 'newest';
         return 'newest';
     }, [sortFromUrl, browse, searchParams]);
-
-    useEffect(() => {
-        if (!shopSlug) return;
-        setFavoriteIds(getFavoriteIds(shopSlug));
-    }, [shopSlug]);
 
     useEffect(() => {
         searchPageRef.current = 1;
@@ -116,6 +114,16 @@ export default function Products() {
     const loadProducts = useCallback(
         async (reset = false) => {
             if (!shopSlug) return;
+
+            if (filters.filterMyFav && !state.isLoggedIn) {
+                if (reset) {
+                    setProducts([]);
+                    setLoading(false);
+                    setHasMore(false);
+                    setCursor(null);
+                }
+                return;
+            }
 
             if (reset) {
                 setLoading(true);
@@ -155,7 +163,10 @@ export default function Products() {
             }
 
             try {
-                const data = await publicApi.getProducts(shopSlug, params);
+                const fetchProducts = filters.filterMyFav && state.isLoggedIn
+                    ? favoritesApi.getFavoriteProducts(shopSlug, params)
+                    : publicApi.getProducts(shopSlug, params);
+                const data = await fetchProducts;
                 const items = data.items ?? [];
                 if (reset) {
                     setProducts(items);
@@ -210,12 +221,14 @@ export default function Products() {
             filters.filterLowPrice,
             filters.lowPriceMax,
             filters.filterDeals,
+            filters.filterMyFav,
             effectiveSortBy,
             searchTerm,
             showUnavailable,
             cursor,
             online,
             showToast,
+            state.isLoggedIn,
         ]
     );
 
@@ -320,8 +333,17 @@ export default function Products() {
     }, [shopSlug, categories, selectedCategoryIdFromUrl, online, categoryCountsOffline, setSearchParams]);
 
     const displayedProducts = useMemo(() => {
-        if (online) return products;
+        if (online) {
+            if (filters.filterMyFav && !state.isLoggedIn) return [];
+            if (filters.filterMyFav) {
+                return products.filter((p: any) => favoriteIds.has(String(p.id)));
+            }
+            return products;
+        }
         let list = [...products].filter((p: any) => isMobileCatalogPriceListed(p));
+        if (filters.filterMyFav) {
+            list = list.filter((p: any) => favoriteIds.has(String(p.id)));
+        }
         if (!showUnavailable) {
             list = list.filter(
                 (p: any) => (Number(p.stock ?? p.available_stock) > 0 || p.is_pre_order)
@@ -435,7 +457,7 @@ export default function Products() {
             });
         }
         return list;
-    }, [online, products, searchTerm, filters, effectiveSortBy, showUnavailable, brands]);
+    }, [online, products, searchTerm, filters, effectiveSortBy, showUnavailable, brands, favoriteIds, state.isLoggedIn]);
 
     useEffect(() => {
         const prev = document.body.style.overflow;
@@ -497,7 +519,7 @@ export default function Products() {
             if (!shopSlug) return;
             setSearchFocused(false);
             if (pick.kind === 'product') {
-                navigate(`/${shopSlug}/products/${pick.id}`);
+                navigate(`/${shopSlug}/products/${pick.id}`, { state: { from: location.pathname } });
                 void publicApi.postSearchAnalytics(shopSlug, {
                     eventType: 'product_click',
                     productId: pick.id,
@@ -537,7 +559,7 @@ export default function Products() {
             });
             addRecentSearch(shopSlug, text);
         },
-        [shopSlug, navigate, setSearchParams, searchTerm]
+        [shopSlug, navigate, location.pathname, setSearchParams, searchTerm]
     );
 
     const applyFilters = (newFilters: Record<string, unknown>) => {
@@ -558,6 +580,7 @@ export default function Products() {
                 'filterPopular',
                 'filterLowPrice',
                 'lowPriceMax',
+                'filterMyFav',
             ];
             keysToDelete.forEach((k) => prev.delete(k));
 
@@ -706,6 +729,7 @@ export default function Products() {
         if (filters.filterDeals) n += 1;
         if (filters.filterInStock) n += 1;
         if (filters.filterPopular) n += 1;
+        if (filters.filterMyFav) n += 1;
         if (filters.availability) n += 1;
         const sortIsDefault =
             effectiveSortBy === 'newest' ||
@@ -749,7 +773,14 @@ export default function Products() {
                 q: searchTerm.trim() || undefined,
                 limit: 12,
             }),
-        enabled: Boolean(online && shopSlug && !loading && displayedProducts.length === 0 && !offlineCatalogMissing),
+        enabled: Boolean(
+            online &&
+                shopSlug &&
+                !loading &&
+                displayedProducts.length === 0 &&
+                !offlineCatalogMissing &&
+                !filters.filterMyFav
+        ),
     });
 
     const disc = emptyDiscovery.data as
@@ -858,6 +889,14 @@ export default function Products() {
                         onClick={() => setChip('filterDeals', !filters.filterDeals)}
                     >
                         Deals
+                    </button>
+                    <button
+                        type="button"
+                        className={`filter-chip-btn ${filters.filterMyFav ? 'active' : ''}`}
+                        onClick={() => setChip('filterMyFav', !filters.filterMyFav)}
+                        aria-pressed={filters.filterMyFav}
+                    >
+                        My Fav
                     </button>
                 </div>
 
@@ -1017,6 +1056,14 @@ export default function Products() {
                             </button>
                         </div>
                     )}
+                    {filters.filterMyFav && (
+                        <div className="filter-chip">
+                            My Fav
+                            <button type="button" onClick={() => removeFilter('filterMyFav')}>
+                                ×
+                            </button>
+                        </div>
+                    )}
                     {filters.filterDeals && (
                         <div className="filter-chip">
                             Deals
@@ -1069,6 +1116,40 @@ export default function Products() {
                     <p>Connect to load products for this shop.</p>
                 </div>
             ) : displayedProducts.length === 0 ? (
+                filters.filterMyFav ? (
+                    <div className="empty-state empty-state--favorites">
+                        <div className="empty-state__icon" aria-hidden>
+                            ❤️
+                        </div>
+                        {!state.isLoggedIn ? (
+                            <>
+                                <h3>Sign in to see favorites</h3>
+                                <p>Save products you love and access them on any device.</p>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => navigate(`/${shopSlug}/login`)}
+                                >
+                                    Sign in
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <h3>No Favorites Yet</h3>
+                                <p>
+                                    Save products you love for quick access anytime. Tap the heart on any product.
+                                </p>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => setChip('filterMyFav', false)}
+                                >
+                                    Browse Products
+                                </button>
+                            </>
+                        )}
+                    </div>
+                ) : (
                 <div className="empty-state empty-state--discovery">
                     <h3>We could not match that exactly</h3>
                     <p>Here are picks you might like instead — adjust filters or try a shorter keyword.</p>
@@ -1094,8 +1175,8 @@ export default function Products() {
                                         unavailableStyle={false}
                                         onAddOne={handleAddOne}
                                         onChangeQty={handleChangeQty}
-                                        isFavorite={favoriteIds.has(p.id)}
-                                        onToggleFavorite={(id) => setFavoriteIds(toggleFavoriteId(shopSlug!, id))}
+                                        isFavorite={isFavorite(p.id)}
+                                        onToggleFavorite={() => void toggleFavorite(p.id)}
                                     />
                                 ))}
                             </div>
@@ -1115,8 +1196,8 @@ export default function Products() {
                                         unavailableStyle={false}
                                         onAddOne={handleAddOne}
                                         onChangeQty={handleChangeQty}
-                                        isFavorite={favoriteIds.has(p.id)}
-                                        onToggleFavorite={(id) => setFavoriteIds(toggleFavoriteId(shopSlug!, id))}
+                                        isFavorite={isFavorite(p.id)}
+                                        onToggleFavorite={() => void toggleFavorite(p.id)}
                                     />
                                 ))}
                             </div>
@@ -1146,6 +1227,7 @@ export default function Products() {
                         </section>
                     ) : null}
                 </div>
+                )
             ) : (
                 <>
                     <VirtualizedProductGrid
@@ -1167,8 +1249,8 @@ export default function Products() {
                                     density="compact"
                                     onAddOne={handleAddOne}
                                     onChangeQty={handleChangeQty}
-                                    isFavorite={favoriteIds.has(p.id)}
-                                    onToggleFavorite={(id) => setFavoriteIds(toggleFavoriteId(shopSlug!, id))}
+                                    isFavorite={isFavorite(p.id)}
+                                    onToggleFavorite={() => void toggleFavorite(p.id)}
                                 />
                             );
                         }}

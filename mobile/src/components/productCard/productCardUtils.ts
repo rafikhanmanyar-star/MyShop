@@ -51,6 +51,22 @@ export function resolveImageFitMode(
     return 'contain-boost';
 }
 
+export type StockStatus = 'in' | 'low' | 'out' | 'preorder';
+
+export function getStockStatus(
+    p: ProductListProduct,
+    stock: number,
+    unavailableStyle: boolean,
+): StockStatus {
+    if (unavailableStyle && p.is_out_of_stock !== false && stock <= 0 && !p.is_pre_order) {
+        return 'out';
+    }
+    if (p.is_pre_order && stock <= 0) return 'preorder';
+    if (stock <= 0) return 'out';
+    if (p.is_low_stock === true || (stock > 0 && stock <= 5)) return 'low';
+    return 'in';
+}
+
 export function stockLabel(
     p: ProductListProduct,
     stock: number,

@@ -1,12 +1,14 @@
-import { memo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { memo, useRef, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getProductImagePath } from '../api';
 import ProductImage from './productCard/ProductImage';
+import ProductCardTitle from './productCard/ProductCardTitle';
 import ProductCardAddButton from './productCard/ProductCardAddButton';
 import ProductCardPriceSection from './productCard/ProductCardPriceSection';
 import {
     getProductStock,
     getProductVariantLabel,
+    getStockStatus,
     originalListPrice,
     stockLabel as buildStockLabel,
 } from './productCard/productCardUtils';
@@ -69,14 +71,16 @@ function ProductListCard({
     onToggleFavorite,
 }: Props) {
     const navigate = useNavigate();
+    const location = useLocation();
     const suppressClick = useRef(false);
+    const [favPop, setFavPop] = useState(false);
     const stock = getProductStock(p);
     const canPurchase = stock > 0 || Boolean(p.is_pre_order);
     const maxOrderQty = stock > 0 ? stock : p.is_pre_order ? 99 : 0;
 
     const openDetail = () => {
         suppressClick.current = true;
-        navigate(`/${shopSlug}/products/${p.id}`);
+        navigate(`/${shopSlug}/products/${p.id}`, { state: { from: location.pathname } });
         window.setTimeout(() => {
             suppressClick.current = false;
         }, 400);
@@ -91,6 +95,7 @@ function ProductListCard({
     const variantLabel = getProductVariantLabel(p);
     const orig = originalListPrice(p);
     const label = buildStockLabel(p, stock, unavailableStyle);
+    const stockStatus = getStockStatus(p, stock, unavailableStyle);
     const outOfStock = stock <= 0 && !p.is_pre_order;
 
     const densityClass = density === 'compact' ? 'product-card--density-compact' : '';
@@ -113,14 +118,30 @@ function ProductListCard({
                 {onToggleFavorite ? (
                     <button
                         type="button"
-                        className={`product-card__fav ${isFavorite ? 'product-card__fav--on' : ''}`}
+                        className={`product-card__fav ${isFavorite ? 'product-card__fav--on' : ''} ${favPop ? 'product-card__fav--pop' : ''}`}
                         aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                        aria-pressed={isFavorite}
                         onClick={(e) => {
                             e.stopPropagation();
+                            setFavPop(true);
+                            window.setTimeout(() => setFavPop(false), 320);
                             onToggleFavorite(p.id);
                         }}
                     >
-                        {isFavorite ? '♥' : '♡'}
+                        <svg
+                            className="product-card__fav-icon"
+                            viewBox="0 0 24 24"
+                            width="18"
+                            height="18"
+                            aria-hidden
+                        >
+                            <path
+                                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                                fill={isFavorite ? 'currentColor' : 'none'}
+                                stroke="currentColor"
+                                strokeWidth="1.75"
+                            />
+                        </svg>
                     </button>
                 ) : null}
                 {p.is_on_sale && (p.discount_percentage ?? 0) > 0 && (
@@ -132,13 +153,14 @@ function ProductListCard({
             </div>
 
             <div className="product-card__body">
-                <div className="product-card__name">{p.name}</div>
+                <ProductCardTitle name={p.name} />
                 {variantLabel ? <div className="product-card__variant">{variantLabel}</div> : null}
 
                 <ProductCardPriceSection
                     price={formatPrice(p.price)}
                     wasPrice={orig != null && orig > p.price ? formatPrice(orig) : undefined}
                     stockLabel={label}
+                    stockStatus={stockStatus}
                     outOfStock={outOfStock}
                 />
 

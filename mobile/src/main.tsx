@@ -9,11 +9,13 @@ import { queryClient } from './queryClient'
 import './index.css'
 import { bootstrapThemeFromStorage } from './theme/themeStorage'
 import { applyThemeTokens } from './theme/applyThemeTokens'
+import { preloadProductCardFonts } from './theme/loadProductCardFonts'
 
 bootstrapThemeFromStorage()
 applyThemeTokens(
   document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
 )
+preloadProductCardFonts()
 
 installSuppressNumberInputWheel()
 applySafeAreaInsets()

@@ -225,6 +225,8 @@ export class MobileOrderService {
         size?: string;
         minDiscount?: number;
         maxDiscount?: number;
+        /** When set, only products favorited by this mobile customer are returned. */
+        favoriteCustomerId?: string;
     } = {}) {
         const LOW_STOCK_THRESHOLD = 5;
         const DEFAULT_LOW_PRICE_MAX = 500;
@@ -366,6 +368,15 @@ export class MobileOrderService {
                     : DEFAULT_LOW_PRICE_MAX;
             where += ` AND COALESCE(p.mobile_price, p.retail_price) <= $${paramIdx}`;
             params.push(cap);
+            paramIdx++;
+        }
+
+        if (opts.favoriteCustomerId) {
+            where += ` AND EXISTS (
+                SELECT 1 FROM customer_favorites cf
+                WHERE cf.tenant_id = $1 AND cf.customer_id = $${paramIdx} AND cf.product_id = p.id
+            )`;
+            params.push(opts.favoriteCustomerId);
             paramIdx++;
         }
 
@@ -524,10 +535,11 @@ export class MobileOrderService {
     async getProductDetailForMobile(tenantId: string, productId: string) {
         const stockExpr = mobileProductSellableStockSql();
         const rows = await this.db.query(
-            `SELECT p.*, c.name as category_name, b.name as brand_name,
+            `SELECT p.*, c.name as category_name, sc.name as subcategory_name, b.name as brand_name,
               ${stockExpr} as available_stock
        FROM shop_products p
        LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = $1
+       LEFT JOIN categories sc ON p.subcategory_id = sc.id AND sc.tenant_id = $1
        LEFT JOIN shop_brands b ON p.brand_id = b.id AND b.tenant_id = $1
        WHERE p.id = $2 AND p.tenant_id = $1 AND p.is_active = TRUE AND p.mobile_visible = TRUE AND COALESCE(p.sales_deactivated, FALSE) = FALSE
          AND COALESCE(p.mobile_price, p.retail_price) > 0`,
@@ -571,6 +583,8 @@ export class MobileOrderService {
             image_url: r.image_url ?? null,
             category_id: r.category_id ?? null,
             category_name: r.category_name ?? null,
+            subcategory_id: (r as any).subcategory_id ?? null,
+            subcategory_name: (r as any).subcategory_name ?? null,
             available_stock: stockNum,
             stock: stockNum,
             description: r.mobile_description ?? (r as any).description ?? null,

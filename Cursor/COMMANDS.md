@@ -13,7 +13,7 @@ Run the app in development mode for local testing.
 | Command | Description |
 |--------|-------------|
 | `npm run dev` | Starts the **local API** (**http://localhost:3001**, PostgreSQL on **Render** via `server/.env` `DATABASE_URL`), **POS web client** (**http://localhost:5173**), **marketing website** (**http://localhost:5190**), **mobile storefront** (**http://localhost:5175**), and **rider app** (**http://localhost:5180**). Frontends proxy `/api` to the local API. No Electron. **On Ctrl+C or exit**, all dev ports are freed automatically; stale ports are cleared before each start. |
-| `npm run dev:stop` | Manually kill anything still listening on dev ports **3001, 5173, 5175, 5180, 5190** (use if a terminal was closed without Ctrl+C and `npm run dev` fails with “address already in use”). |
+| `npm run dev:stop` | Manually kill anything still listening on dev ports **3001, 5173, 5175, 5180, 5190** and any orphaned **Node.js** dev processes for this repo (use if Task Manager still shows many `node.exe` after closing a terminal or if `npm run dev` fails with “address already in use”). |
 | `npm run dev:apps` | Same as `npm run dev` but **without** the POS client (API + website + mobile + rider only). |
 | `npm run dev:server` | **API only** (port **3001**). |
 | `npm run dev:client` | **POS web client only** (port **5173**). |

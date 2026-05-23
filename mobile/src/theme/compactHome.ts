@@ -13,11 +13,13 @@ export const COMPACT_HOME = {
   search: { height: 44, fontSize: 13 },
   header: { height: 52 },
   product: {
-    rowCellWidth: 118,
-    titleSize: 11,
-    priceSize: 12,
-    stockSize: 10,
+    rowCellWidth: 124,
+    titleSize: 13,
+    subtitleSize: 12,
+    priceSize: 16,
+    stockSize: 11,
     imageHeight: 72,
   },
-  banner: { maxHeight: 128, aspectRatio: '2.4 / 1' },
+  /** Promo carousel height follows slide image intrinsic size */
+  banner: { intrinsicHeight: true },
 } as const;

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, memo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi, getProductImagePath } from '../api';
 import CachedImage from '../components/CachedImage';
@@ -9,7 +9,7 @@ import { getSessionProductDetail, setSessionProductDetail } from '../services/pr
 import { type ProductListProduct } from '../components/ProductListCard';
 import RecommendationCard from '../components/RecommendationCard';
 import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
-import { getFavoriteIds, toggleFavoriteId } from '../features/search/favoritesStorage';
+import { useFavorites } from '../hooks/useFavorites';
 import { getRecommendationSubtitle } from '../recommendations/productRecommendationRules';
 import type { ProductRecommendationsResponse } from '../recommendations/types';
 
@@ -40,6 +40,24 @@ function detailText(product: any): string | null {
 function formatSpecLabel(k: string): string {
     const spaced = k.replace(/_/g, ' ');
     return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function tagsFromAttributes(attrs: Record<string, unknown> | null): string | null {
+    if (!attrs) return null;
+    const raw = attrs.tags ?? attrs.Tags;
+    if (Array.isArray(raw)) {
+        const parts = raw.map((t) => String(t).trim()).filter(Boolean);
+        return parts.length ? parts.join(', ') : null;
+    }
+    if (typeof raw === 'string' && raw.trim()) return raw.trim();
+    return null;
+}
+
+function collectionFromAttributes(attrs: Record<string, unknown> | null): string | null {
+    if (!attrs) return null;
+    const raw = attrs.collection ?? attrs.Collection;
+    if (typeof raw === 'string' && raw.trim()) return raw.trim();
+    return null;
 }
 
 const RecRow = memo(function RecRow({
@@ -78,6 +96,7 @@ const RecRow = memo(function RecRow({
 export default function ProductDetail() {
     const { shopSlug, id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const { dispatch, showToast, state } = useApp();
     const online = useOnline();
 
@@ -89,8 +108,9 @@ export default function ProductDetail() {
     const [recBundle, setRecBundle] = useState<ProductRecommendationsResponse['bundle']>(null);
     const [recsLoading, setRecsLoading] = useState(false);
     const [descOpen, setDescOpen] = useState(true);
-    const [specsOpen, setSpecsOpen] = useState(false);
-    const [isFavorite, setIsFavorite] = useState(false);
+    const [specsOpen, setSpecsOpen] = useState(true);
+    const { isFavorite, toggleFavorite } = useFavorites(shopSlug);
+    const [favPop, setFavPop] = useState(false);
 
     useEffect(() => {
         setQty(1);
@@ -101,11 +121,6 @@ export default function ProductDetail() {
         setRecSubtitle(null);
         setRecBundle(null);
     }, [id]);
-
-    useEffect(() => {
-        if (!shopSlug || !id) return;
-        setIsFavorite(getFavoriteIds(shopSlug).has(id));
-    }, [shopSlug, id]);
 
     useEffect(() => {
         if (!shopSlug || !id) return;
@@ -304,11 +319,27 @@ export default function ProductDetail() {
         if (added > 0) showToast(`${added} items added to cart`);
     }, [recBundle, recs, addRecToCart, showToast]);
 
-    const toggleFavorite = useCallback(() => {
-        if (!shopSlug || !id) return;
-        const next = toggleFavoriteId(shopSlug, id);
-        setIsFavorite(next.has(id));
-    }, [shopSlug, id]);
+    const onToggleFavorite = useCallback(() => {
+        if (!id) return;
+        setFavPop(true);
+        window.setTimeout(() => setFavPop(false), 320);
+        void toggleFavorite(id);
+    }, [id, toggleFavorite]);
+
+    const productIsFavorite = id ? isFavorite(id) : false;
+
+    const goBack = useCallback(() => {
+        const from = (location.state as { from?: string } | null)?.from;
+        if (from && from.startsWith('/')) {
+            navigate(from);
+            return;
+        }
+        if (typeof window !== 'undefined' && window.history.length > 1) {
+            navigate(-1);
+            return;
+        }
+        if (shopSlug) navigate(`/${shopSlug}/products`);
+    }, [location.state, navigate, shopSlug]);
 
     const specRows = useMemo(() => {
         if (!product) return [];
@@ -323,7 +354,11 @@ export default function ProductDetail() {
             rows.push({ label, value: v });
         };
 
-        add('Brand', product.brand);
+        add('SKU', product.sku ?? product.sku_code);
+        add('Barcode', product.barcode);
+        add('Brand', product.brand ?? product.brand_name);
+        add('Category', product.category_name);
+        add('Subcategory', product.subcategory_name);
         add('Unit', product.unit);
         add('Size', product.size != null ? String(product.size) : null);
         const wu = product.weight_unit != null ? String(product.weight_unit).trim() : null;
@@ -344,16 +379,35 @@ export default function ProductDetail() {
             product.attributes && typeof product.attributes === 'object' && !Array.isArray(product.attributes)
                 ? (product.attributes as Record<string, unknown>)
                 : null;
+        add('Tags', tagsFromAttributes(rawAttrs));
+        add('Collection', collectionFromAttributes(rawAttrs));
         const skipAttrKeys = new Set(
-            ['brand', 'sku', 'barcode', 'unit', 'size', 'weight', 'color', 'material', 'origin', 'country of origin'].map(
-                (s) => s.toLowerCase()
-            )
+            [
+                'brand',
+                'sku',
+                'barcode',
+                'unit',
+                'size',
+                'weight',
+                'color',
+                'material',
+                'origin',
+                'country of origin',
+                'tags',
+                'collection',
+            ].map((s) => s.toLowerCase())
         );
         if (rawAttrs) {
             for (const [k, v] of Object.entries(rawAttrs)) {
                 if (v === null || v === undefined) continue;
                 const kl = k.toLowerCase().replace(/_/g, ' ');
                 if (skipAttrKeys.has(kl)) continue;
+                if (Array.isArray(v)) {
+                    const parts = v.map((x) => String(x).trim()).filter(Boolean);
+                    if (parts.length) add(formatSpecLabel(k), parts.join(', '));
+                    continue;
+                }
+                if (typeof v === 'object') continue;
                 add(formatSpecLabel(k), String(v));
             }
         }
@@ -405,6 +459,20 @@ export default function ProductDetail() {
 
     return (
         <div className="pdp-page fade-in">
+            <div className="pdp-toolbar">
+                <button type="button" className="pdp-toolbar__back" onClick={goBack} aria-label="Go back">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                        <path d="m12 19-7-7 7-7" />
+                        <path d="M19 12H5" />
+                    </svg>
+                    <span>Back</span>
+                </button>
+                {shopSlug ? (
+                    <Link to={`/${shopSlug}`} className="pdp-toolbar__home">
+                        Home
+                    </Link>
+                ) : null}
+            </div>
             <div className="pdp-body">
                 {/* Product hero — compact side-by-side on wider phones */}
                 <section className="pdp-hero" aria-label="Product overview">
@@ -417,11 +485,19 @@ export default function ProductDetail() {
                         />
                         <button
                             type="button"
-                            className={`pdp-hero__fav ${isFavorite ? 'pdp-hero__fav--on' : ''}`}
-                            aria-label={isFavorite ? 'Remove from wishlist' : 'Add to wishlist'}
-                            onClick={toggleFavorite}
+                            className={`pdp-hero__fav ${productIsFavorite ? 'pdp-hero__fav--on' : ''} ${favPop ? 'pdp-hero__fav--pop' : ''}`}
+                            aria-label={productIsFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            aria-pressed={productIsFavorite}
+                            onClick={onToggleFavorite}
                         >
-                            {isFavorite ? '♥' : '♡'}
+                            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+                                <path
+                                    d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                                    fill={productIsFavorite ? 'currentColor' : 'none'}
+                                    stroke="currentColor"
+                                    strokeWidth="1.75"
+                                />
+                            </svg>
                         </button>
                     </div>
 
@@ -460,28 +536,28 @@ export default function ProductDetail() {
                         <p className={`pdp-desc ${desc ? '' : 'pdp-desc--empty'}`}>{descShown}</p>
                     ) : null}
 
-                    {specRows.length > 0 ? (
-                        <>
-                            <button
-                                type="button"
-                                className="pdp-info__toggle"
-                                aria-expanded={specsOpen ? 'true' : 'false'}
-                                onClick={() => setSpecsOpen((v) => !v)}
-                            >
-                                <span>Specifications</span>
-                                <span aria-hidden>{specsOpen ? '−' : '+'}</span>
-                            </button>
-                            {specsOpen ? (
-                                <dl className="pdp-specs">
-                                    {specRows.map((row, i) => (
-                                        <div key={`spec-${i}-${row.label}`} className="pdp-specs__row">
-                                            <dt>{row.label}</dt>
-                                            <dd>{row.value}</dd>
-                                        </div>
-                                    ))}
-                                </dl>
-                            ) : null}
-                        </>
+                    <button
+                        type="button"
+                        className="pdp-info__toggle"
+                        aria-expanded={specsOpen ? 'true' : 'false'}
+                        onClick={() => setSpecsOpen((v) => !v)}
+                    >
+                        <span>Specifications</span>
+                        <span aria-hidden>{specsOpen ? '−' : '+'}</span>
+                    </button>
+                    {specsOpen ? (
+                        specRows.length > 0 ? (
+                            <dl className="pdp-specs">
+                                {specRows.map((row, i) => (
+                                    <div key={`spec-${i}-${row.label}`} className="pdp-specs__row">
+                                        <dt>{row.label}</dt>
+                                        <dd>{row.value}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        ) : (
+                            <p className="pdp-desc pdp-desc--empty">No additional specifications for this product.</p>
+                        )
                     ) : null}
                 </section>
 

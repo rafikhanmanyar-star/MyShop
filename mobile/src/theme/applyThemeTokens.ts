@@ -1,7 +1,9 @@
 import { darkTheme } from './darkTheme';
 import { lightTheme, type ThemeTokens } from './lightTheme';
 import type { ResolvedTheme } from './themeStorage';
+import { fontCssVars, fontTokens } from './fontTokens';
 import { spacingTokens } from './spacingTokens';
+import { getProductCardCssVarValues } from './typography';
 import { typographyTokens } from './typographyTokens';
 
 /** Map token object → CSS custom properties on :root. */
@@ -10,7 +12,14 @@ export function applyThemeTokens(resolved: ResolvedTheme): ThemeTokens {
   if (typeof document === 'undefined') return tokens;
 
   const root = document.documentElement;
+  const mode = resolved === 'dark' ? 'dark' : 'light';
+  const productVars = getProductCardCssVarValues(mode);
+
   const map: Record<string, string> = {
+    ...productVars,
+    [fontCssVars.inter]: fontTokens.inter,
+    [fontCssVars.urdu]: fontTokens.urdu,
+    [fontCssVars.sans]: fontTokens.sans,
     '--bg': tokens.bg,
     '--bg-card': tokens.bgCard,
     '--bg-overlay': tokens.bgOverlay,

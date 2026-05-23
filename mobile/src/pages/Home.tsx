@@ -145,20 +145,21 @@ export default function Home() {
 
     return (
         <div className="page page--home page--home-compact fade-in">
-            <div className="home-search-sticky">
-                <GlobalSearchBar
-                    variant="home"
-                    value={searchDraft}
-                    onChange={setSearchDraft}
-                    onSubmit={submitSearch}
-                    fixedPlaceholder="Search products, brands…"
-                    onBarcodeScan={() => navigate(`/${shopSlug}/products`)}
-                />
+            <div className="home-top-band">
+                {shopSlug ? (
+                    <CategoryScroller shopSlug={shopSlug} categories={mainCategoriesWithProducts} />
+                ) : null}
+                <div className="home-search-sticky">
+                    <GlobalSearchBar
+                        variant="home"
+                        value={searchDraft}
+                        onChange={setSearchDraft}
+                        onSubmit={submitSearch}
+                        fixedPlaceholder="Search products, brands…"
+                        onBarcodeScan={() => navigate(`/${shopSlug}/products`)}
+                    />
+                </div>
             </div>
-
-            {shopSlug ? (
-                <CategoryScroller shopSlug={shopSlug} categories={mainCategoriesWithProducts} />
-            ) : null}
 
             {state.isLoggedIn && shopSlug ? (
                 <HomeLoyaltyCard shopSlug={shopSlug} brandName={brandName} loyalty={loyalty} />
