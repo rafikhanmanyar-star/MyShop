@@ -137,10 +137,13 @@ const assets = [
 
 await mkdir(outDir, { recursive: true });
 
-const iconBuffer = await sharp(iconSvg).resize(512, 512).png({ quality: 90 }).toBuffer();
+const logoPath = path.join(publicDir, 'logo-brand.png');
+const iconBuffer = await sharp(logoPath)
+  .resize(512, 512, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+  .png({ quality: 90 })
+  .toBuffer();
 
-await sharp(iconBuffer).toFile(path.join(publicDir, 'logo.png'));
-console.log('Created logo.png');
+console.log('Using logo-brand.png for favicon generation');
 
 const faviconSizes = [
   { file: 'favicon-16x16.png', size: 16 },
@@ -166,13 +169,6 @@ console.log('Created mstile-310x150.png');
 
 await sharp(iconBuffer).resize(32, 32).png().toFile(path.join(publicDir, 'favicon.ico'));
 console.log('Created favicon.ico');
-
-const heroPngPath = path.join(outDir, 'hero-app-mockup-red.png');
-await sharp(Buffer.from(phoneMockupSvg()))
-  .resize(909, 755, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
-  .png({ quality: 90 })
-  .toFile(heroPngPath);
-console.log('Created hero-app-mockup-red.png');
 
 for (const asset of assets) {
   const outPath = path.join(outDir, asset.file);

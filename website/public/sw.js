@@ -1,4 +1,4 @@
-const CACHE_NAME = 'obo-store-v4';
+const CACHE_NAME = 'obo-store-v5';
 const PRECACHE = [
   '/',
   '/manifest.json',

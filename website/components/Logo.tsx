@@ -1,4 +1,3 @@
-import { ShoppingBag } from '@/components/icons';
 import { siteConfig } from '@/lib/data';
 
 interface LogoProps {
@@ -6,19 +5,19 @@ interface LogoProps {
   showText?: boolean;
 }
 
-export default function Logo({ variant = 'dark', showText = true }: LogoProps) {
-  const textColor = variant === 'light' ? 'text-white' : 'text-text-dark';
-
+export default function Logo({ showText = false }: LogoProps) {
   return (
-    <div className="flex items-center gap-2" role="img" aria-label={`${siteConfig.name} logo`}>
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-        <ShoppingBag className="h-5 w-5 text-primary" aria-hidden="true" />
-      </div>
-      {showText && (
-        <span className={`text-lg font-bold tracking-tight ${textColor}`}>
-          {siteConfig.brand}
-        </span>
-      )}
+    <div className="flex items-center" role="img" aria-label={`${siteConfig.name} logo`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={siteConfig.logo}
+        alt={`${siteConfig.name} logo`}
+        width={167}
+        height={170}
+        className="h-11 w-auto max-w-[140px] object-contain sm:h-12 sm:max-w-[160px]"
+        decoding="async"
+      />
+      {showText && <span className="sr-only">{siteConfig.brand}</span>}
     </div>
   );
 }
