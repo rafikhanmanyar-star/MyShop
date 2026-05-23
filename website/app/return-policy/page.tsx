@@ -1,10 +1,10 @@
-import type { Metadata } from 'next';
+import BreadcrumbJsonLd from '@/components/BreadcrumbJsonLd';
 import SiteShell from '@/components/SiteShell';
 import LegalDocument from '@/components/LegalDocument';
 import { createPageMetadata } from '@/lib/page-metadata';
 import { pageMeta } from '@/lib/pages';
 
-export const metadata: Metadata = createPageMetadata(pageMeta.returnPolicy);
+export const metadata = createPageMetadata(pageMeta.returnPolicy);
 
 const sections = [
   {
@@ -36,6 +36,12 @@ const sections = [
 export default function ReturnPolicyPage() {
   return (
     <SiteShell>
+      <BreadcrumbJsonLd
+        items={[
+          { name: 'Home', path: '/' },
+          { name: 'Return Policy', path: '/return-policy' },
+        ]}
+      />
       <LegalDocument
         title="Return Policy"
         intro="This return policy explains how oBo Store handles returns for grocery, household, dairy, and frozen products ordered through our website and PWA."

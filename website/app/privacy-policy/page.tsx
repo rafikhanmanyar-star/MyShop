@@ -1,10 +1,10 @@
-import type { Metadata } from 'next';
+import BreadcrumbJsonLd from '@/components/BreadcrumbJsonLd';
 import SiteShell from '@/components/SiteShell';
 import LegalDocument from '@/components/LegalDocument';
 import { createPageMetadata } from '@/lib/page-metadata';
 import { pageMeta } from '@/lib/pages';
 
-export const metadata: Metadata = createPageMetadata(pageMeta.privacyPolicy);
+export const metadata = createPageMetadata(pageMeta.privacyPolicy);
 
 const sections = [
   {
@@ -36,6 +36,12 @@ const sections = [
 export default function PrivacyPolicyPage() {
   return (
     <SiteShell>
+      <BreadcrumbJsonLd
+        items={[
+          { name: 'Home', path: '/' },
+          { name: 'Privacy Policy', path: '/privacy-policy' },
+        ]}
+      />
       <LegalDocument
         title="Privacy Policy"
         intro="oBo Store respects your privacy. This policy describes how we collect, use, and protect your information when you use our website and PWA."

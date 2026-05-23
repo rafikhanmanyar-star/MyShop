@@ -1,18 +1,20 @@
 export const siteConfig = {
   name: 'oBo Store',
   shortName: 'oBo',
-  brand: 'oBo store',
+  brand: 'oBo Store',
   title: 'oBo Store | Smart Grocery Store in B-17 Islamabad',
   description:
-    'Install oBo Store PWA to order groceries, snacks, drinks, dairy, frozen items, and household essentials from FMC B-17 Kohsar Plaza Main Boulevard with fast delivery and real-time tracking.',
+    'Order groceries, snacks, drinks, dairy, frozen items, and household essentials from oBo Store in B-17 Islamabad. Install our smart PWA for fast delivery, real-time tracking, secure ordering, and smart shopping utilities.',
+  ogDescription:
+    'Fast grocery delivery and smart shopping in B-17 Islamabad. Order snacks, dairy, frozen items, and household essentials with real-time tracking.',
   pwaDescription:
-    'Install the oBo smart grocery app to order from our FMC B-17 store with real-time tracking, budget tools, and fast delivery across B-17 Islamabad.',
-  url: 'https://obostore.com',
+    'Install the oBo Store smart grocery app to order from FMC B-17 Kohsar Plaza with real-time tracking, budget tools, and fast delivery across B-17 Islamabad.',
+  url: 'https://www.obostore.com',
   /** Live grocery PWA / shop (Install CTA destination) */
   shopUrl: 'https://obostores-shop.pages.dev/',
   logo: '/logo.png',
   schemaAddress: 'FMC B-17 Kohsar Plaza Main Boulevard, Islamabad, Pakistan',
-  schemaAreaServed: ['B-17 Islamabad', 'FMC B-17', 'Kohsar Plaza'] as const,
+  schemaAreaServed: ['B-17 Islamabad', 'FMC B-17', 'Kohsar Plaza', 'Main Boulevard'] as const,
   openingHours: '09:00-23:00',
   priceRange: 'PKR',
   address: 'FMC B-17 Kohsar Plaza, Main Boulevard',
@@ -25,7 +27,7 @@ export const siteConfig = {
   phoneE164: '+923001234567',
   email: 'support@obostore.com',
   promoCode: 'OBOFIRST',
-  themeColor: '#DC2626',
+  themeColor: '#1F7A63',
   backgroundColor: '#FFFFFF',
   hours: 'Open Daily 9:00 AM – 11:00 PM',
   mapsUrl:
@@ -44,6 +46,16 @@ export const siteConfig = {
   ],
   sameAs: [] as string[],
 } as const;
+
+export const seoKeywords = [
+  'oBo Store',
+  'grocery store Islamabad',
+  'grocery delivery B-17',
+  'smart grocery app',
+  'household essentials Islamabad',
+  'dairy and frozen items',
+  'online grocery store Pakistan',
+] as const;
 
 export const navLinks = [
   { label: 'Home', href: '/' },
@@ -215,35 +227,36 @@ export const productCategories = [
 export const faqItems = [
   {
     question: 'Where is oBo Store located?',
-    answer: 'oBo Store is located at FMC B-17 Kohsar Plaza Main Boulevard, Islamabad.',
+    answer:
+      'oBo Store is located at FMC B-17 Kohsar Plaza Main Boulevard, Sector B-17, Islamabad, Pakistan.',
   },
   {
     question: 'Does oBo Store offer grocery delivery?',
     answer:
-      'Yes, oBo Store offers grocery delivery through its PWA with fast delivery and real-time order tracking.',
+      'Yes. oBo Store offers grocery delivery in B-17 Islamabad through its smart PWA with fast delivery and real-time order tracking.',
   },
   {
     question: 'What products are available at oBo Store?',
     answer:
-      'oBo Store offers groceries, snacks, drinks, dairy products, frozen items, household essentials, and daily-use products.',
+      'oBo Store stocks groceries, snacks, drinks, dairy products, frozen items, household essentials, and daily-use products.',
   },
   {
     question: 'Can I install oBo Store like an app?',
     answer:
-      'Yes, oBo Store is a PWA, so you can install it on your phone and use it like an app without Google Play or App Store.',
+      'Yes. oBo Store is a PWA, so you can install it on your phone and use it like an app without Google Play or the App Store.',
   },
   {
     question: 'Can I track my order?',
-    answer: 'Yes, the oBo Store PWA allows customers to track orders in real time.',
+    answer: 'Yes. The oBo Store PWA lets customers track orders in real time from Kohsar Plaza to their doorstep.',
   },
   {
     question: 'Does oBo Store offer returns?',
-    answer: 'Yes, oBo Store provides an easy return option for eligible products.',
+    answer: 'Yes. oBo Store provides an easy return option for eligible products.',
   },
   {
     question: 'Does oBo Store sell fruits and vegetables?',
     answer:
-      'No, oBo Store focuses on packaged groceries, household essentials, snacks, drinks, dairy, and frozen items.',
+      'No. oBo Store focuses on packaged groceries, household essentials, snacks, drinks, dairy, and frozen items.',
   },
 ] as const;
 

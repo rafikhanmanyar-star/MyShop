@@ -1,61 +1,77 @@
-import { siteConfig, faqItems } from '@/lib/data';
+import { faqItems, siteConfig } from '@/lib/data';
 
 /** Resolve absolute URLs for JSON-LD */
 export function absoluteUrl(path: string): string {
   return new URL(path.startsWith('/') ? path : `/${path}`, siteConfig.url).toString();
 }
 
+export type BreadcrumbItem = {
+  name: string;
+  path: string;
+};
+
 const logoImageObject = () => ({
   '@type': 'ImageObject' as const,
   url: absoluteUrl(siteConfig.logo),
+  width: 512,
+  height: 512,
 });
 
 const postalAddress = {
   '@type': 'PostalAddress' as const,
   streetAddress: 'FMC B-17 Kohsar Plaza Main Boulevard',
   addressLocality: 'Islamabad',
-  addressCountry: 'Pakistan',
+  addressRegion: 'Islamabad Capital Territory',
+  postalCode: siteConfig.postalCode,
+  addressCountry: 'PK',
 };
 
-/** GroceryStore (LocalBusiness) — oBo Store physical & online grocery */
+const openingHoursSpecification = [
+  {
+    '@type': 'OpeningHoursSpecification' as const,
+    dayOfWeek: [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ],
+    opens: '09:00',
+    closes: '23:00',
+  },
+];
+
+const areaServedPlaces = siteConfig.schemaAreaServed.map((name) => ({
+  '@type': 'Place' as const,
+  name,
+}));
+
+/** GroceryStore + LocalBusiness — oBo Store physical & online grocery */
 export function getGroceryStoreSchema() {
   return {
-    '@type': 'GroceryStore',
+    '@type': ['GroceryStore', 'LocalBusiness'],
     '@id': `${siteConfig.url}/#grocery-store`,
     name: siteConfig.name,
     url: siteConfig.url,
     logo: logoImageObject(),
-    image: logoImageObject(),
+    image: [logoImageObject(), absoluteUrl('/images/store-fmc-b17.webp')],
     telephone: siteConfig.phone,
     email: siteConfig.email,
     priceRange: siteConfig.priceRange,
     address: postalAddress,
-    areaServed: siteConfig.schemaAreaServed.map((name) => ({
-      '@type': 'Place',
-      name,
-    })),
-    openingHoursSpecification: [
-      {
-        '@type': 'OpeningHoursSpecification',
-        dayOfWeek: [
-          'Monday',
-          'Tuesday',
-          'Wednesday',
-          'Thursday',
-          'Friday',
-          'Saturday',
-          'Sunday',
-        ],
-        opens: '09:00',
-        closes: '23:00',
-      },
-    ],
+    areaServed: areaServedPlaces,
+    openingHoursSpecification,
     geo: {
       '@type': 'GeoCoordinates',
       latitude: siteConfig.geo.latitude,
       longitude: siteConfig.geo.longitude,
     },
     hasMap: siteConfig.mapsUrl,
+    currenciesAccepted: 'PKR',
+    paymentAccepted: 'Cash, Easypaisa, JazzCash',
+    description: siteConfig.description,
   };
 }
 
@@ -65,8 +81,14 @@ export function getOrganizationSchema() {
     '@type': 'Organization',
     '@id': `${siteConfig.url}/#organization`,
     name: siteConfig.name,
+    legalName: siteConfig.name,
     url: siteConfig.url,
     logo: logoImageObject(),
+    image: logoImageObject(),
+    email: siteConfig.email,
+    telephone: siteConfig.phone,
+    address: postalAddress,
+    sameAs: siteConfig.sameAs,
     contactPoint: {
       '@type': 'ContactPoint',
       contactType: 'customer support',
@@ -86,6 +108,7 @@ export function getWebSiteSchema() {
     name: siteConfig.name,
     url: siteConfig.url,
     inLanguage: 'en-PK',
+    description: siteConfig.description,
     publisher: { '@id': `${siteConfig.url}/#organization` },
     potentialAction: {
       '@type': 'SearchAction',
@@ -110,6 +133,19 @@ export function getFaqSchema() {
         '@type': 'Answer',
         text: item.answer,
       },
+    })),
+  };
+}
+
+/** BreadcrumbList for inner pages */
+export function getBreadcrumbSchema(items: BreadcrumbItem[]) {
+  return {
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      item: absoluteUrl(item.path),
     })),
   };
 }
@@ -145,7 +181,15 @@ export function getFaqSchemaDocument(): string {
   });
 }
 
-/** Shared metadata and structured data for oBo store */
+/** Standalone BreadcrumbList JSON-LD */
+export function getBreadcrumbSchemaDocument(items: BreadcrumbItem[]): string {
+  return JSON.stringify({
+    '@context': 'https://schema.org',
+    ...getBreadcrumbSchema(items),
+  });
+}
+
+/** Shared metadata and structured data for oBo Store */
 export const seoConfig = {
   metadataBase: new URL(siteConfig.url),
   description: siteConfig.description,
@@ -153,7 +197,8 @@ export const seoConfig = {
   authors: [{ name: siteConfig.name, url: siteConfig.url }],
   creator: siteConfig.name,
   publisher: siteConfig.name,
-  category: 'Grocery delivery',
+  category: 'Grocery Delivery',
+  generator: 'Next.js',
   formatDetection: {
     email: false,
     address: false,
@@ -167,7 +212,7 @@ export const seoConfig = {
       follow: true,
       'max-video-preview': -1,
       'max-image-preview': 'large' as const,
-      'max-snippet': -1,
+      'max-snippet': 160,
     },
   },
   openGraph: {
@@ -176,20 +221,20 @@ export const seoConfig = {
     url: siteConfig.url,
     siteName: siteConfig.name,
     title: siteConfig.title,
-    description: siteConfig.description,
+    description: siteConfig.ogDescription,
     images: [
       {
         url: '/images/hero-app-mockup-red.png',
         width: 909,
         height: 755,
-        alt: 'oBo Store grocery app with delivery tracking for FMC B-17 Kohsar Plaza',
+        alt: 'oBo Store grocery delivery app for B-17 Islamabad',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image' as const,
     title: siteConfig.title,
-    description: siteConfig.description,
+    description: siteConfig.ogDescription,
     images: ['/images/hero-app-mockup-red.png'],
   },
   icons: {
@@ -200,15 +245,19 @@ export const seoConfig = {
       { url: '/icons/icon.svg', type: 'image/svg+xml' },
     ],
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
-    other: [
-      { rel: 'mask-icon', url: '/icons/icon.svg', color: siteConfig.themeColor },
-    ],
+    other: [{ rel: 'mask-icon', url: '/icons/icon.svg', color: siteConfig.themeColor }],
   },
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default' as const,
     title: siteConfig.shortName,
+  },
+  verification: {
+    google: 'REPLACE_WITH_GOOGLE_SEARCH_CONSOLE_VERIFICATION',
+    other: {
+      'msvalidate.01': 'REPLACE_WITH_BING_WEBMASTER_VERIFICATION',
+    },
   },
   other: {
     'geo.region': 'PK-IS',

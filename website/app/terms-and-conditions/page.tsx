@@ -1,10 +1,10 @@
-import type { Metadata } from 'next';
+import BreadcrumbJsonLd from '@/components/BreadcrumbJsonLd';
 import SiteShell from '@/components/SiteShell';
 import LegalDocument from '@/components/LegalDocument';
 import { createPageMetadata } from '@/lib/page-metadata';
 import { pageMeta } from '@/lib/pages';
 
-export const metadata: Metadata = createPageMetadata(pageMeta.terms);
+export const metadata = createPageMetadata(pageMeta.terms);
 
 const sections = [
   {
@@ -36,6 +36,12 @@ const sections = [
 export default function TermsAndConditionsPage() {
   return (
     <SiteShell>
+      <BreadcrumbJsonLd
+        items={[
+          { name: 'Home', path: '/' },
+          { name: 'Terms and Conditions', path: '/terms-and-conditions' },
+        ]}
+      />
       <LegalDocument
         title="Terms and Conditions"
         intro="These terms govern your use of the oBo Store website and progressive web app (PWA). Please read them before placing an order."

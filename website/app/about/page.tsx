@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import BreadcrumbJsonLd from '@/components/BreadcrumbJsonLd';
 import SiteShell from '@/components/SiteShell';
 import SectionHeading from '@/components/SectionHeading';
 import ServiceAreaSection from '@/components/sections/ServiceAreaSection';
@@ -7,11 +7,17 @@ import FinalCTA from '@/components/sections/FinalCTA';
 import { createPageMetadata } from '@/lib/page-metadata';
 import { pageMeta } from '@/lib/pages';
 
-export const metadata: Metadata = createPageMetadata(pageMeta.about);
+export const metadata = createPageMetadata(pageMeta.about);
 
 export default function AboutPage() {
   return (
     <SiteShell>
+      <BreadcrumbJsonLd
+        items={[
+          { name: 'Home', path: '/' },
+          { name: 'About', path: '/about' },
+        ]}
+      />
       <section className="bg-background pt-12 sm:pt-16">
         <div className="section-container">
           <SectionHeading

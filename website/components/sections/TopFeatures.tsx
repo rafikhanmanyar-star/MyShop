@@ -47,7 +47,7 @@ export default function TopFeatures({
             level={headingLevel}
             id="features-heading"
             title="Top Features"
-            description="Everything you need in one app."
+            description="Fast grocery delivery, live tracking, and secure ordering — built for smart grocery shopping in B-17 Islamabad."
           />
           {showViewAllLink && headingLevel === 'h2' && (
             <Link

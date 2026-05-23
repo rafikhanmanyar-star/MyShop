@@ -29,14 +29,18 @@ const socialLinks = [
 export default function Footer() {
   return (
     <>
-      <footer className="bg-dark-navy pt-14 pb-8 text-white">
+      <footer
+        className="bg-dark-navy pt-14 pb-8 text-white"
+        data-nosnippet
+        aria-label="Site footer"
+      >
         <div className="section-container">
           <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-5">
             <div className="sm:col-span-2 lg:col-span-1">
               <Logo variant="light" />
               <p className="mt-4 text-sm leading-relaxed text-slate-400">
-                oBo store — grocery store and delivery in B-17 Islamabad. FMC B-17 Kohsar Plaza,
-                Main Boulevard. Install our smart grocery app for fast delivery and live tracking.
+                Smart grocery shopping for B-17 Islamabad. Visit us at Kohsar Plaza or order through
+                our PWA.
               </p>
               <div className="mt-5 flex flex-wrap gap-3" aria-label="Social media links">
                 {socialLinks.map(({ icon: Icon, label }) => (

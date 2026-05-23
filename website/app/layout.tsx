@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import GlobalJsonLd from '@/components/GlobalJsonLd';
-import { siteConfig } from '@/lib/data';
+import { seoKeywords, siteConfig } from '@/lib/data';
 import { seoConfig } from '@/lib/seo';
 import './globals.css';
 
@@ -24,11 +24,18 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: seoConfig.metadataBase,
   applicationName: seoConfig.applicationName,
+  authors: seoConfig.authors,
+  creator: seoConfig.creator,
+  publisher: seoConfig.publisher,
+  category: seoConfig.category,
+  generator: seoConfig.generator,
+  keywords: [...seoKeywords],
   manifest: seoConfig.manifest,
   icons: seoConfig.icons,
   appleWebApp: seoConfig.appleWebApp,
   robots: seoConfig.robots,
   formatDetection: seoConfig.formatDetection,
+  verification: seoConfig.verification,
   other: {
     ...seoConfig.other,
     'msapplication-TileColor': siteConfig.themeColor,
