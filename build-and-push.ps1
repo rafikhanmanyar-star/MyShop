@@ -61,6 +61,62 @@ function Update-PackageVersion {
     Write-Host "  Updated $FilePath -> v$NewVersion" -ForegroundColor Cyan
 }
 
+# -----------------------------------------------------------
+# Helper: Stop desktop app processes that lock release\win-unpacked\resources\app.asar
+# -----------------------------------------------------------
+function Stop-MyShopDesktopProcesses {
+    foreach ($name in @('MyShop')) {
+        Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "  Stopping process: $($_.ProcessName) (pid $($_.Id))" -ForegroundColor DarkGray
+            Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Path -and $_.Path -like "*\MyShop\release\win-unpacked\*"
+    } | ForEach-Object {
+        Write-Host "  Stopping unpacked app: $($_.ProcessName) (pid $($_.Id))" -ForegroundColor DarkGray
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Seconds 1
+}
+
+function Clear-ReleaseWinUnpacked {
+    param([string]$Root)
+    $winUnpacked = Join-Path $Root 'release\win-unpacked'
+    if (-not (Test-Path $winUnpacked)) { return }
+    Stop-MyShopDesktopProcesses
+    try {
+        Remove-Item $winUnpacked -Recurse -Force -ErrorAction Stop
+        Write-Host "  Cleared release\win-unpacked" -ForegroundColor DarkGray
+    }
+    catch {
+        Write-Host "  release\win-unpacked is locked (MyShop may still be running); using an isolated build folder." -ForegroundColor DarkYellow
+    }
+}
+
+function Get-ReleaseBuildOutputDir {
+    param(
+        [string]$Root,
+        [string]$Version
+    )
+    return Join-Path $Root "release\build-$Version"
+}
+
+function Publish-ReleaseBuildArtifacts {
+    param(
+        [string]$BuildOutDir,
+        [string]$ReleaseDir
+    )
+    if (-not (Test-Path $BuildOutDir)) { return }
+    foreach ($pattern in @('MyShop-Setup-*.exe', 'latest.yml', 'MyShop-Setup-*.exe.blockmap')) {
+        Get-ChildItem -Path $BuildOutDir -Filter $pattern -ErrorAction SilentlyContinue | ForEach-Object {
+            $dest = Join-Path $ReleaseDir $_.Name
+            Copy-Item -Path $_.FullName -Destination $dest -Force
+            Write-Host "  Published $($_.Name) -> release\" -ForegroundColor DarkGray
+        }
+    }
+}
+
 # ============================================================
 Write-Host ""
 Write-Host "=============================================" -ForegroundColor Magenta
@@ -106,9 +162,18 @@ try {
     # Package with electron-builder (client-only config; no embedded server)
     # Disable code signing so winCodeSign is not used (avoids Windows symlink errors when not in Developer Mode / Admin)
     $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
-    Write-Host "  Packaging with electron-builder..." -ForegroundColor Cyan
-    npx electron-builder --win -c electron-builder.cloud.json "-c.extraMetadata.version=$newVersion"
+    Write-Host "  Preparing release folder (stop MyShop if running)..." -ForegroundColor Cyan
+    Clear-ReleaseWinUnpacked -Root $ProjectRoot
+    $buildOutDir = Get-ReleaseBuildOutputDir -Root $ProjectRoot -Version $newVersion
+    $buildOutRelative = "release/build-$newVersion"
+    if (Test-Path $buildOutDir) {
+        Remove-Item $buildOutDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    New-Item -ItemType Directory -Path $buildOutDir -Force | Out-Null
+    Write-Host "  Packaging with electron-builder -> $buildOutRelative..." -ForegroundColor Cyan
+    npx electron-builder --win -c electron-builder.cloud.json "-c.directories.output=$buildOutRelative" "-c.extraMetadata.version=$newVersion"
     if ($LASTEXITCODE -ne 0) { throw "Electron build failed!" }
+    Publish-ReleaseBuildArtifacts -BuildOutDir $buildOutDir -ReleaseDir "$ProjectRoot\release"
 
     Write-Host "  Build complete! Installer is in ./release/" -ForegroundColor Green
 }
@@ -170,6 +235,10 @@ Write-Host "[4/5] Pushing to GitHub..." -ForegroundColor Yellow
 
 Push-Location $ProjectRoot
 try {
+    git fetch origin
+    if ($LASTEXITCODE -ne 0) { throw "Git fetch failed!" }
+    git pull --rebase origin main
+    if ($LASTEXITCODE -ne 0) { throw "Git pull --rebase failed! Resolve conflicts, then run npm run release again." }
     git push origin
     if ($LASTEXITCODE -ne 0) { throw "Git push failed!" }
     Write-Host "  Pushed to GitHub successfully!" -ForegroundColor Green
