@@ -26,6 +26,7 @@ export default function BottomNav() {
 
     const utilitiesActive =
         pathname === `${base}/utilities` ||
+        pathname.startsWith(`${base}/utilities/`) ||
         pathname.startsWith(`${base}/feedback`) ||
         pathname.startsWith(`${base}/budget`) ||
         pathname.startsWith(`${base}/recipes`) ||

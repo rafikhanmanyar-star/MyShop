@@ -38,8 +38,12 @@ import NutritionSummaryPage from './pages/menuPlanner/NutritionSummaryPage';
 import FeedbackPage from './pages/FeedbackPage';
 import FeedbackHistoryPage from './pages/FeedbackHistoryPage';
 import UtilitiesHubPage from './pages/UtilitiesHubPage';
+import CheckForUpdatesPage from './pages/CheckForUpdatesPage';
+import AppearanceThemePage from './pages/AppearanceThemePage';
+import { ThemeProvider } from './theme';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
+import AppUpdateBootstrap from './components/updates/AppUpdateBootstrap';
 import OfflineBanner from './components/OfflineBanner';
 import { processOrderQueue, subscribeToOnline } from './services/orderSyncService';
 import { processVoiceOrderQueue } from './services/voiceOrderSyncService';
@@ -117,12 +121,14 @@ function SyncOnOnline() {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <AppProvider>
       <OfflineBanner />
       <FirebaseBootstrap />
       <LoyaltyBootstrap />
       <HeartbeatReporter />
       <SyncOnOnline />
+      <AppUpdateBootstrap />
       <Routes>
         {/* Shop slug entry point — loads shop branding */}
         <Route path="/:shopSlug" element={<ShopLoader />}>
@@ -149,6 +155,8 @@ export default function App() {
 
           {/* Budget Feature */}
           <Route path="utilities" element={<UtilitiesHubPage />} />
+          <Route path="utilities/appearance" element={<AppearanceThemePage />} />
+          <Route path="utilities/updates" element={<CheckForUpdatesPage />} />
           <Route path="feedback" element={<FeedbackPage />} />
           <Route path="feedback/history" element={<FeedbackHistoryPage />} />
           <Route path="budget" element={<BudgetDashboard />} />
@@ -175,5 +183,6 @@ export default function App() {
       <PWAInstallPrompt />
       <PWAReloadPrompt />
     </AppProvider>
+    </ThemeProvider>
   );
 }

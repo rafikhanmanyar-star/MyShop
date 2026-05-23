@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { getFullImageUrl } from '../api';
 import { unreadCount, subscribeCustomerNotifications } from '../services/customerNotifications';
+import { requestAppUpdateCheck } from './updates/AppUpdateBootstrap';
 
 // Branch switching (user menu + getBranches + picker) removed for single-branch shops; restore when multiple branches / nearest delivery ship.
 
@@ -47,7 +48,7 @@ export default function Header() {
     };
 
     const checkForAppUpdate = () => {
-        window.dispatchEvent(new CustomEvent('pwa-check-update'));
+        requestAppUpdateCheck();
         setShowMenu(false);
     };
 

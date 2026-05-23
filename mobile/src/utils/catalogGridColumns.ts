@@ -27,10 +27,12 @@ export function computeCatalogColumnCount(viewportWidth: number): number {
 export function estimateCatalogRowHeight(columnCount: number): number {
     switch (columnCount) {
         case 5:
-            return 175;
+            return 200;
         case 4:
-            return 185;
+            return 215;
+        case 2:
+            return 260;
         default:
-            return 195;
+            return 228;
     }
 }

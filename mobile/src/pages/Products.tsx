@@ -7,7 +7,6 @@ import { publicApi, getProductImagePath } from '../api';
 import FilterPanel from '../components/FilterPanel';
 import ProductListCard, { type ProductListProduct } from '../components/ProductListCard';
 import VirtualizedProductGrid from '../components/VirtualizedProductGrid';
-import CategoryRailIcon from '../components/CategoryRailIcon';
 import { useOnline } from '../hooks/useOnline';
 import { getProducts as getCachedProducts, getCategories as getCachedCategories, getBrands as getCachedBrands } from '../services/offlineCache';
 import { filterCategoriesWithListedProducts, countListedProductsByCategoryId } from '../utils/catalogCategories';
@@ -39,11 +38,13 @@ export default function Products() {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [offlineCatalogMissing, setOfflineCatalogMissing] = useState(false);
     const [searchFocused, setSearchFocused] = useState(false);
+    const [categorySheetOpen, setCategorySheetOpen] = useState(false);
     const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
 
     const searchPageRef = useRef(1);
     const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
+    const productsScrollRef = useRef<HTMLDivElement>(null);
     /** Next page for API when showUnavailable=true (server returns nextPage). */
     const nextUnavailablePageRef = useRef<number | null>(1);
 
@@ -436,16 +437,25 @@ export default function Products() {
     }, [online, products, searchTerm, filters, effectiveSortBy, showUnavailable, brands]);
 
     useEffect(() => {
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prev;
+        };
+    }, []);
+
+    useEffect(() => {
         if (!hasMore || loadingMore || loading) return;
         const el = loadMoreSentinelRef.current;
-        if (!el) return;
+        const root = productsScrollRef.current;
+        if (!el || !root) return;
         const observer = new IntersectionObserver(
             (entries) => {
                 if (entries[0]?.isIntersecting && hasMore && !loadingMore && !loading) {
                     loadProducts(false);
                 }
             },
-            { rootMargin: '240px', threshold: 0.1 }
+            { root, rootMargin: '240px', threshold: 0.1 }
         );
         observer.observe(el);
         return () => observer.disconnect();
@@ -795,11 +805,12 @@ export default function Products() {
     ) : null;
 
     return (
-        <div className="page page--browse fade-in">
+        <div className="page page--browse browse-layout fade-in">
             {browseSearchBar ? createPortal(browseSearchBar, document.body) : null}
             <div className="browse-search-spacer" aria-hidden />
 
-            <div className="browse-filters-scroll">
+            <div ref={productsScrollRef} className="browse-products-scroll">
+                <div className="browse-filters-scroll">
                 <div className="filter-chips-row" role="toolbar" aria-label="Quick filters">
                     <button
                         type="button"
@@ -843,52 +854,49 @@ export default function Products() {
                     </button>
                 </div>
 
-                <div className="category-nav-rail" role="tablist" aria-label="Categories">
-                    <button
-                        type="button"
-                        role="tab"
-                        className={`category-nav-item ${navSelected('all') ? 'selected' : ''}`}
-                        onClick={() => setBrowse('all')}
-                    >
-                        <span className="category-nav-item__icon" aria-hidden>
-                            🏬
-                        </span>
-                        <span>All Products</span>
-                    </button>
-                    <button
-                        type="button"
-                        role="tab"
-                        className={`category-nav-item ${navSelected('popular') ? 'selected' : ''}`}
-                        onClick={() => setBrowse('popular')}
-                    >
-                        <span className="category-nav-item__icon" aria-hidden>
-                            ⭐
-                        </span>
-                        <span>Popular</span>
-                    </button>
-                    <button
-                        type="button"
-                        role="tab"
-                        className={`category-nav-item ${navSelected('new') ? 'selected' : ''}`}
-                        onClick={() => setBrowse('new')}
-                    >
-                        <span className="category-nav-item__icon" aria-hidden>
-                            ✨
-                        </span>
-                        <span>New Arrivals</span>
-                    </button>
-                    {mainCategoriesForRail.map((c: any) => (
+                <div className="category-nav-rail category-nav-rail--text">
+                    <div className="category-nav-rail__scroll" role="tablist" aria-label="Categories">
                         <button
-                            key={c.id}
                             type="button"
                             role="tab"
-                            className={`category-nav-item ${navSelected(c.id) ? 'selected' : ''}`}
-                            onClick={() => setBrowse(null, c.id)}
+                            aria-selected={navSelected('all')}
+                            className={`category-tab ${navSelected('all') ? 'selected' : ''}`}
+                            onClick={() => setBrowse('all')}
                         >
-                            <CategoryRailIcon mobile_icon_url={c.mobile_icon_url} />
-                            <span>{c.name}</span>
+                            All
                         </button>
-                    ))}
+                        {mainCategoriesForRail.map((c: any) => (
+                            <button
+                                key={c.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={navSelected(c.id)}
+                                className={`category-tab ${navSelected(c.id) ? 'selected' : ''}`}
+                                onClick={() => setBrowse(null, c.id)}
+                            >
+                                {c.name}
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        className="category-nav-expand"
+                        onClick={() => setCategorySheetOpen(true)}
+                        aria-label="Show all categories"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            aria-hidden
+                        >
+                            <path d="m6 9 6 6 6-6" />
+                        </svg>
+                    </button>
                 </div>
 
                 <div className="browse-toolbar-row">
@@ -900,7 +908,7 @@ export default function Products() {
                         Show unavailable items
                     </button>
                 </div>
-            </div>
+                </div>
 
             {activeFilterCount > 0 && (
                 <div className="active-filters">
@@ -1134,6 +1142,7 @@ export default function Products() {
             ) : (
                 <>
                     <VirtualizedProductGrid
+                        scrollElementRef={productsScrollRef}
                         items={displayedProducts}
                         renderCard={(p: any) => {
                             const qty = cartQtyMap.get(p.id) ?? 0;
@@ -1148,6 +1157,7 @@ export default function Products() {
                                     cartQty={qty}
                                     formatPrice={formatPrice}
                                     unavailableStyle={unavailable}
+                                    density="compact"
                                     onAddOne={handleAddOne}
                                     onChangeQty={handleChangeQty}
                                     isFavorite={favoriteIds.has(p.id)}
@@ -1173,6 +1183,8 @@ export default function Products() {
                 </>
             )}
 
+            </div>
+
             <FilterPanel
                 isOpen={isFilterOpen}
                 onClose={() => setIsFilterOpen(false)}
@@ -1182,6 +1194,62 @@ export default function Products() {
                 onApply={applyFilters}
                 onClear={clearFilters}
             />
+
+            {categorySheetOpen
+                ? createPortal(
+                      <div
+                          className="bottom-sheet-overlay"
+                          role="presentation"
+                          onClick={() => setCategorySheetOpen(false)}
+                      >
+                          <div
+                              className="bottom-sheet category-sheet"
+                              role="dialog"
+                              aria-modal="true"
+                              aria-labelledby="category-sheet-title"
+                              onClick={(e) => e.stopPropagation()}
+                          >
+                              <div className="bottom-sheet-header">
+                                  <h2 id="category-sheet-title">Categories</h2>
+                                  <button
+                                      type="button"
+                                      className="filter-drawer-close"
+                                      onClick={() => setCategorySheetOpen(false)}
+                                      aria-label="Close categories"
+                                  >
+                                      ×
+                                  </button>
+                              </div>
+                              <div className="category-sheet__list">
+                                  <button
+                                      type="button"
+                                      className={`category-sheet__item ${navSelected('all') ? 'selected' : ''}`}
+                                      onClick={() => {
+                                          setBrowse('all');
+                                          setCategorySheetOpen(false);
+                                      }}
+                                  >
+                                      All
+                                  </button>
+                                  {mainCategoriesForRail.map((c: any) => (
+                                      <button
+                                          key={c.id}
+                                          type="button"
+                                          className={`category-sheet__item ${navSelected(c.id) ? 'selected' : ''}`}
+                                          onClick={() => {
+                                              setBrowse(null, c.id);
+                                              setCategorySheetOpen(false);
+                                          }}
+                                      >
+                                          {c.name}
+                                      </button>
+                                  ))}
+                              </div>
+                          </div>
+                      </div>,
+                      document.body
+                  )
+                : null}
         </div>
     );
 }

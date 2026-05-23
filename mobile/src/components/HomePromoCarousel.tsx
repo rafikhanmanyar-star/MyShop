@@ -50,6 +50,8 @@ export default function HomePromoCarousel({ slides, shopSlug, deliveryMinutes, i
     const [idx, setIdx] = useState(0);
     const [dragPx, setDragPx] = useState(0);
     const touchRef = useRef<{ startX: number; startY: number; swiping: boolean } | null>(null);
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const [viewportWidth, setViewportWidth] = useState(0);
     const autoplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const intervalMs = clampIntervalSec(intervalSeconds) * 1000;
 
@@ -90,6 +92,16 @@ export default function HomePromoCarousel({ slides, shopSlug, deliveryMinutes, i
     useEffect(() => {
         setIdx(0);
         setDragPx(0);
+    }, [slidesKey]);
+
+    useEffect(() => {
+        const el = viewportRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const measure = () => setViewportWidth(el.clientWidth);
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
     }, [slidesKey]);
 
     useEffect(() => {
@@ -148,14 +160,19 @@ export default function HomePromoCarousel({ slides, shopSlug, deliveryMinutes, i
     };
 
     if (valid.length > 0) {
+        const slideOffsetPx = viewportWidth > 0 ? idx * viewportWidth : 0;
         const trackStyle: React.CSSProperties = {
-            transform: `translateX(calc(-${idx * 100}% + ${dragPx}px))`,
+            transform:
+                viewportWidth > 0
+                    ? `translateX(calc(-${slideOffsetPx}px + ${dragPx}px))`
+                    : `translateX(calc(-${idx * 100}% + ${dragPx}px))`,
             transition: dragPx !== 0 ? 'none' : 'transform 0.35s ease',
         };
 
         return (
             <div className={rootClass}>
                 <div
+                    ref={viewportRef}
                     className="home-promo-carousel__viewport"
                     onTouchStart={onTouchStart}
                     onTouchMove={onTouchMove}

@@ -1,7 +1,7 @@
 /**
  * Microphone permission — voice orders (MediaRecorder) and voice search.
- * Native Android: custom Capacitor plugin (RECORD_AUDIO).
- * Web/PWA: Permissions API + getUserMedia probe.
+ * Native Android: RECORD_AUDIO via Capacitor plugin + WebView getUserMedia probe.
+ * Web/PWA: getUserMedia is the source of truth for MediaRecorder.
  */
 
 import { isNativeAndroid } from '../services/firebaseNative';
@@ -9,37 +9,14 @@ import { PERMISSION_COPY } from './constants';
 import {
     incrementPermissionRequestCount,
     permissionDevLog,
+    resetPermissionRequestCount,
     resolvePermissionStatus,
 } from './permissionService';
 import { MicrophonePermission } from './nativePlugins';
 import type { PermissionCheckResult, PermissionRequestResult } from './types';
 
-async function checkWebMicrophone(): Promise<boolean> {
-    if (typeof navigator === 'undefined') return false;
-
-    try {
-        const perm = navigator.permissions as Permissions | undefined;
-        if (perm?.query) {
-            const status = await perm.query({ name: 'microphone' as PermissionName });
-            if (status.state === 'granted') return true;
-            if (status.state === 'denied') return false;
-        }
-    } catch {
-        /* Permissions API may be unavailable */
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) return false;
-
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((t) => t.stop());
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-async function requestWebMicrophone(): Promise<boolean> {
+/** Whether the WebView can actually open a mic stream (what MediaRecorder needs). */
+export async function probeMicrophoneAccess(): Promise<boolean> {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
         return false;
     }
@@ -52,8 +29,32 @@ async function requestWebMicrophone(): Promise<boolean> {
     }
 }
 
+async function ensureNativeAppMicPermission(): Promise<{ granted: boolean; canPrompt: boolean }> {
+    try {
+        const { granted } = await MicrophonePermission.check();
+        if (granted) return { granted: true, canPrompt: false };
+
+        const result = await MicrophonePermission.request();
+        if (result.granted) {
+            resetPermissionRequestCount('microphone');
+            return { granted: true, canPrompt: false };
+        }
+
+        const recheck = await MicrophonePermission.check();
+        return { granted: recheck.granted, canPrompt: !recheck.granted };
+    } catch (err) {
+        permissionDevLog('native mic plugin failed', err);
+        return { granted: false, canPrompt: true };
+    }
+}
+
 export async function checkMicrophonePermission(): Promise<PermissionCheckResult> {
     permissionDevLog('checkMicrophone');
+
+    if (await probeMicrophoneAccess()) {
+        resetPermissionRequestCount('microphone');
+        return { status: 'granted' };
+    }
 
     if (isNativeAndroid()) {
         try {
@@ -75,59 +76,75 @@ export async function checkMicrophonePermission(): Promise<PermissionCheckResult
         };
     }
 
-    const granted = await checkWebMicrophone();
-    const status = resolvePermissionStatus('microphone', granted, !granted);
     return {
-        status,
-        message: granted ? undefined : PERMISSION_COPY.microphone.denied,
+        status: 'prompt',
+        message: PERMISSION_COPY.microphone.denied,
     };
 }
 
 export async function requestMicrophonePermission(): Promise<PermissionRequestResult> {
     permissionDevLog('requestMicrophone');
-    incrementPermissionRequestCount('microphone');
-
-    let granted = false;
 
     if (isNativeAndroid()) {
-        try {
-            const result = await MicrophonePermission.request();
-            granted = result.granted;
-        } catch (err) {
-            permissionDevLog('native mic request failed', err);
+        const appPerm = await ensureNativeAppMicPermission();
+        if (!appPerm.granted) {
+            incrementPermissionRequestCount('microphone');
         }
-    } else {
-        granted = await requestWebMicrophone();
     }
 
-    const status = resolvePermissionStatus('microphone', granted, !granted);
-    const canAskAgain = status !== 'permanently_denied' && status !== 'granted';
+    if (await probeMicrophoneAccess()) {
+        resetPermissionRequestCount('microphone');
+        return { status: 'granted', canAskAgain: false };
+    }
+
+    if (isNativeAndroid()) {
+        const { granted, canPrompt } = await ensureNativeAppMicPermission();
+        const status = resolvePermissionStatus('microphone', granted, canPrompt);
+        return {
+            status,
+            canAskAgain: status !== 'permanently_denied' && status !== 'granted',
+            message:
+                status === 'granted'
+                    ? undefined
+                    : status === 'permanently_denied'
+                      ? PERMISSION_COPY.microphone.permanent
+                      : PERMISSION_COPY.microphone.denied,
+        };
+    }
+
+    incrementPermissionRequestCount('microphone');
+    const granted = await probeMicrophoneAccess();
+    const status = granted ? 'granted' : 'denied';
+    if (granted) resetPermissionRequestCount('microphone');
 
     return {
         status,
-        canAskAgain,
-        message:
-            status === 'granted'
-                ? undefined
-                : status === 'permanently_denied'
-                  ? PERMISSION_COPY.microphone.permanent
-                  : PERMISSION_COPY.microphone.denied,
+        canAskAgain: !granted,
+        message: granted ? undefined : PERMISSION_COPY.microphone.denied,
     };
 }
 
 /** Ensures mic access before starting MediaRecorder or speech recognition. */
 export async function ensureMicrophoneForRecording(): Promise<PermissionRequestResult> {
-    const current = await checkMicrophonePermission();
-    if (current.status === 'granted') {
-        return { ...current, canAskAgain: false };
+    if (await probeMicrophoneAccess()) {
+        resetPermissionRequestCount('microphone');
+        return { status: 'granted', canAskAgain: false };
     }
-    if (current.status === 'permanently_denied') {
-        return {
-            ...current,
-            canAskAgain: false,
-            message: PERMISSION_COPY.microphone.permanent,
-        };
+
+    if (isNativeAndroid()) {
+        await ensureNativeAppMicPermission();
     }
+
+    if (await probeMicrophoneAccess()) {
+        resetPermissionRequestCount('microphone');
+        return { status: 'granted', canAskAgain: false };
+    }
+
+    const check = await checkMicrophonePermission();
+    if (check.status === 'granted') {
+        return { ...check, canAskAgain: false };
+    }
+
     return requestMicrophonePermission();
 }
 

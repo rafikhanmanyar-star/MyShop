@@ -5,7 +5,7 @@
 import { Capacitor } from '@capacitor/core';
 import { isNativeAndroid } from '../services/firebaseNative';
 import { AppSettings } from './nativePlugins';
-import { PERMANENT_DENIAL_THRESHOLD, PERMISSION_STORAGE_KEYS } from './constants';
+import { PERMISSION_STORAGE_KEYS } from './constants';
 import type { PermissionKind, PermissionStatus } from './types';
 
 function devLog(...args: unknown[]) {
@@ -58,6 +58,18 @@ export function incrementPermissionRequestCount(kind: PermissionKind): number {
     return next;
 }
 
+export function resetPermissionRequestCount(kind: PermissionKind): void {
+    const key =
+        kind === 'microphone'
+            ? PERMISSION_STORAGE_KEYS.micRequestCount
+            : PERMISSION_STORAGE_KEYS.locationRequestCount;
+    try {
+        localStorage.removeItem(key);
+    } catch {
+        /* ignore */
+    }
+}
+
 export function isOnboardingComplete(): boolean {
     try {
         return localStorage.getItem(PERMISSION_STORAGE_KEYS.onboardingDone) === '1';
@@ -74,17 +86,23 @@ export function markOnboardingComplete() {
     }
 }
 
-/** Maps raw granted/denied + request history to a UI-friendly status. */
+export function resetPermissionRequestCounts(): void {
+    resetPermissionRequestCount('microphone');
+    resetPermissionRequestCount('location');
+}
+
+/** Maps OS permission state to UI status — does not use stale local request counts. */
 export function resolvePermissionStatus(
     kind: PermissionKind,
     granted: boolean,
     canPrompt: boolean
 ): PermissionStatus {
-    if (granted) return 'granted';
-    const attempts = getPermissionRequestCount(kind);
-    if (!canPrompt && attempts >= 1) return 'permanently_denied';
-    if (attempts >= PERMANENT_DENIAL_THRESHOLD) return 'permanently_denied';
-    if (attempts >= 1) return 'denied';
+    if (granted) {
+        resetPermissionRequestCount(kind);
+        return 'granted';
+    }
+    // Android "Don't ask again" — only trust OS signal, not local counters
+    if (!canPrompt) return 'permanently_denied';
     return 'prompt';
 }
 

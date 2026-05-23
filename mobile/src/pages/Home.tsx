@@ -209,7 +209,7 @@ export default function Home() {
                             <div className="home-product-row">
                                 {[1, 2, 3, 4, 5].map((i) => (
                                     <div key={i} className="home-product-row__cell">
-                                        <div className="skeleton" style={{ height: 168, borderRadius: 10 }} />
+                                        <div className="skeleton" style={{ height: 210, borderRadius: 10 }} />
                                     </div>
                                 ))}
                             </div>

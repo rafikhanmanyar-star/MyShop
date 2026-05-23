@@ -70,6 +70,7 @@ export default function ShopLoader() {
     const hideFloatingCart =
         !!shopSlug &&
         (pathname === `${base}/utilities` ||
+            pathname.startsWith(`${base}/utilities/`) ||
             pathname.startsWith(`${base}/feedback`) ||
             pathname.startsWith(`${base}/budget`) ||
             pathname.startsWith(`${base}/recipes`) ||

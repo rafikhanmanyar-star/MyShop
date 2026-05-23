@@ -262,8 +262,8 @@ export default function Checkout() {
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : 'Could not get location';
             setLocationError(msg);
-            const disabled = (e as Error & { locationServicesDisabled?: boolean }).locationServicesDisabled;
-            setGpsDisabled(Boolean(disabled) || /GPS|location services/i.test(msg));
+            const disabled = (e as Error & { locationServicesDisabled?: boolean }).locationServicesDisabled === true;
+            setGpsDisabled(disabled);
             showToast(msg);
         } finally {
             setLocating(false);

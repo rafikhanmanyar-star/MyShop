@@ -93,7 +93,7 @@ export default function Orders() {
             <div className="page fade-in">
                 <div className="page-header"><h1>My Orders</h1></div>
                 {[1, 2, 3].map(i => (
-                    <div key={i} className="skeleton" style={{ height: 100, marginBottom: 12, borderRadius: 'var(--radius-lg)' }} />
+                    <div key={i} className="skeleton order-history-card-skeleton" />
                 ))}
             </div>
         );
@@ -103,7 +103,7 @@ export default function Orders() {
         <div className="page fade-in">
             <div className="page-header">
                 <h1>My Orders</h1>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+                <p className="orders-page-subtitle">
                     Cart and voice orders in one place
                 </p>
             </div>
@@ -121,39 +121,39 @@ export default function Orders() {
                     </div>
                 </div>
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="orders-list">
                     {orders.map((order) => {
                         const channel = orderChannel(order);
                         const detailPath = orderDetailPath(shopSlug!, order);
                         const isPickupRow = order.payment_method === 'SelfCollection';
                         const pendingInvoice = order.status === 'InvoiceCreated';
                         return (
-                        <Link key={`${channel}-${order.id}`} to={detailPath} className="card order-history-card" style={{ padding: 16 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8, gap: 8 }}>
-                                <div style={{ minWidth: 0, flex: 1 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                        <Link key={`${channel}-${order.id}`} to={detailPath} className="card order-history-card">
+                            <div className="order-history-card__top">
+                                <div className="order-history-card__main">
+                                    <div className="order-history-card__id-row">
                                         <ChannelBadge channel={channel} />
-                                        <span style={{ fontWeight: 700, fontSize: 15 }}>{order.order_number}</span>
+                                        <span className="order-history-card__number">{order.order_number}</span>
                                     </div>
-                                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatDate(order.created_at)}</div>
+                                    <div className="order-history-card__date">{formatDate(order.created_at)}</div>
                                 </div>
                                 <span className={`status-badge ${statusBadgeClass(order.status)}`}>
                                     {orderStatusLabel(order)}
                                 </span>
                             </div>
                             {!isPickupRow && order.estimated_delivery_at && (
-                                <div style={{ fontSize: 12, fontWeight: 600, color: '#5b21b6', marginBottom: 8 }}>
+                                <div className="order-history-card__notice order-history-card__notice--delivery">
                                     📅 Requested: {formatDate(order.estimated_delivery_at)}
                                 </div>
                             )}
                             {pendingInvoice && (
-                                <div style={{ fontSize: 12, fontWeight: 600, color: '#1d4ed8', marginBottom: 8 }}>
+                                <div className="order-history-card__notice order-history-card__notice--invoice">
                                     Tap to review and approve your invoice
                                 </div>
                             )}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{formatOrderPaymentMethod(order.payment_method)}</span>
-                                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--primary)' }}>
+                            <div className="order-history-card__footer">
+                                <span className="order-history-card__payment">{formatOrderPaymentMethod(order.payment_method)}</span>
+                                <span className="order-history-card__total">
                                     {order.grand_total != null
                                         ? formatPrice(order.grand_total)
                                         : channel === 'voice'
@@ -162,7 +162,7 @@ export default function Orders() {
                                 </span>
                             </div>
                             {order.payment_method !== 'SelfCollection' && order.delivery_order_id && order.status === 'OutForDelivery' && (
-                                <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: '#047857' }}>
+                                <div className="order-history-card__rider">
                                     🛵 {order.rider_name ? `${order.rider_name} · ` : ''}
                                     {String(order.delivery_status || '').toUpperCase() === 'ON_THE_WAY' ? 'On the way' : 'Out for delivery'}
                                 </div>

@@ -31,13 +31,22 @@ function roundMoney(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Next SR-##### from highest existing suffix (COUNT+1 breaks after deletes or gaps). */
+export function computeNextReturnNumber(existingNumbers: string[]): string {
+  let maxN = 0;
+  for (const raw of existingNumbers) {
+    const m = /^SR-(\d+)$/i.exec(String(raw ?? '').trim());
+    if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+  }
+  return `SR-${String(maxN + 1).padStart(5, '0')}`;
+}
+
 async function nextReturnNumber(client: any, tenantId: string): Promise<string> {
   const rows = await client.query(
-    `SELECT COUNT(*)::int AS c FROM shop_sales_returns WHERE tenant_id = $1`,
+    `SELECT return_number FROM shop_sales_returns WHERE tenant_id = $1`,
     [tenantId]
   );
-  const n = (rows[0]?.c ?? 0) + 1;
-  return `SR-${String(n).padStart(5, '0')}`;
+  return computeNextReturnNumber(rows.map((r: { return_number?: string }) => r.return_number ?? ''));
 }
 
 async function getReturnedQtyByLine(client: any, tenantId: string, saleId: string): Promise<Map<string, number>> {

@@ -22,7 +22,7 @@ export const PERMISSION_COPY = {
             'We use your location to confirm delivery range, suggest your address, and show accurate delivery times.',
         privacy: 'Your location is only used for delivery and is shared with the shop for your order — never sold to third parties.',
         denied: 'Location access helps us verify delivery range. You can still pick a spot on the map or enter your address.',
-        permanent: 'Location access was blocked. Open Settings to enable GPS for faster checkout.',
+        permanent: 'Location access was blocked. Open Settings to allow location for delivery.',
         gpsDisabled: 'Location services are turned off on your device. Enable GPS in system settings, then try again.',
     },
     welcome: {

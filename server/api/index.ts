@@ -30,6 +30,7 @@ import { runMigrations } from '../scripts/run-migrations.js';
 import { createUploadsMiddleware } from '../middleware/uploadsMiddleware.js';
 import { getPlatformAuthService } from '../services/platformAuthService.js';
 import { getMobileOrderService } from '../services/mobileOrderService.js';
+import { evaluateVersionCheck } from '../services/appVersionService.js';
 import { fileURLToPath } from 'url';
 import fs from 'node:fs';
 
@@ -92,6 +93,46 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/test', (_req, res) => {
   res.json({ message: 'API is working' });
+});
+
+/** Public mobile app version policy (Play Store in-app updates + force-update gate). */
+app.get('/api/app-version', (req, res) => {
+  const currentVersion = String(req.query.currentVersion ?? req.query.version ?? '').trim();
+  const buildRaw = req.query.build ?? req.query.versionCode;
+  const currentBuild =
+    buildRaw != null && buildRaw !== '' ? parseInt(String(buildRaw), 10) : undefined;
+
+  const policyOnly = req.query.policyOnly === '1' || req.query.policyOnly === 'true';
+
+  if (!currentVersion && !policyOnly) {
+    res.status(400).json({ error: 'currentVersion query parameter is required' });
+    return;
+  }
+
+  const evaluation = currentVersion
+    ? evaluateVersionCheck({
+        currentVersion,
+        currentBuild: Number.isFinite(currentBuild) ? currentBuild : undefined,
+      })
+    : null;
+
+  const policy = evaluation?.policy ?? evaluateVersionCheck({ currentVersion: '0.0.0' }).policy;
+
+  res.json({
+    latestVersion: policy.latestVersion,
+    minimumSupportedVersion: policy.minimumSupportedVersion,
+    forceUpdate: policy.forceUpdate,
+    releaseNotes: policy.releaseNotes,
+    ...(policy.minimumAndroidVersionCode != null
+      ? { minimumAndroidVersionCode: policy.minimumAndroidVersionCode }
+      : {}),
+    ...(evaluation
+      ? {
+          updateAvailable: evaluation.updateAvailable,
+          forceUpdateRequired: evaluation.forceUpdateRequired,
+        }
+      : {}),
+  });
 });
 
 // Public routes (no auth required)

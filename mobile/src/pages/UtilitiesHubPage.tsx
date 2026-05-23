@@ -46,6 +46,33 @@ function IconMyMenu() {
     );
 }
 
+function IconAppearance() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="m4.93 4.93 1.41 1.41" />
+            <path d="m17.66 17.66 1.41 1.41" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+            <path d="m4.93 19.07 1.41-1.41" />
+            <path d="m17.66 6.34 1.41-1.41" />
+        </svg>
+    );
+}
+
+function IconUpdates() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+            <path d="M16 21h5v-5" />
+        </svg>
+    );
+}
+
 function IconRecipes() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -91,6 +118,20 @@ export default function UtilitiesHubPage() {
             description: 'Browse and save ideas',
             gradient: 'linear-gradient(145deg, #ea580c 0%, #f97316 50%, #fb923c 100%)',
             icon: <IconRecipes />,
+        },
+        {
+            to: `${base}/utilities/appearance`,
+            title: 'Appearance & Theme',
+            description: 'Light, dark, or system default',
+            gradient: 'linear-gradient(145deg, #4c1d95 0%, #6d28d9 50%, #8b5cf6 100%)',
+            icon: <IconAppearance />,
+        },
+        {
+            to: `${base}/utilities/updates`,
+            title: 'Check for Updates',
+            description: `Version ${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '—'}`,
+            gradient: 'linear-gradient(145deg, #2563eb 0%, #3b82f6 50%, #60a5fa 100%)',
+            icon: <IconUpdates />,
         },
     ];
 
