@@ -9,7 +9,7 @@ import { getSessionProductDetail, setSessionProductDetail } from '../services/pr
 import { type ProductListProduct } from '../components/ProductListCard';
 import RecommendationCard from '../components/RecommendationCard';
 import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
-import { useFavorites } from '../hooks/useFavorites';
+import { getFavoriteIds, toggleFavoriteId } from '../features/search/favoritesStorage';
 import { getRecommendationSubtitle } from '../recommendations/productRecommendationRules';
 import type { ProductRecommendationsResponse } from '../recommendations/types';
 
@@ -109,8 +109,7 @@ export default function ProductDetail() {
     const [recsLoading, setRecsLoading] = useState(false);
     const [descOpen, setDescOpen] = useState(true);
     const [specsOpen, setSpecsOpen] = useState(true);
-    const { isFavorite, toggleFavorite } = useFavorites(shopSlug);
-    const [favPop, setFavPop] = useState(false);
+    const [isFavorite, setIsFavorite] = useState(false);
 
     useEffect(() => {
         setQty(1);
@@ -121,6 +120,11 @@ export default function ProductDetail() {
         setRecSubtitle(null);
         setRecBundle(null);
     }, [id]);
+
+    useEffect(() => {
+        if (!shopSlug || !id) return;
+        setIsFavorite(getFavoriteIds(shopSlug).has(id));
+    }, [shopSlug, id]);
 
     useEffect(() => {
         if (!shopSlug || !id) return;
@@ -319,14 +323,11 @@ export default function ProductDetail() {
         if (added > 0) showToast(`${added} items added to cart`);
     }, [recBundle, recs, addRecToCart, showToast]);
 
-    const onToggleFavorite = useCallback(() => {
-        if (!id) return;
-        setFavPop(true);
-        window.setTimeout(() => setFavPop(false), 320);
-        void toggleFavorite(id);
-    }, [id, toggleFavorite]);
-
-    const productIsFavorite = id ? isFavorite(id) : false;
+    const toggleFavorite = useCallback(() => {
+        if (!shopSlug || !id) return;
+        const next = toggleFavoriteId(shopSlug, id);
+        setIsFavorite(next.has(id));
+    }, [shopSlug, id]);
 
     const goBack = useCallback(() => {
         const from = (location.state as { from?: string } | null)?.from;
@@ -485,19 +486,11 @@ export default function ProductDetail() {
                         />
                         <button
                             type="button"
-                            className={`pdp-hero__fav ${productIsFavorite ? 'pdp-hero__fav--on' : ''} ${favPop ? 'pdp-hero__fav--pop' : ''}`}
-                            aria-label={productIsFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                            aria-pressed={productIsFavorite}
-                            onClick={onToggleFavorite}
+                            className={`pdp-hero__fav ${isFavorite ? 'pdp-hero__fav--on' : ''}`}
+                            aria-label={isFavorite ? 'Remove from wishlist' : 'Add to wishlist'}
+                            onClick={toggleFavorite}
                         >
-                            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
-                                <path
-                                    d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-                                    fill={productIsFavorite ? 'currentColor' : 'none'}
-                                    stroke="currentColor"
-                                    strokeWidth="1.75"
-                                />
-                            </svg>
+                            {isFavorite ? '♥' : '♡'}
                         </button>
                     </div>
 

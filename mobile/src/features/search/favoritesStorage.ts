@@ -12,18 +12,14 @@ export function getFavoriteIds(shopSlug: string): Set<string> {
     }
 }
 
-export function setFavoriteIds(shopSlug: string, ids: Iterable<string>): void {
-    try {
-        localStorage.setItem(key(shopSlug), JSON.stringify([...ids]));
-    } catch {
-        /* */
-    }
-}
-
 export function toggleFavoriteId(shopSlug: string, productId: string): Set<string> {
     const cur = getFavoriteIds(shopSlug);
     if (cur.has(productId)) cur.delete(productId);
     else cur.add(productId);
-    setFavoriteIds(shopSlug, cur);
+    try {
+        localStorage.setItem(key(shopSlug), JSON.stringify([...cur]));
+    } catch {
+        /* */
+    }
     return cur;
 }

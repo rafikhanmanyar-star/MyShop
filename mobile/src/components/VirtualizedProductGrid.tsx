@@ -46,6 +46,22 @@ function VirtualizedProductGrid({ items, renderCard, scrollElement }: Props) {
 
     if (items.length === 0) return null;
 
+    if (!scrollElement) {
+        return (
+            <div
+                className="product-grid product-grid--browse"
+                style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
+                data-cols={cols}
+            >
+                {items.map((p) => (
+                    <div key={p.id} className="virtual-product-grid__cell">
+                        {renderCard(p)}
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
     return (
         <div
             className="virtual-product-grid-root"

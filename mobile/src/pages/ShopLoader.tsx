@@ -67,6 +67,10 @@ export default function ShopLoader() {
     const { state, dispatch, cartCount } = useApp();
     // Hide over Utilities flows so list actions (e.g. My Menu) aren’t covered above the tab bar.
     const base = shopSlug ? `/${shopSlug}` : '';
+    const productsPath = `${base}/products`;
+    const isHomePage = pathname === base || pathname === `${base}/`;
+    const isBrowsePage =
+        pathname === productsPath || pathname.startsWith(`${productsPath}?`);
     const hideFloatingCart =
         !!shopSlug &&
         (pathname === `${base}/utilities` ||
@@ -201,19 +205,22 @@ export default function ShopLoader() {
         );
     }
 
+    const outletClass = [
+        'shop-outlet',
+        isHomePage ? 'shop-outlet--home' : '',
+        isBrowsePage ? 'shop-outlet--browse' : '',
+        cartCount > 0 && !hideFloatingCart ? 'shop-outlet--cart-pad' : '',
+    ]
+        .filter(Boolean)
+        .join(' ');
+
     return (
-        <>
+        <div className="shop-shell">
             <CustomerNotificationsBridge />
             <Header />
             <OrderAcceptanceClosedLoginModal />
             <OrderAcceptanceClosedBanner />
-            <div
-                className={
-                    cartCount > 0 && !hideFloatingCart
-                        ? 'shop-outlet shop-outlet--cart-pad'
-                        : 'shop-outlet'
-                }
-            >
+            <div className={outletClass}>
                 <Outlet />
             </div>
             {!hideFloatingCart && <FloatingCartBar />}
@@ -221,6 +228,6 @@ export default function ShopLoader() {
             {permissionOnboarding ? (
                 <PermissionOnboardingModal onComplete={() => setPermissionOnboarding(false)} />
             ) : null}
-        </>
+        </div>
     );
 }

@@ -321,48 +321,6 @@ export const customerApi = {
         request(`${API_BASE}/${shopSlug}/recipes/${encodeURIComponent(recipeId)}/save`, { method: 'DELETE' }),
 };
 
-/** Customer product favorites — persisted per account, tenant-scoped. */
-export const favoritesApi = {
-    getFavoriteIds: (shopSlug: string) =>
-        request(`${API_BASE}/${shopSlug}/favorites/ids`, {}, shopSlug) as Promise<{ productIds: string[] }>,
-
-    getFavoriteProducts: (shopSlug: string, params: Record<string, unknown> = {}) => {
-        const query = new URLSearchParams();
-        Object.entries(params).forEach(([key, value]) => {
-            if (Array.isArray(value)) {
-                value.forEach((v) => query.append(`${key}[]`, String(v)));
-            } else if (value !== undefined && value !== null && value !== '') {
-                query.append(key, String(value));
-            }
-        });
-        const qs = query.toString();
-        return request(`${API_BASE}/${shopSlug}/favorites${qs ? `?${qs}` : ''}`, {}, shopSlug);
-    },
-
-    getFavoriteStatus: (shopSlug: string, productIds: string[]) => {
-        const query = new URLSearchParams();
-        productIds.forEach((id) => query.append('productIds[]', id));
-        const qs = query.toString();
-        return request(
-            `${API_BASE}/${shopSlug}/favorites/status${qs ? `?${qs}` : ''}`,
-            {},
-            shopSlug
-        ) as Promise<{ status: Record<string, boolean> }>;
-    },
-
-    addFavorite: (shopSlug: string, productId: string) =>
-        request(`${API_BASE}/${shopSlug}/favorites/add`, {
-            method: 'POST',
-            body: JSON.stringify({ productId }),
-        }, shopSlug),
-
-    removeFavorite: (shopSlug: string, productId: string) =>
-        request(`${API_BASE}/${shopSlug}/favorites/remove`, {
-            method: 'POST',
-            body: JSON.stringify({ productId }),
-        }, shopSlug),
-};
-
 function shopAuthRequest(shopSlug: string, path: string, options: RequestInit = {}) {
     return request(`${API_BASE}/${shopSlug}${path}`, options, shopSlug);
 }

@@ -14,7 +14,6 @@ import { publicTenantMiddleware, mobileAuthMiddleware } from '../../middleware/m
 import { mobileTenantGuard } from '../../middleware/mobileTenantGuard.js';
 import { getCustomerIdentityService } from '../../services/customerIdentityService.js';
 import { getRecipeService } from '../../services/recipeService.js';
-import { getCustomerFavoriteService } from '../../services/customerFavoriteService.js';
 import { getWeeklyMenuPlannerService } from '../../services/weeklyMenuPlannerService.js';
 import { getMobileSearchService } from '../../services/mobileSearchService.js';
 import jwt from 'jsonwebtoken';
@@ -839,134 +838,60 @@ router.get('/:shopSlug/search/recommendations', publicTenantMiddleware(db), asyn
     }
 });
 
-/** Shared query parsing for mobile product list + favorites list. */
-function parseMobileProductListQuery(req: any) {
-    const {
-        cursor, limit, search, category,
-        categoryIds, subcategoryIds, brandIds,
-        minPrice, maxPrice, availability,
-        onSale, minRating, sortBy,
-        page, searchPage,
-        showUnavailable,
-        filterInStock,
-        filterPopular,
-        filterLowPrice,
-        lowPriceMax,
-        deals,
-        color, size,
-        minDiscount, maxDiscount,
-    } = req.query;
-
-    let finalCategoryIds: string[] | undefined = undefined;
-    if (categoryIds) {
-        finalCategoryIds = Array.isArray(categoryIds) ? categoryIds : [categoryIds as string];
-    } else if (category) {
-        finalCategoryIds = [category as string];
-    }
-
-    const pageNum = page ? parseInt(page as string, 10) : undefined;
-    const searchPageNum = searchPage ? parseInt(searchPage as string, 10) : undefined;
-
-    return {
-        cursor: cursor as string,
-        page: pageNum && pageNum > 0 ? pageNum : undefined,
-        searchPage: searchPageNum && searchPageNum > 0 ? searchPageNum : undefined,
-        limit: parseInt(limit as string) || 20,
-        search: search as string,
-        categoryIds: finalCategoryIds,
-        subcategoryIds: subcategoryIds ? (Array.isArray(subcategoryIds) ? subcategoryIds : [subcategoryIds as string]) : undefined,
-        brandIds: brandIds ? (Array.isArray(brandIds) ? brandIds : [brandIds as string]) : undefined,
-        minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
-        maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
-        availability: availability as string,
-        onSale: onSale === 'true' || deals === 'true',
-        minRating: minRating ? parseFloat(minRating as string) : undefined,
-        sortBy: sortBy as string,
-        showUnavailable: showUnavailable === 'true',
-        filterInStock: filterInStock === 'true',
-        filterPopular: filterPopular === 'true',
-        filterLowPrice: filterLowPrice === 'true',
-        lowPriceMax: lowPriceMax ? parseFloat(lowPriceMax as string) : undefined,
-        color: color ? String(color) : undefined,
-        size: size ? String(size) : undefined,
-        minDiscount: minDiscount ? parseFloat(minDiscount as string) : undefined,
-        maxDiscount: maxDiscount ? parseFloat(maxDiscount as string) : undefined,
-    };
-}
-
-// Customer favorites (register before /products/:id)
-router.get('/:shopSlug/favorites/ids', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
-    try {
-        const productIds = await getCustomerFavoriteService().listFavoriteProductIds(
-            req.tenantId,
-            req.customerId
-        );
-        res.json({ productIds });
-    } catch (e: any) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-router.get('/:shopSlug/favorites/status', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
-    try {
-        const raw = req.query.productIds;
-        const productIds = raw
-            ? (Array.isArray(raw) ? raw : [raw]).map(String)
-            : [];
-        const status = await getCustomerFavoriteService().getFavoriteStatus(
-            req.tenantId,
-            req.customerId,
-            productIds
-        );
-        res.json({ status });
-    } catch (e: any) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-router.get('/:shopSlug/favorites', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
-    try {
-        const opts = parseMobileProductListQuery(req);
-        const result = await getMobileOrderService().getProductsForMobile(req.tenantId, {
-            ...opts,
-            favoriteCustomerId: req.customerId,
-        });
-        res.json(result);
-    } catch (e: any) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
-router.post('/:shopSlug/favorites/add', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
-    try {
-        const productId = String((req.body as { productId?: string })?.productId || '').trim();
-        if (!productId) return res.status(400).json({ error: 'productId is required' });
-        await getCustomerFavoriteService().addFavorite(req.tenantId, req.customerId, productId);
-        res.json({ ok: true, productId, favorited: true });
-    } catch (e: any) {
-        const msg = String(e?.message || '');
-        res.status(msg.includes('not found') ? 404 : 400).json({ error: msg });
-    }
-});
-
-router.post('/:shopSlug/favorites/remove', publicTenantMiddleware(db), mobileAuthMiddleware(db), async (req: any, res) => {
-    try {
-        const productId = String((req.body as { productId?: string })?.productId || '').trim();
-        if (!productId) return res.status(400).json({ error: 'productId is required' });
-        await getCustomerFavoriteService().removeFavorite(req.tenantId, req.customerId, productId);
-        res.json({ ok: true, productId, favorited: false });
-    } catch (e: any) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
 // Products (paginated)
 router.get('/:shopSlug/products', publicTenantMiddleware(db), async (req: any, res) => {
     try {
-        const result = await getMobileOrderService().getProductsForMobile(
-            req.tenantId,
-            parseMobileProductListQuery(req)
-        );
+        const {
+            cursor, limit, search, category,
+            categoryIds, subcategoryIds, brandIds,
+            minPrice, maxPrice, availability,
+            onSale, minRating, sortBy,
+            page, searchPage,
+            showUnavailable,
+            filterInStock,
+            filterPopular,
+            filterLowPrice,
+            lowPriceMax,
+            deals,
+            color, size,
+            minDiscount, maxDiscount,
+        } = req.query;
+
+        // Support both single 'category' and multiple 'categoryIds'
+        let finalCategoryIds: string[] | undefined = undefined;
+        if (categoryIds) {
+            finalCategoryIds = Array.isArray(categoryIds) ? categoryIds : [categoryIds as string];
+        } else if (category) {
+            finalCategoryIds = [category as string];
+        }
+
+        const pageNum = page ? parseInt(page as string, 10) : undefined;
+        const searchPageNum = searchPage ? parseInt(searchPage as string, 10) : undefined;
+        const result = await getMobileOrderService().getProductsForMobile(req.tenantId, {
+            cursor: cursor as string,
+            page: pageNum && pageNum > 0 ? pageNum : undefined,
+            searchPage: searchPageNum && searchPageNum > 0 ? searchPageNum : undefined,
+            limit: parseInt(limit as string) || 20,
+            search: search as string,
+            categoryIds: finalCategoryIds,
+            subcategoryIds: subcategoryIds ? (Array.isArray(subcategoryIds) ? subcategoryIds : [subcategoryIds as string]) : undefined,
+            brandIds: brandIds ? (Array.isArray(brandIds) ? brandIds : [brandIds as string]) : undefined,
+            minPrice: minPrice ? parseFloat(minPrice as string) : undefined,
+            maxPrice: maxPrice ? parseFloat(maxPrice as string) : undefined,
+            availability: availability as string,
+            onSale: onSale === 'true' || deals === 'true',
+            minRating: minRating ? parseFloat(minRating as string) : undefined,
+            sortBy: sortBy as string,
+            showUnavailable: showUnavailable === 'true',
+            filterInStock: filterInStock === 'true',
+            filterPopular: filterPopular === 'true',
+            filterLowPrice: filterLowPrice === 'true',
+            lowPriceMax: lowPriceMax ? parseFloat(lowPriceMax as string) : undefined,
+            color: color ? String(color) : undefined,
+            size: size ? String(size) : undefined,
+            minDiscount: minDiscount ? parseFloat(minDiscount as string) : undefined,
+            maxDiscount: maxDiscount ? parseFloat(maxDiscount as string) : undefined,
+        });
         res.json(result);
     } catch (error: any) {
         res.status(500).json({ error: error.message });

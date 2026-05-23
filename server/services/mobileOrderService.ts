@@ -225,8 +225,6 @@ export class MobileOrderService {
         size?: string;
         minDiscount?: number;
         maxDiscount?: number;
-        /** When set, only products favorited by this mobile customer are returned. */
-        favoriteCustomerId?: string;
     } = {}) {
         const LOW_STOCK_THRESHOLD = 5;
         const DEFAULT_LOW_PRICE_MAX = 500;
@@ -368,15 +366,6 @@ export class MobileOrderService {
                     : DEFAULT_LOW_PRICE_MAX;
             where += ` AND COALESCE(p.mobile_price, p.retail_price) <= $${paramIdx}`;
             params.push(cap);
-            paramIdx++;
-        }
-
-        if (opts.favoriteCustomerId) {
-            where += ` AND EXISTS (
-                SELECT 1 FROM customer_favorites cf
-                WHERE cf.tenant_id = $1 AND cf.customer_id = $${paramIdx} AND cf.product_id = p.id
-            )`;
-            params.push(opts.favoriteCustomerId);
             paramIdx++;
         }
 
