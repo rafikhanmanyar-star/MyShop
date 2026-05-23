@@ -3,6 +3,8 @@ import { apiClient } from '../services/apiClient';
 import { authApi, type LoginResponse } from '../services/authApi';
 import { getAppContext, setAppContext } from '../services/appContext';
 import { isPosDesktopClient } from '../utils/isPosDesktopClient';
+import { clearOfflineMirrorStores, ensureOfflineMirrorForTenant } from '../offline/localDb';
+import { clearPosCatalogPreferences } from '../components/shop/pos/posCatalogStorage';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -109,6 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       tenant: { id: result.tenantId, name: result.name, company_name: '' },
     });
+
+    void ensureOfflineMirrorForTenant(result.tenantId).catch(() => {});
   }, []);
 
   const register = useCallback(async (data: { name: string; email: string; username: string; password: string; companyName?: string }) => {
@@ -130,6 +134,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    clearPosCatalogPreferences();
+    void clearOfflineMirrorStores().catch(() => {});
     authApi.logout().catch(() => {});
     apiClient.clearAuth();
     apiClient.setBranchId(null);

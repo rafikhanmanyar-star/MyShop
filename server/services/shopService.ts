@@ -1806,31 +1806,34 @@ export class ShopService {
    * Ensures every mobile_customers row has a matching loyalty + contact row (backfill for users who
    * registered without ordering or before auto-enrollment existed).
    */
-  async getLoyaltyMembers(tenantId: string) {
-    const needsEnrollment = await this.db.query(
-      `SELECT mc.phone, mc.name
-       FROM mobile_customers mc
-       WHERE mc.tenant_id = $1
-         AND NULLIF(trim(mc.phone), '') IS NOT NULL
-         AND NOT EXISTS (
-           SELECT 1
-           FROM shop_loyalty_members m
-           INNER JOIN contacts c ON c.id = m.customer_id AND c.tenant_id = mc.tenant_id
-           WHERE m.tenant_id = mc.tenant_id
-             AND regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
-             AND length(regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g')) > 0
-         )`,
-      [tenantId]
-    );
-    for (const row of needsEnrollment) {
-      try {
-        await this.ensureLoyaltyMemberForMobileUser(tenantId, {
-          phone: row.phone,
-          name: row.name || 'Customer',
-          email: null,
-        });
-      } catch {
-        // Best-effort; list still loads for other members
+  async getLoyaltyMembers(tenantId: string, options?: { skipEnrollmentBackfill?: boolean }) {
+    if (!options?.skipEnrollmentBackfill) {
+      const needsEnrollment = await this.db.query(
+        `SELECT mc.phone, mc.name
+         FROM mobile_customers mc
+         WHERE mc.tenant_id = $1
+           AND NULLIF(trim(mc.phone), '') IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1
+             FROM shop_loyalty_members m
+             INNER JOIN contacts c ON c.id = m.customer_id AND c.tenant_id = mc.tenant_id
+             WHERE m.tenant_id = mc.tenant_id
+               AND regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+               AND length(regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g')) > 0
+           )
+         LIMIT 25`,
+        [tenantId]
+      );
+      for (const row of needsEnrollment) {
+        try {
+          await this.ensureLoyaltyMemberForMobileUser(tenantId, {
+            phone: row.phone,
+            name: row.name || 'Customer',
+            email: null,
+          });
+        } catch {
+          // Best-effort; list still loads for other members
+        }
       }
     }
 
@@ -3021,7 +3024,7 @@ export class ShopService {
       this.db.query(`SELECT * FROM shop_policies WHERE tenant_id = $1 LIMIT 1`, [tenantId]),
       this.getPosSettings(tenantId),
       this.getReceiptSettings(tenantId),
-      this.getLoyaltyMembers(tenantId),
+      this.getLoyaltyMembers(tenantId, { skipEnrollmentBackfill: true }),
     ]);
 
     const skuPack = await this.listInventorySkus(tenantId, {

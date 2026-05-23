@@ -22,7 +22,7 @@ import {
 import { subscribeToOnline } from '../services/productSyncService';
 import { showAppToast } from '../utils/appToast';
 import type { ProductApiResult } from '../services/shopApi';
-import { getAllLocalSkus, getMirrorWarehouses } from '../offline/localDb';
+import { getAllLocalSkus, getMirrorWarehouses, isOfflineMirrorForTenant } from '../offline/localDb';
 import { routeNeedsCatalog } from '../utils/routeNeedsCatalog';
 
 interface InventoryContextType {
@@ -350,9 +350,10 @@ function mapMovementRows(movementList: any[]): StockMovement[] {
 }
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
     const { pathname } = useLocation();
     const catalogFetchStartedRef = useRef(false);
+    const lastCatalogTenantRef = useRef<string | null>(null);
     const refreshInFlightRef = useRef<Promise<void> | null>(null);
     const lastRefreshAtRef = useRef(0);
     const MIN_REFRESH_INTERVAL_MS = 30_000;
@@ -365,8 +366,16 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     React.useEffect(() => {
         if (!isAuthenticated) {
             catalogFetchStartedRef.current = false;
+            lastCatalogTenantRef.current = null;
             return;
         }
+        const tenantId = user?.tenantId ?? null;
+        if (tenantId && lastCatalogTenantRef.current && lastCatalogTenantRef.current !== tenantId) {
+            catalogFetchStartedRef.current = false;
+            setItems([]);
+            setWarehouses([]);
+        }
+        lastCatalogTenantRef.current = tenantId;
         if (!routeNeedsCatalog(pathname)) return;
         if (catalogFetchStartedRef.current) return;
 
@@ -410,8 +419,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             };
 
             try {
-                const localRows = await getAllLocalSkus();
-                const localWhRows = await getMirrorWarehouses();
+                const tenantId = user?.tenantId ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('tenant_id') : null);
+                const mirrorOk = tenantId ? await isOfflineMirrorForTenant(tenantId) : false;
+                const localRows = mirrorOk ? await getAllLocalSkus() : [];
+                const localWhRows = mirrorOk ? await getMirrorWarehouses() : [];
                 const hadLocalMirror = localRows.length > 0;
                 if (hadLocalMirror) {
                     const whLocal = mapWarehouseRows(localWhRows);
@@ -524,7 +535,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             cancelled = true;
             window.clearTimeout(timer);
         };
-    }, [isAuthenticated, pathname]);
+    }, [isAuthenticated, pathname, user?.tenantId]);
 
     // NEW: Refresh warehouses function
     const refreshWarehouses = useCallback(async () => {

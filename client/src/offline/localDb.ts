@@ -185,6 +185,10 @@ export async function applyBootstrapPayload(payload: SyncBootstrapPayload): Prom
     const m = metaT.objectStore('sync_meta');
     m.put({ key: 'last_full_sync_at', value: payload.serverTime });
     m.put({ key: 'last_delta_sync_at', value: payload.serverTime });
+    const tid = typeof localStorage !== 'undefined' ? localStorage.getItem('tenant_id') : null;
+    if (tid) {
+      m.put({ key: OFFLINE_MIRROR_TENANT_META_KEY, value: tid });
+    }
     await txDone(metaT);
   } finally {
     db.close();
@@ -508,4 +512,61 @@ export async function getRecentConflicts(limit = 50): Promise<SyncConflictEntry[
 
 export function generateLocalId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+/** IndexedDB sync mirror is global; this meta key records which tenant owns the mirror. */
+export const OFFLINE_MIRROR_TENANT_META_KEY = 'offline_mirror_tenant_id';
+
+const MIRROR_STORE_NAMES = [
+  'sync_skus',
+  'sync_contacts',
+  'sync_categories',
+  'sync_brands',
+  'sync_warehouses',
+  'sync_branches',
+  'sync_terminals',
+  'sync_loyalty_members',
+  'sync_singletons',
+  'sync_queue',
+  'sync_conflicts',
+] as const;
+
+export async function getOfflineMirrorTenantId(): Promise<string | null> {
+  return getSyncMeta(OFFLINE_MIRROR_TENANT_META_KEY);
+}
+
+export async function isOfflineMirrorForTenant(tenantId: string | null | undefined): Promise<boolean> {
+  if (!tenantId) return false;
+  const stored = await getOfflineMirrorTenantId();
+  return stored === tenantId;
+}
+
+/** Wipe sync mirror stores when switching shops on the same desktop install. */
+export async function clearOfflineMirrorStores(): Promise<void> {
+  return withDb(async (db) => {
+    for (const name of MIRROR_STORE_NAMES) {
+      const t = db.transaction(name, 'readwrite');
+      t.objectStore(name).clear();
+      await txDone(t);
+    }
+    const metaT = db.transaction('sync_meta', 'readwrite');
+    const m = metaT.objectStore('sync_meta');
+    m.delete('last_full_sync_at');
+    m.delete('last_delta_sync_at');
+    m.delete(OFFLINE_MIRROR_TENANT_META_KEY);
+    await txDone(metaT);
+  });
+}
+
+/**
+ * Ensure IndexedDB mirror belongs to the logged-in tenant.
+ * Returns true when stores were cleared (caller should bootstrap).
+ */
+export async function ensureOfflineMirrorForTenant(tenantId: string): Promise<boolean> {
+  const stored = await getOfflineMirrorTenantId();
+  if (stored === tenantId) return false;
+
+  await clearOfflineMirrorStores();
+  await setSyncMeta(OFFLINE_MIRROR_TENANT_META_KEY, tenantId);
+  return true;
 }

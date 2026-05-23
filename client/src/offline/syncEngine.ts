@@ -7,6 +7,7 @@ import { apiClient } from '../services/apiClient';
 import {
   applyBootstrapPayload,
   applySyncChangesPayload,
+  ensureOfflineMirrorForTenant,
   getAllLocalSkus,
   getSyncMeta,
   getPendingSyncJobs,
@@ -79,8 +80,12 @@ export async function runSyncDelta(): Promise<boolean> {
  */
 export async function runPullRestoreOrDelta(): Promise<'bootstrap' | 'delta' | 'skipped'> {
   if (!isBrowserOnline() || !(await getAuthTenantHeadersOk())) return 'skipped';
+  const tid = typeof localStorage !== 'undefined' ? localStorage.getItem('tenant_id') : null;
+  if (!tid) return 'skipped';
+
+  const cleared = await ensureOfflineMirrorForTenant(tid);
   const local = await getAllLocalSkus();
-  if (local.length === 0) {
+  if (cleared || local.length === 0) {
     const ok = await runSyncBootstrap();
     return ok ? 'bootstrap' : 'skipped';
   }
