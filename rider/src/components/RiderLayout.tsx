@@ -8,9 +8,14 @@ import { useRiderGeolocation } from '../hooks/useRiderGeolocation';
 import { startOfflineSyncListener } from '../lib/offlineSync';
 
 function GeolocationRunner() {
-  const { geoError } = useRiderGeolocation();
+  const { geoError, gpsDisabled } = useRiderGeolocation();
   if (!geoError) return null;
-  return <div className="rider-geo-warn">{geoError}</div>;
+  return (
+    <div className="rider-geo-warn" role="alert">
+      {geoError}
+      {gpsDisabled ? ' Enable GPS in your device settings.' : null}
+    </div>
+  );
 }
 
 function RiderShell() {

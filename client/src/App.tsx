@@ -10,7 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
-  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User, ChefHat, FileSpreadsheet, LayoutGrid
+  BarChart3, BookOpen, Settings, Store, Smartphone, Brain, ChevronRight, ChevronDown, ChevronUp, Wallet, ClipboardList, Receipt, Undo2, Tag, AlignJustify, Clock, LogOut, User, ChefHat, FileSpreadsheet, LayoutGrid, MessageSquare
 } from 'lucide-react';
 import { BranchProvider } from './context/BranchContext';
 import { ShopTimezoneProvider } from './context/ShopTimezoneContext';
@@ -53,6 +53,7 @@ const SalesReturnListPage = lazy(() => import('./components/shop/salesReturns/Sa
 const SalesReturnCreatePage = lazy(() => import('./components/shop/salesReturns/SalesReturnCreatePage'));
 const SalesReturnDetailPage = lazy(() => import('./components/shop/salesReturns/SalesReturnDetailPage'));
 const ShopRealtimeBridge = lazy(() => import('./components/shop/ShopRealtimeBridge'));
+const CustomerFeedbackPage = lazy(() => import('./components/shop/customerFeedback/CustomerFeedbackPage'));
 
 /** Remount editor when :id changes so form state does not leak between recipes */
 function RecipeEditRouteById() {
@@ -100,6 +101,7 @@ const navSections: NavSection[] = [
     section: 'CUSTOMERS',
     items: [
       { path: '/loyalty', label: 'Loyalty', icon: Users, roles: ['admin'] },
+      { path: '/customer-feedback', label: 'Customer Feedback', icon: MessageSquare, roles: ['admin', 'pos_cashier'] },
       { path: '/khata', label: 'Khata Ledger', icon: Receipt, roles: ['admin', 'pos_cashier', 'accountant'] },
     ],
   },
@@ -474,6 +476,7 @@ function AppLayout() {
                 }
               />
               <Route path="/loyalty" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><LoyaltyPage /></div> : <Navigate to="/" replace />} />
+              <Route path="/customer-feedback" element={['admin', 'pos_cashier'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><CustomerFeedbackPage /></div> : <Navigate to="/" replace />} />
               <Route path="/khata" element={['admin', 'pos_cashier', 'accountant'].includes(role) ? <KhataPage /> : <Navigate to="/" replace />} />
               <Route path="/multi-store" element={role === 'admin' ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><MultiStorePage /></div> : <Navigate to="/" replace />} />
               <Route path="/shifts" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><ShiftsAdminPage /></div> : <Navigate to="/" replace />} />

@@ -63,6 +63,7 @@ export type HomePromoLinkType =
     | 'voice_order'
     | 'budget'
     | 'utilities'
+    | 'feedback'
     | 'custom';
 
 export interface HomePromoSlide {

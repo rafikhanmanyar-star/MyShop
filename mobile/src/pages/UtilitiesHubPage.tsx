@@ -9,6 +9,17 @@ type Tile = {
     icon: ReactNode;
 };
 
+function IconFeedback() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M8 10h.01" />
+            <path d="M12 10h.01" />
+            <path d="M16 10h.01" />
+        </svg>
+    );
+}
+
 function IconBudget() {
     return (
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -53,6 +64,13 @@ export default function UtilitiesHubPage() {
 
     const base = `/${shopSlug}`;
     const tiles: Tile[] = [
+        {
+            to: `${base}/feedback`,
+            title: 'Feedback & Suggestions',
+            description: 'Help us improve your experience',
+            gradient: 'linear-gradient(145deg, #db2777 0%, #ec4899 45%, #f472b6 100%)',
+            icon: <IconFeedback />,
+        },
         {
             to: `${base}/budget`,
             title: 'Budget Planner',

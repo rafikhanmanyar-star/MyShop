@@ -8,6 +8,7 @@ import FloatingCartBar from '../components/FloatingCartBar';
 import CustomerNotificationsBridge from '../components/CustomerNotificationsBridge';
 import OrderAcceptanceClosedBanner from '../components/OrderAcceptanceClosedBanner';
 import OrderAcceptanceClosedLoginModal from '../components/OrderAcceptanceClosedLoginModal';
+import PermissionOnboardingModal from '../components/permissions/PermissionOnboardingModal';
 import { getShop, setShop } from '../services/offlineCache';
 import { syncCatalogForShop } from '../services/catalogSync';
 import type { TenantBranding, HomePromoSlide } from '../context/AppContext';
@@ -69,12 +70,15 @@ export default function ShopLoader() {
     const hideFloatingCart =
         !!shopSlug &&
         (pathname === `${base}/utilities` ||
+            pathname.startsWith(`${base}/feedback`) ||
             pathname.startsWith(`${base}/budget`) ||
             pathname.startsWith(`${base}/recipes`) ||
             pathname.startsWith(`${base}/my-menu`) ||
-            pathname.startsWith(`${base}/menu-planner`));
+            pathname.startsWith(`${base}/menu-planner`) ||
+            pathname.startsWith(`${base}/products/`));
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [permissionOnboarding, setPermissionOnboarding] = useState(true);
 
     useEffect(() => {
         if (!shopSlug) return;
@@ -213,6 +217,9 @@ export default function ShopLoader() {
             </div>
             {!hideFloatingCart && <FloatingCartBar />}
             <BottomNav />
+            {permissionOnboarding ? (
+                <PermissionOnboardingModal onComplete={() => setPermissionOnboarding(false)} />
+            ) : null}
         </>
     );
 }

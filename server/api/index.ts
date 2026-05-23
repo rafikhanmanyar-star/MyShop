@@ -15,6 +15,7 @@ import { shopVoiceOrdersRouter, mobileVoiceOrdersRouter } from './routes/voiceOr
 import { shopOrderCenterRouter } from './routes/orderCenter.js';
 import accountingRoutes from './routes/accounting.js';
 import expensesRoutes from './routes/expenses.js';
+import customerFeedbackRoutes from './routes/customerFeedback.js';
 import procurementRoutes from './routes/procurement.js';
 import procurementDemandRoutes from './routes/procurementDemand.js';
 import shiftsRoutes from './routes/shifts.js';
@@ -117,6 +118,7 @@ app.use('/api/shop/voice-orders', tenantMiddleware(dbService), shopVoiceOrdersRo
 app.use('/api/shop/order-center', tenantMiddleware(dbService), shopOrderCenterRouter);
 app.use('/api/shop/accounting', tenantMiddleware(dbService), accountingRoutes);
 app.use('/api/shop/expenses', tenantMiddleware(dbService), expensesRoutes);
+app.use('/api/shop/customer-feedback', tenantMiddleware(dbService), customerFeedbackRoutes);
 app.use('/api/shop/procurement/demand', tenantMiddleware(dbService), procurementDemandRoutes);
 app.use('/api/shop/procurement', tenantMiddleware(dbService), procurementRoutes);
 app.use('/api/shop/shifts', tenantMiddleware(dbService), shiftsRoutes);

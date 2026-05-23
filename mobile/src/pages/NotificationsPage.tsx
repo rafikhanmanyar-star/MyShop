@@ -51,11 +51,17 @@ export default function NotificationsPage() {
         }
     }, [state.isLoggedIn, navigate, shopSlug]);
 
-    const onOrderClick = (n: CustomerNotificationItem) => {
-        if (!slug || n.kind !== 'order' || !n.orderId) return;
+    const onItemClick = (n: CustomerNotificationItem) => {
+        if (!slug) return;
         markRead(slug, n.id);
         setListVersion((x) => x + 1);
-        navigate(`/${slug}/orders/${n.orderId}`);
+        if (n.kind === 'order' && n.orderId) {
+            navigate(`/${slug}/orders/${n.orderId}`);
+            return;
+        }
+        if (n.kind === 'feedback') {
+            navigate(`/${slug}/feedback/history`);
+        }
     };
 
     if (!state.isLoggedIn) {
@@ -100,7 +106,7 @@ export default function NotificationsPage() {
                     {items.map((n) => (
                         <li key={n.id}>
                             {n.kind === 'order' && n.orderId ? (
-                                <button type="button" className="notifications-item notifications-item--order" onClick={() => onOrderClick(n)}>
+                                <button type="button" className="notifications-item notifications-item--order" onClick={() => onItemClick(n)}>
                                     <span className={`notifications-dot ${!n.read ? 'notifications-dot--unread' : ''}`} aria-hidden />
                                     <div className="notifications-item-body">
                                         <span className="notifications-item-title">{n.title}</span>
@@ -117,6 +123,20 @@ export default function NotificationsPage() {
                                             <path d="M9 18l6-6-6-6" />
                                         </svg>
                                     </span>
+                                </button>
+                            ) : n.kind === 'feedback' ? (
+                                <button type="button" className="notifications-item notifications-item--order" onClick={() => onItemClick(n)}>
+                                    <span className={`notifications-dot ${!n.read ? 'notifications-dot--unread' : ''}`} aria-hidden />
+                                    <div className="notifications-item-body">
+                                        <span className="notifications-item-title">{n.title}</span>
+                                        <span className="notifications-item-text">{n.body}</span>
+                                        <time className="notifications-item-time" dateTime={n.createdAt}>
+                                            {new Date(n.createdAt).toLocaleString(undefined, {
+                                                dateStyle: 'medium',
+                                                timeStyle: 'short',
+                                            })}
+                                        </time>
+                                    </div>
                                 </button>
                             ) : (
                                 <div className="notifications-item notifications-item--static">

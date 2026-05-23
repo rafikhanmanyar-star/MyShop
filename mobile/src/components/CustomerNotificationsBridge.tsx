@@ -5,8 +5,11 @@ import { getApiBaseUrl } from '../api';
 import { customerApi } from '../api';
 import {
     appendOrderNotification,
+    appendFeedbackNotification,
     formatOrderEventMessage,
+    formatFeedbackEventMessage,
     makeOrderNotificationId,
+    makeFeedbackNotificationId,
     mergeBudgetAlerts,
 } from '../services/customerNotifications';
 
@@ -59,6 +62,19 @@ export default function CustomerNotificationsBridge() {
         es.onmessage = (ev) => {
             try {
                 const d = JSON.parse(ev.data);
+                if (d.type === 'feedback_event' && d.payload) {
+                    const p = d.payload as Record<string, unknown>;
+                    const { title, body } = formatFeedbackEventMessage(p);
+                    const id = makeFeedbackNotificationId(p, 'sse');
+                    appendFeedbackNotification(slug, {
+                        id,
+                        title,
+                        body,
+                        createdAt: new Date().toISOString(),
+                        feedbackId: typeof p.feedbackId === 'string' ? p.feedbackId : String(p.feedbackId || ''),
+                    });
+                    return;
+                }
                 if (d.type !== 'order_event' || !d.payload) return;
                 const p = d.payload as Record<string, unknown>;
                 const { title, body } = formatOrderEventMessage(p);

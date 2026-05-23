@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ensureMicrophoneForRecording } from '../permissions/microphonePermission';
+import { openAppSettings } from '../permissions/permissionService';
+import type { PermissionStatus } from '../permissions/types';
+import PermissionDeniedBanner from './permissions/PermissionDeniedBanner';
 
 export type VoiceRecorderResult = {
     blob: Blob;
@@ -28,6 +32,10 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
     /** Wall-clock seconds while recording — React `elapsed` in onstop is stale (closure). */
     const elapsedRef = useRef(0);
     const recordingStartedAtRef = useRef<number | null>(null);
+
+    const [micDenied, setMicDenied] = useState(false);
+    const [micStatus, setMicStatus] = useState<PermissionStatus>('unknown');
+    const [micMessage, setMicMessage] = useState<string | undefined>();
 
     const stopTracks = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -91,6 +99,15 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
 
     const startRecording = async () => {
         try {
+            const perm = await ensureMicrophoneForRecording();
+            setMicStatus(perm.status);
+            setMicMessage(perm.message);
+            if (perm.status !== 'granted') {
+                setMicDenied(true);
+                return;
+            }
+            setMicDenied(false);
+
             if (previewUrl) {
                 URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
@@ -153,7 +170,9 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
             }, 1000);
             drawWave();
         } catch {
-            alert('Microphone access is required for voice orders.');
+            setMicDenied(true);
+            setMicStatus('denied');
+            setMicMessage('Microphone access is required for voice orders.');
         }
     };
 
@@ -200,6 +219,16 @@ export default function VoiceRecorder({ maxSeconds, minSeconds = 2, onRecordingR
 
     return (
         <div className="voice-recorder" style={{ padding: 16, borderRadius: 16, background: 'var(--surface-elevated, #f8fafc)', border: '1px solid var(--border-subtle)' }}>
+            {micDenied ? (
+                <PermissionDeniedBanner
+                    kind="microphone"
+                    status={micStatus === 'unavailable' ? 'denied' : micStatus}
+                    message={micMessage}
+                    onRetry={() => void startRecording()}
+                    onOpenSettings={() => void openAppSettings()}
+                    compact
+                />
+            ) : null}
             <canvas ref={canvasRef} width={320} height={48} style={{ width: '100%', height: 48, borderRadius: 8, marginBottom: 12, background: 'rgba(0,0,0,0.04)' }} />
             <div style={{ textAlign: 'center', fontSize: 28, fontWeight: 700, fontVariantNumeric: 'tabular-nums', marginBottom: 8 }}>
                 {state === 'idle' ? '0:00' : fmt(elapsed)}

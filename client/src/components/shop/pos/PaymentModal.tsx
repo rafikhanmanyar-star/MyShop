@@ -8,9 +8,9 @@ import { showAppToast } from '../../../utils/appToast';
 import { usePayFromAccounts } from '../../../hooks/usePayFromAccounts';
 import {
     formatPayFromAccountLabel,
-    isPosCashStylePayFromAccount,
+    payFromAccountsForPosMethod,
     pickDefaultPayFromAccountId,
-    type PayFromAccountOption,
+    resolvePayFromAccountForPos,
 } from '../../../utils/payFromAccounts';
 
 const PaymentModal: React.FC = () => {
@@ -33,29 +33,24 @@ const PaymentModal: React.FC = () => {
     const [tenderAmount, setTenderAmount] = useState('0');
     const [selectedMethod, setSelectedMethod] = useState<POSPaymentMethod>(POSPaymentMethod.CASH);
     const [selectedChartAccountId, setSelectedChartAccountId] = useState('');
-    const { payFromAccounts, reload: reloadPayFrom } = usePayFromAccounts();
+    const { payFromAccounts, loading: payFromLoading, reload: reloadPayFrom } = usePayFromAccounts();
 
     const isKhata = selectedMethod === POSPaymentMethod.KHATA;
     const khataRequiresCustomer = isKhata && (!customer || customer.id === 'walk-in');
 
     const accountsForMethod = useCallback(
-        (method: POSPaymentMethod): PayFromAccountOption[] => {
-            if (method === POSPaymentMethod.KHATA) return [];
-            const cashStyle = method === POSPaymentMethod.CASH;
-            const filtered = payFromAccounts.filter((a) =>
-                cashStyle ? isPosCashStylePayFromAccount(a) : !isPosCashStylePayFromAccount(a)
-            );
-            return filtered.length > 0 ? filtered : payFromAccounts;
-        },
+        (method: POSPaymentMethod) => payFromAccountsForPosMethod(payFromAccounts, method),
         [payFromAccounts]
     );
 
     const pickDefaultForMethod = useCallback(
-        (method: POSPaymentMethod) => {
-            const list = accountsForMethod(method);
-            return pickDefaultPayFromAccountId(list);
-        },
+        (method: POSPaymentMethod) => pickDefaultPayFromAccountId(accountsForMethod(method)),
         [accountsForMethod]
+    );
+
+    const resolvedReceiveAccount = React.useMemo(
+        () => resolvePayFromAccountForPos(payFromAccounts, selectedMethod, selectedChartAccountId),
+        [payFromAccounts, selectedMethod, selectedChartAccountId]
     );
 
     useEffect(() => {
@@ -63,22 +58,35 @@ const PaymentModal: React.FC = () => {
     }, [isPaymentModalOpen, reloadPayFrom]);
 
     useEffect(() => {
+        if (!isPaymentModalOpen || payFromAccounts.length === 0) return;
+        const resolved = resolvePayFromAccountForPos(payFromAccounts, selectedMethod, selectedChartAccountId);
+        if (resolved && resolved.id !== selectedChartAccountId) {
+            setSelectedChartAccountId(resolved.id);
+        }
+    }, [isPaymentModalOpen, payFromAccounts, selectedMethod, selectedChartAccountId]);
+
+    useEffect(() => {
         if (isPaymentModalOpen) {
             setTenderAmount(balanceDue.toString());
-            setSelectedChartAccountId((prev) =>
-                prev && payFromAccounts.some((a) => a.id === prev)
-                    ? prev
-                    : pickDefaultForMethod(selectedMethod)
-            );
         }
-    }, [isPaymentModalOpen, balanceDue, payFromAccounts, selectedMethod, pickDefaultForMethod]);
+    }, [isPaymentModalOpen, balanceDue]);
 
     const handleAddPayment = async () => {
         const amount = parseFloat(tenderAmount);
         if (amount > 0) {
-            const acc = !isKhata ? payFromAccounts.find((a) => a.id === selectedChartAccountId) : undefined;
+            let acc = !isKhata ? resolvedReceiveAccount : undefined;
             if (!isKhata && !acc) {
-                showAppToast('Select an account from Chart of Accounts to receive this payment.', 'error');
+                const fresh = payFromAccounts.length > 0 ? payFromAccounts : await reloadPayFrom();
+                acc = resolvePayFromAccountForPos(fresh, selectedMethod, selectedChartAccountId);
+                if (acc) setSelectedChartAccountId(acc.id);
+            }
+            if (!isKhata && !acc) {
+                showAppToast(
+                    payFromAccounts.length === 0 && !payFromLoading
+                        ? 'No cash or bank account is set up in Chart of Accounts.'
+                        : 'Payment accounts are still loading. Try again in a moment.',
+                    'error'
+                );
                 return;
             }
             addPayment(
@@ -234,7 +242,10 @@ const PaymentModal: React.FC = () => {
 
                             <button
                                 onClick={handleAddPayment}
-                                disabled={parseFloat(tenderAmount) <= 0}
+                                disabled={
+                                    parseFloat(tenderAmount) <= 0 ||
+                                    (!isKhata && (payFromLoading || !resolvedReceiveAccount))
+                                }
                                 className="w-full py-5 pos-gradient-dark hover:opacity-95 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-[1.5rem] font-semibold text-xl transition-all shadow-none shadow-none-200 uppercase tracking-[0.2em] relative overflow-hidden group"
                             >
                                 <div className="absolute inset-x-0 h-px top-0 bg-white/20"></div>

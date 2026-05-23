@@ -1,29 +1,23 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi, getProductImagePath } from '../api';
-import ProductListCard, { type ProductListProduct } from '../components/ProductListCard';
-import CategoryRailIcon from '../components/CategoryRailIcon';
+import { type ProductListProduct } from '../components/ProductListCard';
 import { filterCategoriesWithListedProducts } from '../utils/catalogCategories';
 import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
 import GlobalSearchBar from '../features/search/GlobalSearchBar';
 import { addRecentSearch } from '../features/search/recentSearchesStorage';
 import HomePromoCarousel from '../components/HomePromoCarousel';
-import type { HomePromoSlide } from '../context/AppContext';
+import CategoryScroller from '../components/home/CategoryScroller';
+import HomeLoyaltyCard from '../components/home/HomeLoyaltyCard';
+import HomeProductSection from '../components/home/HomeProductSection';
+import { coerceHomePromoSlides } from '../utils/homePromoSlides';
 
-function coercePromoSlides(raw: unknown): HomePromoSlide[] {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw as HomePromoSlide[];
-    if (typeof raw === 'string') {
-        try {
-            const p = JSON.parse(raw);
-            return Array.isArray(p) ? (p as HomePromoSlide[]) : [];
-        } catch {
-            return [];
-        }
-    }
-    return [];
-}
+const formatPrice = (p: number | string | null | undefined) => {
+    if (p === null || p === undefined) return 'Rs. 0';
+    const num = typeof p === 'string' ? parseFloat(p) : p;
+    return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
+};
 
 export default function Home() {
     const { shopSlug } = useParams();
@@ -39,12 +33,12 @@ export default function Home() {
 
     const mainCategories = useMemo(
         () => categories.filter((c: any) => !c.parent_id),
-        [categories]
+        [categories],
     );
 
     const mainCategoriesWithProducts = useMemo(
         () => filterCategoriesWithListedProducts(mainCategories, null),
-        [mainCategories]
+        [mainCategories],
     );
 
     useEffect(() => {
@@ -58,7 +52,8 @@ export default function Home() {
         ])
             .then(([cats, bs, dl, nw]) => {
                 setCategories(Array.isArray(cats) ? cats : (cats as any)?.categories ?? []);
-                const priceOk = (items: any[]) => (Array.isArray(items) ? items.filter((p) => isMobileCatalogPriceListed(p)) : []);
+                const priceOk = (items: any[]) =>
+                    Array.isArray(items) ? items.filter((p) => isMobileCatalogPriceListed(p)) : [];
                 setBestSellers(priceOk(bs.items || []));
                 setDeals(priceOk(dl.items || []));
                 setNewArrivals(priceOk(nw.items || []));
@@ -66,12 +61,6 @@ export default function Home() {
             .catch(() => {})
             .finally(() => setLoading(false));
     }, [shopSlug]);
-
-    const formatPrice = (p: number | string | null | undefined) => {
-        if (p === null || p === undefined) return 'Rs. 0';
-        const num = typeof p === 'string' ? parseFloat(p) : p;
-        return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
-    };
 
     const cartQtyMap = useMemo(() => {
         const m = new Map<string, number>();
@@ -118,196 +107,96 @@ export default function Home() {
                 showToast(e?.message || 'Could not update cart');
             }
         },
-        [dispatch, showToast, state.cart]
+        [dispatch, showToast, state.cart],
     );
 
-    const handleAddOne = (product: ProductListProduct) => addToCart(product, 1);
-    const handleChangeQty = (productId: string, quantity: number) => {
-        const merged = [...bestSellers, ...deals, ...newArrivals];
-        const product = merged.find((p: any) => p.id === productId);
-        if (!product) return;
-        const cur = cartQtyMap.get(productId) ?? 0;
-        addToCart(product as ProductListProduct, quantity - cur);
-    };
+    const handleAddOne = useCallback(
+        (product: ProductListProduct) => addToCart(product, 1),
+        [addToCart],
+    );
 
-    const submitSearch = () => {
+    const handleChangeQty = useCallback(
+        (productId: string, quantity: number) => {
+            const merged = [...bestSellers, ...deals, ...newArrivals];
+            const product = merged.find((p: any) => p.id === productId);
+            if (!product) return;
+            const cur = cartQtyMap.get(productId) ?? 0;
+            addToCart(product as ProductListProduct, quantity - cur);
+        },
+        [addToCart, bestSellers, deals, newArrivals, cartQtyMap],
+    );
+
+    const submitSearch = useCallback(() => {
         const q = searchDraft.trim();
         if (!shopSlug) return;
         if (q) addRecentSearch(shopSlug, q);
         if (q) navigate(`/${shopSlug}/products?search=${encodeURIComponent(q)}`);
         else navigate(`/${shopSlug}/products`);
-    };
+    }, [searchDraft, shopSlug, navigate]);
 
-    const renderSection = (title: string, items: any[], viewAllQuery: string) => (
-        <section className="home-product-section">
-            <div className="home-product-section__head">
-                <h2 className="home-section-title">{title}</h2>
-                <Link to={`/${shopSlug}/products${viewAllQuery}`} className="home-section-link">
-                    View All →
-                </Link>
-            </div>
-            <div className="home-product-row">
-                {items.map((p: any) => (
-                    <div key={p.id} className="home-product-row__cell">
-                        <ProductListCard
-                            product={p}
-                            shopSlug={shopSlug!}
-                            cartQty={cartQtyMap.get(p.id) ?? 0}
-                            formatPrice={formatPrice}
-                            unavailableStyle={false}
-                            onAddOne={handleAddOne}
-                            onChangeQty={handleChangeQty}
-                        />
-                    </div>
-                ))}
-            </div>
-        </section>
+    const promoSlides = useMemo(
+        () => coerceHomePromoSlides(state.branding?.home_promo_slides),
+        [state.branding?.home_promo_slides],
     );
-
-    const promoSlides = coercePromoSlides(state.branding?.home_promo_slides);
     const promoIntervalSec = state.branding?.home_promo_interval_seconds ?? 5;
     const deliveryMins = state.settings?.estimated_delivery_minutes || 30;
 
+    const brandName = state.shop?.company_name || state.shop?.name || 'Rewards';
+
     return (
-        <div className="page page--home fade-in">
+        <div className="page page--home page--home-compact fade-in">
             <div className="home-search-sticky">
                 <GlobalSearchBar
                     variant="home"
                     value={searchDraft}
                     onChange={setSearchDraft}
                     onSubmit={submitSearch}
-                    fixedPlaceholder="Search for products, brands & more"
+                    fixedPlaceholder="Search products, brands…"
                     onBarcodeScan={() => navigate(`/${shopSlug}/products`)}
                 />
             </div>
 
-            <div className="category-nav-rail category-nav-rail--home" role="navigation" aria-label="Quick categories">
-                <Link to={`/${shopSlug}/products`} className="category-nav-item category-nav-item--link category-nav-item--chip">
-                    <span className="category-nav-item__icon category-nav-item__icon--indigo" aria-hidden>
-                        📦
-                    </span>
-                    <span>All Items</span>
-                </Link>
-                <Link
-                    to={`/${shopSlug}/products?filterInStock=true`}
-                    className="category-nav-item category-nav-item--link category-nav-item--chip"
-                >
-                    <span className="category-nav-item__icon category-nav-item__icon--emerald" aria-hidden>
-                        ✓
-                    </span>
-                    <span>In Stock</span>
-                </Link>
-                <Link
-                    to={`/${shopSlug}/products?browse=popular`}
-                    className="category-nav-item category-nav-item--link category-nav-item--chip"
-                >
-                    <span className="category-nav-item__icon category-nav-item__icon--amber" aria-hidden>
-                        ⭐
-                    </span>
-                    <span>Popular</span>
-                </Link>
-                <Link
-                    to={`/${shopSlug}/products?filterDeals=true`}
-                    className="category-nav-item category-nav-item--link category-nav-item--chip"
-                >
-                    <span className="category-nav-item__icon category-nav-item__icon--rose" aria-hidden>
-                        %
-                    </span>
-                    <span>Deals</span>
-                </Link>
-                <Link
-                    to={`/${shopSlug}/products?sortBy=price_low_high`}
-                    className="category-nav-item category-nav-item--link category-nav-item--chip"
-                >
-                    <span className="category-nav-item__icon category-nav-item__icon--cyan" aria-hidden>
-                        ↓
-                    </span>
-                    <span>Low Price</span>
-                </Link>
-                <Link
-                    to={`/${shopSlug}/utilities`}
-                    className="category-nav-item category-nav-item--link category-nav-item--chip"
-                >
-                    <span className="category-nav-item__icon category-nav-item__icon--violet" aria-hidden>
-                        ↩
-                    </span>
-                    <span>Easy Return</span>
-                </Link>
-                {mainCategoriesWithProducts.map((c: any) => (
-                    <Link
-                        key={c.id}
-                        to={`/${shopSlug}/products?category=${c.id}`}
-                        className="category-nav-item category-nav-item--link category-nav-item--chip"
-                    >
-                        <CategoryRailIcon mobile_icon_url={c.mobile_icon_url} />
-                        <span>{c.name}</span>
-                    </Link>
-                ))}
-            </div>
+            {shopSlug ? (
+                <CategoryScroller shopSlug={shopSlug} categories={mainCategoriesWithProducts} />
+            ) : null}
 
-            {state.isLoggedIn && (
-                <div className="home-loyalty-card home-loyalty-card--rich">
-                    <div className="home-loyalty-card__main">
-                        <span className="home-loyalty-card__icon" aria-hidden>
-                            🎁
-                        </span>
-                        <div className="home-loyalty-card__text">
-                            <p className="home-loyalty-card__brand-line">{state.shop?.company_name || state.shop?.name || 'Rewards'}</p>
-                            {loyalty.fetchFailed && loyalty.totalPoints == null ? (
-                                <p className="home-loyalty-card__points">Points unavailable</p>
-                            ) : loyalty.totalPoints == null && !loyalty.fetchFailed ? (
-                                <p className="home-loyalty-card__points home-loyalty-card__loading">Loading points…</p>
-                            ) : (
-                                <>
-                                    <p className="home-loyalty-card__points">
-                                        <strong>{(loyalty.totalPoints ?? 0).toLocaleString()}</strong> points
-                                    </p>
-                                    {loyalty.fetchFailed && (
-                                        <p className="home-loyalty-card__hint home-loyalty-card__hint--muted">
-                                            Showing last saved balance
-                                        </p>
-                                    )}
-                                    <div className="home-loyalty-card__progress" aria-hidden>
-                                        <span className="home-loyalty-card__progress-fill" />
-                                    </div>
-                                    <p className="home-loyalty-card__tagline">Keep shopping to unlock more perks</p>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                    <div className="home-loyalty-card__actions">
-                        <Link to={`/${shopSlug}/loyalty/history`} className="home-loyalty-card__cta home-loyalty-card__cta--ghost">
-                            View History
-                        </Link>
-                        <Link to={`/${shopSlug}/loyalty/benefits`} className="home-loyalty-card__cta">
-                            View Benefits →
-                        </Link>
-                    </div>
-                </div>
-            )}
+            {state.isLoggedIn && shopSlug ? (
+                <HomeLoyaltyCard shopSlug={shopSlug} brandName={brandName} loyalty={loyalty} />
+            ) : null}
 
-            <HomePromoCarousel
-                slides={promoSlides}
-                shopSlug={shopSlug!}
-                deliveryMinutes={deliveryMins}
-                intervalSeconds={promoIntervalSec}
-            />
+            {shopSlug ? (
+                <HomePromoCarousel
+                    slides={promoSlides}
+                    shopSlug={shopSlug}
+                    deliveryMinutes={deliveryMins}
+                    intervalSeconds={promoIntervalSec}
+                    compact
+                />
+            ) : null}
 
-            <div className="home-service-strip" aria-label="Service highlights">
+            <div className="home-service-strip home-service-strip--compact" aria-label="Service highlights">
                 <div className="home-service-strip__item">
-                    <span className="home-service-strip__ico">🚚</span>
+                    <span className="home-service-strip__ico" aria-hidden>
+                        🚚
+                    </span>
                     <span className="home-service-strip__txt">Free Delivery</span>
                 </div>
                 <div className="home-service-strip__item">
-                    <span className="home-service-strip__ico">🏪</span>
+                    <span className="home-service-strip__ico" aria-hidden>
+                        🏪
+                    </span>
                     <span className="home-service-strip__txt">Easy Return</span>
                 </div>
                 <div className="home-service-strip__item">
-                    <span className="home-service-strip__ico">🔒</span>
+                    <span className="home-service-strip__ico" aria-hidden>
+                        🔒
+                    </span>
                     <span className="home-service-strip__txt">Secure Pay</span>
                 </div>
                 <div className="home-service-strip__item">
-                    <span className="home-service-strip__ico">💬</span>
+                    <span className="home-service-strip__ico" aria-hidden>
+                        💬
+                    </span>
                     <span className="home-service-strip__txt">24/7 Support</span>
                 </div>
             </div>
@@ -316,25 +205,51 @@ export default function Home() {
                 <>
                     {[1, 2, 3].map((s) => (
                         <section key={s} className="home-product-section">
-                            <div className="skeleton" style={{ height: 20, width: 140, marginBottom: 12 }} />
+                            <div className="skeleton" style={{ height: 16, width: 120, marginBottom: 8 }} />
                             <div className="home-product-row">
-                                {[1, 2, 3, 4].map((i) => (
-                                    <div key={i} style={{ width: 140, flexShrink: 0 }}>
-                                        <div className="skeleton" style={{ aspectRatio: '1', borderRadius: 12 }} />
-                                        <div className="skeleton" style={{ height: 10, marginTop: 8 }} />
+                                {[1, 2, 3, 4, 5].map((i) => (
+                                    <div key={i} className="home-product-row__cell">
+                                        <div className="skeleton" style={{ height: 168, borderRadius: 10 }} />
                                     </div>
                                 ))}
                             </div>
                         </section>
                     ))}
                 </>
-            ) : (
+            ) : shopSlug ? (
                 <>
-                    {renderSection('Best Sellers', bestSellers, '?sortBy=best_selling')}
-                    {renderSection('Flash Deals', deals, '?filterDeals=true')}
-                    {renderSection('New Arrivals', newArrivals, '?browse=new')}
+                    <HomeProductSection
+                        title="Best Sellers"
+                        items={bestSellers}
+                        viewAllQuery="?sortBy=best_selling"
+                        shopSlug={shopSlug}
+                        cartQtyMap={cartQtyMap}
+                        formatPrice={formatPrice}
+                        onAddOne={handleAddOne}
+                        onChangeQty={handleChangeQty}
+                    />
+                    <HomeProductSection
+                        title="Flash Deals"
+                        items={deals}
+                        viewAllQuery="?filterDeals=true"
+                        shopSlug={shopSlug}
+                        cartQtyMap={cartQtyMap}
+                        formatPrice={formatPrice}
+                        onAddOne={handleAddOne}
+                        onChangeQty={handleChangeQty}
+                    />
+                    <HomeProductSection
+                        title="New Arrivals"
+                        items={newArrivals}
+                        viewAllQuery="?browse=new"
+                        shopSlug={shopSlug}
+                        cartQtyMap={cartQtyMap}
+                        formatPrice={formatPrice}
+                        onAddOne={handleAddOne}
+                        onChangeQty={handleChangeQty}
+                    />
                 </>
-            )}
+            ) : null}
         </div>
     );
 }

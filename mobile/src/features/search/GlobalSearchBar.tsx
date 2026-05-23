@@ -1,5 +1,20 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { ensureMicrophoneForRecording } from '../../permissions/microphonePermission';
+import { openAppSettings } from '../../permissions/permissionService';
+import { PERMISSION_COPY } from '../../permissions/constants';
+import type { PermissionStatus } from '../../permissions/types';
+import PermissionDeniedBanner from '../../components/permissions/PermissionDeniedBanner';
 import { SEARCH_PLACEHOLDER_ROTATION } from './searchPlaceholders';
+
+type SpeechRecognitionLike = {
+    lang: string;
+    interimResults: boolean;
+    maxAlternatives: 1;
+    onresult: ((ev: { results: { [i: number]: { [j: number]: { transcript?: string } } } }) => void) | null;
+    onerror: (() => void) | null;
+    onend: (() => void) | null;
+    start: () => void;
+};
 
 type Props = {
     value: string;
@@ -33,6 +48,8 @@ export default function GlobalSearchBar({
     const inputRef = useRef<HTMLInputElement>(null);
     const [phIdx, setPhIdx] = useState(0);
     const [listening, setListening] = useState(false);
+    const [micBlocked, setMicBlocked] = useState(false);
+    const [micStatus, setMicStatus] = useState<PermissionStatus>('unknown');
 
     useEffect(() => {
         if (fixedPlaceholder) return;
@@ -40,10 +57,19 @@ export default function GlobalSearchBar({
         return () => clearInterval(id);
     }, [fixedPlaceholder]);
 
-    const startVoice = () => {
-        const SR = (window as unknown as { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition;
+    const startVoice = async () => {
+        const perm = await ensureMicrophoneForRecording();
+        setMicStatus(perm.status);
+        if (perm.status !== 'granted') {
+            setMicBlocked(true);
+            return;
+        }
+        setMicBlocked(false);
+
+        const SR = (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition
+            ?? (window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition;
         if (!SR) {
-            alert('Voice search is not supported in this browser. Try Chrome.');
+            inputRef.current?.focus();
             return;
         }
         const rec = new SR();
@@ -51,7 +77,7 @@ export default function GlobalSearchBar({
         rec.interimResults = false;
         rec.maxAlternatives = 1;
         setListening(true);
-        rec.onresult = (ev: any) => {
+        rec.onresult = (ev) => {
             const t = ev.results[0]?.[0]?.transcript?.trim();
             if (t) onChange(t);
             setListening(false);
@@ -75,7 +101,13 @@ export default function GlobalSearchBar({
                     onSubmit();
                 }}
             >
-                <svg className="global-search__icon" viewBox="0 0 24 24" aria-hidden>
+                <svg
+                    className="global-search__icon"
+                    viewBox="0 0 24 24"
+                    width={variant === 'home' ? 16 : 20}
+                    height={variant === 'home' ? 16 : 20}
+                    aria-hidden
+                >
                     <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
                     <path d="m21 21-4.3-4.3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
@@ -111,9 +143,9 @@ export default function GlobalSearchBar({
                     type="button"
                     className={`global-search__mic ${listening ? 'global-search__mic--active' : ''}`}
                     aria-label="Voice search"
-                    onClick={() => startVoice()}
+                    onClick={() => void startVoice()}
                 >
-                    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+                    <svg viewBox="0 0 24 24" width={variant === 'home' ? 18 : 20} height={variant === 'home' ? 18 : 20} aria-hidden>
                         <path
                             fill="currentColor"
                             d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 1 1-10 0H5a7 7 0 0 0 6 6.92V20H7v2h10v-2h-4v-2.08A7 7 0 0 0 19 11h-2z"
@@ -122,7 +154,7 @@ export default function GlobalSearchBar({
                 </button>
                 {variant === 'home' && onBarcodeScan ? (
                     <button type="button" className="global-search__scan" aria-label="Browse products" onClick={() => onBarcodeScan()}>
-                        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden>
+                        <svg viewBox="0 0 24 24" width={18} height={18} aria-hidden>
                             <path
                                 fill="currentColor"
                                 d="M4 5a1 1 0 0 1 1-1h3v2H6v2H4V5zm16 0v3h-2V6h-2V4h3a1 1 0 0 1 1 1zm0 14a1 1 0 0 1-1 1h-3v-2h2v-2h2v3zM4 19v-3h2v2h2v2H5a1 1 0 0 1-1-1zm4-12h2v8H8V7zm4 0h4v2h-4V7zm0 4h6v2h-6v-2zm0 4h8v2h-8v-2z"
@@ -131,6 +163,16 @@ export default function GlobalSearchBar({
                     </button>
                 ) : null}
             </form>
+            {micBlocked ? (
+                <PermissionDeniedBanner
+                    kind="microphone"
+                    status={micStatus === 'unavailable' ? 'denied' : micStatus}
+                    message={PERMISSION_COPY.microphone.denied}
+                    onRetry={() => void startVoice()}
+                    onOpenSettings={() => void openAppSettings()}
+                    compact
+                />
+            ) : null}
             {overlay}
         </div>
     );

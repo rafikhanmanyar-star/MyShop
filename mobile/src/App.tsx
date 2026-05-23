@@ -35,6 +35,8 @@ import RecipePickerPage from './pages/menuPlanner/RecipePickerPage';
 import ShoppingListPage from './pages/menuPlanner/ShoppingListPage';
 import MenuTemplatesPage from './pages/menuPlanner/MenuTemplatesPage';
 import NutritionSummaryPage from './pages/menuPlanner/NutritionSummaryPage';
+import FeedbackPage from './pages/FeedbackPage';
+import FeedbackHistoryPage from './pages/FeedbackHistoryPage';
 import UtilitiesHubPage from './pages/UtilitiesHubPage';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import PWAReloadPrompt from './components/PWAReloadPrompt';
@@ -147,6 +149,8 @@ export default function App() {
 
           {/* Budget Feature */}
           <Route path="utilities" element={<UtilitiesHubPage />} />
+          <Route path="feedback" element={<FeedbackPage />} />
+          <Route path="feedback/history" element={<FeedbackHistoryPage />} />
           <Route path="budget" element={<BudgetDashboard />} />
           <Route path="budget/create" element={<BudgetCreation />} />
           <Route path="budget/:id" element={<BudgetDetail />} />

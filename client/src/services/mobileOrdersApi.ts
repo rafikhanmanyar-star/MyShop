@@ -127,7 +127,7 @@ export interface PosRidersOverview {
 
 export interface HomePromoSlide {
     image_url: string;
-    link_type?: 'none' | 'products' | 'offers' | 'deals' | 'recipes' | 'voice_order' | 'budget' | 'utilities' | 'custom';
+    link_type?: 'none' | 'products' | 'offers' | 'deals' | 'recipes' | 'voice_order' | 'budget' | 'utilities' | 'feedback' | 'custom';
     link_url?: string | null;
     title?: string | null;
 }

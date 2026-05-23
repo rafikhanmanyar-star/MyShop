@@ -10,6 +10,11 @@ import { invalidateInventorySkuListCache } from './shopService.js';
 import { tryAutoAssignRiderForMobileOrder, manuallyAssignRiderForMobileOrder } from './deliveryAssignment.js';
 import { haversineDistanceKm } from '../utils/haversine.js';
 import { getDrivingDurationSeconds } from './googleDirectionsEtaService.js';
+import {
+    getBundleTitle,
+    getRecipeCompanionKeywords,
+    getRecommendationSubtitle,
+} from '../utils/productRecommendationRules.js';
 
 function generateId(prefix: string): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -579,10 +584,14 @@ export class MobileOrderService {
     }
 
     /**
-     * Recommendations: rank same-category products first, then fill with related cross-category
-     * products using brand/unit/name/category keyword matches, and finally popular sellable items.
+     * PDP recommendations — priority order:
+     * 1) Frequently bought together (order co-occurrence)
+     * 2) Same-recipe ingredients (recipe_ingredients graph)
+     * 3) Recipe-family companion keywords (rice → oil, masala, …)
+     * 4) Same subcategory / category / brand / name keywords
+     * 5) Popular sellable fallback
      */
-    async getProductRecommendationsForMobile(tenantId: string, productId: string, limit = 6) {
+    async getProductRecommendationsForMobile(tenantId: string, productId: string, limit = 12) {
         const stockSubquery = mobileProductSellableStockSql();
         const meta = await this.db.query(
             `SELECT p.category_id, p.subcategory_id, p.brand_id, p.name, p.mobile_description, p.unit,
@@ -599,22 +608,81 @@ export class MobileOrderService {
          AND COALESCE(p.sales_deactivated, FALSE) = FALSE`,
             [tenantId, productId]
         );
-        if (meta.length === 0) return [];
+        if (meta.length === 0) {
+            return { items: [], subtitle: null, bundle: null };
+        }
 
+        const productName = String(meta[0]?.name ?? '');
+        const categoryName = meta[0]?.category_name ?? null;
         const categoryId = meta[0]?.category_id ?? null;
         const subcategoryId = meta[0]?.subcategory_id ?? null;
         const brandId = meta[0]?.brand_id ?? null;
         const unit = meta[0]?.unit ?? null;
         const currentPrice = safeNum(meta[0]?.price);
-        const keywords = getRecommendationKeywords(
-            meta[0]?.name,
-            meta[0]?.mobile_description,
-            meta[0]?.category_name,
-            meta[0]?.brand_name,
-            unit
+
+        const recipeKeywords = getRecipeCompanionKeywords(productName, categoryName);
+        const keywords = [
+            ...new Set([
+                ...recipeKeywords,
+                ...getRecommendationKeywords(
+                    meta[0]?.name,
+                    meta[0]?.mobile_description,
+                    meta[0]?.category_name,
+                    meta[0]?.brand_name,
+                    unit
+                ),
+            ]),
+        ].slice(0, 16);
+
+        const coPurchaseRows = await this.db.query(
+            `SELECT oi2.product_id::text AS id, COUNT(*)::int AS freq
+       FROM mobile_order_items oi1
+       JOIN mobile_order_items oi2
+         ON oi1.order_id = oi2.order_id AND oi1.tenant_id = oi2.tenant_id
+       JOIN shop_products p ON p.id = oi2.product_id AND p.tenant_id = oi1.tenant_id
+       WHERE oi1.tenant_id = $1
+         AND oi1.product_id::text = $2
+         AND oi2.product_id::text != $2
+         AND p.is_active = TRUE
+         AND p.mobile_visible = TRUE
+         AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+         AND COALESCE(p.mobile_price, p.retail_price) > 0
+       GROUP BY oi2.product_id
+       ORDER BY freq DESC
+       LIMIT 20`,
+            [tenantId, productId]
         );
-        const safeLimit = Math.min(Math.max(limit, 6), 12);
-        const poolSize = Math.min(60, Math.max(safeLimit * 8, 24));
+        const coPurchaseIds = coPurchaseRows.map((r: { id: string }) => String(r.id));
+        const hasCoPurchase = coPurchaseIds.length > 0;
+
+        let recipeCompanionIds: string[] = [];
+        try {
+            const recipeRows = await this.db.query(
+                `SELECT ri2.product_id::text AS id, COUNT(DISTINCT ri2.recipe_id)::int AS recipes
+         FROM recipe_ingredients ri1
+         JOIN recipe_ingredients ri2
+           ON ri1.recipe_id = ri2.recipe_id AND ri1.tenant_id = ri2.tenant_id
+         JOIN shop_products p ON p.id = ri2.product_id AND p.tenant_id = ri1.tenant_id
+         WHERE ri1.tenant_id = $1
+           AND ri1.product_id::text = $2
+           AND ri2.product_id IS NOT NULL
+           AND ri2.product_id::text != $2
+           AND p.is_active = TRUE
+           AND p.mobile_visible = TRUE
+           AND COALESCE(p.sales_deactivated, FALSE) = FALSE
+           AND COALESCE(p.mobile_price, p.retail_price) > 0
+         GROUP BY ri2.product_id
+         ORDER BY recipes DESC
+         LIMIT 20`,
+                [tenantId, productId]
+            );
+            recipeCompanionIds = recipeRows.map((r: { id: string }) => String(r.id));
+        } catch {
+            recipeCompanionIds = [];
+        }
+
+        const safeLimit = Math.min(Math.max(limit, 8), 16);
+        const poolSize = Math.min(80, Math.max(safeLimit * 8, 32));
 
         const relatedQuery = `
       WITH scored AS (
@@ -626,6 +694,8 @@ export class MobileOrderService {
                COALESCE(NULLIF(p.brand, ''), b.name) as brand_name,
                ${stockSubquery} as available_stock,
                (
+                 CASE WHEN p.id::text = ANY($9::text[]) THEN 220 ELSE 0 END +
+                 CASE WHEN p.id::text = ANY($10::text[]) THEN 170 ELSE 0 END +
                  CASE WHEN $3::text IS NOT NULL AND p.subcategory_id::text = $3 THEN 100 ELSE 0 END +
                  CASE WHEN $4::text IS NOT NULL AND p.category_id::text = $4 THEN 75 ELSE 0 END +
                  CASE WHEN $5::text IS NOT NULL AND p.brand_id::text = $5 THEN 35 ELSE 0 END +
@@ -637,7 +707,7 @@ export class MobileOrderService {
                       OR COALESCE(p.mobile_description, '') ILIKE '%' || kw || '%'
                       OR COALESCE(c.name, '') ILIKE '%' || kw || '%'
                       OR COALESCE(p.brand, b.name, '') ILIKE '%' || kw || '%'
-                 ) * 12, 48) +
+                 ) * 14, 56) +
                  CASE
                    WHEN $7::numeric > 0 THEN GREATEST(0, 12 - LEAST(12, ABS(COALESCE(p.mobile_price, p.retail_price) - $7::numeric) / $7::numeric * 12))
                    ELSE 0
@@ -660,7 +730,7 @@ export class MobileOrderService {
       FROM scored
       WHERE relevance_score > 0
       ORDER BY relevance_score DESC, COALESCE(total_sales, 0) DESC, COALESCE(rating_avg, 0) DESC, RANDOM()
-      LIMIT $9
+      LIMIT $11
     `;
 
         let rows = await this.db.query(relatedQuery, [
@@ -672,6 +742,8 @@ export class MobileOrderService {
             unit,
             currentPrice,
             keywords,
+            coPurchaseIds.length > 0 ? coPurchaseIds : ['__none__'],
+            recipeCompanionIds.length > 0 ? recipeCompanionIds : ['__none__'],
             poolSize,
         ]);
 
@@ -706,7 +778,7 @@ export class MobileOrderService {
 
         rows = rows.slice(0, safeLimit);
         const LOW_STOCK_THRESHOLD = 5;
-        return rows.map((row: any) => {
+        const items = rows.map((row: any) => {
             const stock = parseFloat(row.available_stock) || 0;
             const isPre = Boolean(row.is_pre_order);
             return {
@@ -720,6 +792,19 @@ export class MobileOrderService {
                 rating_avg: parseFloat(row.rating_avg) || 0,
             };
         });
+
+        const subtitle = getRecommendationSubtitle(productName, categoryName, hasCoPurchase);
+        const bundleTitle = getBundleTitle(productName, categoryName);
+        let bundle: { title: string; product_ids: string[]; total_price: number } | null = null;
+        if (bundleTitle && items.length >= 3) {
+            const bundleIds = items.slice(0, Math.min(6, items.length)).map((r: { id: string }) => String(r.id));
+            const totalPrice = items
+                .slice(0, bundleIds.length)
+                .reduce((sum: number, r: { price: number }) => sum + safeNum(r.price), 0);
+            bundle = { title: bundleTitle, product_ids: bundleIds, total_price: totalPrice };
+        }
+
+        return { items, subtitle, bundle };
     }
 
     async getCategoriesForMobile(tenantId: string) {

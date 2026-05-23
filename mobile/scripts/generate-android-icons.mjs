@@ -1,9 +1,9 @@
 /**
  * Generate Android launcher icons from mobile/assets/obo-app-icon-source.png
- * Run: node scripts/generate-android-icons.mjs
+ * Run: npm run generate-android-icons
  */
 import sharp from 'sharp';
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -35,11 +35,18 @@ const FOREGROUND = {
   'mipmap-xxxhdpi': 432,
 };
 
-const input = readFileSync(source);
+const WHITE = { r: 255, g: 255, b: 255, alpha: 1 };
+
+async function renderIcon(size) {
+  return sharp(source)
+    .resize(size, size, { fit: 'contain', background: WHITE })
+    .png()
+    .toBuffer();
+}
 
 for (const [folder, size] of Object.entries(LAUNCHER)) {
   const dir = join(resDir, folder);
-  const buf = await sharp(input).resize(size, size, { fit: 'cover' }).png().toBuffer();
+  const buf = await renderIcon(size);
   for (const name of ['ic_launcher.png', 'ic_launcher_round.png']) {
     await sharp(buf).toFile(join(dir, name));
     console.log('Wrote', join(folder, name), `${size}x${size}`);
@@ -48,7 +55,7 @@ for (const [folder, size] of Object.entries(LAUNCHER)) {
 
 for (const [folder, size] of Object.entries(FOREGROUND)) {
   const path = join(resDir, folder, 'ic_launcher_foreground.png');
-  await sharp(input).resize(size, size, { fit: 'cover' }).png().toFile(path);
+  await sharp(await renderIcon(size)).toFile(path);
   console.log('Wrote', join(folder, 'ic_launcher_foreground.png'), `${size}x${size}`);
 }
 

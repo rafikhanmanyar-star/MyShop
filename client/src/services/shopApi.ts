@@ -99,6 +99,7 @@ export type HomePromoLinkType =
   | 'voice_order'
   | 'budget'
   | 'utilities'
+  | 'feedback'
   | 'custom';
 
 /** Mobile home ad carousel slide — edited under POS → Mobile branding */

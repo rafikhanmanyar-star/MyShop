@@ -1,23 +1,38 @@
+import { memo, useEffect, useState } from 'react';
 import { useWindowVirtualizer } from '@tanstack/react-virtual';
-
-const COLS = 2;
-const EST_ROW = 320;
+import {
+    computeCatalogColumnCount,
+    estimateCatalogRowHeight,
+} from '../utils/catalogGridColumns';
 
 type Props = {
     items: { id: string }[];
-    renderCard: (product: any) => React.ReactNode;
+    renderCard: (product: { id: string }) => React.ReactNode;
 };
 
-/**
- * Two-column grid with window-based virtualization for long product lists.
- */
-export default function VirtualizedProductGrid({ items, renderCard }: Props) {
-    const rowCount = Math.ceil(items.length / COLS);
+function useCatalogColumnCount(): number {
+    const [cols, setCols] = useState(() =>
+        typeof window !== 'undefined' ? computeCatalogColumnCount(window.innerWidth) : 3,
+    );
+
+    useEffect(() => {
+        const onResize = () => setCols(computeCatalogColumnCount(window.innerWidth));
+        window.addEventListener('resize', onResize, { passive: true });
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+
+    return cols;
+}
+
+function VirtualizedProductGrid({ items, renderCard }: Props) {
+    const cols = useCatalogColumnCount();
+    const rowCount = Math.ceil(items.length / cols);
+    const estRow = estimateCatalogRowHeight(cols);
 
     const rowVirtualizer = useWindowVirtualizer({
         count: rowCount,
-        estimateSize: () => EST_ROW,
-        overscan: 4,
+        estimateSize: () => estRow,
+        overscan: 3,
     });
 
     if (items.length === 0) return null;
@@ -30,10 +45,11 @@ export default function VirtualizedProductGrid({ items, renderCard }: Props) {
                 width: '100%',
                 height: rowVirtualizer.getTotalSize(),
             }}
+            data-cols={cols}
         >
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                const start = virtualRow.index * COLS;
-                const rowItems = items.slice(start, start + COLS);
+                const start = virtualRow.index * cols;
+                const rowItems = items.slice(start, start + cols);
                 return (
                     <div
                         key={virtualRow.key}
@@ -47,7 +63,10 @@ export default function VirtualizedProductGrid({ items, renderCard }: Props) {
                             transform: `translateY(${virtualRow.start}px)`,
                         }}
                     >
-                        <div className="product-grid product-grid--browse">
+                        <div
+                            className="product-grid product-grid--browse"
+                            style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
+                        >
                             {rowItems.map((p) => (
                                 <div key={p.id} className="virtual-product-grid__cell">
                                     {renderCard(p)}
@@ -60,3 +79,5 @@ export default function VirtualizedProductGrid({ items, renderCard }: Props) {
         </div>
     );
 }
+
+export default memo(VirtualizedProductGrid);

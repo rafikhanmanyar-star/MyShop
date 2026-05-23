@@ -475,3 +475,33 @@ export const voiceOrderApi = {
         });
     },
 };
+
+// ─── Customer feedback ───────────────────────────────
+export const feedbackApi = {
+    list: () => request(`${API_BASE}/feedback`),
+    get: (id: string) => request(`${API_BASE}/feedback/${encodeURIComponent(id)}`),
+    submit: (body: Record<string, unknown>) =>
+        request(`${API_BASE}/feedback`, { method: 'POST', body: JSON.stringify(body) }),
+    reply: (id: string, message: string) =>
+        request(`${API_BASE}/feedback/${encodeURIComponent(id)}/reply`, {
+            method: 'POST',
+            body: JSON.stringify({ message }),
+        }),
+    uploadAttachment: async (file: File): Promise<{ url: string }> => {
+        const slug = currentShopSlug();
+        const formData = new FormData();
+        formData.append('image', file);
+        const token = getAuthTokenForShop(slug);
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        if (slug) headers[MOBILE_SHOP_SLUG_HEADER] = slug;
+        const res = await fetch(`${getApiBaseUrl()}/mobile/feedback/upload`, {
+            method: 'POST',
+            body: formData,
+            headers,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+        return data;
+    },
+};

@@ -26,6 +26,7 @@ export const HOME_PROMO_LINK_TYPES = [
   'voice_order',
   'budget',
   'utilities',
+  'feedback',
   'custom',
 ] as const;
 

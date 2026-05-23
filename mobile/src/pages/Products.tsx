@@ -1037,7 +1037,7 @@ export default function Products() {
 
             {loading ? (
                 <div className="product-grid product-grid--browse">
-                    {Array.from({ length: 6 }).map((_, i) => (
+                    {Array.from({ length: 9 }).map((_, i) => (
                         <div key={i} className="product-card product-card--list">
                             <div className="skeleton" style={{ aspectRatio: '1', width: '100%' }} />
                             <div style={{ padding: 8 }}>

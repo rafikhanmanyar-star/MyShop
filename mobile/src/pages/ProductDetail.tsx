@@ -1,13 +1,17 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState, useMemo, useCallback, memo } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi, getProductImagePath } from '../api';
 import CachedImage from '../components/CachedImage';
 import { useOnline } from '../hooks/useOnline';
 import { getProductById } from '../services/offlineCache';
 import { getSessionProductDetail, setSessionProductDetail } from '../services/productSessionCache';
-import ProductListCard, { type ProductListProduct } from '../components/ProductListCard';
+import { type ProductListProduct } from '../components/ProductListCard';
+import RecommendationCard from '../components/RecommendationCard';
 import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
+import { getFavoriteIds, toggleFavoriteId } from '../features/search/favoritesStorage';
+import { getRecommendationSubtitle } from '../recommendations/productRecommendationRules';
+import type { ProductRecommendationsResponse } from '../recommendations/types';
 
 function detailText(product: any): string | null {
     const raw = product?.description ?? product?.mobile_description ?? '';
@@ -38,6 +42,39 @@ function formatSpecLabel(k: string): string {
     return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const RecRow = memo(function RecRow({
+    items,
+    shopSlug,
+    cartQtyMap,
+    formatPrice,
+    onAddOne,
+    onChangeQty,
+}: {
+    items: ProductListProduct[];
+    shopSlug: string;
+    cartQtyMap: Map<string, number>;
+    formatPrice: (p: number | string | null | undefined) => string;
+    onAddOne: (p: ProductListProduct) => void;
+    onChangeQty: (productId: string, quantity: number) => void;
+}) {
+    return (
+        <div className="pdp-rec-row" role="list">
+            {items.map((p) => (
+                <div key={p.id} className="pdp-rec-row__cell" role="listitem">
+                    <RecommendationCard
+                        product={p}
+                        shopSlug={shopSlug}
+                        cartQty={cartQtyMap.get(p.id) ?? 0}
+                        formatPrice={formatPrice}
+                        onAddOne={onAddOne}
+                        onChangeQty={onChangeQty}
+                    />
+                </div>
+            ))}
+        </div>
+    );
+});
+
 export default function ProductDetail() {
     const { shopSlug, id } = useParams();
     const navigate = useNavigate();
@@ -48,8 +85,12 @@ export default function ProductDetail() {
     const [loading, setLoading] = useState(true);
     const [qty, setQty] = useState(1);
     const [recs, setRecs] = useState<ProductListProduct[]>([]);
+    const [recSubtitle, setRecSubtitle] = useState<string | null>(null);
+    const [recBundle, setRecBundle] = useState<ProductRecommendationsResponse['bundle']>(null);
     const [recsLoading, setRecsLoading] = useState(false);
-    const [specsVisible, setSpecsVisible] = useState(false);
+    const [descOpen, setDescOpen] = useState(true);
+    const [specsOpen, setSpecsOpen] = useState(false);
+    const [isFavorite, setIsFavorite] = useState(false);
 
     useEffect(() => {
         setQty(1);
@@ -57,17 +98,14 @@ export default function ProductDetail() {
 
     useEffect(() => {
         setRecs([]);
+        setRecSubtitle(null);
+        setRecBundle(null);
     }, [id]);
 
     useEffect(() => {
-        if (!product) {
-            setSpecsVisible(false);
-            return;
-        }
-        setSpecsVisible(false);
-        const frame = requestAnimationFrame(() => setSpecsVisible(true));
-        return () => cancelAnimationFrame(frame);
-    }, [product?.id]);
+        if (!shopSlug || !id) return;
+        setIsFavorite(getFavoriteIds(shopSlug).has(id));
+    }, [shopSlug, id]);
 
     useEffect(() => {
         if (!shopSlug || !id) return;
@@ -130,12 +168,23 @@ export default function ProductDetail() {
         setRecsLoading(true);
         publicApi
             .getProductRecommendations(shopSlug, id)
-            .then((data: { items?: ProductListProduct[] }) => {
+            .then((data: ProductRecommendationsResponse & { items?: ProductListProduct[] }) => {
                 const items = Array.isArray(data?.items) ? data.items : [];
-                if (!cancelled) setRecs(items);
+                if (!cancelled) {
+                    setRecs(items);
+                    setRecSubtitle(
+                        data?.subtitle ??
+                            getRecommendationSubtitle(product.name, product.category_name)
+                    );
+                    setRecBundle(data?.bundle ?? null);
+                }
             })
             .catch(() => {
-                if (!cancelled) setRecs([]);
+                if (!cancelled) {
+                    setRecs([]);
+                    setRecSubtitle(getRecommendationSubtitle(product.name, product.category_name));
+                    setRecBundle(null);
+                }
             })
             .finally(() => {
                 if (!cancelled) setRecsLoading(false);
@@ -146,11 +195,11 @@ export default function ProductDetail() {
         };
     }, [shopSlug, id, product, online]);
 
-    const formatPrice = (p: number | string | null | undefined) => {
+    const formatPrice = useCallback((p: number | string | null | undefined) => {
         if (p === null || p === undefined) return 'Rs. 0';
         const num = typeof p === 'string' ? parseFloat(p) : p;
         return `Rs. ${isNaN(num) ? '0' : num.toLocaleString()}`;
-    };
+    }, []);
 
     const stock = useMemo(() => {
         if (!product) return 0;
@@ -213,15 +262,18 @@ export default function ProductDetail() {
         [dispatch, showToast, state.cart]
     );
 
-    const handleRecAddOne = (p: ProductListProduct) => addRecToCart(p, 1);
-    const handleRecChangeQty = (productId: string, quantity: number) => {
-        const p = recs.find((r) => r.id === productId);
-        if (!p) return;
-        const cur = cartQtyMap.get(productId) ?? 0;
-        addRecToCart(p, quantity - cur);
-    };
+    const handleRecAddOne = useCallback((p: ProductListProduct) => addRecToCart(p, 1), [addRecToCart]);
+    const handleRecChangeQty = useCallback(
+        (productId: string, quantity: number) => {
+            const p = recs.find((r) => r.id === productId);
+            if (!p) return;
+            const cur = cartQtyMap.get(productId) ?? 0;
+            addRecToCart(p, quantity - cur);
+        },
+        [recs, cartQtyMap, addRecToCart]
+    );
 
-    const handleAdd = () => {
+    const handleAdd = useCallback(() => {
         if (!product || !canPurchase) return;
         dispatch({
             type: 'ADD_TO_CART',
@@ -237,28 +289,27 @@ export default function ProductDetail() {
             },
         });
         showToast(`${product.name} added to cart`);
-    };
+    }, [product, canPurchase, qty, stock, dispatch, showToast]);
 
-    const desc = product ? detailText(product) : null;
-    const descShown = desc ?? 'No description available for this product.';
-    const sizeVal = product?.size != null && String(product.size).trim() !== '' ? String(product.size).trim() : null;
-    const weightUnitVal =
-        product?.weight_unit != null && String(product.weight_unit).trim() !== ''
-            ? String(product.weight_unit).trim()
-            : null;
-    const weightRaw = product?.weight;
-    const weightNum =
-        weightRaw === null || weightRaw === undefined || weightRaw === ''
-            ? null
-            : (() => {
-                  const n = typeof weightRaw === 'number' ? weightRaw : parseFloat(String(weightRaw));
-                  return Number.isFinite(n) ? n : null;
-              })();
-    const weightLine =
-        weightNum != null ? (weightUnitVal ? `${weightNum} ${weightUnitVal}` : String(weightNum)) : null;
-    const unitVal = product?.unit != null && String(product.unit).trim() !== '' ? String(product.unit).trim() : null;
-    const brandLine =
-        product?.brand != null && String(product.brand).trim() !== '' ? String(product.brand).trim() : null;
+    const handleBundleAddAll = useCallback(() => {
+        if (!recBundle?.product_ids?.length) return;
+        let added = 0;
+        for (const pid of recBundle.product_ids) {
+            const p = recs.find((r) => r.id === pid);
+            if (p) {
+                addRecToCart(p, 1);
+                added++;
+            }
+        }
+        if (added > 0) showToast(`${added} items added to cart`);
+    }, [recBundle, recs, addRecToCart, showToast]);
+
+    const toggleFavorite = useCallback(() => {
+        if (!shopSlug || !id) return;
+        const next = toggleFavoriteId(shopSlug, id);
+        setIsFavorite(next.has(id));
+    }, [shopSlug, id]);
+
     const specRows = useMemo(() => {
         if (!product) return [];
         const rows: { label: string; value: string }[] = [];
@@ -272,14 +323,10 @@ export default function ProductDetail() {
             rows.push({ label, value: v });
         };
 
-        const b =
-            product.brand != null && String(product.brand).trim() !== '' ? String(product.brand).trim() : null;
-        const u = product.unit != null && String(product.unit).trim() !== '' ? String(product.unit).trim() : null;
-        const sz = product.size != null && String(product.size).trim() !== '' ? String(product.size).trim() : null;
-        const wu =
-            product.weight_unit != null && String(product.weight_unit).trim() !== ''
-                ? String(product.weight_unit).trim()
-                : null;
+        add('Brand', product.brand);
+        add('Unit', product.unit);
+        add('Size', product.size != null ? String(product.size) : null);
+        const wu = product.weight_unit != null ? String(product.weight_unit).trim() : null;
         const wr = product.weight;
         const wn =
             wr === null || wr === undefined || wr === ''
@@ -288,12 +335,7 @@ export default function ProductDetail() {
                       const n = typeof wr === 'number' ? wr : parseFloat(String(wr));
                       return Number.isFinite(n) ? n : null;
                   })();
-        const wl = wn != null ? (wu ? `${wn} ${wu}` : String(wn)) : null;
-
-        add('Brand', b);
-        add('Unit', u);
-        add('Size', sz);
-        add('Weight', wl);
+        add('Weight', wn != null ? (wu ? `${wn} ${wu}` : String(wn)) : null);
         add('Color', product.color != null ? String(product.color) : null);
         add('Material', product.material != null ? String(product.material) : null);
         add('Country of origin', product.origin_country != null ? String(product.origin_country) : null);
@@ -302,22 +344,10 @@ export default function ProductDetail() {
             product.attributes && typeof product.attributes === 'object' && !Array.isArray(product.attributes)
                 ? (product.attributes as Record<string, unknown>)
                 : null;
-
         const skipAttrKeys = new Set(
-            [
-                'brand',
-                'sku',
-                'sku code',
-                'barcode',
-                'unit',
-                'size',
-                'weight',
-                'color',
-                'material',
-                'origin',
-                'origin country',
-                'country of origin',
-            ].map((s) => s.toLowerCase())
+            ['brand', 'sku', 'barcode', 'unit', 'size', 'weight', 'color', 'material', 'origin', 'country of origin'].map(
+                (s) => s.toLowerCase()
+            )
         );
         if (rawAttrs) {
             for (const [k, v] of Object.entries(rawAttrs)) {
@@ -332,14 +362,13 @@ export default function ProductDetail() {
 
     if (loading) {
         return (
-            <div className="page fade-in">
-                <div
-                    className="skeleton"
-                    style={{ width: '100%', aspectRatio: '1', borderRadius: 'var(--radius-xl)', marginBottom: 20 }}
-                />
-                <div className="skeleton" style={{ height: 28, width: '70%', marginBottom: 12 }} />
-                <div className="skeleton" style={{ height: 24, width: '40%', marginBottom: 20 }} />
-                <div className="skeleton" style={{ height: 48, width: '100%' }} />
+            <div className="pdp-page fade-in">
+                <div className="pdp-skeleton-hero skeleton" />
+                <div className="pdp-body">
+                    <div className="skeleton" style={{ height: 18, width: '40%', marginBottom: 6 }} />
+                    <div className="skeleton" style={{ height: 22, width: '75%', marginBottom: 6 }} />
+                    <div className="skeleton" style={{ height: 26, width: '35%' }} />
+                </div>
             </div>
         );
     }
@@ -349,7 +378,9 @@ export default function ProductDetail() {
             <div className="page fade-in">
                 <div className="empty-state">
                     <h3>Product not found</h3>
-                    <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 8 }}>This item may have been removed or is not available.</p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 8 }}>
+                        This item may have been removed or is not available.
+                    </p>
                     <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => navigate(-1)}>
                         Go back
                     </button>
@@ -358,293 +389,173 @@ export default function ProductDetail() {
         );
     }
 
+    const desc = detailText(product);
+    const descShown = desc ?? 'No description available for this product.';
+    const unitVal = product?.unit != null && String(product.unit).trim() !== '' ? String(product.unit).trim() : null;
     const stockStatusLabel =
         !isPreOrder && stock <= 0 ? 'Out of stock' : isPreOrder && stock <= 0 ? 'Pre-order' : 'In stock';
+    const cartCount = state.cart.reduce((n, i) => n + i.quantity, 0);
+    const bundleTotal =
+        recBundle?.total_price ??
+        recBundle?.product_ids?.reduce((sum, pid) => {
+            const p = recs.find((r) => r.id === pid);
+            return sum + (p ? Number(p.price) || 0 : 0);
+        }, 0) ??
+        0;
 
     return (
-        <div className="page fade-in" style={{ padding: 0, paddingBottom: 'calc(80px + var(--safe-bottom))' }}>
-            <div
-                style={{
-                    width: '100%',
-                    aspectRatio: '1',
-                    background: 'linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
-                    overflow: 'hidden',
-                }}
-            >
-                <CachedImage
-                    path={getProductImagePath(product)}
-                    alt={product.name}
-                    fallbackLabel={product.name}
-                    fallbackClassName="product-detail-image-fallback"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-
-                <button
-                    type="button"
-                    style={{
-                        position: 'absolute',
-                        top: 12,
-                        left: 12,
-                        width: 40,
-                        height: 40,
-                        borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.9)',
-                        backdropFilter: 'blur(10px)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: 'var(--shadow)',
-                        border: 'none',
-                        cursor: 'pointer',
-                    }}
-                    onClick={() => navigate(-1)}
-                    aria-label="Back"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="m12 19-7-7 7-7" />
-                        <path d="M19 12H5" />
-                    </svg>
-                </button>
-            </div>
-
-            <div style={{ padding: '20px 16px 12px' }}>
-                <section style={{ marginBottom: 20 }} aria-label="Overview">
-                    {product.category_name && (
-                        <span
-                            style={{
-                                fontSize: 12,
-                                fontWeight: 600,
-                                color: 'var(--primary)',
-                                background: 'rgba(79,70,229,0.08)',
-                                padding: '4px 10px',
-                                borderRadius: 'var(--radius-full)',
-                                marginBottom: 8,
-                                display: 'inline-block',
-                            }}
-                        >
-                            {product.category_name}
-                        </span>
-                    )}
-
-                    <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6, lineHeight: 1.3 }}>{product.name}</h1>
-                    {brandLine && (
-                        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12, marginTop: 0 }}>{brandLine}</p>
-                    )}
-
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14 }}>
-                        <span style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary)' }}>{formatPrice(product.price)}</span>
-                        {parseFloat(String(product.tax_rate ?? 0)) > 0 && (
-                            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>+{product.tax_rate}% tax</span>
-                        )}
-                    </div>
-
-                    {(sizeVal || weightLine || unitVal) && (
-                        <div
-                            style={{
-                                display: 'flex',
-                                flexWrap: 'wrap',
-                                gap: 8,
-                                marginBottom: 12,
-                            }}
-                        >
-                            {sizeVal && (
-                                <span
-                                    style={{
-                                        fontSize: 12,
-                                        fontWeight: 600,
-                                        color: 'var(--text-secondary)',
-                                        background: 'var(--bg)',
-                                        padding: '6px 10px',
-                                        borderRadius: 'var(--radius-full)',
-                                        border: '1px solid var(--border)',
-                                    }}
-                                >
-                                    Size: {sizeVal}
-                                </span>
-                            )}
-                            {weightLine && (
-                                <span
-                                    style={{
-                                        fontSize: 12,
-                                        fontWeight: 600,
-                                        color: 'var(--text-secondary)',
-                                        background: 'var(--bg)',
-                                        padding: '6px 10px',
-                                        borderRadius: 'var(--radius-full)',
-                                        border: '1px solid var(--border)',
-                                    }}
-                                >
-                                    Weight: {weightLine}
-                                </span>
-                            )}
-                            {unitVal && (
-                                <span
-                                    style={{
-                                        fontSize: 12,
-                                        fontWeight: 600,
-                                        color: 'var(--text-secondary)',
-                                        background: 'var(--bg)',
-                                        padding: '6px 10px',
-                                        borderRadius: 'var(--radius-full)',
-                                        border: '1px solid var(--border)',
-                                    }}
-                                >
-                                    Unit: {unitVal}
-                                </span>
-                            )}
-                        </div>
-                    )}
-
-                    <div
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            padding: '6px 12px',
-                            borderRadius: 'var(--radius-full)',
-                            background: canPurchase ? '#D1FAE5' : '#FEE2E2',
-                            color: canPurchase ? '#065F46' : '#991B1B',
-                            fontSize: 13,
-                            fontWeight: 600,
-                            marginBottom: 4,
-                        }}
-                    >
-                        <span
-                            style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: '50%',
-                                background: canPurchase ? '#10B981' : '#EF4444',
-                            }}
+        <div className="pdp-page fade-in">
+            <div className="pdp-body">
+                {/* Product hero — compact side-by-side on wider phones */}
+                <section className="pdp-hero" aria-label="Product overview">
+                    <div className="pdp-hero__media">
+                        <CachedImage
+                            path={getProductImagePath(product)}
+                            alt={product.name}
+                            fallbackLabel={product.name}
+                            fallbackClassName="product-detail-image-fallback"
                         />
-                        {stockStatusLabel}
-                        {canPurchase && stock > 0 && (
-                            <span style={{ fontWeight: 500, opacity: 0.85 }}> · {Math.floor(stock)} available</span>
+                        <button
+                            type="button"
+                            className={`pdp-hero__fav ${isFavorite ? 'pdp-hero__fav--on' : ''}`}
+                            aria-label={isFavorite ? 'Remove from wishlist' : 'Add to wishlist'}
+                            onClick={toggleFavorite}
+                        >
+                            {isFavorite ? '♥' : '♡'}
+                        </button>
+                    </div>
+
+                    <div className="pdp-hero__info">
+                        {product.category_name ? (
+                            <span className="pdp-chip pdp-chip--category">{product.category_name}</span>
+                        ) : null}
+                        <h1 className="pdp-title">{product.name}</h1>
+                        <div className="pdp-price">{formatPrice(product.price)}</div>
+                        {parseFloat(String(product.tax_rate ?? 0)) > 0 && (
+                            <span className="pdp-tax">+{product.tax_rate}% tax</span>
                         )}
+                        {unitVal ? <span className="pdp-chip">Unit: {unitVal}</span> : null}
+                        <div className={`pdp-stock ${canPurchase ? 'pdp-stock--ok' : 'pdp-stock--out'}`}>
+                            <span className="pdp-stock__dot" aria-hidden />
+                            {stockStatusLabel}
+                            {canPurchase && stock > 0 ? (
+                                <span className="pdp-stock__qty"> · {Math.floor(stock)} available</span>
+                            ) : null}
+                        </div>
                     </div>
                 </section>
 
-                <section style={{ marginBottom: 22 }} aria-label="Description">
-                    <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Description</h2>
-                    <p
-                        style={{
-                            fontSize: 14,
-                            lineHeight: 1.6,
-                            color: desc ? 'var(--text-secondary)' : 'var(--text-muted)',
-                            margin: 0,
-                            whiteSpace: 'pre-wrap',
-                            fontStyle: desc ? 'normal' : 'italic',
-                        }}
+                {/* Product information — collapsible, compact */}
+                <section className="pdp-info" aria-label="Product information">
+                    <button
+                        type="button"
+                        className="pdp-info__toggle"
+                        aria-expanded={descOpen ? 'true' : 'false'}
+                        onClick={() => setDescOpen((v) => !v)}
                     >
-                        {descShown}
-                    </p>
+                        <span>Description</span>
+                        <span aria-hidden>{descOpen ? '−' : '+'}</span>
+                    </button>
+                    {descOpen ? (
+                        <p className={`pdp-desc ${desc ? '' : 'pdp-desc--empty'}`}>{descShown}</p>
+                    ) : null}
+
+                    {specRows.length > 0 ? (
+                        <>
+                            <button
+                                type="button"
+                                className="pdp-info__toggle"
+                                aria-expanded={specsOpen ? 'true' : 'false'}
+                                onClick={() => setSpecsOpen((v) => !v)}
+                            >
+                                <span>Specifications</span>
+                                <span aria-hidden>{specsOpen ? '−' : '+'}</span>
+                            </button>
+                            {specsOpen ? (
+                                <dl className="pdp-specs">
+                                    {specRows.map((row, i) => (
+                                        <div key={`spec-${i}-${row.label}`} className="pdp-specs__row">
+                                            <dt>{row.label}</dt>
+                                            <dd>{row.value}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            ) : null}
+                        </>
+                    ) : null}
                 </section>
 
-                {specsVisible && specRows.length > 0 && (
-                    <section style={{ marginBottom: 22 }} aria-label="Specifications">
-                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>Specifications</h2>
-                        <dl
-                            style={{
-                                margin: 0,
-                                display: 'grid',
-                                gridTemplateColumns: 'auto 1fr',
-                                gap: '8px 16px',
-                                fontSize: 14,
-                                color: 'var(--text-secondary)',
-                            }}
-                        >
-                            {specRows.map((row, i) => (
-                                <div key={`spec-${i}-${row.label}`} style={{ display: 'contents' }}>
-                                    <dt style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{row.label}</dt>
-                                    <dd style={{ margin: 0, wordBreak: 'break-word' }}>{row.value}</dd>
-                                </div>
-                            ))}
-                        </dl>
-                    </section>
-                )}
+                {inCart ? (
+                    <p className="pdp-in-cart">✓ {inCart.quantity} already in cart</p>
+                ) : null}
 
-                <section style={{ marginBottom: 24 }} aria-label="Add to cart">
-                    <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Add to cart</h2>
-                    {canPurchase ? (
-                        <div
-                            style={{
-                                display: 'flex',
-                                gap: 12,
-                                alignItems: 'center',
-                                padding: '16px',
-                                background: 'var(--bg)',
-                                borderRadius: 'var(--radius-lg)',
-                                border: '1px solid var(--border)',
-                            }}
-                        >
-                            <div className="qty-controls">
-                                <button type="button" onClick={() => setQty(Math.max(1, qty - 1))}>
-                                    −
-                                </button>
-                                <span>{qty}</span>
-                                <button type="button" onClick={() => setQty(Math.min(maxQty, qty + 1))}>
-                                    +
+                {/* Frequently bought together — primary focus below details */}
+                {recsLoading ? (
+                    <div className="pdp-rec-section">
+                        <div className="skeleton" style={{ height: 16, width: '55%', marginBottom: 8 }} />
+                        <div className="skeleton" style={{ height: 120, width: '100%', borderRadius: 10 }} />
+                    </div>
+                ) : null}
+
+                {!recsLoading && recs.length > 0 && shopSlug ? (
+                    <section className="pdp-rec-section" aria-label="Frequently bought together">
+                        <div className="pdp-rec-section__head">
+                            <div>
+                                <h2 className="pdp-rec-section__title">Frequently Bought Together</h2>
+                                {recSubtitle ? <p className="pdp-rec-section__sub">{recSubtitle}</p> : null}
+                            </div>
+                            <Link to={`/${shopSlug}/products`} className="pdp-rec-section__link">
+                                View all
+                            </Link>
+                        </div>
+
+                        {recBundle && recBundle.product_ids.length >= 3 ? (
+                            <div className="pdp-bundle">
+                                <span className="pdp-bundle__title">{recBundle.title}</span>
+                                <button type="button" className="pdp-bundle__add" onClick={handleBundleAddAll}>
+                                    Add all · {formatPrice(bundleTotal)}
                                 </button>
                             </div>
-                            <button type="button" className="btn btn-primary btn-full" onClick={handleAdd}>
-                                + Add to Cart — {formatPrice(Number(product.price) * qty)}
-                            </button>
-                        </div>
-                    ) : (
-                        <p
-                            style={{
-                                margin: 0,
-                                padding: '14px 16px',
-                                background: 'var(--bg)',
-                                borderRadius: 'var(--radius-lg)',
-                                border: '1px solid var(--border)',
-                                fontSize: 14,
-                                color: 'var(--text-muted)',
-                                fontWeight: 500,
-                            }}
-                        >
-                            This item is not available to add to your cart right now.
-                        </p>
-                    )}
-                </section>
+                        ) : null}
 
-                {inCart && (
-                    <p style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, marginTop: -12, marginBottom: 20, textAlign: 'center' }}>
-                        ✓ {inCart.quantity} already in cart
-                    </p>
-                )}
-
-                {recsLoading && (
-                    <div style={{ marginBottom: 16 }} className="skeleton" aria-hidden>
-                        <div style={{ height: 18, width: '50%', marginBottom: 12 }} />
-                        <div style={{ height: 220, width: '100%', borderRadius: 12 }} />
-                    </div>
-                )}
-
-                {!recsLoading && recs.length > 0 && shopSlug && (
-                    <section style={{ marginBottom: 8 }} aria-label="Similar products">
-                        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Similar products</h2>
-                        <div className="home-product-row">
-                            {recs.map((p) => (
-                                <div key={p.id} className="home-product-row__cell">
-                                    <ProductListCard
-                                        product={p}
-                                        shopSlug={shopSlug}
-                                        cartQty={cartQtyMap.get(p.id) ?? 0}
-                                        formatPrice={formatPrice}
-                                        onAddOne={handleRecAddOne}
-                                        onChangeQty={handleRecChangeQty}
-                                    />
-                                </div>
-                            ))}
-                        </div>
+                        <RecRow
+                            items={recs}
+                            shopSlug={shopSlug}
+                            cartQtyMap={cartQtyMap}
+                            formatPrice={formatPrice}
+                            onAddOne={handleRecAddOne}
+                            onChangeQty={handleRecChangeQty}
+                        />
                     </section>
-                )}
+                ) : null}
             </div>
+
+            {/* Sticky add-to-cart — compact, above bottom nav */}
+            {canPurchase ? (
+                <div className="pdp-sticky-bar" role="region" aria-label="Add to cart">
+                    <div className="pdp-sticky-bar__qty">
+                        <button type="button" aria-label="Decrease quantity" onClick={() => setQty(Math.max(1, qty - 1))}>
+                            −
+                        </button>
+                        <span>{qty}</span>
+                        <button type="button" aria-label="Increase quantity" onClick={() => setQty(Math.min(maxQty, qty + 1))}>
+                            +
+                        </button>
+                    </div>
+                    <button type="button" className="pdp-sticky-bar__cta" onClick={handleAdd}>
+                        + Add {formatPrice(Number(product.price) * qty)}
+                    </button>
+                    {cartCount > 0 && shopSlug ? (
+                        <Link to={`/${shopSlug}/cart`} className="pdp-sticky-bar__cart" aria-label="View cart">
+                            🛒
+                        </Link>
+                    ) : null}
+                </div>
+            ) : (
+                <div className="pdp-sticky-bar pdp-sticky-bar--disabled" role="status">
+                    Not available to add right now
+                </div>
+            )}
         </div>
     );
 }

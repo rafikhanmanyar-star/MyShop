@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CachedImage from './CachedImage';
 import { getProductImagePath } from '../api';
@@ -33,6 +33,8 @@ type Props = {
     formatPrice: (p: number | string | null | undefined) => string;
     /** Grey out + disable add (out of stock row when showing unavailable) */
     unavailableStyle?: boolean;
+    /** `compact` — home rails & browse grid (high density). */
+    density?: 'default' | 'compact';
     onAddOne: (product: ProductListProduct) => void;
     onChangeQty: (productId: string, quantity: number) => void;
     isFavorite?: boolean;
@@ -44,12 +46,13 @@ function getStock(p: ProductListProduct): number {
     return typeof s === 'string' ? parseFloat(s) || 0 : s;
 }
 
-export default function ProductListCard({
+function ProductListCard({
     product: p,
     shopSlug,
     cartQty,
     formatPrice,
     unavailableStyle = false,
+    density = 'default',
     onAddOne,
     onChangeQty,
     isFavorite = false,
@@ -98,9 +101,11 @@ export default function ProductListCard({
               ? p.list_price
               : undefined;
 
+    const densityClass = density === 'compact' ? 'product-card--density-compact' : '';
+
     return (
         <div
-            className={`product-card product-card--list ${unavailableStyle ? 'product-card--unavailable' : ''}`}
+            className={`product-card product-card--list ${densityClass} ${unavailableStyle ? 'product-card--unavailable' : ''}`}
             role="button"
             tabIndex={0}
             onClick={handleCardClick}
@@ -199,3 +204,15 @@ export default function ProductListCard({
         </div>
     );
 }
+
+/** Memoized to avoid re-renders during scroll when unrelated parent state changes. */
+export default memo(ProductListCard, (prev, next) =>
+    prev.product.id === next.product.id &&
+    prev.cartQty === next.cartQty &&
+    prev.unavailableStyle === next.unavailableStyle &&
+    prev.density === next.density &&
+    prev.isFavorite === next.isFavorite &&
+    prev.product.price === next.product.price &&
+    prev.product.name === next.product.name &&
+    getStock(prev.product) === getStock(next.product),
+);

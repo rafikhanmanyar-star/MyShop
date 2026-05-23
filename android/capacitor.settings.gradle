@@ -10,3 +10,9 @@ project(':capacitor-firebase-crashlytics').projectDir = new File('../mobile/node
 
 include ':capacitor-firebase-messaging'
 project(':capacitor-firebase-messaging').projectDir = new File('../mobile/node_modules/@capacitor-firebase/messaging/android')
+
+include ':capacitor-app'
+project(':capacitor-app').projectDir = new File('../mobile/node_modules/@capacitor/app/android')
+
+include ':capacitor-geolocation'
+project(':capacitor-geolocation').projectDir = new File('../mobile/node_modules/@capacitor/geolocation/android')

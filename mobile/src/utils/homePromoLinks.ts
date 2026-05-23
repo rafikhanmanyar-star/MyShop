@@ -33,6 +33,8 @@ export function resolveHomePromoHref(shopSlug: string, slide: HomePromoSlide): s
       return `${base}/budget`;
     case 'utilities':
       return `${base}/utilities`;
+    case 'feedback':
+      return `${base}/feedback`;
     default:
       return null;
   }

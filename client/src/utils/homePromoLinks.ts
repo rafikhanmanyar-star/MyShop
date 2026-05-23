@@ -13,6 +13,7 @@ export const HOME_PROMO_LINK_TYPE_OPTIONS: { value: HomePromoLinkType; label: st
   { value: 'voice_order', label: 'Voice order', hint: 'Opens voice ordering' },
   { value: 'budget', label: 'Budget planner', hint: 'Opens budget dashboard' },
   { value: 'utilities', label: 'Utilities hub', hint: 'Recipes, budget, returns, etc.' },
+  { value: 'feedback', label: 'Feedback', hint: 'Opens customer feedback page' },
   { value: 'custom', label: 'Custom URL', hint: 'Your own path or https:// link' },
 ];
 

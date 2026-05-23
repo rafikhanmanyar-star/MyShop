@@ -1,3 +1,5 @@
+import { POSPaymentMethod } from '../types/pos';
+
 /** Chart-of-accounts entries that can fund supplier payments, expenses, POS receipts, etc. */
 
 export type PayFromAccountOption = {
@@ -99,4 +101,37 @@ export function paymentMethodForPayFromAccount(code?: string): 'Cash' | 'Bank' {
 /** Cash-style accounts for POS (vs online/bank). */
 export function isPosCashStylePayFromAccount(acc: PayFromAccountOption): boolean {
   return paymentMethodForPayFromAccount(acc.code) === 'Cash' || /cash/i.test(acc.name);
+}
+
+/** POS payment methods that post to a chart-of-accounts receive account. */
+export function payFromAccountsForPosMethod(
+  accounts: PayFromAccountOption[],
+  method: POSPaymentMethod
+): PayFromAccountOption[] {
+  if (method === POSPaymentMethod.KHATA) return [];
+  const cashStyle = method === POSPaymentMethod.CASH;
+  const filtered = accounts.filter((a) =>
+    cashStyle ? isPosCashStylePayFromAccount(a) : !isPosCashStylePayFromAccount(a)
+  );
+  return filtered.length > 0 ? filtered : accounts;
+}
+
+/**
+ * Resolve which chart account receives a POS payment.
+ * Uses the selected id when valid; otherwise the default for the payment method.
+ */
+export function resolvePayFromAccountForPos(
+  accounts: PayFromAccountOption[],
+  method: POSPaymentMethod,
+  selectedId?: string
+): PayFromAccountOption | undefined {
+  if (method === POSPaymentMethod.KHATA) return undefined;
+  const list = payFromAccountsForPosMethod(accounts, method);
+  if (list.length === 0) return undefined;
+  if (selectedId) {
+    const selected = list.find((a) => a.id === selectedId) ?? accounts.find((a) => a.id === selectedId);
+    if (selected) return selected;
+  }
+  const defaultId = pickDefaultPayFromAccountId(list);
+  return list.find((a) => a.id === defaultId) ?? list[0];
 }

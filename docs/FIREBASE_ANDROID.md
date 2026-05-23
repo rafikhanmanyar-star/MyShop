@@ -260,6 +260,14 @@ Ads are loaded from your **API** (`GET /api/mobile/{shopSlug}/branding` → `hom
 
 If you still see the default “Quick Delivery” banner, the app has **no valid promo slides** (empty list, missing images, or branding not saved).
 
+## Play Console: Advertising ID declaration
+
+Firebase Analytics can merge `com.google.android.gms.permission.AD_ID` into the APK. This app **does not** use the advertising ID for ads.
+
+`AndroidManifest.xml` removes those permissions and sets `google_analytics_adid_collection_enabled=false`.
+
+In Play Console → **App content** → **Advertising ID**, answer **No**, then rebuild and upload a new AAB so the merged manifest matches.
+
 ## Manual actions
 
 - [ ] Add release keystore and signing config before store / App Distribution production use

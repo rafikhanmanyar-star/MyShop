@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { authApi, customerApi } from '../api';
 import { isNativeAndroid, triggerTestCrash } from '../services/firebaseNative';
+import PermissionStatusSection from '../components/permissions/PermissionStatusSection';
 
 interface Profile {
     id: string;
@@ -315,6 +316,8 @@ export default function AccountSettings() {
                         {pwSaving ? <span className="spinner" style={{ width: 20, height: 20 }} /> : 'Update password'}
                     </button>
                 </form>
+
+                <PermissionStatusSection />
 
                 {import.meta.env.DEV && isNativeAndroid() && (
                     <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px dashed var(--border-light)' }}>
