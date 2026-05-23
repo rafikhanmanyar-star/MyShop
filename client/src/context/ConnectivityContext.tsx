@@ -64,7 +64,7 @@ export function ConnectivityProvider({ children }: { children: React.ReactNode }
   const prevOnlineRef = useRef(isOnline);
   useEffect(() => {
     if (isOnline && !prevOnlineRef.current) {
-      void runOnlineSyncPipeline();
+      void runOnlineSyncPipeline({ refreshCaches: false });
     }
     prevOnlineRef.current = isOnline;
   }, [isOnline]);

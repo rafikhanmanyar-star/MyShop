@@ -125,14 +125,25 @@ export async function setConflictPolicy(policy: ConflictPolicy): Promise<void> {
   await setSyncMeta('conflict_policy', policy);
 }
 
-async function bulkPutInStore(db: IDBDatabase, storeName: string, rows: Array<{ id: string } & Record<string, unknown>>) {
+async function bulkPutInStore(
+  db: IDBDatabase,
+  storeName: string,
+  rows: Array<{ id: string } & Record<string, unknown>>,
+  chunkSize = 250
+) {
   if (rows.length === 0) return;
-  const t = db.transaction(storeName, 'readwrite');
-  const s = t.objectStore(storeName);
-  for (const row of rows) {
-    if (row?.id) s.put(row);
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const t = db.transaction(storeName, 'readwrite');
+    const s = t.objectStore(storeName);
+    for (const row of chunk) {
+      if (row?.id) s.put(row);
+    }
+    await txDone(t);
+    if (i + chunkSize < rows.length) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
   }
-  await txDone(t);
 }
 
 async function putSingleton(db: IDBDatabase, key: string, payload: unknown) {

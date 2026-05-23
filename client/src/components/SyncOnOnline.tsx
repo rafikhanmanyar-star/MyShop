@@ -1,8 +1,6 @@
 /**
- * Subscribes to the browser online event and runs all offline sync queues,
- * then refreshes caches so local DB stays in sync with cloud.
- * Also retries on focus / visibility and on an interval when the outbox still has work,
- * so recovery does not depend solely on another `online` event.
+ * Subscribes to the browser online event and runs offline sync queues.
+ * Deferred and throttled so Electron/desktop UI stays responsive on login and focus.
  */
 
 import { useEffect } from 'react';
@@ -12,53 +10,38 @@ import {
   hasUnifiedOutboxWork,
 } from '../offline/runOnlineSyncPipeline';
 
-const OUTBOX_RETRY_MS = 40_000;
-const VISIBILITY_DEBOUNCE_MS = 350;
+const OUTBOX_RETRY_MS = 60_000;
+/** Wait for dashboard/shell to paint before heavy IndexedDB + catalog sync. */
+const INITIAL_SYNC_DELAY_MS = 6_000;
 
 export function SyncOnOnline() {
   useEffect(() => {
     let intervalId: number | undefined;
-    let visTimer: number | undefined;
-
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-      if (visTimer) clearTimeout(visTimer);
-      visTimer = window.setTimeout(() => {
-        visTimer = undefined;
-        void runOnlineSyncPipeline();
-      }, VISIBILITY_DEBOUNCE_MS);
-    };
-
-    const onFocus = () => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-      onVisible();
-    };
+    let initialTimer: number | undefined;
 
     const unsubscribe = subscribeToBrowserOnline(() => {
-      void runOnlineSyncPipeline();
+      void runOnlineSyncPipeline({ refreshCaches: true });
     });
 
     intervalId = window.setInterval(() => {
       if (typeof navigator === 'undefined' || !navigator.onLine) return;
       void (async () => {
-        if (await hasUnifiedOutboxWork()) await runOnlineSyncPipeline();
+        if (await hasUnifiedOutboxWork()) {
+          await runOnlineSyncPipeline({ refreshCaches: false });
+        }
       })();
     }, OUTBOX_RETRY_MS);
 
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisible);
-
     if (typeof navigator !== 'undefined' && navigator.onLine) {
-      void runOnlineSyncPipeline();
+      initialTimer = window.setTimeout(() => {
+        void runOnlineSyncPipeline({ refreshCaches: true });
+      }, INITIAL_SYNC_DELAY_MS);
     }
 
     return () => {
       unsubscribe();
       if (intervalId !== undefined) window.clearInterval(intervalId);
-      if (visTimer !== undefined) window.clearTimeout(visTimer);
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisible);
+      if (initialTimer !== undefined) window.clearTimeout(initialTimer);
     };
   }, []);
   return null;

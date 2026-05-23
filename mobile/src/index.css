@@ -5482,6 +5482,11 @@ img {
   height: 100%;
   min-height: 100%;
   position: relative;
+  pointer-events: none;
+}
+
+.home-promo-carousel__slide--active {
+  pointer-events: auto;
 }
 
 .home-promo-carousel__slide::after {
@@ -5497,15 +5502,43 @@ img {
   margin-bottom: var(--space-2);
   border-radius: 10px;
   box-shadow: 0 4px 16px rgba(79, 70, 229, 0.08);
+  touch-action: pan-y;
 }
 
 .home-promo-carousel--compact .home-promo-carousel__viewport {
-  aspect-ratio: 2 / 1;
-  max-height: 168px;
+  aspect-ratio: unset;
+  max-height: none;
+  height: auto;
+  overflow: hidden;
+  contain: layout paint;
+  touch-action: pan-y pinch-zoom;
+}
+
+.home-promo-carousel--compact .home-promo-carousel__track {
+  height: auto;
+  align-items: flex-start;
+}
+
+.home-promo-carousel--compact .home-promo-carousel__slide {
+  height: auto;
+  min-height: 0;
+  align-self: flex-start;
+  overflow: hidden;
+}
+
+.home-promo-carousel--compact .home-promo-carousel__link {
+  height: auto;
+  min-height: 0;
 }
 
 .home-promo-carousel--compact .home-promo-carousel__img {
-  object-position: center top;
+  position: static;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  object-fit: unset;
+  object-position: unset;
+  display: block;
 }
 
 .home-promo-carousel--compact .home-promo-carousel__dots {
@@ -5783,9 +5816,6 @@ img {
     max-width: 68px;
   }
 
-  .home-promo-carousel--compact .home-promo-carousel__viewport {
-    max-height: 188px;
-  }
 }
 
 .global-search__scan {

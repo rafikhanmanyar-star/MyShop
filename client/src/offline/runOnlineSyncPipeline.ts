@@ -17,6 +17,13 @@ import { runBackgroundSync } from './syncEngine';
 import { countPendingSyncJobs } from './localDb';
 
 let pipelineInFlight: Promise<void> | null = null;
+let lastTenantCacheRefreshAt = 0;
+const TENANT_CACHE_MIN_INTERVAL_MS = 5 * 60_000;
+
+export type OnlineSyncPipelineOptions = {
+  /** When true, refresh branches/terminals/dashboard caches (throttled). Default false. */
+  refreshCaches?: boolean;
+};
 
 async function refreshTenantCaches(): Promise<void> {
   const tenantId = getTenantId();
@@ -28,12 +35,21 @@ async function refreshTenantCaches(): Promise<void> {
   await setTerminalsCache(tenantId, Array.isArray(t) ? t : []);
 }
 
+async function refreshTenantCachesIfDue(force = false): Promise<void> {
+  const now = Date.now();
+  if (!force && now - lastTenantCacheRefreshAt < TENANT_CACHE_MIN_INTERVAL_MS) return;
+  lastTenantCacheRefreshAt = now;
+  await refreshTenantCaches();
+}
+
 /**
- * Runs push/outbox, parallel domain queues, then shared caches. Safe to call repeatedly.
+ * Runs push/outbox, parallel domain queues, then optional shared caches. Safe to call repeatedly.
  */
-export async function runOnlineSyncPipeline(): Promise<void> {
+export async function runOnlineSyncPipeline(options: OnlineSyncPipelineOptions = {}): Promise<void> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return;
   if (pipelineInFlight) return pipelineInFlight;
+
+  const { refreshCaches = false } = options;
 
   pipelineInFlight = (async () => {
     await runBackgroundSync();
@@ -44,7 +60,9 @@ export async function runOnlineSyncPipeline(): Promise<void> {
       processPendingProcurementQueue(),
       processExpenseQueue(),
     ]);
-    await refreshTenantCaches();
+    if (refreshCaches) {
+      await refreshTenantCachesIfDue(true);
+    }
   })().finally(() => {
     pipelineInFlight = null;
   });

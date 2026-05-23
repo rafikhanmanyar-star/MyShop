@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
     POSCartItem,
     POSProduct,
@@ -197,6 +198,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const thermalPrinterRef = useRef<ThermalPrinter | null>(null);
 
     const { user: authUser } = useAuth();
+    const { pathname } = useLocation();
+    const isPosRoute = pathname === '/pos';
     const { currentShift } = useShifts();
     const { refreshItems: refreshInventory, items: inventoryItems } = useInventory();
     const currentUserId = authUser?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('user_id') : null) ?? null;
@@ -228,11 +231,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     useEffect(() => {
         const onRealtime = () => {
+            if (pathname !== '/pos' && pathname !== '/inventory') return;
             refreshInventory().catch(() => {});
         };
         window.addEventListener('shop:realtime', onRealtime as EventListener);
         return () => window.removeEventListener('shop:realtime', onRealtime as EventListener);
-    }, [refreshInventory]);
+    }, [refreshInventory, pathname]);
 
     // Totals Calculation
     const totals = useMemo(() => {
@@ -283,7 +287,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
     }, [state.printSettings, posSettings, receiptSettings]);
 
-    // Fetch Branches and Terminals
+    // Fetch Branches and Terminals (defer off POS so dashboard stays responsive in Electron)
     useEffect(() => {
         const fetchConfig = async () => {
             try {
@@ -344,10 +348,14 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
         };
 
-        if (authUser) {
-            fetchConfig();
-        }
-    }, [authUser]);
+        if (!authUser) return;
+
+        const delayMs = isPosRoute ? 0 : 4_000;
+        const timer = window.setTimeout(() => {
+            void fetchConfig();
+        }, delayMs);
+        return () => window.clearTimeout(timer);
+    }, [authUser, isPosRoute]);
 
     // When user has an active shift, lock branch/terminal to shift (location & station are static).
     // Do NOT dispatch 'branch-changed' here: that event clears the cart and is for explicit user branch switch only.

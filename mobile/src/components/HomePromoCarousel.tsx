@@ -51,9 +51,7 @@ export default function HomePromoCarousel({ slides, shopSlug, deliveryMinutes, i
     const [dragPx, setDragPx] = useState(0);
     const touchRef = useRef<{ startX: number; startY: number; swiping: boolean } | null>(null);
     const viewportRef = useRef<HTMLDivElement>(null);
-    const imgRefs = useRef<(HTMLImageElement | null)[]>([]);
     const [viewportWidth, setViewportWidth] = useState(0);
-    const [viewportHeight, setViewportHeight] = useState<number | undefined>(undefined);
     const autoplayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const intervalMs = clampIntervalSec(intervalSeconds) * 1000;
 
@@ -91,37 +89,20 @@ export default function HomePromoCarousel({ slides, shopSlug, deliveryMinutes, i
         }, intervalMs);
     }, [clearAutoplay, intervalMs, valid.length]);
 
-    const syncViewportHeight = useCallback(() => {
-        if (!compact) return;
-        const img = imgRefs.current[idx];
-        if (!img) return;
-        const h = img.offsetHeight;
-        if (h > 0) setViewportHeight(h);
-    }, [compact, idx]);
-
     useEffect(() => {
         setIdx(0);
         setDragPx(0);
-        setViewportHeight(undefined);
-        imgRefs.current = [];
     }, [slidesKey]);
 
     useEffect(() => {
         const el = viewportRef.current;
         if (!el || typeof ResizeObserver === 'undefined') return;
-        const measure = () => {
-            setViewportWidth(el.clientWidth);
-            syncViewportHeight();
-        };
+        const measure = () => setViewportWidth(el.clientWidth);
         measure();
         const ro = new ResizeObserver(measure);
         ro.observe(el);
         return () => ro.disconnect();
-    }, [slidesKey, syncViewportHeight]);
-
-    useEffect(() => {
-        syncViewportHeight();
-    }, [idx, syncViewportHeight]);
+    }, [slidesKey]);
 
     useEffect(() => {
         scheduleAutoplay();
@@ -196,10 +177,7 @@ export default function HomePromoCarousel({ slides, shopSlug, deliveryMinutes, i
                     onTouchStart={onTouchStart}
                     onTouchMove={onTouchMove}
                     onTouchEnd={onTouchEnd}
-                    style={{
-                        touchAction: valid.length > 1 ? 'pan-y pinch-zoom' : undefined,
-                        ...(compact && viewportHeight != null ? { height: viewportHeight } : undefined),
-                    }}
+                    style={{ touchAction: valid.length > 1 ? 'pan-y pinch-zoom' : undefined }}
                 >
                     <div className="home-promo-carousel__track" style={trackStyle}>
                         {valid.map((slide, i) => {
@@ -207,20 +185,19 @@ export default function HomePromoCarousel({ slides, shopSlug, deliveryMinutes, i
                             const href = resolveHomePromoHref(shopSlug, slide);
                             const inner = (
                                 <img
-                                    ref={(el) => {
-                                        imgRefs.current[i] = el;
-                                    }}
                                     src={imgSrc}
                                     alt={slide.title?.trim() || 'Promotion'}
                                     className="home-promo-carousel__img"
                                     decoding="async"
                                     loading={i === 0 ? 'eager' : 'lazy'}
                                     draggable={false}
-                                    onLoad={syncViewportHeight}
                                 />
                             );
                             return (
-                                <div key={`${slidesKey}-${i}`} className="home-promo-carousel__slide">
+                                <div
+                                    key={`${slidesKey}-${i}`}
+                                    className={`home-promo-carousel__slide${i === idx ? ' home-promo-carousel__slide--active' : ''}`}
+                                >
                                     {wrapSlideContent(inner, href)}
                                 </div>
                             );

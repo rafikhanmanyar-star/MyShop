@@ -73,7 +73,42 @@ export default function Products() {
         filterLowPrice: searchParams.get('filterLowPrice') === 'true',
         lowPriceMax: searchParams.get('lowPriceMax') || DEFAULT_LOW_PRICE_MAX,
         filterDeals: searchParams.get('filterDeals') === 'true' || searchParams.get('onSale') === 'true',
+        filterMyFav: searchParams.get('filterMyFav') === 'true',
     };
+
+    const catalogFiltersKey = useMemo(
+        () =>
+            JSON.stringify({
+                categoryIds: filters.categoryIds,
+                subcategoryIds: filters.subcategoryIds,
+                brandIds: filters.brandIds,
+                minPrice: filters.minPrice,
+                maxPrice: filters.maxPrice,
+                availability: filters.availability,
+                onSale: filters.onSale,
+                filterInStock: filters.filterInStock,
+                filterPopular: filters.filterPopular,
+                filterLowPrice: filters.filterLowPrice,
+                lowPriceMax: filters.lowPriceMax,
+                filterDeals: filters.filterDeals,
+                search: filters.search,
+            }),
+        [
+            filters.categoryIds,
+            filters.subcategoryIds,
+            filters.brandIds,
+            filters.minPrice,
+            filters.maxPrice,
+            filters.availability,
+            filters.onSale,
+            filters.filterInStock,
+            filters.filterPopular,
+            filters.filterLowPrice,
+            filters.lowPriceMax,
+            filters.filterDeals,
+            filters.search,
+        ]
+    );
 
     /** Explicit `sortBy` in the URL wins; with an active text search default to relevance when unset. */
     const effectiveSortBy = useMemo(() => {
@@ -92,7 +127,7 @@ export default function Products() {
 
     useEffect(() => {
         searchPageRef.current = 1;
-    }, [shopSlug, browse, showUnavailable, JSON.stringify(filters), effectiveSortBy]);
+    }, [shopSlug, browse, showUnavailable, catalogFiltersKey, filters.filterMyFav, effectiveSortBy]);
 
     const qUrl = searchParams.get('search') || '';
     useEffect(() => {
@@ -262,6 +297,7 @@ export default function Products() {
         if (!shopSlug) return;
         setCursor(null);
         if (!online) {
+            if (filters.filterMyFav) return;
             setLoading(true);
             setOfflineCatalogMissing(false);
             getCachedProducts(shopSlug)
@@ -279,15 +315,83 @@ export default function Products() {
                     setLoading(false);
                 });
         }
-    }, [shopSlug, online]);
+    }, [shopSlug, online, filters.filterMyFav]);
 
     useEffect(() => {
-        if (online && shopSlug) {
+        if (online && shopSlug && !filters.filterMyFav) {
             loadProducts(true);
         }
         // Intentionally omit loadProducts: it depends on cursor; including it would refetch after every page.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [online, shopSlug, JSON.stringify(filters), effectiveSortBy, browse, showUnavailable]);
+    }, [online, shopSlug, catalogFiltersKey, filters.filterMyFav, effectiveSortBy, browse, showUnavailable]);
+
+    useEffect(() => {
+        if (!shopSlug || !filters.filterMyFav) return;
+
+        let cancelled = false;
+
+        const loadFavoriteProducts = async () => {
+            setLoading(true);
+            setCursor(null);
+            setHasMore(false);
+            setOfflineCatalogMissing(false);
+
+            const favIds = getFavoriteIds(shopSlug);
+            if (favIds.size === 0) {
+                if (!cancelled) {
+                    setProducts([]);
+                    setLoading(false);
+                }
+                return;
+            }
+
+            const fromCache = async () => {
+                const cached = await getCachedProducts(shopSlug);
+                if (!cached?.items?.length) return null;
+                return cached.items.filter(
+                    (p: any) => favIds.has(String(p.id)) && isMobileCatalogPriceListed(p)
+                );
+            };
+
+            try {
+                if (online) {
+                    const cachedFavs = await fromCache();
+                    if (cancelled) return;
+                    if (cachedFavs) {
+                        setProducts(cachedFavs);
+                        setLoading(false);
+                        return;
+                    }
+                    const data = await publicApi.getProducts(shopSlug, { limit: '500' });
+                    if (cancelled) return;
+                    const items = (data.items ?? []).filter(
+                        (p: any) => favIds.has(String(p.id)) && isMobileCatalogPriceListed(p)
+                    );
+                    setProducts(items);
+                } else {
+                    const cachedFavs = await fromCache();
+                    if (cancelled) return;
+                    setProducts(cachedFavs ?? []);
+                }
+            } catch (err: any) {
+                if (!cancelled) {
+                    if (!online) {
+                        setOfflineCatalogMissing(true);
+                    } else {
+                        showToast(err.message || 'Failed to load favorites');
+                    }
+                    setProducts([]);
+                }
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+
+        void loadFavoriteProducts();
+        return () => {
+            cancelled = true;
+        };
+    }, [shopSlug, filters.filterMyFav, online, favoriteIds, showToast]);
 
     const selectedCategoryIdFromUrl = useMemo(() => {
         if (searchParams.getAll('categoryIds[]').length > 0) {
@@ -321,8 +425,11 @@ export default function Products() {
     }, [shopSlug, categories, selectedCategoryIdFromUrl, online, categoryCountsOffline, setSearchParams]);
 
     const displayedProducts = useMemo(() => {
-        if (online) return products;
+        if (online && !filters.filterMyFav) return products;
         let list = [...products].filter((p: any) => isMobileCatalogPriceListed(p));
+        if (filters.filterMyFav) {
+            list = list.filter((p: any) => favoriteIds.has(String(p.id)));
+        }
         if (!showUnavailable) {
             list = list.filter(
                 (p: any) => (Number(p.stock ?? p.available_stock) > 0 || p.is_pre_order)
@@ -436,7 +543,7 @@ export default function Products() {
             });
         }
         return list;
-    }, [online, products, searchTerm, filters, effectiveSortBy, showUnavailable, brands]);
+    }, [online, products, searchTerm, filters, effectiveSortBy, showUnavailable, brands, favoriteIds]);
 
     useEffect(() => {
         const prev = document.body.style.overflow;
@@ -557,6 +664,7 @@ export default function Products() {
                 'filterDeals',
                 'filterInStock',
                 'filterPopular',
+                'filterMyFav',
                 'filterLowPrice',
                 'lowPriceMax',
             ];
@@ -707,6 +815,7 @@ export default function Products() {
         if (filters.filterDeals) n += 1;
         if (filters.filterInStock) n += 1;
         if (filters.filterPopular) n += 1;
+        if (filters.filterMyFav) n += 1;
         if (filters.availability) n += 1;
         const sortIsDefault =
             effectiveSortBy === 'newest' ||
@@ -750,7 +859,14 @@ export default function Products() {
                 q: searchTerm.trim() || undefined,
                 limit: 12,
             }),
-        enabled: Boolean(online && shopSlug && !loading && displayedProducts.length === 0 && !offlineCatalogMissing),
+        enabled: Boolean(
+            online &&
+                shopSlug &&
+                !loading &&
+                displayedProducts.length === 0 &&
+                !offlineCatalogMissing &&
+                !filters.filterMyFav
+        ),
     });
 
     const disc = emptyDiscovery.data as
@@ -859,6 +975,13 @@ export default function Products() {
                         onClick={() => setChip('filterDeals', !filters.filterDeals)}
                     >
                         Deals
+                    </button>
+                    <button
+                        type="button"
+                        className={`filter-chip-btn ${filters.filterMyFav ? 'active' : ''}`}
+                        onClick={() => setChip('filterMyFav', !filters.filterMyFav)}
+                    >
+                        My Fav
                     </button>
                 </div>
 
@@ -1032,6 +1155,14 @@ export default function Products() {
                             </button>
                         </div>
                     )}
+                    {filters.filterMyFav && (
+                        <div className="filter-chip">
+                            My Fav
+                            <button type="button" onClick={() => removeFilter('filterMyFav')}>
+                                ×
+                            </button>
+                        </div>
+                    )}
                     {!browse && sortFromUrl && (
                         <div className="filter-chip">
                             {sortChipLabel(effectiveSortBy)}
@@ -1070,6 +1201,20 @@ export default function Products() {
                     <p>Connect to load products for this shop.</p>
                 </div>
             ) : displayedProducts.length === 0 ? (
+                filters.filterMyFav ? (
+                    <div className="empty-state">
+                        <h3>No favorites yet</h3>
+                        <p>Tap ♡ on any product to save it here.</p>
+                        <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            style={{ marginTop: 12 }}
+                            onClick={() => removeFilter('filterMyFav')}
+                        >
+                            Browse all products
+                        </button>
+                    </div>
+                ) : (
                 <div className="empty-state empty-state--discovery">
                     <h3>We could not match that exactly</h3>
                     <p>Here are picks you might like instead — adjust filters or try a shorter keyword.</p>
@@ -1147,6 +1292,7 @@ export default function Products() {
                         </section>
                     ) : null}
                 </div>
+                )
             ) : (
                 <>
                     <VirtualizedProductGrid

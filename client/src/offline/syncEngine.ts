@@ -18,6 +18,7 @@ import {
 } from './localDb';
 import { fetchAndCacheImage } from '../services/imageCache';
 import { getFullImageUrl } from '../config/apiUrl';
+import { isPosDesktopClient } from '../utils/isPosDesktopClient';
 
 export function isBrowserOnline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine;
@@ -33,8 +34,12 @@ async function getAuthTenantHeadersOk(): Promise<boolean> {
   }
 }
 
-/** Prefetch product images after sync (throttled). */
+/** Prefetch product images after sync (throttled). Skipped on desktop POS during bootstrap to keep UI responsive. */
 export async function prefetchSkuImagesThrottled(maxImages = 40, delayMs = 40): Promise<void> {
+  if (isPosDesktopClient() && maxImages > 12) {
+    maxImages = 12;
+    delayMs = 80;
+  }
   const skus = await getAllLocalSkus();
   let n = 0;
   for (const row of skus) {

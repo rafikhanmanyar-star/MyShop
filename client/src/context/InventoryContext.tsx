@@ -1,5 +1,6 @@
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
     InventoryItem,
     Warehouse,
@@ -22,6 +23,7 @@ import { subscribeToOnline } from '../services/productSyncService';
 import { showAppToast } from '../utils/appToast';
 import type { ProductApiResult } from '../services/shopApi';
 import { getAllLocalSkus, getMirrorWarehouses } from '../offline/localDb';
+import { routeNeedsCatalog } from '../utils/routeNeedsCatalog';
 
 interface InventoryContextType {
     items: InventoryItem[];
@@ -349,6 +351,8 @@ function mapMovementRows(movementList: any[]): StockMovement[] {
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { isAuthenticated } = useAuth();
+    const { pathname } = useLocation();
+    const catalogFetchStartedRef = useRef(false);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [movements, setMovements] = useState<StockMovement[]>([]);
@@ -356,9 +360,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const [transfers, setTransfers] = useState<StockTransfer[]>([]);
 
     React.useEffect(() => {
-        if (!isAuthenticated) return; // Don't fetch until user is logged in
+        if (!isAuthenticated) {
+            catalogFetchStartedRef.current = false;
+            return;
+        }
+        if (!routeNeedsCatalog(pathname)) return;
+        if (catalogFetchStartedRef.current) return;
+
+        let cancelled = false;
+        const startDelayMs = pathname === '/pos' ? 80 : 350;
 
         const fetchData = async () => {
+            if (cancelled) return;
+
             const mapWarehouseRows = (warehousesList: any[]): Warehouse[] =>
                 warehousesList.map((w: any) => ({
                     id: w.id,
@@ -395,12 +409,17 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             try {
                 const localRows = await getAllLocalSkus();
                 const localWhRows = await getMirrorWarehouses();
-                if (localRows.length > 0) {
+                const hadLocalMirror = localRows.length > 0;
+                if (hadLocalMirror) {
                     const whLocal = mapWarehouseRows(localWhRows);
                     if (whLocal.length > 0) setWarehouses(whLocal);
                     const mappedLocal = localRows.map((r) => mapSkuRowToInventoryItem(r));
                     setItems(await mergePending(mappedLocal));
+                    // Let Electron paint POS/inventory UI before downloading thousands of SKUs again.
+                    await new Promise((r) => setTimeout(r, hadLocalMirror ? 2800 : 0));
                 }
+
+                if (cancelled) return;
 
                 const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
                 console.log('🔄 [InventoryContext] Fetching warehouses + inventory SKUs (single request)...');
@@ -448,6 +467,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 }
 
                 setItems(await mergePending(mappedItems));
+                catalogFetchStartedRef.current = true;
 
             } catch (error: any) {
                 console.error('Failed to fetch inventory data:', error);
@@ -461,6 +481,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                                 setWarehouses(mapWarehouseRows(localWhRows));
                             }
                             setItems(await mergePending(mappedLocal));
+                            catalogFetchStartedRef.current = true;
                             return;
                         }
                         const pending = await getAllPendingProducts();
@@ -484,14 +505,23 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                             warehouseStock: {},
                         }));
                         setItems(pendingAsItems);
+                        catalogFetchStartedRef.current = true;
                     } catch (e) {
                         console.error('Failed to load offline inventory:', e);
                     }
                 }
             }
         };
-        fetchData();
-    }, [isAuthenticated]);
+
+        const timer = window.setTimeout(() => {
+            void fetchData();
+        }, startDelayMs);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [isAuthenticated, pathname]);
 
     // NEW: Refresh warehouses function
     const refreshWarehouses = useCallback(async () => {
@@ -635,8 +665,16 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (result.succeeded > 0) await refreshItems();
         };
         const unsub = subscribeToOnline(runSync);
-        if (typeof navigator !== 'undefined' && navigator.onLine) runSync();
-        return unsub;
+        let timer: number | undefined;
+        if (typeof navigator !== 'undefined' && navigator.onLine) {
+            timer = window.setTimeout(() => {
+                void runSync();
+            }, 10_000);
+        }
+        return () => {
+            if (timer !== undefined) window.clearTimeout(timer);
+            unsub();
+        };
     }, [refreshItems]);
 
     const updateStock = useCallback(async (

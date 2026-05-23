@@ -408,7 +408,10 @@ function AppLayout() {
     }
   }, [pathname, posFullScreen]);
 
-  useEffect(() => installElectronFocusRecovery(), []);
+  useEffect(() => {
+    if (pathname !== '/pos') return;
+    return installElectronFocusRecovery();
+  }, [pathname]);
 
   return (
     <BranchProvider>

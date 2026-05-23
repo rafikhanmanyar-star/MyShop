@@ -7,6 +7,7 @@ import ProductCardPriceSection from './productCard/ProductCardPriceSection';
 import {
     getProductStock,
     getProductVariantLabel,
+    getStockStatus,
     originalListPrice,
     stockLabel as buildStockLabel,
 } from './productCard/productCardUtils';
@@ -92,6 +93,7 @@ function ProductListCard({
     const variantLabel = getProductVariantLabel(p);
     const orig = originalListPrice(p);
     const label = buildStockLabel(p, stock, unavailableStyle);
+    const stockStatus = getStockStatus(p, stock, unavailableStyle);
     const outOfStock = stock <= 0 && !p.is_pre_order;
 
     const densityClass = density === 'compact' ? 'product-card--density-compact' : '';
@@ -140,6 +142,7 @@ function ProductListCard({
                     price={formatPrice(p.price)}
                     wasPrice={orig != null && orig > p.price ? formatPrice(orig) : undefined}
                     stockLabel={label}
+                    stockStatus={stockStatus}
                     outOfStock={outOfStock}
                 />
 
