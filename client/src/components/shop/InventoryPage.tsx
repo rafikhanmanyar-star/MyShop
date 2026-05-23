@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useRegisterInventoryPageHeader, type InventoryTabId } from '../../context/InventoryPageHeaderContext';
-import { InventoryProvider, useInventory } from '../../context/InventoryContext';
+import { InventoryProvider } from '../../context/InventoryContext';
 import InventoryDashboard from './inventory/InventoryDashboard';
 import StockMaster from './inventory/StockMaster';
 import StockMovements from './inventory/StockMovements';
@@ -16,7 +16,6 @@ const INVENTORY_TABS: readonly InventoryTabId[] = [
 ];
 
 const InventoryContent: React.FC = () => {
-    const { refreshItems } = useInventory();
     const [searchParams, setSearchParams] = useSearchParams();
     const [activeTab, setActiveTab] = useState<InventoryTabId>(() => {
         try {
@@ -42,9 +41,7 @@ const InventoryContent: React.FC = () => {
         );
     };
 
-    useEffect(() => {
-        refreshItems();
-    }, [refreshItems]);
+    // InventoryContext loads catalog on first visit; avoid duplicate 10k-SKU refetch on tab switch.
 
     const tabs = useMemo(
         () =>

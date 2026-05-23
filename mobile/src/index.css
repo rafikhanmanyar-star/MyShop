@@ -105,8 +105,10 @@ html.theme-transition *::after {
 
 #root {
   min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 button {
@@ -3108,6 +3110,16 @@ img {
 }
 
 /* ─── Shop layout + floating cart ───────────────────────── */
+.shop-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  max-width: 480px;
+  margin-inline: auto;
+}
+
 .shop-outlet {
   flex: 1;
   display: flex;
@@ -3118,11 +3130,19 @@ img {
 }
 
 /* Home scrolls in the outlet; sticky search pins below header padding (not viewport). */
+.shop-outlet--home,
 .shop-outlet:has(.page--home) {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+  touch-action: pan-y;
+}
+
+/* Browse keeps scroll inside .browse-products-scroll */
+.shop-outlet--browse,
+.shop-outlet:has(.page--browse) {
+  overflow: hidden;
 }
 
 .shop-outlet--cart-pad .page {
@@ -3212,6 +3232,7 @@ img {
   scrollbar-width: none;
   -ms-overflow-style: none;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
 }
 
 .category-nav-rail::-webkit-scrollbar {
@@ -3916,6 +3937,7 @@ img {
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   scroll-snap-type: x proximity;
+  touch-action: pan-x pan-y;
 }
 
 .home-product-row::-webkit-scrollbar {
@@ -5510,13 +5532,20 @@ img {
   max-height: none;
   height: auto;
   overflow: hidden;
-  contain: layout paint;
+  overflow: clip;
+  contain: none;
   touch-action: pan-y pinch-zoom;
+  pointer-events: none;
+}
+
+.home-promo-carousel--compact .home-promo-carousel__slide--active .home-promo-carousel__link {
+  pointer-events: auto;
 }
 
 .home-promo-carousel--compact .home-promo-carousel__track {
   height: auto;
   align-items: flex-start;
+  pointer-events: none;
 }
 
 .home-promo-carousel--compact .home-promo-carousel__slide {
@@ -5544,6 +5573,7 @@ img {
 .home-promo-carousel--compact .home-promo-carousel__dots {
   padding: 4px 8px 6px;
   gap: 4px;
+  pointer-events: auto;
 }
 
 .home-promo-carousel--compact .home-promo-carousel__dot {

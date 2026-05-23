@@ -478,10 +478,19 @@ const ProductSearch: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        loadProducts();
         loadShopCategories();
         loadPopularProducts();
+        if (!inventoryItemsRef.current?.length) {
+            loadProducts();
+        }
     }, [loadProducts, loadShopCategories, loadPopularProducts]);
+
+    const catalogProducts = useMemo(() => {
+        if (inventoryItems?.length) {
+            return inventoryItems.map(mapInventoryItemToPOS);
+        }
+        return products;
+    }, [inventoryItems, products]);
 
     useEffect(() => {
         const t = window.setTimeout(() => focusPosSearch(), 0);
@@ -516,11 +525,19 @@ const ProductSearch: React.FC = () => {
         return getDescendantCategoryIds(shopCategories, selectedCategory);
     }, [selectedCategory, shopCategories]);
 
+    const inventoryById = useMemo(() => {
+        const map = new Map<string, InventoryItem>();
+        for (const item of inventoryItems ?? []) {
+            map.set(item.id, item);
+        }
+        return map;
+    }, [inventoryItems]);
+
     // Merge inventory into products: stock (branch-aware, sellable qty), and name/price/image/SKU so edits reflect without refetching the catalog API.
     const productsWithStock = useMemo(() => {
-        if (!inventoryItems?.length) return products;
-        return products.map((p) => {
-            const inv = inventoryItems.find((i) => i.id === p.id);
+        if (!inventoryItems?.length) return catalogProducts;
+        return catalogProducts.map((p) => {
+            const inv = inventoryById.get(p.id);
             const { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved } = computeBranchStockForPos(
                 inv,
                 selectedBranchId
@@ -549,7 +566,7 @@ const ProductSearch: React.FC = () => {
                 reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
             };
         });
-    }, [products, inventoryItems, selectedBranchId]);
+    }, [catalogProducts, inventoryItems, inventoryById, selectedBranchId]);
 
     /** SKUs manually deactivated for sales stay out of POS grid and barcode add (still in inventory for reactivation). */
     const productsForPOSCatalog = useMemo(
@@ -561,7 +578,7 @@ const ProductSearch: React.FC = () => {
     const popularProductsWithStock = useMemo(() => {
         if (!popularProducts.length) return [];
         return popularProducts.map((p) => {
-            const inv = inventoryItems?.find((i) => i.id === p.id);
+            const inv = inventoryById.get(p.id);
             const { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved } = computeBranchStockForPos(
                 inv,
                 selectedBranchId
@@ -590,7 +607,7 @@ const ProductSearch: React.FC = () => {
                 reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
             };
         });
-    }, [popularProducts, inventoryItems, selectedBranchId]);
+    }, [popularProducts, inventoryById, selectedBranchId]);
 
     const popularProductsForPOS = useMemo(
         () => popularProductsWithStock.filter((p) => !p.salesDeactivated),
@@ -840,8 +857,8 @@ const ProductSearch: React.FC = () => {
     const initialEditingItemForModal = useMemo((): InventoryItem | null => {
         if (!skuModal.open || skuModal.kind !== 'edit') return null;
         const p = skuModal.product;
-        return inventoryItems.find((i) => i.id === p.id) ?? posProductToInventoryStub(p);
-    }, [skuModal, inventoryItems]);
+        return inventoryById.get(p.id) ?? posProductToInventoryStub(p);
+    }, [skuModal, inventoryById]);
 
     const handleProductContextMenu = useCallback((e: React.MouseEvent, product: POSProduct) => {
         e.preventDefault();

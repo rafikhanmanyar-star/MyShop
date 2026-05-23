@@ -39,7 +39,7 @@ interface InventoryContextType {
     requestTransfer: (transfer: Omit<StockTransfer, 'id' | 'timestamp' | 'status'>) => void;
     approveAdjustment: (adjustmentId: string) => void;
     refreshWarehouses: () => Promise<void>; // Refresh warehouses list
-    refreshItems: () => Promise<void>; // NEW: Refresh products/SKU list
+    refreshItems: (options?: { force?: boolean }) => Promise<void>;
     /** Loads movement ledger (lazy; avoids blocking inventory list). */
     loadMovements: () => Promise<void>;
 
@@ -353,6 +353,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const { isAuthenticated } = useAuth();
     const { pathname } = useLocation();
     const catalogFetchStartedRef = useRef(false);
+    const refreshInFlightRef = useRef<Promise<void> | null>(null);
+    const lastRefreshAtRef = useRef(0);
+    const MIN_REFRESH_INTERVAL_MS = 30_000;
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [movements, setMovements] = useState<StockMovement[]>([]);
@@ -550,11 +553,24 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
     }, []);
 
-    // NEW: Refresh items/products function
-    const refreshItems = useCallback(async () => {
+    const refreshItems = useCallback(async (options?: { force?: boolean }) => {
+        const force = options?.force ?? false;
+        const now = Date.now();
+        if (!force && now - lastRefreshAtRef.current < MIN_REFRESH_INTERVAL_MS) {
+            return;
+        }
+        if (refreshInFlightRef.current) {
+            return refreshInFlightRef.current;
+        }
+
+        const run = async () => {
         try {
             console.log('🔄 [InventoryContext] Refreshing products/items...');
-            const skuPack = await shopApi.getInventorySkus({ page: 1, limit: 10000, skipCache: true });
+            const skuPack = await shopApi.getInventorySkus({
+                page: 1,
+                limit: 10000,
+                skipCache: force,
+            });
             let mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
             if (mappedItems.length === 0) {
                 try {
@@ -598,6 +614,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 fetchAndCacheImage(`${getBaseUrl()}${path}`, path).catch(() => {});
             });
             console.log('✅ [InventoryContext] Products refreshed:', mappedItems.length + pendingAsItems.length, 'items');
+            lastRefreshAtRef.current = Date.now();
         } catch (error: any) {
             console.error('Failed to refresh products:', error);
             if (isRetryableServerOrNetworkError(error)) {
@@ -626,6 +643,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                             warehouseStock: {},
                         }));
                         setItems([...mappedLocal, ...pendingAsItems]);
+                        lastRefreshAtRef.current = Date.now();
                         return;
                     }
                     const pending = await getAllPendingProducts();
@@ -652,17 +670,26 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                         ...prev.filter((i) => !i.id.startsWith('pending-')),
                         ...pendingAsItems,
                     ]);
+                    lastRefreshAtRef.current = Date.now();
                 } catch (e) {
                     console.error('Failed to merge pending on refresh error:', e);
                 }
             }
+        }
+        };
+
+        refreshInFlightRef.current = run();
+        try {
+            await refreshInFlightRef.current;
+        } finally {
+            refreshInFlightRef.current = null;
         }
     }, []);
 
     React.useEffect(() => {
         const runSync = async () => {
             const result = await processPendingProductQueue();
-            if (result.succeeded > 0) await refreshItems();
+            if (result.succeeded > 0) await refreshItems({ force: true });
         };
         const unsub = subscribeToOnline(runSync);
         let timer: number | undefined;
@@ -829,7 +856,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     throw new Error('Post-save verification failed');
                 }
 
-                await refreshItems();
+                await refreshItems({ force: true });
                 return mapServerProductToItem(verifyRes.data);
             } catch (createErr: any) {
                 if (isRetryableServerOrNetworkError(createErr)) {
@@ -900,7 +927,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw new Error('Post-save verification failed');
             }
 
-            await refreshItems();
+            await refreshItems({ force: true });
         } catch (error: any) {
             console.error("Failed to update product:", error);
             const msg = error?.error || error?.message || 'Update failed';
@@ -917,7 +944,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
         try {
             await shopApi.deleteProduct(id);
-            await refreshItems();
+            await refreshItems({ force: true });
         } catch (error: any) {
             const msg = error?.error ?? error?.message ?? '';
             const msgStr = String(msg);

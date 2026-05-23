@@ -230,12 +230,19 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [heldSales, authUser?.id]);
 
     useEffect(() => {
+        let debounceTimer: number | undefined;
         const onRealtime = () => {
             if (pathname !== '/pos' && pathname !== '/inventory') return;
-            refreshInventory().catch(() => {});
+            if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
+            debounceTimer = window.setTimeout(() => {
+                refreshInventory().catch(() => {});
+            }, 4000);
         };
         window.addEventListener('shop:realtime', onRealtime as EventListener);
-        return () => window.removeEventListener('shop:realtime', onRealtime as EventListener);
+        return () => {
+            if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
+            window.removeEventListener('shop:realtime', onRealtime as EventListener);
+        };
     }, [refreshInventory, pathname]);
 
     // Totals Calculation
@@ -251,20 +258,26 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { subtotal, taxTotal, discountTotal, grandTotal, totalPaid, balanceDue, changeDue };
     }, [cart, payments]);
 
-    // Initialize barcode scanner and thermal printer
+    // Initialize barcode scanner and thermal printer (POS route only — global key listener blocks UI elsewhere)
     useEffect(() => {
-        // Re-create thermal printer with receipt + print settings (configurable template, optional silent print)
         thermalPrinterRef.current = createThermalPrinter({
             printSettings: posSettings ?? state.printSettings,
             receiptSettings: receiptSettings ?? undefined,
         });
+
+        if (!isPosRoute) {
+            if (barcodeScannerRef.current) {
+                barcodeScannerRef.current.stop();
+                barcodeScannerRef.current = null;
+            }
+            return;
+        }
 
         console.log('🖨️ Thermal printer initialized with settings:', {
             shopName: state.printSettings?.posShopName,
             showBarcode: state.printSettings?.posShowBarcode
         });
 
-        // Initialize barcode scanner (only once). Detect SALE|tenant|invoice to open sale detail.
         if (!barcodeScannerRef.current) {
             barcodeScannerRef.current = createBarcodeScanner((barcode) => {
                 const match = typeof barcode === 'string' && barcode.match(/^SALE\|[^|]+\|(.+)$/);
@@ -279,13 +292,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             barcodeScannerRef.current.start();
         }
 
-        // Cleanup on unmount
         return () => {
             if (barcodeScannerRef.current) {
                 barcodeScannerRef.current.stop();
+                barcodeScannerRef.current = null;
             }
         };
-    }, [state.printSettings, posSettings, receiptSettings]);
+    }, [state.printSettings, posSettings, receiptSettings, isPosRoute]);
 
     // Fetch Branches and Terminals (defer off POS so dashboard stays responsive in Electron)
     useEffect(() => {
@@ -815,7 +828,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 clearCart();
                 setPayments([]);
 
-                refreshInventory().catch(() => { });
+                refreshInventory({ force: true }).catch(() => { });
                 window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_created', saleId: saleId } }));
 
                 const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
@@ -928,7 +941,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setLastCompletedSale(completedSale);
                 clearCart();
                 setPayments([]);
-                refreshInventory().catch(() => { });
+                refreshInventory({ force: true }).catch(() => { });
                 window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_queued' } }));
 
                 const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
@@ -978,7 +991,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }));
     }, []);
 
-    const value = {
+    const value = useMemo(() => ({
         cart,
         lastAddedUnitPrice,
         focusedCatalogProduct,
@@ -1020,7 +1033,38 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isDenseMode,
         setIsDenseMode,
         posSettings
-    };
+    }), [
+        cart,
+        lastAddedUnitPrice,
+        focusedCatalogProduct,
+        addToCart,
+        removeFromCart,
+        updateCartItem,
+        clearCart,
+        applyGlobalDiscount,
+        customer,
+        payments,
+        addPayment,
+        removePayment,
+        heldSales,
+        holdSale,
+        recallSale,
+        totals,
+        isPaymentModalOpen,
+        isHeldSalesModalOpen,
+        isCustomerModalOpen,
+        isSalesHistoryModalOpen,
+        searchQuery,
+        completeSale,
+        printReceipt,
+        lastCompletedSale,
+        branches,
+        terminals,
+        selectedBranchId,
+        selectedTerminalId,
+        isDenseMode,
+        posSettings
+    ]);
 
     return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
 };
