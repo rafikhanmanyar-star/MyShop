@@ -270,6 +270,29 @@ If Play Console shows *"All uploaded bundles must be signed"*, rebuild after fix
 
 Place `android/app/google-services.json` from Firebase Console. Package name must be **`com.obostores.customer`**. See `docs/FIREBASE_ANDROID.md`.
 
+### Pre-launch: Advertising ID declaration (Play Console)
+
+If Play Console shows **Incomplete advertising ID declaration**, complete the form in the console — the app code is already configured for **No**.
+
+**What the app does (already in repo):**
+
+- `android/app/src/main/AndroidManifest.xml` removes `AD_ID` / `ACCESS_ADSERVICES_AD_ID` (Firebase Analytics would otherwise merge them).
+- Sets `google_analytics_adid_collection_enabled=false` (analytics without Play advertising ID).
+- `npm run android:bundleRelease` verifies the release manifest contains **no** advertising ID permission.
+
+**Fix in Google Play Console (required once per app):**
+
+1. Open [Google Play Console](https://play.google.com/console) → your app **OBO Stores**.
+2. Go to **Policy and programs** → **App content** (or use the **Update declaration** link on the release error).
+3. Find **Advertising ID** → **Manage** / **Start**.
+4. **Does your app use advertising ID?** → **No**.
+5. Save and submit the declaration. Status should change from incomplete to complete.
+6. Return to your release (Closed testing → Production / Pre-launch) and send for review again.
+
+**Important:** Answer **No** only if the uploaded AAB was built from this repo (merged manifest must not include `com.google.android.gms.permission.AD_ID`). Rebuild with `npm run android:bundleRelease` if unsure.
+
+The app uses Firebase Analytics, Crashlytics, and FCM — not AdMob or third-party ad SDKs. In-app promo banners come from your API, not the advertising ID.
+
 ---
 
 ## 10. Installable desktop app (Windows)

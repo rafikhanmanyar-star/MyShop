@@ -401,6 +401,13 @@ function AppLayout() {
     return () => window.removeEventListener('pos:fullscreen', handlePosFullScreen as EventListener);
   }, []);
 
+  // Leaving POS must restore sidebar/header — fullscreen flag lives in AppLayout, not on the POS route.
+  useEffect(() => {
+    if (pathname !== '/pos' && posFullScreen) {
+      setPosFullScreen(false);
+    }
+  }, [pathname, posFullScreen]);
+
   useEffect(() => installElectronFocusRecovery(), []);
 
   return (

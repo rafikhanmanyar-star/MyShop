@@ -326,12 +326,12 @@ const POSSalesContent: React.FC = () => {
         setFullScreenEnabled(!isFullScreen);
     }, [isFullScreen, setFullScreenEnabled]);
 
-    // If we leave the POS page while full screen is enabled, always restore normal layout
+    // Unmounting POS (navigate away) must clear app-level fullscreen so sidebar/header return.
     useEffect(() => {
-        if (!isActive && isFullScreen) {
+        return () => {
             setFullScreenEnabled(false);
-        }
-    }, [isActive, isFullScreen, setFullScreenEnabled]);
+        };
+    }, [setFullScreenEnabled]);
 
     usePosKeyboard({
         enabled: isActive,

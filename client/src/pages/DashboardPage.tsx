@@ -19,6 +19,10 @@ import {
   LineChart,
 } from 'lucide-react';
 import { useShopTimezone } from '../context/ShopTimezoneContext';
+import { promiseWithTimeout } from '../utils/promiseTimeout';
+
+const CACHE_READ_TIMEOUT_MS = 4_000;
+const OVERVIEW_FETCH_TIMEOUT_MS = 45_000;
 
 const DashboardCharts = lazy(() => import('../components/dashboard/DashboardCharts'));
 
@@ -73,6 +77,7 @@ const EMPTY_STATS: DashboardStats = {
 
 export default function DashboardPage() {
   const { lastYmdDays, timezone } = useShopTimezone();
+  const trendDayKeys = useMemo(() => lastYmdDays(7), [lastYmdDays, timezone]);
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
   const [ready, setReady] = useState(false);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
@@ -94,10 +99,10 @@ export default function DashboardPage() {
         const [trendRaw, categoryPerf, profitSummary] = await Promise.all([
           accountingApi.getDailyTrend(7).catch(() => null),
           accountingApi.getCategoryPerformance().catch(() => []),
-          accountingApi.dailyProfitSummary(lastYmdDays(7)).catch(() => null),
+          accountingApi.dailyProfitSummary(trendDayKeys).catch(() => null),
         ]);
         if (cancelled) return;
-        setSalesTrend(mergeDailyTrend(trendRaw, lastYmdDays(7), timezone));
+        setSalesTrend(mergeDailyTrend(trendRaw, trendDayKeys, timezone));
         const catArr = Array.isArray(categoryPerf) ? categoryPerf : [];
         setRevenueBreakdown(
           catArr
@@ -129,36 +134,54 @@ export default function DashboardPage() {
     async function load() {
       try {
         if (tenantId) {
-          const cached = await getDashboardCache(tenantId);
+          const cached = await promiseWithTimeout(
+            getDashboardCache(tenantId),
+            CACHE_READ_TIMEOUT_MS,
+            null
+          );
           if (cancelled) return;
           if (cached?.stats) {
             setStats(cached.stats);
             setCachedAt(cached.cachedAt || null);
-            setReady(true);
           }
         }
+      } catch {
+        /* IndexedDB unavailable or blocked — continue with empty/cached UI */
+      }
 
-        if (isOnline && tenantId) {
-          loadCharts();
-          const overview = await shopApi.getDashboardOverview();
-          if (cancelled) return;
-          setStats(overview.stats);
-          setLowStockRows(overview.lowStockRows);
-          setPendingOrderRows(overview.pendingOrders);
-          setCachedAt(null);
-          setReady(true);
-          await setDashboardCache(tenantId, overview.stats);
-          return;
+      if (!cancelled) setReady(true);
+
+      if (!isOnline || !tenantId) {
+        if (!cancelled) {
+          setChartsLoaded(false);
+          setProfit7d(null);
         }
+        return;
+      }
 
-        setChartsLoaded(false);
-        setProfit7d(null);
-        setReady(true);
+      loadCharts();
+
+      try {
+        const overview = await promiseWithTimeout(
+          shopApi.getDashboardOverview(),
+          OVERVIEW_FETCH_TIMEOUT_MS,
+          null
+        );
+        if (cancelled || !overview) return;
+        setStats(overview.stats);
+        setLowStockRows(overview.lowStockRows);
+        setPendingOrderRows(overview.pendingOrders);
+        setCachedAt(null);
+        await setDashboardCache(tenantId, overview.stats).catch(() => {});
       } catch (err) {
         console.error('Failed to load dashboard:', err);
         if (!cancelled && tenantId) {
           try {
-            const cached = await getDashboardCache(tenantId);
+            const cached = await promiseWithTimeout(
+              getDashboardCache(tenantId),
+              CACHE_READ_TIMEOUT_MS,
+              null
+            );
             if (cached?.stats) {
               setStats(cached.stats);
               setCachedAt(cached.cachedAt || null);
@@ -167,11 +190,6 @@ export default function DashboardPage() {
             setCachedAt(null);
           }
         }
-        if (!cancelled) {
-          setChartsLoaded(false);
-          setProfit7d(null);
-          setReady(true);
-        }
       }
     }
 
@@ -179,7 +197,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [timezone, lastYmdDays]);
+  }, [timezone, trendDayKeys]);
 
   const todayLabel = useMemo(
     () =>

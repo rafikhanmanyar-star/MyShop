@@ -170,12 +170,47 @@ try {
     Pop-Location
 }
 
+function Test-NoAdvertisingIdInManifest {
+    $manifestCandidates = @(
+        (Join-Path $repoRoot 'android\app\build\intermediates\merged_manifest\release\AndroidManifest.xml'),
+        (Join-Path $repoRoot 'android\app\build\intermediates\bundle_manifest\release\AndroidManifest.xml')
+    )
+    $manifestPath = $manifestCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $manifestPath) {
+        Write-Host 'WARNING: merged release manifest not found; skipped AD_ID check.' -ForegroundColor Yellow
+        return
+    }
+
+    $manifest = Get-Content $manifestPath -Raw -Encoding UTF8
+  $adIdPatterns = @(
+        'com\.google\.android\.gms\.permission\.AD_ID',
+        'android\.permission\.ACCESS_ADSERVICES_AD_ID'
+    )
+    foreach ($pattern in $adIdPatterns) {
+        if ($manifest -match $pattern) {
+            throw @"
+Advertising ID permission still present in release manifest ($manifestPath).
+
+Play Console requires declaring whether the app uses advertising ID. This project declares No.
+Ensure android/app/src/main/AndroidManifest.xml keeps tools:node=remove for AD_ID permissions, then rebuild.
+"@
+        }
+    }
+
+    if ($manifest -notmatch 'google_analytics_adid_collection_enabled[\s\S]*?android:value="false"') {
+        Write-Host 'WARNING: google_analytics_adid_collection_enabled=false not found in merged manifest.' -ForegroundColor Yellow
+    }
+
+    Write-Host "  AD_ID check OK (no advertising ID permission in $([IO.Path]::GetFileName($manifestPath)))" -ForegroundColor Green
+}
+
 Write-Host ''
 if (Test-Path $aabPath) {
     $aabCode = Get-AabVersionCode $aabPath
     if ($null -ne $aabCode -and $aabCode -ne $releaseVersion.Code) {
         throw "AAB versionCode mismatch: build.gradle has $($releaseVersion.Code) but AAB contains $aabCode. Do not upload this file."
     }
+    Test-NoAdvertisingIdInManifest
     Write-Host 'Build succeeded.' -ForegroundColor Green
     Write-Host "  versionName: $($releaseVersion.Name)"
     Write-Host "  versionCode: $($releaseVersion.Code)"
@@ -183,6 +218,8 @@ if (Test-Path $aabPath) {
     Write-Host ''
     Write-Host 'Upload to Google Play Console:' -ForegroundColor Green
     Write-Host $aabPath
+    Write-Host ''
+    Write-Host 'Before sending for review: complete App content > Advertising ID and answer No (see Cursor/COMMANDS.md).' -ForegroundColor Cyan
 } else {
     Write-Host "Build finished but AAB not found at expected path: $aabPath" -ForegroundColor Yellow
 }

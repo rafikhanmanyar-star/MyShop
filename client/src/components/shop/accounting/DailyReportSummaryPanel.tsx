@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   RefreshCw,
@@ -25,10 +25,25 @@ import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
 
-export function useDailyReportStream(onUpdate: () => void) {
+const DAILY_REPORT_REFRESH_TYPES = new Set(['daily_report_updated', 'sales_return_created']);
+
+export function useDailyReportStream(onUpdate: () => void, enabled = true) {
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
+    if (!enabled) return;
     const token = localStorage.getItem('auth_token');
     if (!token) return;
+
+    const scheduleRefresh = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
+        onUpdateRef.current();
+      }, 400);
+    };
 
     const url = `${getApiBaseUrl()}/shop/accounting/reports/daily/stream`;
     const controller = new AbortController();
@@ -59,8 +74,8 @@ export function useDailyReportStream(onUpdate: () => void) {
                   if (line.startsWith('data: ')) {
                     try {
                       const payload = JSON.parse(line.slice(6));
-                      if (payload.type === 'daily_report_updated' || payload.type === 'sales_return_created') {
-                        onUpdate();
+                      if (DAILY_REPORT_REFRESH_TYPES.has(payload.type)) {
+                        scheduleRefresh();
                       }
                     } catch {
                       /* ignore */
@@ -80,8 +95,11 @@ export function useDailyReportStream(onUpdate: () => void) {
     };
 
     connect();
-    return () => controller.abort();
-  }, [onUpdate]);
+    return () => {
+      controller.abort();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [enabled]);
 }
 
 function formatMoney(n: number) {
@@ -177,10 +195,13 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
   const [localDate, setLocalDate] = useState(() => shopToday);
   const [localBranchId, setLocalBranchId] = useState<string | null>(null);
 
-  const date = urlSync ? searchParams.get('date') || shopToday : localDate;
-  const branchParam = urlSync ? searchParams.get('branchId') : localBranchId === null ? null : localBranchId;
-  const branchId =
-    branchParam === '' || branchParam === 'all' || branchParam == null ? null : branchParam;
+  const urlDate = searchParams.get('date') || shopToday;
+  const urlBranchRaw = searchParams.get('branchId');
+  const urlBranchId =
+    urlBranchRaw === '' || urlBranchRaw === 'all' || urlBranchRaw == null ? null : urlBranchRaw;
+
+  const date = urlSync ? urlDate : localDate;
+  const branchId = urlSync ? urlBranchId : localBranchId;
 
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof accountingApi.dailyReportSummary>> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,17 +211,7 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
     setLoading(true);
     setError(null);
     try {
-      let d: string;
-      let br: string | null;
-      if (urlSync) {
-        d = searchParams.get('date') || shopToday;
-        const bp = searchParams.get('branchId');
-        br = bp === '' || bp === 'all' || bp == null ? null : bp;
-      } else {
-        d = localDate;
-        br = localBranchId;
-      }
-      const data = await accountingApi.dailyReportSummary(d, br);
+      const data = await accountingApi.dailyReportSummary(date, branchId);
       setSummary(data);
     } catch (e: any) {
       setError(e?.error || e?.message || 'Failed to load report');
@@ -208,9 +219,29 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
     } finally {
       setLoading(false);
     }
-  }, [urlSync, searchParams, localDate, localBranchId]);
+  }, [date, branchId]);
 
-  useDailyReportStream(load);
+  // Full daily report page: dedicated SSE. Embedded dashboard: shared ShopRealtimeBridge event.
+  useDailyReportStream(load, urlSync);
+
+  useEffect(() => {
+    if (urlSync) return;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const onRealtime = (e: Event) => {
+      const type = (e as CustomEvent<{ type?: string }>).detail?.type;
+      if (!type || !DAILY_REPORT_REFRESH_TYPES.has(type)) return;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        load();
+      }, 400);
+    };
+    window.addEventListener('shop:realtime', onRealtime as EventListener);
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      window.removeEventListener('shop:realtime', onRealtime as EventListener);
+    };
+  }, [urlSync, load]);
 
   useEffect(() => {
     load();
