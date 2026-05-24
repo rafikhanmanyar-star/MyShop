@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { perfMark } from '../../utils/perfTrace';
 import { usePOS } from '../../context/POSContext';
 import POSHeader from './pos/POSHeader';
 import ProductSearch, {
@@ -113,6 +114,12 @@ const POSSalesContent: React.FC = () => {
         isDenseMode,
         setIsDenseMode
     } = usePOS();
+
+    useEffect(() => {
+        perfMark('pos:page-mount');
+        return () => perfMark('pos:page-unmount');
+    }, []);
+
     const cartRef = useRef<CartGridHandle | null>(null);
     const checkoutRef = useRef<CheckoutPanelHandle | null>(null);
     const mainRef = useRef<HTMLDivElement>(null);

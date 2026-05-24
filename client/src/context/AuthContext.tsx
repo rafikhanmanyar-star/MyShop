@@ -30,38 +30,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    const tenantId = localStorage.getItem('tenant_id');
-
-    if (token && tenantId && apiClient.isAuthenticated()) {
-      try {
-        const parts = token.split('.');
-        const payload = JSON.parse(atob(parts[1]));
-        setState({
-          isAuthenticated: true,
-          isLoading: false,
-          user: {
-            id: payload.userId,
-            userId: payload.userId,
-            username: payload.username,
-            name: payload.username,
-            role: payload.role,
-            tenantId: payload.tenantId,
-          },
-          tenant: { id: payload.tenantId, name: '', company_name: '' },
-        });
-      } catch {
-        setState({ isAuthenticated: false, isLoading: false, user: null, tenant: null });
-      }
-    } else {
-      setState({ isAuthenticated: false, isLoading: false, user: null, tenant: null });
-    }
+    let cancelled = false;
 
     const handleExpired = () => {
       setState({ isAuthenticated: false, isLoading: false, user: null, tenant: null });
     };
+
+    const initAuth = async () => {
+      // Desktop POS: always show login on launch (no session restore from localStorage).
+      if (isPosDesktopClient()) {
+        if (apiClient.isAuthenticated()) {
+          try {
+            await authApi.logout();
+          } catch {
+            /* server unreachable — still clear local session */
+          }
+        }
+        apiClient.clearAuth();
+        try {
+          localStorage.removeItem('pos_assigned_terminal_id');
+        } catch {
+          /* ignore quota / private mode */
+        }
+        if (!cancelled) {
+          setState({ isAuthenticated: false, isLoading: false, user: null, tenant: null });
+        }
+        return;
+      }
+
+      const token = localStorage.getItem('auth_token');
+      const tenantId = localStorage.getItem('tenant_id');
+
+      if (token && tenantId && apiClient.isAuthenticated()) {
+        try {
+          const parts = token.split('.');
+          const payload = JSON.parse(atob(parts[1]));
+          if (!cancelled) {
+            setState({
+              isAuthenticated: true,
+              isLoading: false,
+              user: {
+                id: payload.userId,
+                userId: payload.userId,
+                username: payload.username,
+                name: payload.username,
+                role: payload.role,
+                tenantId: payload.tenantId,
+              },
+              tenant: { id: payload.tenantId, name: '', company_name: '' },
+            });
+          }
+        } catch {
+          if (!cancelled) {
+            setState({ isAuthenticated: false, isLoading: false, user: null, tenant: null });
+          }
+        }
+      } else if (!cancelled) {
+        setState({ isAuthenticated: false, isLoading: false, user: null, tenant: null });
+      }
+    };
+
+    void initAuth();
     window.addEventListener('auth:expired', handleExpired);
-    return () => window.removeEventListener('auth:expired', handleExpired);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('auth:expired', handleExpired);
+    };
   }, []);
 
   const login = useCallback(async (username: string, password: string, orgId?: string) => {

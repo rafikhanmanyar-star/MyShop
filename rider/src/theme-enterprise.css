@@ -501,6 +501,16 @@ body.rider-enterprise {
   border: 1px solid var(--r-border);
   font-size: 16px;
   background: var(--r-surface);
+  color: var(--r-text);
+}
+.r-field input::placeholder {
+  color: var(--r-muted);
+}
+.r-field input:-webkit-autofill,
+.r-field input:-webkit-autofill:hover,
+.r-field input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--r-text);
+  box-shadow: 0 0 0 1000px var(--r-surface) inset;
 }
 
 .rider-geo-warn {

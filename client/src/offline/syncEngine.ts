@@ -20,6 +20,24 @@ import {
 import { fetchAndCacheImage } from '../services/imageCache';
 import { getFullImageUrl } from '../config/apiUrl';
 import { isPosDesktopClient } from '../utils/isPosDesktopClient';
+import { perfMark, perfMeasure, debugTrace } from '../utils/perfTrace';
+
+export type CatalogSyncMode = 'bootstrap' | 'delta' | 'skipped';
+
+export type CatalogSyncResult = {
+  mode: CatalogSyncMode;
+  skuDeltaCount: number;
+  /** Delta/bootstrap SKU rows for in-memory patch (avoid full IDB reload). */
+  skuRows: Record<string, unknown>[];
+};
+
+let lastCatalogSyncResult: CatalogSyncResult | null = null;
+
+export function consumeLastCatalogSyncResult(): CatalogSyncResult | null {
+  const r = lastCatalogSyncResult;
+  lastCatalogSyncResult = null;
+  return r;
+}
 
 export function isBrowserOnline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine;
@@ -55,42 +73,71 @@ export async function prefetchSkuImagesThrottled(maxImages = 40, delayMs = 40): 
   }
 }
 
-export async function runSyncBootstrap(): Promise<boolean> {
-  if (!isBrowserOnline() || !(await getAuthTenantHeadersOk())) return false;
+export async function runSyncBootstrap(): Promise<CatalogSyncResult> {
+  if (!isBrowserOnline() || !(await getAuthTenantHeadersOk())) {
+    return { mode: 'skipped', skuDeltaCount: 0, skuRows: [] };
+  }
+  perfMark('sync:bootstrap');
+  debugTrace('sync:bootstrap:start');
   const raw = (await shopApi.getSyncBootstrap()) as SyncBootstrapPayload;
-  if (!raw?.serverTime || !raw.skus) return false;
+  if (!raw?.serverTime || !raw.skus) {
+    return { mode: 'skipped', skuDeltaCount: 0, skuRows: [] };
+  }
+  const skuRows = ((raw.skus?.items ?? []) as Record<string, unknown>[]).filter((x) => x?.id);
+  const rowCount = skuRows.length;
   await applyBootstrapPayload(raw);
-  prefetchSkuImagesThrottled().catch(() => {});
-  return true;
+  if (rowCount < 400) {
+    prefetchSkuImagesThrottled().catch(() => {});
+  }
+  perfMeasure('sync:bootstrap', 'sync:bootstrap', { rows: rowCount });
+  debugTrace('sync:bootstrap:done', { rows: rowCount });
+  return { mode: 'bootstrap', skuDeltaCount: rowCount, skuRows };
 }
 
-export async function runSyncDelta(): Promise<boolean> {
-  if (!isBrowserOnline() || !(await getAuthTenantHeadersOk())) return false;
+export async function runSyncDelta(): Promise<CatalogSyncResult> {
+  if (!isBrowserOnline() || !(await getAuthTenantHeadersOk())) {
+    return { mode: 'skipped', skuDeltaCount: 0, skuRows: [] };
+  }
   const since = (await getSyncMeta('last_delta_sync_at')) || undefined;
+  debugTrace('sync:delta:start', { since: since ?? 'epoch' });
+  perfMark('sync:delta');
   const raw = (await shopApi.getSyncChanges(since ?? undefined)) as SyncChangesPayload;
-  if (!raw?.serverTime) return false;
+  if (!raw?.serverTime) {
+    return { mode: 'skipped', skuDeltaCount: 0, skuRows: [] };
+  }
+  const skuRows = ((raw.skus_delta?.items ?? []) as Record<string, unknown>[]).filter((x) => x?.id);
+  const rowCount = skuRows.length;
+  debugTrace('sync:delta:response', {
+    skuDeltaCount: rowCount,
+    productsChanged: Array.isArray(raw.products) ? raw.products.length : 0,
+    inventoryChanged: Array.isArray(raw.inventory) ? raw.inventory.length : 0,
+  });
   await applySyncChangesPayload(raw);
-  prefetchSkuImagesThrottled(24).catch(() => {});
-  return true;
+  if (rowCount > 0 && rowCount < 80) {
+    prefetchSkuImagesThrottled(Math.min(24, rowCount)).catch(() => {});
+  }
+  perfMeasure('sync:delta', 'sync:delta', { rows: rowCount });
+  debugTrace('sync:delta:done', { rows: rowCount });
+  return { mode: 'delta', skuDeltaCount: rowCount, skuRows };
 }
 
 /**
  * If local SKU mirror is empty, run bootstrap; otherwise delta.
  * Call after successful login.
  */
-export async function runPullRestoreOrDelta(): Promise<'bootstrap' | 'delta' | 'skipped'> {
-  if (!isBrowserOnline() || !(await getAuthTenantHeadersOk())) return 'skipped';
+export async function runPullRestoreOrDelta(): Promise<CatalogSyncResult> {
+  if (!isBrowserOnline() || !(await getAuthTenantHeadersOk())) {
+    return { mode: 'skipped', skuDeltaCount: 0, skuRows: [] };
+  }
   const tid = typeof localStorage !== 'undefined' ? localStorage.getItem('tenant_id') : null;
-  if (!tid) return 'skipped';
+  if (!tid) return { mode: 'skipped', skuDeltaCount: 0, skuRows: [] };
 
   const cleared = await ensureOfflineMirrorForTenant(tid);
   const local = await getAllLocalSkus();
   if (cleared || local.length === 0) {
-    const ok = await runSyncBootstrap();
-    return ok ? 'bootstrap' : 'skipped';
+    return runSyncBootstrap();
   }
-  const ok = await runSyncDelta();
-  return ok ? 'delta' : 'skipped';
+  return runSyncDelta();
 }
 
 function jobDependsMet(job: { dependsOnLocalId?: string }, completed: Set<string>): boolean {
@@ -171,22 +218,32 @@ export async function processUnifiedOutbox(): Promise<{
 export async function runFullOfflineSyncRound(): Promise<void> {
   if (!isBrowserOnline()) return;
   await processUnifiedOutbox().catch(() => {});
-  await runPullRestoreOrDelta().catch(() => {});
+  await runPullRestoreOrDelta().catch(() => ({ mode: 'skipped' as const, skuDeltaCount: 0, skuRows: [] }));
 }
 
-function dispatchCatalogSyncFinished(): void {
+function dispatchCatalogSyncFinished(result: CatalogSyncResult): void {
+  lastCatalogSyncResult = result;
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('myshop:sync:catalog-done'));
+    debugTrace('sync:catalog-done:dispatch', {
+      mode: result.mode,
+      skuDeltaCount: result.skuDeltaCount,
+    });
+    window.dispatchEvent(
+      new CustomEvent('myshop:sync:catalog-done', {
+        detail: { mode: result.mode, skuDeltaCount: result.skuDeltaCount },
+      })
+    );
   }
 }
 
 /** Like runPullRestoreOrDelta but notifies listeners when finished (for refreshing “last sync” UI). */
 export async function runPullRestoreOrDeltaInBackground(): Promise<void> {
   if (!isBrowserOnline()) return;
+  let result: CatalogSyncResult = { mode: 'skipped', skuDeltaCount: 0, skuRows: [] };
   try {
-    await runPullRestoreOrDelta();
+    result = await runPullRestoreOrDelta();
   } finally {
-    dispatchCatalogSyncFinished();
+    dispatchCatalogSyncFinished(result);
   }
 }
 
@@ -202,6 +259,7 @@ export async function runBackgroundSync(): Promise<void> {
   if (backgroundSyncInFlight) return backgroundSyncInFlight;
 
   backgroundSyncInFlight = (async () => {
+    debugTrace('sync:background:start');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('myshop:sync:start'));
     }

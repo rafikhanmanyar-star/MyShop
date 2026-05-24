@@ -28,6 +28,7 @@ import { ProcurementPageHeaderProvider } from './context/ProcurementPageHeaderCo
 import { useAutoLogout } from './hooks/useAutoLogout';
 import { shopApi, type OrganizationProfile } from './services/shopApi';
 import { getFullImageUrl } from './config/apiUrl';
+import { installDebugObservers } from './utils/perfTrace';
 
 const POSSalesPage = lazy(() => import('./components/shop/POSSalesPage'));
 const InventoryPage = lazy(() => import('./components/shop/InventoryPage'));
@@ -538,6 +539,10 @@ function AppLayout() {
 export default function App() {
   const { isAuthenticated, isLoading } = useAuth();
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
+
+  useEffect(() => {
+    installDebugObservers();
+  }, []);
 
   if (isLoading) {
     return (

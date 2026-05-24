@@ -239,7 +239,7 @@ const ProductSearch: React.FC = () => {
         isCustomerModalOpen,
         isSalesHistoryModalOpen
     } = usePOS();
-    const { items: inventoryItems } = useInventory();
+    const { items: inventoryItems, catalogReady } = useInventory();
     const deferredInventoryItems = useDeferredValue(inventoryItems);
     const inventoryItemsRef = useRef(inventoryItems);
     inventoryItemsRef.current = inventoryItems;
@@ -481,10 +481,22 @@ const ProductSearch: React.FC = () => {
     useEffect(() => {
         loadShopCategories();
         loadPopularProducts();
-        if (!inventoryItemsRef.current?.length) {
-            loadProducts();
+        // Full catalog comes from InventoryContext only — never duplicate GET /products (obo ~1052 SKUs).
+    }, [loadShopCategories, loadPopularProducts]);
+
+    useEffect(() => {
+        if (catalogReady || (deferredInventoryItems?.length ?? 0) > 0) {
+            setIsLoading(false);
+            setLoadError(null);
+            return;
         }
-    }, [loadProducts, loadShopCategories, loadPopularProducts]);
+        const timeout = window.setTimeout(() => {
+            if ((inventoryItemsRef.current?.length ?? 0) > 0) return;
+            setIsLoading(false);
+            setLoadError('Product catalog is still loading. Try refreshing the page or check your connection.');
+        }, 45_000);
+        return () => window.clearTimeout(timeout);
+    }, [catalogReady, deferredInventoryItems?.length]);
 
     const catalogProducts = useMemo(() => products, [products]);
 

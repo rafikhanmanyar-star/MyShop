@@ -22,8 +22,12 @@ import {
 import { subscribeToOnline } from '../services/productSyncService';
 import { showAppToast } from '../utils/appToast';
 import type { ProductApiResult } from '../services/shopApi';
-import { getAllLocalSkus, getMirrorWarehouses, isOfflineMirrorForTenant } from '../offline/localDb';
+import { getAllLocalSkus, getMirrorWarehouses, getSyncMeta, isOfflineMirrorForTenant } from '../offline/localDb';
 import { routeNeedsCatalog } from '../utils/routeNeedsCatalog';
+import { mapRowsInChunks, parseJsonRecord } from '../utils/catalogMapping';
+import { resolvePosWarehouseWithStock } from '../components/shop/pos/posProductCardUtils';
+import { perfMark, perfMeasure, perfWarn, debugTrace } from '../utils/perfTrace';
+import { consumeLastCatalogSyncResult } from '../offline/syncEngine';
 
 interface InventoryContextType {
     items: InventoryItem[];
@@ -40,6 +44,13 @@ interface InventoryContextType {
     approveAdjustment: (adjustmentId: string) => void;
     refreshWarehouses: () => Promise<void>; // Refresh warehouses list
     refreshItems: (options?: { force?: boolean }) => Promise<void>;
+    /** After a sale, patch stock locally instead of re-fetching 10k SKUs. */
+    applySaleStockDeductions: (
+        sold: { productId: string; quantity: number }[],
+        branchId?: string | null
+    ) => void;
+    /** True once the first catalog slice is in memory (mirror or API). */
+    catalogReady: boolean;
     /** Loads movement ledger (lazy; avoids blocking inventory list). */
     loadMovements: () => Promise<void>;
 
@@ -141,54 +152,9 @@ function mapServerProductToItem(p: any): InventoryItem {
 
 /** Row from GET /shop/inventory/skus — single round-trip stock + product fields. */
 function mapSkuRowToInventoryItem(r: any): InventoryItem {
-    let ws: Record<string, number> = {};
-    if (r.warehouse_stock != null) {
-        let raw: unknown = r.warehouse_stock;
-        if (typeof r.warehouse_stock === 'string') {
-            try {
-                raw = JSON.parse(r.warehouse_stock);
-            } catch {
-                raw = {};
-            }
-        }
-        if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-            for (const k of Object.keys(raw as object)) {
-                ws[k] = Number((raw as Record<string, unknown>)[k]) || 0;
-            }
-        }
-    }
-    let wsRes: Record<string, number> = {};
-    if (r.warehouse_reserved != null) {
-        let rawR: unknown = r.warehouse_reserved;
-        if (typeof r.warehouse_reserved === 'string') {
-            try {
-                rawR = JSON.parse(r.warehouse_reserved);
-            } catch {
-                rawR = {};
-            }
-        }
-        if (rawR && typeof rawR === 'object' && !Array.isArray(rawR)) {
-            for (const k of Object.keys(rawR as object)) {
-                wsRes[k] = Number((rawR as Record<string, unknown>)[k]) || 0;
-            }
-        }
-    }
-    let wsSell: Record<string, number> = {};
-    if (r.warehouse_sellable != null) {
-        let rawS: unknown = r.warehouse_sellable;
-        if (typeof r.warehouse_sellable === 'string') {
-            try {
-                rawS = JSON.parse(r.warehouse_sellable);
-            } catch {
-                rawS = {};
-            }
-        }
-        if (rawS && typeof rawS === 'object' && !Array.isArray(rawS)) {
-            for (const k of Object.keys(rawS as object)) {
-                wsSell[k] = Number((rawS as Record<string, unknown>)[k]) || 0;
-            }
-        }
-    }
+    const ws = parseJsonRecord(r.warehouse_stock);
+    const wsRes = parseJsonRecord(r.warehouse_reserved);
+    const wsSell = parseJsonRecord(r.warehouse_sellable);
     const onHand = Number(r.on_hand) || 0;
     const available = Number(r.available) || 0;
     const reserved = Number(r.reserved_total) || 0;
@@ -349,15 +315,50 @@ function mapMovementRows(movementList: any[]): StockMovement[] {
     }));
 }
 
+async function mergePendingIntoCatalog(mappedItems: InventoryItem[]): Promise<InventoryItem[]> {
+    const pending = await getAllPendingProducts();
+    const pendingAsItems: InventoryItem[] = pending.map((p) => ({
+        id: `pending-${p.localId}`,
+        sku: p.payload.sku,
+        barcode: p.payload.barcode ?? undefined,
+        name: p.payload.name,
+        category: p.payload.category_id || 'General',
+        subcategoryId: p.payload.subcategory_id || undefined,
+        unit: p.payload.unit || 'pcs',
+        onHand: 0,
+        available: 0,
+        reserved: 0,
+        inTransit: 0,
+        damaged: 0,
+        costPrice: p.payload.cost_price ?? 0,
+        retailPrice: p.payload.retail_price ?? 0,
+        reorderPoint: p.payload.reorder_point ?? 10,
+        imageUrl: undefined,
+        description: p.payload.description ?? undefined,
+        warehouseStock: {},
+    }));
+    return [...mappedItems, ...pendingAsItems];
+}
+
+const MIRROR_FRESH_MS = 3 * 60_000;
+const API_DEFER_AFTER_MIRROR_MS = 2_500;
+const BACKGROUND_API_REFRESH_MS = 90_000;
+
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { isAuthenticated, user } = useAuth();
     const { pathname } = useLocation();
-    const catalogFetchStartedRef = useRef(false);
+    /** Tenant id for which initial catalog hydration finished (mirror or API). */
+    const catalogHydratedTenantRef = useRef<string | null>(null);
+    const catalogFetchInFlightRef = useRef(false);
     const lastCatalogTenantRef = useRef<string | null>(null);
+    const lastMirrorReloadAtRef = useRef(0);
     const refreshInFlightRef = useRef<Promise<void> | null>(null);
     const lastRefreshAtRef = useRef(0);
     const MIN_REFRESH_INTERVAL_MS = 30_000;
+    const MIRROR_RELOAD_MIN_MS = 12_000;
     const LARGE_CATALOG_THRESHOLD = 200;
+    const backgroundApiTimerRef = useRef<number | undefined>(undefined);
+    const [catalogReady, setCatalogReady] = useState(false);
 
     const applyCatalogItems = useCallback((next: InventoryItem[]) => {
         if (next.length >= LARGE_CATALOG_THRESHOLD) {
@@ -365,6 +366,86 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         } else {
             setItems(next);
         }
+    }, []);
+
+    const applySaleStockDeductions = useCallback((
+        sold: { productId: string; quantity: number }[],
+        branchId?: string | null
+    ) => {
+        if (!sold.length) return;
+        const soldMap = new Map<string, number>();
+        for (const line of sold) {
+            soldMap.set(line.productId, (soldMap.get(line.productId) ?? 0) + line.quantity);
+        }
+        startTransition(() => {
+            setItems((prev) =>
+                prev.map((item) => {
+                    const qty = soldMap.get(item.id);
+                    if (!qty) return item;
+                    const next: InventoryItem = {
+                        ...item,
+                        onHand: Math.max(0, item.onHand - qty),
+                        available: Math.max(0, item.available - qty),
+                        sellableOnHand: Math.max(0, (item.sellableOnHand ?? item.available) - qty),
+                    };
+                    const whId = resolvePosWarehouseWithStock(item, branchId);
+                    if (whId && item.warehouseSellable?.[whId] != null) {
+                        next.warehouseSellable = {
+                            ...item.warehouseSellable,
+                            [whId]: Math.max(0, item.warehouseSellable[whId] - qty),
+                        };
+                    }
+                    if (whId && item.warehouseStock?.[whId] != null) {
+                        next.warehouseStock = {
+                            ...item.warehouseStock,
+                            [whId]: Math.max(0, item.warehouseStock[whId] - qty),
+                        };
+                    }
+                    return next;
+                })
+            );
+        });
+    }, []);
+
+    const reloadFromLocalMirror = useCallback(async (source: string) => {
+        const tenantId = user?.tenantId ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('tenant_id') : null);
+        if (!tenantId) return;
+        debugTrace('catalog:idb-reload:start', { source });
+        perfMark(`catalog:idb-reload:${source}`);
+        const mirrorOk = await isOfflineMirrorForTenant(tenantId);
+        if (!mirrorOk) return;
+        const localRows = await getAllLocalSkus();
+        if (!localRows.length) return;
+        debugTrace('catalog:idb-reload:rows', { source, count: localRows.length });
+        const mapped = await mapRowsInChunks(localRows, mapSkuRowToInventoryItem, 100, `idb-map:${source}`);
+        applyCatalogItems(await mergePendingIntoCatalog(mapped));
+        perfMeasure(`catalog:idb-reload:${source}`, `catalog:idb-reload:${source}`);
+    }, [user?.tenantId, applyCatalogItems]);
+
+    /** Merge delta SKU rows into in-memory catalog (avoids full IDB reload after large sync deltas). */
+    const patchCatalogFromDelta = useCallback(async (rows: Record<string, unknown>[], source: string) => {
+        if (!rows.length) return;
+        debugTrace('catalog:delta-patch:start', { source, count: rows.length });
+        perfMark(`catalog:delta-patch:${source}`, { count: rows.length });
+        const mapped = await mapRowsInChunks(rows, mapSkuRowToInventoryItem, 100, `delta-map:${source}`);
+        const patchById = new Map(mapped.map((item) => [item.id, item]));
+        startTransition(() => {
+            setItems((prev) => {
+                if (prev.length === 0) return mapped;
+                const seen = new Set<string>();
+                const next = prev.map((item) => {
+                    const patched = patchById.get(item.id);
+                    if (patched) seen.add(item.id);
+                    return patched ?? item;
+                });
+                for (const item of mapped) {
+                    if (!seen.has(item.id)) next.push(item);
+                }
+                return next;
+            });
+        });
+        perfMeasure(`catalog:delta-patch:${source}`, `catalog:delta-patch:${source}`, { patched: mapped.length });
+        debugTrace('catalog:delta-patch:done', { source, patched: mapped.length });
     }, []);
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [items, setItems] = useState<InventoryItem[]>([]);
@@ -374,30 +455,87 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     React.useEffect(() => {
         if (!isAuthenticated) {
-            catalogFetchStartedRef.current = false;
+            catalogHydratedTenantRef.current = null;
+            catalogFetchInFlightRef.current = false;
             lastCatalogTenantRef.current = null;
+            setCatalogReady(false);
             return;
         }
         const tenantId = user?.tenantId ?? null;
         if (tenantId && lastCatalogTenantRef.current && lastCatalogTenantRef.current !== tenantId) {
-            catalogFetchStartedRef.current = false;
+            catalogHydratedTenantRef.current = null;
+            catalogFetchInFlightRef.current = false;
+            setCatalogReady(false);
             setItems([]);
             setWarehouses([]);
         }
         lastCatalogTenantRef.current = tenantId;
         if (!routeNeedsCatalog(pathname)) return;
-        if (catalogFetchStartedRef.current) return;
+        if (tenantId && catalogHydratedTenantRef.current === tenantId) return;
+        if (catalogFetchInFlightRef.current) return;
 
         // Guard BEFORE the async timer fires so re-navigation during a slow obo fetch
         // doesn't start a second concurrent fetch (large catalogs take 10-20 s).
-        catalogFetchStartedRef.current = true;
+        catalogFetchInFlightRef.current = true;
         let cancelled = false;
         const startDelayMs = pathname === '/pos' ? 80 : 350;
 
+        const markCatalogHydrated = () => {
+            if (tenantId) catalogHydratedTenantRef.current = tenantId;
+            setCatalogReady(true);
+            catalogFetchInFlightRef.current = false;
+        };
+
+        const fetchFromApi = async (source: string) => {
+            if (cancelled) return;
+            perfMark(`catalog:api:${source}`);
+            const [warehousesList, skuPack] = await Promise.all([
+                shopApi.getWarehouses(),
+                shopApi.getInventorySkus({ page: 1, limit: 10000, forPos: true }),
+            ]);
+            if (cancelled) return;
+
+            const whs: Warehouse[] = warehousesList.map((w: any) => ({
+                id: w.id,
+                name: w.name,
+                code: w.code,
+                location: w.location || 'Main',
+            }));
+            setWarehouses(whs);
+
+            let mappedItems = await mapRowsInChunks(
+                skuPack.items || [],
+                mapSkuRowToInventoryItem,
+                100,
+                `api-map:${source}`
+            );
+            if (mappedItems.length === 0) {
+                try {
+                    const [products, inventory] = await Promise.all([
+                        shopApi.getProducts(),
+                        shopApi.getInventory(),
+                    ]);
+                    if (Array.isArray(products) && products.length > 0) {
+                        mappedItems = mergeLegacyProductsInventory(products, inventory || []);
+                    }
+                } catch {
+                    /* legacy fallback optional */
+                }
+            }
+
+            applyCatalogItems(await mergePendingIntoCatalog(mappedItems));
+            lastRefreshAtRef.current = Date.now();
+            markCatalogHydrated();
+            const ms = perfMeasure(`catalog:api:${source}`, `catalog:api:${source}`, {
+                rows: mappedItems.length,
+                serverMs: (skuPack as { serverMs?: number }).serverMs,
+            });
+            perfWarn(`catalog:api:${source}`, ms, 5000, { tenantId: user?.tenantId });
+        };
+
         const fetchData = async () => {
             if (cancelled) {
-                // Effect was cleaned up before the fetch started — allow a future attempt.
-                catalogFetchStartedRef.current = false;
+                catalogFetchInFlightRef.current = false;
                 return;
             }
 
@@ -409,140 +547,55 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     location: w.location || 'Main',
                 }));
 
-            const mergePending = async (mappedItems: InventoryItem[]) => {
-                const pending = await getAllPendingProducts();
-                const pendingAsItems: InventoryItem[] = pending.map((p) => ({
-                    id: `pending-${p.localId}`,
-                    sku: p.payload.sku,
-                    barcode: p.payload.barcode ?? undefined,
-                    name: p.payload.name,
-                    category: p.payload.category_id || 'General',
-                    subcategoryId: p.payload.subcategory_id || undefined,
-                    unit: p.payload.unit || 'pcs',
-                    onHand: 0,
-                    available: 0,
-                    reserved: 0,
-                    inTransit: 0,
-                    damaged: 0,
-                    costPrice: p.payload.cost_price ?? 0,
-                    retailPrice: p.payload.retail_price ?? 0,
-                    reorderPoint: p.payload.reorder_point ?? 10,
-                    imageUrl: undefined,
-                    description: p.payload.description ?? undefined,
-                    warehouseStock: {},
-                }));
-                return [...mappedItems, ...pendingAsItems];
-            };
-
             try {
+                perfMark('catalog:fetch-start', { pathname, tenantId: user?.tenantId });
                 const tenantId = user?.tenantId ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('tenant_id') : null);
                 const mirrorOk = tenantId ? await isOfflineMirrorForTenant(tenantId) : false;
                 const localRows = mirrorOk ? await getAllLocalSkus() : [];
                 const localWhRows = mirrorOk ? await getMirrorWarehouses() : [];
                 const hadLocalMirror = localRows.length > 0;
+
                 if (hadLocalMirror) {
+                    perfMark('catalog:mirror-hit', { rows: localRows.length });
                     const whLocal = mapWarehouseRows(localWhRows);
                     if (whLocal.length > 0) setWarehouses(whLocal);
-                    const mappedLocal = localRows.map((r) => mapSkuRowToInventoryItem(r));
-                    applyCatalogItems(await mergePending(mappedLocal));
-                    await new Promise((r) => setTimeout(r, 120));
-                }
+                    const mappedLocal = await mapRowsInChunks(localRows, mapSkuRowToInventoryItem, 100, 'mirror-map');
+                    applyCatalogItems(await mergePendingIntoCatalog(mappedLocal));
+                    perfMeasure('catalog:mirror-ready', 'catalog:mirror-hit', { rows: mappedLocal.length });
+                    markCatalogHydrated();
 
-                if (cancelled) {
-                    catalogFetchStartedRef.current = false;
-                    return;
-                }
+                    if (cancelled) return;
 
-                const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
-                console.log('🔄 [InventoryContext] Fetching warehouses + inventory SKUs (single request)...');
-                const [warehousesList, skuPack] = await Promise.all([
-                    shopApi.getWarehouses(),
-                    shopApi.getInventorySkus({ page: 1, limit: 10000, forPos: true }),
-                ]);
-
-                if (import.meta.env.DEV && skuPack) {
-                    console.log(
-                        `[perf] inventory/skus: ${(skuPack as any).serverMs ?? '?'}ms server, ${(skuPack as any).routeMs ?? '?'}ms route, ${(skuPack as any).items?.length ?? 0} items`
-                    );
-                }
-                if (t0 && import.meta.env.DEV) {
-                    console.log(`[perf] inventory context fetch ${(performance.now() - t0).toFixed(0)}ms (client)`);
-                }
-
-                console.log('📦 [InventoryContext] Raw warehouses from API:', warehousesList);
-
-                // Map Warehouses
-                const whs: Warehouse[] = warehousesList.map((w: any) => ({
-                    id: w.id,
-                    name: w.name,
-                    code: w.code,
-                    location: w.location || 'Main'
-                }));
-                setWarehouses(whs);
-
-                let mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
-                if (mappedItems.length === 0) {
-                    try {
-                        const [products, inventory] = await Promise.all([
-                            shopApi.getProducts(),
-                            shopApi.getInventory(),
-                        ]);
-                        if (Array.isArray(products) && products.length > 0) {
-                            mappedItems = mergeLegacyProductsInventory(products, inventory || []);
-                            console.warn(
-                                '[InventoryContext] /inventory/skus returned 0 rows; loaded SKUs via legacy products + inventory merge.'
-                            );
+                    const lastSync = await getSyncMeta('last_delta_sync_at');
+                    const mirrorFresh = lastSync && Date.now() - Date.parse(lastSync) < MIRROR_FRESH_MS;
+                    if (mirrorFresh) {
+                        perfMark('catalog:defer-api', { reason: 'mirror-fresh', lastSync });
+                        if (backgroundApiTimerRef.current !== undefined) {
+                            window.clearTimeout(backgroundApiTimerRef.current);
                         }
-                    } catch (fbErr) {
-                        console.warn('[InventoryContext] Legacy inventory fallback failed:', fbErr);
+                        backgroundApiTimerRef.current = window.setTimeout(() => {
+                            void fetchFromApi('background-fresh').catch(() => {});
+                        }, BACKGROUND_API_REFRESH_MS);
+                        return;
                     }
+
+                    await new Promise((r) => window.setTimeout(r, API_DEFER_AFTER_MIRROR_MS));
+                    if (cancelled) return;
                 }
 
-                applyCatalogItems(await mergePending(mappedItems));
-                // ref was already set to true at effect start; nothing to do here
-
-            } catch (error: any) {
+                await fetchFromApi(hadLocalMirror ? 'after-mirror' : 'cold');
+            } catch (error: unknown) {
                 console.error('Failed to fetch inventory data:', error);
                 if (isRetryableServerOrNetworkError(error)) {
                     try {
-                        const localRows = await getAllLocalSkus();
-                        if (localRows.length > 0) {
-                            const mappedLocal = localRows.map((r) => mapSkuRowToInventoryItem(r));
-                            const localWhRows = await getMirrorWarehouses();
-                            if (localWhRows.length > 0) {
-                                setWarehouses(mapWarehouseRows(localWhRows));
-                            }
-                            setItems(await mergePending(mappedLocal));
-                            return;
-                        }
-                        const pending = await getAllPendingProducts();
-                        const pendingAsItems: InventoryItem[] = pending.map((p) => ({
-                            id: `pending-${p.localId}`,
-                            sku: p.payload.sku,
-                            barcode: p.payload.barcode ?? undefined,
-                            name: p.payload.name,
-                            category: p.payload.category_id || 'General',
-                            subcategoryId: p.payload.subcategory_id || undefined,
-                            unit: p.payload.unit || 'pcs',
-                            onHand: 0,
-                            available: 0,
-                            reserved: 0,
-                            inTransit: 0,
-                            damaged: 0,
-                            costPrice: p.payload.cost_price ?? 0,
-                            retailPrice: p.payload.retail_price ?? 0,
-                            reorderPoint: p.payload.reorder_point ?? 10,
-                            imageUrl: undefined,
-                            warehouseStock: {},
-                        }));
-                        setItems(pendingAsItems);
+                        await reloadFromLocalMirror('fetch-error-fallback');
+                        markCatalogHydrated();
                     } catch (e) {
                         console.error('Failed to load offline inventory:', e);
-                        catalogFetchStartedRef.current = false; // allow retry on total failure
+                        catalogFetchInFlightRef.current = false;
                     }
                 } else {
-                    // Non-retryable error — reset so the user can try again by re-navigating
-                    catalogFetchStartedRef.current = false;
+                    markCatalogHydrated();
                 }
             }
         };
@@ -554,8 +607,43 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return () => {
             cancelled = true;
             window.clearTimeout(timer);
+            if (backgroundApiTimerRef.current !== undefined) {
+                window.clearTimeout(backgroundApiTimerRef.current);
+                backgroundApiTimerRef.current = undefined;
+            }
         };
-    }, [isAuthenticated, pathname, user?.tenantId]);
+    }, [isAuthenticated, pathname, user?.tenantId, applyCatalogItems, reloadFromLocalMirror]);
+
+    React.useEffect(() => {
+        if (!isAuthenticated || !routeNeedsCatalog(pathname)) return;
+        const onCatalogSyncDone = () => {
+            const now = Date.now();
+            if (now - lastMirrorReloadAtRef.current < MIRROR_RELOAD_MIN_MS) {
+                debugTrace('catalog:sync-done:throttled');
+                return;
+            }
+            lastMirrorReloadAtRef.current = now;
+
+            const result = consumeLastCatalogSyncResult();
+            debugTrace('catalog:sync-done:event', {
+                mode: result?.mode ?? 'unknown',
+                skuDeltaCount: result?.skuDeltaCount ?? 0,
+            });
+
+            if (!result || result.mode === 'skipped' || result.skuDeltaCount === 0) return;
+
+            if (result.mode === 'delta' && result.skuRows.length > 0) {
+                void patchCatalogFromDelta(result.skuRows, 'sync-delta');
+                return;
+            }
+
+            if (result.mode === 'bootstrap') {
+                void reloadFromLocalMirror('sync-bootstrap');
+            }
+        };
+        window.addEventListener('myshop:sync:catalog-done', onCatalogSyncDone);
+        return () => window.removeEventListener('myshop:sync:catalog-done', onCatalogSyncDone);
+    }, [isAuthenticated, pathname, reloadFromLocalMirror, patchCatalogFromDelta]);
 
     // NEW: Refresh warehouses function
     const refreshWarehouses = useCallback(async () => {
@@ -596,13 +684,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         const run = async () => {
         try {
-            console.log('🔄 [InventoryContext] Refreshing products/items...');
+            perfMark('catalog:refresh');
             const skuPack = await shopApi.getInventorySkus({
                 page: 1,
                 limit: 10000,
+                forPos: true,
                 skipCache: force,
             });
-            let mappedItems: InventoryItem[] = (skuPack.items || []).map(mapSkuRowToInventoryItem);
+            let mappedItems = await mapRowsInChunks(
+                skuPack.items || [],
+                mapSkuRowToInventoryItem,
+                100,
+                'refresh-map'
+            );
             if (mappedItems.length === 0) {
                 try {
                     const [products, inventory] = await Promise.all([
@@ -617,63 +711,22 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 }
             }
 
-            const pending = await getAllPendingProducts();
-            const pendingAsItems: InventoryItem[] = pending.map((p) => ({
-                id: `pending-${p.localId}`,
-                sku: p.payload.sku,
-                barcode: p.payload.barcode ?? undefined,
-                name: p.payload.name,
-                category: p.payload.category_id || 'General',
-                subcategoryId: p.payload.subcategory_id || undefined,
-                unit: p.payload.unit || 'pcs',
-                onHand: 0,
-                available: 0,
-                reserved: 0,
-                inTransit: 0,
-                damaged: 0,
-                costPrice: p.payload.cost_price ?? 0,
-                retailPrice: p.payload.retail_price ?? 0,
-                reorderPoint: p.payload.reorder_point ?? 10,
-                imageUrl: undefined,
-                warehouseStock: {},
-            }));
-            setItems([...mappedItems, ...pendingAsItems]);
-            // Prefill local image cache so product images load offline
+            applyCatalogItems(await mergePendingIntoCatalog(mappedItems));
             mappedItems.filter((it) => it.imageUrl).slice(0, 50).forEach((it) => {
                 const rel = it.imageUrl!.replace(/^https?:\/\/[^/]+/, '');
                 const path = rel.startsWith('/') ? rel : `/${rel}`;
                 fetchAndCacheImage(`${getBaseUrl()}${path}`, path).catch(() => {});
             });
-            console.log('✅ [InventoryContext] Products refreshed:', mappedItems.length + pendingAsItems.length, 'items');
             lastRefreshAtRef.current = Date.now();
+            perfMeasure('catalog:refresh', 'catalog:refresh', { rows: mappedItems.length });
         } catch (error: any) {
             console.error('Failed to refresh products:', error);
             if (isRetryableServerOrNetworkError(error)) {
                 try {
                     const localRows = await getAllLocalSkus();
                     if (localRows.length > 0) {
-                        const mappedLocal = localRows.map((r) => mapSkuRowToInventoryItem(r));
-                        const pending = await getAllPendingProducts();
-                        const pendingAsItems: InventoryItem[] = pending.map((p) => ({
-                            id: `pending-${p.localId}`,
-                            sku: p.payload.sku,
-                            barcode: p.payload.barcode ?? undefined,
-                            name: p.payload.name,
-                            category: p.payload.category_id || 'General',
-                            subcategoryId: p.payload.subcategory_id || undefined,
-                            unit: p.payload.unit || 'pcs',
-                            onHand: 0,
-                            available: 0,
-                            reserved: 0,
-                            inTransit: 0,
-                            damaged: 0,
-                            costPrice: p.payload.cost_price ?? 0,
-                            retailPrice: p.payload.retail_price ?? 0,
-                            reorderPoint: p.payload.reorder_point ?? 10,
-                            imageUrl: undefined,
-                            warehouseStock: {},
-                        }));
-                        setItems([...mappedLocal, ...pendingAsItems]);
+                        const mappedLocal = await mapRowsInChunks(localRows, mapSkuRowToInventoryItem, 100, 'refresh-idb');
+                        applyCatalogItems(await mergePendingIntoCatalog(mappedLocal));
                         lastRefreshAtRef.current = Date.now();
                         return;
                     }
@@ -1031,10 +1084,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         approveAdjustment,
         refreshWarehouses,
         refreshItems,
+        applySaleStockDeductions,
+        catalogReady,
         loadMovements,
         lowStockItems,
         totalInventoryValue
-    }), [items, warehouses, movements, adjustments, transfers, addItem, updateItem, deleteItem, updateStock, requestTransfer, approveAdjustment, refreshWarehouses, refreshItems, loadMovements, lowStockItems, totalInventoryValue]);
+    }), [items, warehouses, movements, adjustments, transfers, addItem, updateItem, deleteItem, updateStock, requestTransfer, approveAdjustment, refreshWarehouses, refreshItems, applySaleStockDeductions, catalogReady, loadMovements, lowStockItems, totalInventoryValue]);
 
     return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
 };

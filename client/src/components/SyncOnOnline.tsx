@@ -9,6 +9,7 @@ import {
   subscribeToBrowserOnline,
   hasUnifiedOutboxWork,
 } from '../offline/runOnlineSyncPipeline';
+import { debugTrace } from '../utils/perfTrace';
 
 const OUTBOX_RETRY_MS = 60_000;
 /** Wait for shell to paint before heavy IndexedDB sync; longer on Electron desktop and in dev. */
@@ -25,6 +26,7 @@ export function SyncOnOnline() {
     let initialTimer: number | undefined;
 
     const unsubscribe = subscribeToBrowserOnline(() => {
+      debugTrace('sync:browser-online');
       void runOnlineSyncPipeline({ refreshCaches: true });
     });
 
@@ -32,6 +34,7 @@ export function SyncOnOnline() {
       if (typeof navigator === 'undefined' || !navigator.onLine) return;
       void (async () => {
         if (await hasUnifiedOutboxWork()) {
+          debugTrace('sync:outbox-retry');
           await runOnlineSyncPipeline({ refreshCaches: false });
         }
       })();
@@ -39,6 +42,7 @@ export function SyncOnOnline() {
 
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       initialTimer = window.setTimeout(() => {
+        debugTrace('sync:initial-delay-fired', { delayMs: INITIAL_SYNC_DELAY_MS });
         void runOnlineSyncPipeline({ refreshCaches: false });
       }, INITIAL_SYNC_DELAY_MS);
     }

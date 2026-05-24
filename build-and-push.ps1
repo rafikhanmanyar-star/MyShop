@@ -25,6 +25,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$KeepReleaseCount = 10
 
 # -----------------------------------------------------------
 # Helper: Increment a semver string
@@ -320,13 +321,13 @@ if (-not $SkipRelease) {
         Write-Host "  https://github.com/rafikhanmanyar-star/MyShop/releases" -ForegroundColor Green
         Write-Host "  Users can now use Settings -> App -> Check for updates." -ForegroundColor Green
 
-        # Prune old GitHub releases: keep only the latest 3
-        Write-Host "  Pruning old GitHub releases (keeping latest 3)..." -ForegroundColor Cyan
+        # Prune old GitHub releases: keep only the latest $KeepReleaseCount
+        Write-Host "  Pruning old GitHub releases (keeping latest $KeepReleaseCount)..." -ForegroundColor Cyan
         $releasesJson = gh release list --json tagName,publishedAt --limit 100 2>$null
         if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($releasesJson)) {
             $releases = $releasesJson | ConvertFrom-Json
             $sorted = $releases | Sort-Object { [datetime]::Parse($_.publishedAt) } -Descending
-            $toDelete = $sorted | Select-Object -Skip 3
+            $toDelete = $sorted | Select-Object -Skip $KeepReleaseCount
             foreach ($r in $toDelete) {
                 gh release delete $r.tagName --yes 2>$null
                 if ($LASTEXITCODE -eq 0) {
@@ -334,7 +335,7 @@ if (-not $SkipRelease) {
                 }
             }
             if ($toDelete.Count -gt 0) {
-                Write-Host "  Kept latest 3 GitHub releases; removed $($toDelete.Count) older." -ForegroundColor Green
+                Write-Host "  Kept latest $KeepReleaseCount GitHub releases; removed $($toDelete.Count) older." -ForegroundColor Green
             }
         }
     }
@@ -352,12 +353,12 @@ if (-not $SkipRelease) {
 }
 
 # -----------------------------------------------------------
-# Prune local release folder: keep only the latest 3 installer builds
+# Prune local release folder: keep only the latest $KeepReleaseCount installer builds
 # -----------------------------------------------------------
 $releaseDir = "$ProjectRoot\release"
 if (Test-Path $releaseDir) {
     Write-Host ""
-    Write-Host "Pruning local release folder (keeping latest 3 builds)..." -ForegroundColor Yellow
+    Write-Host "Pruning local release folder (keeping latest $KeepReleaseCount builds)..." -ForegroundColor Yellow
     $installers = Get-ChildItem -Path $releaseDir -Filter "MyShop-Setup-*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "unpacked" }
     $withVersion = @()
     foreach ($f in $installers) {
@@ -365,16 +366,16 @@ if (Test-Path $releaseDir) {
             $withVersion += [PSCustomObject]@{ File = $f; Version = $matches[1] }
         }
     }
-    if ($withVersion.Count -gt 3) {
+    if ($withVersion.Count -gt $KeepReleaseCount) {
         $sortedInstallers = $withVersion | Sort-Object { [version]$_.Version } -Descending
-        $toRemove = $sortedInstallers | Select-Object -Skip 3
+        $toRemove = $sortedInstallers | Select-Object -Skip $KeepReleaseCount
         foreach ($x in $toRemove) {
             Remove-Item $x.File.FullName -Force -ErrorAction SilentlyContinue
             $blockmap = $x.File.FullName + ".blockmap"
             if (Test-Path $blockmap) { Remove-Item $blockmap -Force -ErrorAction SilentlyContinue }
             Write-Host "  Removed local: $($x.File.Name)" -ForegroundColor DarkGray
         }
-        Write-Host "  Local release folder: kept latest 3 builds; removed $($toRemove.Count) older." -ForegroundColor Green
+        Write-Host "  Local release folder: kept latest $KeepReleaseCount builds; removed $($toRemove.Count) older." -ForegroundColor Green
     }
     else {
         Write-Host "  Local release folder: $($withVersion.Count) build(s), no pruning needed." -ForegroundColor DarkGray

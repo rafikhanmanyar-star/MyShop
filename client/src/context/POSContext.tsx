@@ -33,8 +33,10 @@ import {
     getMirrorPosSettings,
     getMirrorReceiptSettings,
 } from '../offline/localDb';
+import { debugTrace } from '../utils/perfTrace';
 import { isBrowserOnline } from '../offline/syncEngine';
 import type { InventoryItem } from '../types/inventory';
+import { resolvePosWarehouseWithStock } from '../components/shop/pos/posProductCardUtils';
 
 const HELD_SALES_STORAGE_PREFIX = 'myshop_pos_held_sales_v1:';
 
@@ -201,7 +203,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { pathname } = useLocation();
     const isPosRoute = pathname === '/pos';
     const { currentShift } = useShifts();
-    const { refreshItems: refreshInventory, items: inventoryItems } = useInventory();
+    const { refreshItems: refreshInventory, items: inventoryItems, applySaleStockDeductions } = useInventory();
     const currentUserId = authUser?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('user_id') : null) ?? null;
 
     /** Restore held sales after navigation or full reload (session-scoped, per logged-in user). */
@@ -231,12 +233,15 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     useEffect(() => {
         let debounceTimer: number | undefined;
-        const onRealtime = () => {
+        const onRealtime = (e: Event) => {
             if (pathname !== '/pos' && pathname !== '/inventory') return;
+            const detail = (e as CustomEvent).detail as { type?: string } | undefined;
+            debugTrace('pos:realtime:event', { type: detail?.type, pathname });
             if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
             debounceTimer = window.setTimeout(() => {
+                debugTrace('pos:realtime:refresh-inventory');
                 refreshInventory().catch(() => {});
-            }, 4000);
+            }, 15_000);
         };
         window.addEventListener('shop:realtime', onRealtime as EventListener);
         return () => {
@@ -772,17 +777,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 createdAt: new Date().toISOString()
             };
 
-            const resolveSaleWarehouseId = (branchId: string | null, productId: string, invItems: InventoryItem[]): string | null => {
-                if (branchId) return branchId;
-                const inv = invItems.find((i) => i.id === productId);
-                if (inv?.warehouseStock && Object.keys(inv.warehouseStock).length > 0) {
-                    return Object.keys(inv.warehouseStock)[0];
-                }
-                if (inv?.warehouseSellable && Object.keys(inv.warehouseSellable).length > 0) {
-                    return Object.keys(inv.warehouseSellable)[0];
-                }
-                return null;
-            };
+            const resolveSaleWarehouseId = (branchId: string | null, productId: string, invItems: InventoryItem[]): string | null =>
+                resolvePosWarehouseWithStock(invItems.find((i) => i.id === productId), branchId);
 
             const showSaleToast = (text: string, ok: boolean) => {
                 const toast = document.createElement('div');
@@ -825,10 +821,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 };
                 setLastCompletedSale(completedSale);
 
+                applySaleStockDeductions(
+                    cart.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+                    selectedBranchId
+                );
                 clearCart();
                 setPayments([]);
 
-                refreshInventory({ force: true }).catch(() => { });
                 window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_created', saleId: saleId } }));
 
                 const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
@@ -939,9 +938,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     reprint_count: 0,
                 };
                 setLastCompletedSale(completedSale);
+                applySaleStockDeductions(
+                    cart.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+                    selectedBranchId
+                );
                 clearCart();
                 setPayments([]);
-                refreshInventory({ force: true }).catch(() => { });
                 window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_queued' } }));
 
                 const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
@@ -972,7 +974,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             throw error;
         }
-    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId, currentShift?.id, posSettings, printReceipt, inventoryItems]);
+    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId, currentShift?.id, posSettings, printReceipt, inventoryItems, applySaleStockDeductions]);
 
     const applyGlobalDiscount = useCallback((percentage: number) => {
         setCart(prev => prev.map(item => {
