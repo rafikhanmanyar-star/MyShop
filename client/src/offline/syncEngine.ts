@@ -112,7 +112,9 @@ export async function runSyncDelta(): Promise<CatalogSyncResult> {
     productsChanged: Array.isArray(raw.products) ? raw.products.length : 0,
     inventoryChanged: Array.isArray(raw.inventory) ? raw.inventory.length : 0,
   });
+  perfMark('sync:delta:idb-apply', { rows: rowCount });
   await applySyncChangesPayload(raw);
+  perfMeasure('sync:delta:idb-apply', 'sync:delta:idb-apply', { rows: rowCount });
   if (rowCount > 0 && rowCount < 80) {
     prefetchSkuImagesThrottled(Math.min(24, rowCount)).catch(() => {});
   }

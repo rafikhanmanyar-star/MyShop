@@ -94,6 +94,27 @@ Copy **on-hand / reserved** quantities and optional **batch** rows from one tena
 
 ---
 
+## 4b. Migrate suppliers & loyalty members between tenants (oBo → obostores)
+
+Copy **suppliers** (`shop_vendors`) and **loyalty members** (`shop_loyalty_members` + linked `contacts`) from one tenant to another.
+
+| Step | Where to run | Command |
+|------|----------------|---------|
+| List tenants | **`server/`** | `npm run migrate-suppliers-loyalty -- --list-tenants` |
+| Dry run | **`server/`** | `npm run migrate-suppliers-loyalty` |
+| Apply suppliers + loyalty | **`server/`** | `npm run migrate-suppliers-loyalty -- --execute` |
+| Apply + update existing rows | **`server/`** | `npm run migrate-suppliers-loyalty -- --update-existing --execute` |
+| Suppliers only | **`server/`** | `npm run migrate-suppliers-loyalty -- --suppliers-only --execute` |
+| Loyalty only | **`server/`** | `npm run migrate-suppliers-loyalty -- --loyalty-only --execute` |
+
+**Matching:** suppliers by normalized **name + company_name**; loyalty contacts by **phone digits**, members by **card number** or linked contact.
+
+**Environment (optional):** `FROM_COMPANY_HINT` (default `obo`), `TO_COMPANY_HINT` (default `obostores`), or `--from-id` / `--to-id`. Requires `DATABASE_URL` in `server/.env`.
+
+**Note:** loyalty members without a phone on their contact are skipped (logged). `mobile_customers` are per-tenant and are **not** copied by this script.
+
+---
+
 ## 5. Delete product & related transactions (DB cleanup)
 
 One-off script to remove a product and its **POS sales**, **sales returns**, **mobile orders** (lines referencing the product), **purchase bills** (lines referencing the product), **inventory movements / batches**, and **procurement demand draft lines**, then the **`shop_products`** row. Uses the same `DATABASE_URL` as the API (`server/.env`).

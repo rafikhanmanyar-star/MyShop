@@ -150,8 +150,8 @@ export const shopApi = {
   getSyncChanges: (since?: string) =>
     apiClient.get<unknown>(
       since
-        ? `/shop/sync/changes?since=${encodeURIComponent(since)}`
-        : '/shop/sync/changes'
+        ? `/shop/sync/changes?since=${encodeURIComponent(since)}&forPos=1`
+        : '/shop/sync/changes?forPos=1'
     ),
   getDashboardOverview: () => apiClient.get<DashboardOverviewResponse>('/shop/dashboard/overview'),
 
@@ -421,7 +421,14 @@ export interface ShopUser {
   created_at?: string;
 }
 
+export interface LoggedInUser {
+  id: string;
+  name: string;
+  role: string;
+}
+
 export const shopUserApi = {
+  getLoggedInCount: () => apiClient.get<{ count: number; users: LoggedInUser[] }>('/shop/users/logged-in-count'),
   getUsers: () => apiClient.get<ShopUser[]>('/shop/users'),
   createUser: (data: any) => apiClient.post<{ id: string }>('/shop/users', data),
   updateUser: (id: string, data: any) => apiClient.put(`/shop/users/${id}`, data),

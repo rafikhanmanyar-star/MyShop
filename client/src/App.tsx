@@ -26,7 +26,7 @@ import AppHeader from './components/AppHeader';
 import { InventoryPageHeaderProvider } from './context/InventoryPageHeaderContext';
 import { ProcurementPageHeaderProvider } from './context/ProcurementPageHeaderContext';
 import { useAutoLogout } from './hooks/useAutoLogout';
-import { shopApi, type OrganizationProfile } from './services/shopApi';
+import { shopApi, shopUserApi, type OrganizationProfile, type LoggedInUser } from './services/shopApi';
 import { getFullImageUrl } from './config/apiUrl';
 import { installDebugObservers } from './utils/perfTrace';
 
@@ -168,6 +168,7 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
   const { user } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [organization, setOrganization] = useState<OrganizationProfile | null>(null);
+  const [loggedInUsers, setLoggedInUsers] = useState<LoggedInUser[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -182,6 +183,28 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
       });
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshLoggedInUsers = () => {
+      shopUserApi
+        .getLoggedInCount()
+        .then(({ users }) => {
+          if (!cancelled) setLoggedInUsers(users);
+        })
+        .catch(() => {
+          if (!cancelled) setLoggedInUsers([]);
+        });
+    };
+
+    refreshLoggedInUsers();
+    const intervalId = window.setInterval(refreshLoggedInUsers, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -209,6 +232,9 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
       items: section.items.filter(item => !user || !item.roles || item.roles.includes(user.role)),
     }))
     .filter(section => section.items.length > 0);
+
+  const loggedInCount = loggedInUsers.length;
+  const loggedInNamesLabel = loggedInUsers.map((u) => u.name).join(', ');
 
   return (
     <aside
@@ -358,14 +384,44 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
               type="button"
               onClick={() => setUserMenuOpen(prev => !prev)}
               className="flex w-full flex-col items-center gap-2 rounded-lg py-1 transition-colors duration-150 hover:bg-sky-200/60 dark:hover:bg-sky-800/40"
-              title={`${user.name} — Click to log out`}
+              title={
+                loggedInCount > 0
+                  ? `${user.name} — ${loggedInNamesLabel} — Click to log out`
+                  : `${user.name} — Click to log out`
+              }
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
                 {getUserInitials(user.name)}
               </div>
+              {loggedInCount > 0 && (
+                <span className="text-[0.6rem] font-medium text-blue-200/80" title={loggedInNamesLabel}>
+                  {loggedInCount} online
+                </span>
+              )}
             </button>
           ) : null}
         </div>
+
+        {!collapsed && loggedInCount > 0 && (
+          <div className="mt-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2">
+            <p className="flex items-center gap-1 text-[0.65rem] font-medium text-blue-200/80">
+              <Users className="h-3 w-3 shrink-0" />
+              <span>{loggedInCount} logged in</span>
+            </p>
+            <ul className="mt-1.5 space-y-0.5">
+              {loggedInUsers.map((loggedInUser) => (
+                <li
+                  key={loggedInUser.id}
+                  className="truncate text-[0.65rem] text-blue-100/90"
+                  title={`${loggedInUser.name} (${loggedInUser.role.replace(/_/g, ' ')})`}
+                >
+                  {loggedInUser.name}
+                  {loggedInUser.id === user?.id ? ' (you)' : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {!collapsed && (
           <p className="mt-2 text-center text-xs text-blue-200/70">

@@ -64,7 +64,8 @@ router.get('/sync/bootstrap', checkRole(['admin', 'pos_cashier', 'accountant']),
 router.get('/sync/changes', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
     const since = typeof req.query?.since === 'string' ? req.query.since : undefined;
-    const payload = await getShopService().getSyncChanges(req.tenantId, since);
+    const forPos = req.query?.forPos === '1' || req.query?.forPos === 'true';
+    const payload = await getShopService().getSyncChanges(req.tenantId, since, { forPos });
     res.json(payload);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -849,6 +850,16 @@ router.delete('/vendors/:id', async (req: any, res) => {
   try {
     await getShopService().deleteVendor(req.tenantId, req.params.id);
     res.json({ success: true, message: 'Vendor deactivated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Logged-in staff (sidebar; any authenticated shop user) ---
+router.get('/users/logged-in-count', async (req: any, res) => {
+  try {
+    const users = await getShopService().getLoggedInUsers(req.tenantId);
+    res.json({ count: users.length, users });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

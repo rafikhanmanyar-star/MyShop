@@ -2589,6 +2589,20 @@ export class ShopService {
     );
   }
 
+  /** Active staff sessions (non-expired user_sessions for active users). */
+  async getLoggedInUsers(tenantId: string): Promise<{ id: string; name: string; role: string }[]> {
+    return this.db.query<{ id: string; name: string; role: string }>(
+      `SELECT u.id, u.name, u.role
+       FROM user_sessions s
+       INNER JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+       WHERE s.tenant_id = $1
+         AND s.expires_at > NOW()
+         AND u.is_active = TRUE
+       ORDER BY u.name ASC`,
+      [tenantId]
+    );
+  }
+
   async createUser(tenantId: string, data: any) {
     const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     const bcrypt = await import('bcryptjs');
@@ -3070,13 +3084,19 @@ export class ShopService {
   }
 
   /** Incremental sync: changed rows since `since` ISO timestamp plus joined SKU rows for touched products/inventory. */
-  async getSyncChanges(tenantId: string, sinceRaw: string | undefined) {
+  async getSyncChanges(
+    tenantId: string,
+    sinceRaw: string | undefined,
+    options: { forPos?: boolean } = {}
+  ) {
     const since =
       sinceRaw && !Number.isNaN(Date.parse(sinceRaw))
         ? sinceRaw
         : new Date(0).toISOString();
     const serverTime = new Date().toISOString();
+    const forPos = options.forPos === true;
 
+    /** POS client only consumes skus_delta + mirror stores — skip duplicate product/inventory row arrays. */
     const [
       products,
       inventory,
@@ -3089,8 +3109,12 @@ export class ShopService {
       policies,
       posSettingsRows,
     ] = await Promise.all([
-      this.db.query(`SELECT * FROM shop_products WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
-      this.db.query(`SELECT * FROM shop_inventory WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      forPos
+        ? Promise.resolve([])
+        : this.db.query(`SELECT * FROM shop_products WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      forPos
+        ? Promise.resolve([])
+        : this.db.query(`SELECT * FROM shop_inventory WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
       this.db.query(`SELECT * FROM categories WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
       this.db.query(`SELECT * FROM shop_brands WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
       this.db.query(`SELECT * FROM contacts WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
@@ -3106,6 +3130,7 @@ export class ShopService {
       limit: 10000,
       skipCache: true,
       updatedSince: since,
+      forPos,
     });
 
     return {

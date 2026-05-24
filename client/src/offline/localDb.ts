@@ -141,7 +141,13 @@ async function bulkPutInStore(
     }
     await txDone(t);
     if (i + chunkSize < rows.length) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await new Promise<void>((resolve) => {
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(() => resolve(), { timeout: 32 });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
     }
   }
 }

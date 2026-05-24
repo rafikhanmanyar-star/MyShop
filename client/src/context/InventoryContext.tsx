@@ -484,6 +484,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (tenantId) catalogHydratedTenantRef.current = tenantId;
             setCatalogReady(true);
             catalogFetchInFlightRef.current = false;
+            debugTrace('catalog:hydrated', { tenantId, pathname });
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('myshop:catalog:hydrated', { detail: { tenantId } }));
+            }
         };
 
         const fetchFromApi = async (source: string) => {
@@ -614,20 +618,23 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         };
     }, [isAuthenticated, pathname, user?.tenantId, applyCatalogItems, reloadFromLocalMirror]);
 
+    /** Always listen for sync-done when authenticated (not only on catalog routes). */
     React.useEffect(() => {
-        if (!isAuthenticated || !routeNeedsCatalog(pathname)) return;
+        if (!isAuthenticated) return;
         const onCatalogSyncDone = () => {
             const now = Date.now();
             if (now - lastMirrorReloadAtRef.current < MIRROR_RELOAD_MIN_MS) {
-                debugTrace('catalog:sync-done:throttled');
+                debugTrace('catalog:sync-done:throttled', { pathname });
                 return;
             }
             lastMirrorReloadAtRef.current = now;
 
             const result = consumeLastCatalogSyncResult();
             debugTrace('catalog:sync-done:event', {
+                pathname,
                 mode: result?.mode ?? 'unknown',
                 skuDeltaCount: result?.skuDeltaCount ?? 0,
+                inMemoryItems: items.length,
             });
 
             if (!result || result.mode === 'skipped' || result.skuDeltaCount === 0) return;
@@ -643,7 +650,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         };
         window.addEventListener('myshop:sync:catalog-done', onCatalogSyncDone);
         return () => window.removeEventListener('myshop:sync:catalog-done', onCatalogSyncDone);
-    }, [isAuthenticated, pathname, reloadFromLocalMirror, patchCatalogFromDelta]);
+    }, [isAuthenticated, pathname, items.length, reloadFromLocalMirror, patchCatalogFromDelta]);
 
     // NEW: Refresh warehouses function
     const refreshWarehouses = useCallback(async () => {
