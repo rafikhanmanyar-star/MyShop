@@ -1,6 +1,6 @@
 {
   "name": "myshop-api",
-  "version": "1.1.18",
+  "version": "1.1.19",
   "description": "MyShop API Server - Standalone Shop & POS Application",
   "type": "module",
   "main": "dist/api/index.js",
@@ -16,6 +16,8 @@
     "migrate-skus": "tsx scripts/migrate-skus-between-tenants.ts",
     "migrate-inventory": "tsx scripts/migrate-inventory-between-tenants.ts",
     "migrate-suppliers-loyalty": "tsx scripts/migrate-suppliers-and-loyalty-between-tenants.ts",
+    "migrate-khata": "tsx scripts/migrate-khata-between-tenants.ts",
+    "consolidate-inventory": "tsx scripts/consolidate-tenant-inventory-warehouses.ts",
     "test": "vitest run"
   },
   "dependencies": {

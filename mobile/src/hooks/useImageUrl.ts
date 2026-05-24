@@ -2,15 +2,19 @@ import { useState, useEffect, useRef } from 'react';
 import { getImageBlob } from '../services/imageCache';
 import { getFullImageUrl } from '../api';
 
+export type UseImageUrlOptions = {
+    /** When true, use IndexedDB blob first (no network) — for prefetched promo slides. */
+    preferCache?: boolean;
+};
+
 /**
- * Returns a URL suitable for <img src>. Uses full remote URL immediately so
- * images show without waiting for cache. If a cached blob is available, swaps
- * to blob URL for offline support. Revokes object URLs on unmount.
+ * Returns a URL suitable for <img src>. By default uses full remote URL immediately,
+ * then swaps to a cached blob when available. With preferCache, blob is tried first.
  */
-export function useImageUrl(path: string | undefined): string | undefined {
-    // Set initial URL from path so <img> has a valid src on first paint (no undefined)
+export function useImageUrl(path: string | undefined, options?: UseImageUrlOptions): string | undefined {
+    const preferCache = options?.preferCache ?? false;
     const [url, setUrl] = useState<string | undefined>(() =>
-        path ? getFullImageUrl(path) : undefined
+        path && !preferCache ? getFullImageUrl(path) : undefined,
     );
     const objectUrlRef = useRef<string | null>(null);
 
@@ -19,25 +23,42 @@ export function useImageUrl(path: string | undefined): string | undefined {
             setUrl(undefined);
             return;
         }
-        // Show remote URL immediately so images load right away
-        setUrl(getFullImageUrl(path));
 
         let cancelled = false;
-        getImageBlob(path).then((blob) => {
-            if (cancelled) return;
+
+        const applyBlob = (blob: Blob) => {
             if (objectUrlRef.current) {
                 URL.revokeObjectURL(objectUrlRef.current);
                 objectUrlRef.current = null;
             }
-            if (blob) {
-                const objUrl = URL.createObjectURL(blob);
-                objectUrlRef.current = objUrl;
-                setUrl(objUrl);
-            }
-            // else: keep current url (already set to full remote URL above)
-        }).catch(() => {
-            // keep current url (full remote URL)
-        });
+            const objUrl = URL.createObjectURL(blob);
+            objectUrlRef.current = objUrl;
+            setUrl(objUrl);
+        };
+
+        if (preferCache) {
+            getImageBlob(path)
+                .then((blob) => {
+                    if (cancelled) return;
+                    if (blob) {
+                        applyBlob(blob);
+                        return;
+                    }
+                    setUrl(getFullImageUrl(path));
+                })
+                .catch(() => {
+                    if (!cancelled) setUrl(getFullImageUrl(path));
+                });
+        } else {
+            setUrl(getFullImageUrl(path));
+            getImageBlob(path)
+                .then((blob) => {
+                    if (cancelled || !blob) return;
+                    applyBlob(blob);
+                })
+                .catch(() => {});
+        }
+
         return () => {
             cancelled = true;
             if (objectUrlRef.current) {
@@ -45,7 +66,7 @@ export function useImageUrl(path: string | undefined): string | undefined {
                 objectUrlRef.current = null;
             }
         };
-    }, [path]);
+    }, [path, preferCache]);
 
     return url;
 }

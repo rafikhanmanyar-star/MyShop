@@ -1,7 +1,10 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { publicApi, getProductImagePath } from '../api';
+import { setShop } from '../services/offlineCache';
+import { prefetchHomePromoSlideImages } from '../services/homePromoImageCache';
+import { brandingPromoConfigKey, normalizeBrandingFromApi } from '../utils/branding';
 import { type ProductListProduct } from '../components/ProductListCard';
 import { filterCategoriesWithListedProducts } from '../utils/catalogCategories';
 import { isMobileCatalogPriceListed } from '../utils/mobileProductPrice';
@@ -140,6 +143,45 @@ export default function Home() {
     );
     const promoIntervalSec = state.branding?.home_promo_interval_seconds ?? 5;
     const deliveryMins = state.settings?.estimated_delivery_minutes || 30;
+
+    /** Pick up POS branding changes; promo images re-fetch only when slide URLs change. */
+    const brandingRefreshRef = useRef(false);
+    useEffect(() => {
+        if (!shopSlug || !state.shop || !state.settings) return;
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+        if (brandingRefreshRef.current) return;
+        brandingRefreshRef.current = true;
+
+        let cancelled = false;
+        publicApi
+            .getBranding(shopSlug)
+            .then((raw) => {
+                if (cancelled) return;
+                const branding = normalizeBrandingFromApi(raw);
+                if (!branding) return;
+                const prevKey = brandingPromoConfigKey(state.branding);
+                const nextKey = brandingPromoConfigKey(branding);
+                if (prevKey === nextKey) return;
+
+                dispatch({
+                    type: 'SET_SHOP',
+                    slug: shopSlug,
+                    shop: state.shop!,
+                    settings: state.settings!,
+                    branding,
+                });
+                setShop(shopSlug, {
+                    shop: state.shop!,
+                    settings: state.settings!,
+                    branding,
+                }).catch(() => {});
+                void prefetchHomePromoSlideImages(branding.home_promo_slides);
+            })
+            .catch(() => {});
+        return () => {
+            cancelled = true;
+        };
+    }, [shopSlug, state.shop, state.settings, dispatch]);
 
     const brandName = state.shop?.company_name || state.shop?.name || 'Rewards';
 

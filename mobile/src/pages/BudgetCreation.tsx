@@ -712,7 +712,7 @@ export default function BudgetCreation() {
             {/* Sticky Bottom Bar */}
             {selectedItems.length > 0 && (
                 <div style={{
-                    position: 'fixed', bottom: 'calc(64px + var(--safe-bottom))', left: 0, right: 0,
+                    position: 'fixed', bottom: 'var(--bottom-nav-height)', left: 0, right: 0,
                     padding: '12px 20px', background: 'white', borderTop: '1px solid var(--border)',
                     boxShadow: '0 -4px 15px rgba(0,0,0,0.05)', zIndex: 100,
                 }}>

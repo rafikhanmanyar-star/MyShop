@@ -23,6 +23,16 @@ export async function getWarehouseIdForMobileOrder(
     tenantId: string,
     orderId: string
 ): Promise<string | null> {
+    const reserved = await client.query(
+        `SELECT warehouse_id FROM shop_inventory_movements
+         WHERE tenant_id = $1 AND reference_id = $2 AND type = 'Reserve'
+         LIMIT 1`,
+        [tenantId, orderId]
+    );
+    if (reserved.length > 0 && reserved[0].warehouse_id) {
+        return String(reserved[0].warehouse_id);
+    }
+
     const rows = await client.query(
         `SELECT COALESCE(assigned_branch_id, branch_id) AS bid
      FROM mobile_orders
@@ -45,6 +55,33 @@ async function canFulfillAtWarehouse(
     warehouseId: string
 ): Promise<boolean> {
     return (await getDemandShortfallsAtWarehouse(client, tenantId, demand, warehouseId)).length === 0;
+}
+
+/**
+ * Pick a warehouse that can fulfill the full cart. Prefers the branch-linked warehouse, then
+ * any tenant warehouse (same strategy as POS `resolveWarehouseForSaleDeduction`).
+ */
+async function findWarehouseThatCanFulfillDemand(
+    client: any,
+    tenantId: string,
+    demand: Demand,
+    preferredWarehouseId?: string | null
+): Promise<string | null> {
+    const warehouses = await client.query(
+        `SELECT id FROM shop_warehouses WHERE tenant_id = $1 ORDER BY name ASC`,
+        [tenantId]
+    );
+    const ordered: string[] = [];
+    if (preferredWarehouseId) ordered.push(preferredWarehouseId);
+    for (const w of warehouses as { id: string }[]) {
+        if (!ordered.includes(w.id)) ordered.push(w.id);
+    }
+    for (const whId of ordered) {
+        if (await canFulfillAtWarehouse(client, tenantId, demand, whId)) {
+            return whId;
+        }
+    }
+    return null;
 }
 
 async function getDemandShortfallsAtWarehouse(
@@ -261,8 +298,9 @@ export async function resolveBranchWarehouseForPlaceOrder(
         if (!bid) {
             return { effectiveBranchId: null, warehouseId: null, assignedBranchId: null, distanceKm: null };
         }
-        const wh = await warehouseIdForBranch(client, tenantId, bid);
-        if (!wh || !(await canFulfillAtWarehouse(client, tenantId, demand, wh))) {
+        const preferredWh = await warehouseIdForBranch(client, tenantId, bid);
+        const wh = await findWarehouseThatCanFulfillDemand(client, tenantId, demand, preferredWh);
+        if (!wh) {
             throw new Error('Insufficient stock at this branch for pickup. Try different items or quantities.');
         }
         const dist = await distanceKmToBranch(client, bid, custLat, custLng);
@@ -284,22 +322,30 @@ export async function resolveBranchWarehouseForPlaceOrder(
         );
         if (brows.length > 0) {
             const bRow = brows[0];
-            const wh = await warehouseIdForBranch(client, tenantId, bid);
-            if (!wh || !(await canFulfillAtWarehouse(client, tenantId, demand, wh))) {
+            const preferredWh = await warehouseIdForBranch(client, tenantId, bid);
+            const wh = await findWarehouseThatCanFulfillDemand(client, tenantId, demand, preferredWh);
+            if (!wh) {
                 throw new Error(
                     'Insufficient stock for this order at the selected branch. Try another branch or different items.'
                 );
             }
             const blat = parseFloat(bRow.latitude);
             const blng = parseFloat(bRow.longitude);
-            if (!Number.isFinite(blat) || !Number.isFinite(blng)) {
-                throw new Error('This branch does not have coordinates configured for delivery.');
+            if (Number.isFinite(blat) && Number.isFinite(blng)) {
+                const dist = haversineDistanceKm(custLat!, custLng!, blat, blng);
+                const maxKm = maxKmForBranch(bRow, tenantDefaultKm);
+                if (dist > maxKm) {
+                    throw new Error('Delivery not available in your area');
+                }
+                return {
+                    effectiveBranchId: bid,
+                    warehouseId: wh,
+                    assignedBranchId: bid,
+                    distanceKm: dist,
+                };
             }
-            const dist = haversineDistanceKm(custLat!, custLng!, blat, blng);
-            const maxKm = maxKmForBranch(bRow, tenantDefaultKm);
-            if (dist > maxKm) {
-                throw new Error('Delivery not available in your area');
-            }
+            // Legacy / single-branch tenants may have stock in a non-linked warehouse and no branch GPS yet.
+            const dist = await distanceKmToBranch(client, bid, custLat, custLng);
             return {
                 effectiveBranchId: bid,
                 warehouseId: wh,
@@ -313,6 +359,18 @@ export async function resolveBranchWarehouseForPlaceOrder(
     // ─── Delivery: auto-route — nearest branch that can fulfill and is within radius ───
     const geoRows = await fetchActiveBranchesWithGeo(client, tenantId);
     if (geoRows.length === 0) {
+        const bid = input.branchId || (await firstBranch());
+        const preferredWh = bid ? await warehouseIdForBranch(client, tenantId, bid) : null;
+        const wh = await findWarehouseThatCanFulfillDemand(client, tenantId, demand, preferredWh);
+        if (wh) {
+            const dist = bid ? await distanceKmToBranch(client, bid, custLat, custLng) : null;
+            return {
+                effectiveBranchId: bid,
+                warehouseId: wh,
+                assignedBranchId: bid,
+                distanceKm: dist,
+            };
+        }
         throw new Error(
             'Delivery is not available. The shop has not configured branch locations yet. Please try again later.'
         );
@@ -338,9 +396,9 @@ export async function resolveBranchWarehouseForPlaceOrder(
         const maxKm = maxKmForBranch(row, tenantDefaultKm);
         if (d > maxKm) continue;
         sawInRange = true;
-        const wh = await warehouseIdForBranch(client, tenantId, id);
-        if (!wh) continue;
-        if (!(await canFulfillAtWarehouse(client, tenantId, demand, wh))) {
+        const preferredWh = await warehouseIdForBranch(client, tenantId, id);
+        const wh = await findWarehouseThatCanFulfillDemand(client, tenantId, demand, preferredWh);
+        if (!wh) {
             inRangeButNoStock = true;
             continue;
         }
@@ -353,6 +411,26 @@ export async function resolveBranchWarehouseForPlaceOrder(
     }
 
     if (inRangeButNoStock) {
+        const bid = input.branchId || (await firstBranch());
+        const preferredWh = bid ? await warehouseIdForBranch(client, tenantId, bid) : null;
+        const wh = await findWarehouseThatCanFulfillDemand(client, tenantId, demand, preferredWh);
+        if (wh) {
+            const dist =
+                ranked.length > 0 && sawInRange
+                    ? ranked.find(r => {
+                          const maxKm = maxKmForBranch(r.row, tenantDefaultKm);
+                          return r.d <= maxKm;
+                      })?.d ?? null
+                    : bid
+                      ? await distanceKmToBranch(client, bid, custLat, custLng)
+                      : null;
+            return {
+                effectiveBranchId: bid,
+                warehouseId: wh,
+                assignedBranchId: bid,
+                distanceKm: dist,
+            };
+        }
         const detail = await buildInsufficientNearbyStockMessage(
             client,
             tenantId,

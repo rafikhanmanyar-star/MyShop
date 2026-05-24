@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { getFullImageUrl } from '../api';
 import type { HomePromoSlide } from '../context/AppContext';
+import CachedImage from './CachedImage';
 import { isExternalHref, resolveHomePromoHref } from '../utils/homePromoLinks';
 import { homePromoSlidesKey, slideImageUrl } from '../utils/homePromoSlides';
 
@@ -205,16 +205,16 @@ export default function HomePromoCarousel({ slides, shopSlug, deliveryMinutes, i
                 >
                     <div className="home-promo-carousel__track" style={trackStyle}>
                         {valid.map((slide, i) => {
-                            const imgSrc = getFullImageUrl(slideImageUrl(slide));
+                            const imagePath = slideImageUrl(slide);
                             const href = resolveHomePromoHref(shopSlug, slide);
                             const inner = (
-                                <img
-                                    src={imgSrc}
+                                <CachedImage
+                                    path={imagePath}
                                     alt={slide.title?.trim() || 'Promotion'}
                                     className="home-promo-carousel__img"
-                                    decoding="async"
                                     loading={i === 0 ? 'eager' : 'lazy'}
-                                    draggable={false}
+                                    preferCache
+                                    fallbackToPlaceholder={false}
                                     onLoad={i === idx ? syncViewportHeight : undefined}
                                 />
                             );

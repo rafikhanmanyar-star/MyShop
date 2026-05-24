@@ -157,6 +157,37 @@ function buildKhataPaymentDescriptionPreview(
   return text;
 }
 
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** Apply payment to selected debits oldest-first (FIFO), allowing partial on the last covered invoice. */
+function allocateKhataPaymentToDebits(
+  orderedUnpaidInvoices: KhataLedgerEntry[],
+  selectedDebitIds: string[],
+  paymentAmount: number,
+  remainingOnDebit: (e: KhataLedgerEntry) => number
+): Array<{ debitLedgerId: string; amount: number }> {
+  const selectedSet = new Set(selectedDebitIds);
+  const selected = orderedUnpaidInvoices.filter((inv) => selectedSet.has(inv.id));
+  if (selected.length === 0) return [];
+
+  let remaining = roundMoney(paymentAmount);
+  const allocations: Array<{ debitLedgerId: string; amount: number }> = [];
+
+  for (const inv of selected) {
+    if (remaining <= PAID_EPS) break;
+    const due = roundMoney(remainingOnDebit(inv));
+    if (due <= PAID_EPS) continue;
+    const apply = roundMoney(Math.min(due, remaining));
+    if (apply <= PAID_EPS) continue;
+    allocations.push({ debitLedgerId: inv.id, amount: apply });
+    remaining = roundMoney(remaining - apply);
+  }
+
+  return allocations;
+}
+
 function buildKhataPendingReminderMessage(
   customerName: string,
   currency: string,
@@ -384,15 +415,37 @@ const KhataPage: React.FC = () => {
     if (sum > PAID_EPS) setReceiveAmount(sum.toFixed(2));
   }, [receiveSelectedDebitIds, receiveUnpaidInvoices]);
 
+  const receiveSelectedInvoicesTotal = useMemo(() => {
+    if (receiveSelectedDebitIds.length === 0) return 0;
+    return roundMoney(
+      receiveUnpaidInvoices
+        .filter((e) => receiveSelectedDebitIds.includes(e.id))
+        .reduce((s, e) => s + debitRemaining(e), 0)
+    );
+  }, [receiveSelectedDebitIds, receiveUnpaidInvoices]);
+
+  const receivePaymentAllocations = useMemo(() => {
+    if (receiveSelectedDebitIds.length === 0) return [];
+    const amount = parseFloat(receiveAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return [];
+    return allocateKhataPaymentToDebits(
+      receiveUnpaidInvoices,
+      receiveSelectedDebitIds,
+      amount,
+      debitRemaining
+    );
+  }, [receiveSelectedDebitIds, receiveUnpaidInvoices, receiveAmount]);
+
   const receivePaymentDescriptionPreview = useMemo(() => {
-    if (receiveSelectedDebitIds.length === 0) return null;
-    const invoices = receiveUnpaidInvoices
-      .filter((e) => receiveSelectedDebitIds.includes(e.id))
-      .map((e) => ({ ref: referenceLabel(e), amount: debitRemaining(e) }));
-    const total = invoices.reduce((s, i) => s + i.amount, 0);
+    if (receivePaymentAllocations.length === 0) return null;
+    const invoices = receivePaymentAllocations.map((a) => {
+      const inv = receiveUnpaidInvoices.find((e) => e.id === a.debitLedgerId);
+      return { ref: inv ? referenceLabel(inv) : a.debitLedgerId, amount: a.amount };
+    });
+    const total = roundMoney(receivePaymentAllocations.reduce((s, a) => s + a.amount, 0));
     if (total <= PAID_EPS) return null;
     return buildKhataPaymentDescriptionPreview(invoices, total, receiveNote);
-  }, [receiveSelectedDebitIds, receiveUnpaidInvoices, receiveNote]);
+  }, [receivePaymentAllocations, receiveUnpaidInvoices, receiveNote]);
 
   const contactById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
 
@@ -728,20 +781,27 @@ const KhataPage: React.FC = () => {
     const amount = parseFloat(receiveAmount);
     if (!receiveCustomerId || !receiveBankAccountId || !amount || amount <= 0) return;
 
-    let allocations = receiveUnpaidInvoices
-      .filter((inv) => receiveSelectedDebitIds.includes(inv.id))
-      .map((inv) => ({ debitLedgerId: inv.id, amount: debitRemaining(inv) }));
-
-    if (allocations.length === 1 && amount < allocations[0].amount - PAID_EPS) {
-      allocations = [{ ...allocations[0], amount: Math.round(amount * 100) / 100 }];
-    }
-
-    if (allocations.length > 0) {
-      const allocSum = Math.round(allocations.reduce((s, a) => s + a.amount, 0) * 100) / 100;
-      if (Math.abs(allocSum - amount) > 0.01) {
+    let allocations: Array<{ debitLedgerId: string; amount: number }> = [];
+    if (receiveSelectedDebitIds.length > 0) {
+      if (amount > receiveSelectedInvoicesTotal + 0.01) {
         alert(
-          `Amount (${CURRENCY} ${formatMoney(amount)}) must match the total of selected invoices (${CURRENCY} ${formatMoney(allocSum)}).`
+          `Amount (${CURRENCY} ${formatMoney(amount)}) cannot exceed the total due on selected invoices (${CURRENCY} ${formatMoney(receiveSelectedInvoicesTotal)}).`
         );
+        return;
+      }
+      allocations = allocateKhataPaymentToDebits(
+        receiveUnpaidInvoices,
+        receiveSelectedDebitIds,
+        amount,
+        debitRemaining
+      );
+      if (allocations.length === 0) {
+        alert('Enter a positive amount to apply to the selected invoices.');
+        return;
+      }
+      const allocSum = roundMoney(allocations.reduce((s, a) => s + a.amount, 0));
+      if (Math.abs(allocSum - roundMoney(amount)) > 0.01) {
+        alert('Could not allocate payment to selected invoices. Please check the amount and try again.');
         return;
       }
     }
@@ -1603,9 +1663,26 @@ const KhataPage: React.FC = () => {
             />
             {receiveSelectedDebitIds.length > 0 && (
               <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Amount is the sum of selected invoices. Clear selection to enter a different amount (unallocated payment).
+                Selected invoices total {CURRENCY} {formatMoney(receiveSelectedInvoicesTotal)}. Payment is applied
+                oldest-first; you can pay less for partial settlement. Clear selection to record an unallocated payment.
               </p>
             )}
+            {receiveSelectedDebitIds.length > 0 &&
+              receivePaymentAllocations.length > 0 &&
+              receiveSelectedInvoicesTotal > parseFloat(receiveAmount || '0') + PAID_EPS && (
+                <p className="mt-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
+                  Partial payment:{' '}
+                  {receivePaymentAllocations
+                    .map((a) => {
+                      const inv = receiveUnpaidInvoices.find((e) => e.id === a.debitLedgerId);
+                      const ref = inv ? referenceLabel(inv) : a.debitLedgerId.slice(0, 8);
+                      const due = inv ? debitRemaining(inv) : a.amount;
+                      const partial = a.amount < due - PAID_EPS;
+                      return `${ref} ${CURRENCY} ${formatMoney(a.amount)}${partial ? ' (partial)' : ''}`;
+                    })
+                    .join(' · ')}
+                </p>
+              )}
           </div>
           {receivePaymentDescriptionPreview && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5 dark:border-emerald-900 dark:bg-emerald-950/40">

@@ -115,6 +115,22 @@ Copy **suppliers** (`shop_vendors`) and **loyalty members** (`shop_loyalty_membe
 
 ---
 
+## 4c. Migrate khata invoices & payments between tenants (oBo → obostores)
+
+Copy **khata ledger** rows: **debit** = customer invoice, **credit** = payment. Links payments to invoices via `linked_debit_id`. Customers matched by **phone**, unique **name**, or new contact created on destination.
+
+| Step | Where to run | Command |
+|------|----------------|---------|
+| List tenants | **`server/`** | `npm run migrate-khata -- --list-tenants` |
+| Dry run | **`server/`** | `npm run migrate-khata` |
+| Apply | **`server/`** | `npm run migrate-khata -- --execute` |
+
+**Environment (optional):** `FROM_COMPANY_HINT` (default `obo`), `TO_COMPANY_HINT` (default `obostores`), or `--from-id` / `--to-id`. Requires `DATABASE_URL` in `server/.env`.
+
+**Note:** Preserves `created_at`. `order_id` is set only when a matching `shop_sales.sale_number` exists on the destination (otherwise `NULL`; sale ref stays in `note`). Does **not** copy journal/GL entries for khata payments.
+
+---
+
 ## 5. Delete product & related transactions (DB cleanup)
 
 One-off script to remove a product and its **POS sales**, **sales returns**, **mobile orders** (lines referencing the product), **purchase bills** (lines referencing the product), **inventory movements / batches**, and **procurement demand draft lines**, then the **`shop_products`** row. Uses the same `DATABASE_URL` as the API (`server/.env`).
