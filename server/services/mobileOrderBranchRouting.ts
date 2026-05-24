@@ -417,7 +417,7 @@ export async function resolveBranchWarehouseForPlaceOrder(
         if (wh) {
             const dist =
                 ranked.length > 0 && sawInRange
-                    ? ranked.find(r => {
+                    ? ranked.find((r: { row: any; id: string; d: number }) => {
                           const maxKm = maxKmForBranch(r.row, tenantDefaultKm);
                           return r.d <= maxKm;
                       })?.d ?? null

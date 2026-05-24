@@ -485,7 +485,7 @@ async function consolidateWarehouse(
        RETURNING id`,
       [targetWarehouseId, tenantId, row.product_id, sourceWarehouseId]
     );
-    stats.batchesMoved += batchUpd.rowCount ?? batchUpd.length ?? 0;
+    stats.batchesMoved += batchUpd.rowCount ?? batchUpd.rows.length ?? 0;
 
     await client.query(
       `INSERT INTO shop_inventory (tenant_id, product_id, warehouse_id, quantity_on_hand, quantity_reserved, updated_at)
@@ -568,7 +568,7 @@ async function consolidateWarehouse(
        AND o.status = ANY($4::text[])`,
     [targetWarehouseId, tenantId, sourceWarehouseId, OPEN_MOBILE_STATUSES]
   );
-  stats.reserveMovementsUpdated = reserveUpd.rowCount ?? reserveUpd.length ?? 0;
+  stats.reserveMovementsUpdated = reserveUpd.rowCount ?? reserveUpd.rows.length ?? 0;
 
   progress.done(
     `${stats.productsMoved} SKUs, ${Math.round(stats.onHandMoved)} units, ${stats.batchesMoved} batch rows`
