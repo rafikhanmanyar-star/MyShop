@@ -204,7 +204,7 @@ export class KhataService {
              FROM khata_ledger k
              LEFT JOIN shop_sales s ON s.id = k.order_id AND s.tenant_id = k.tenant_id
              WHERE k.id = $1 AND k.tenant_id = $2
-             FOR UPDATE`,
+             FOR UPDATE OF k`,
             [debitId, tenantId]
           );
           if (deb.length === 0) throw new Error('Debit ledger line not found');

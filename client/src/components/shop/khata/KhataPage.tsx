@@ -409,11 +409,13 @@ const KhataPage: React.FC = () => {
 
   useEffect(() => {
     if (receiveSelectedDebitIds.length === 0) return;
+    const typedAmount = parseFloat(receiveAmount);
+    if (Number.isFinite(typedAmount) && typedAmount > PAID_EPS) return;
     const sum = receiveUnpaidInvoices
       .filter((e) => receiveSelectedDebitIds.includes(e.id))
       .reduce((s, e) => s + debitRemaining(e), 0);
     if (sum > PAID_EPS) setReceiveAmount(sum.toFixed(2));
-  }, [receiveSelectedDebitIds, receiveUnpaidInvoices]);
+  }, [receiveSelectedDebitIds, receiveUnpaidInvoices, receiveAmount]);
 
   const receiveSelectedInvoicesTotal = useMemo(() => {
     if (receiveSelectedDebitIds.length === 0) return 0;
