@@ -4,6 +4,7 @@ import {
   Download,
   Filter,
   Wallet,
+  Send,
   Pencil,
   Trash2,
   Clock,
@@ -12,6 +13,16 @@ import {
   FolderTree,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
+  CalendarDays,
+  Sparkles,
+  Landmark,
+  UserRound,
+  Phone,
+  CheckSquare,
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
+  ArrowDownUp,
   MessageCircle,
 } from 'lucide-react';
 import { khataApi, KhataLedgerEntry, KhataSummaryRow, shopApi, ShopBankAccount } from '../../../services/shopApi';
@@ -216,7 +227,193 @@ function buildKhataPendingReminderMessage(
   return lines.join('\n');
 }
 
-const KhataPage: React.FC = () => {
+type LedgerDisplayRow =
+  | { kind: 'entry'; entry: KhataLedgerEntry }
+  | {
+      kind: 'bulkPayment';
+      groupId: string;
+      customerId: string;
+      createdAt: string;
+      note: string;
+      paymentEntries: KhataLedgerEntry[];
+      totalAmount: number;
+      settledInvoices: Array<{ debitId: string; ref: string; amount: number }>;
+    };
+
+function isGroupedBulkPaymentCandidate(entry: KhataLedgerEntry): boolean {
+  return (
+    entry.type === 'credit' &&
+    !!entry.linked_debit_id &&
+    !!entry.note &&
+    entry.note.includes('Invoices:')
+  );
+}
+
+const StatusBadge = React.memo(function StatusBadge({ label, className }: { label: string; className: string }) {
+  return (
+    <span className={`inline-flex rounded px-1.5 py-0 text-[10px] font-bold uppercase leading-5 tracking-wide ${className}`}>
+      {label}
+    </span>
+  );
+});
+
+const ReceivePaymentButton = React.memo(function ReceivePaymentButton({
+  onClick,
+  disabled,
+  className,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={
+        className ||
+        'inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:from-blue-700 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-50'
+      }
+    >
+      <Wallet className="h-4 w-4" />
+      Receive Payment
+    </button>
+  );
+});
+
+const TransactionTabs = React.memo(function TransactionTabs({
+  value,
+  onChange,
+}: {
+  value: 'all' | 'invoices' | 'payments';
+  onChange: (value: 'all' | 'invoices' | 'payments') => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border border-border bg-background p-0.5 shadow-sm" role="group" aria-label="Filter by transaction type">
+      {(
+        [
+          { id: 'all' as const, label: 'All Transactions' },
+          { id: 'invoices' as const, label: 'Invoices' },
+          { id: 'payments' as const, label: 'Payments' },
+        ] as const
+      ).map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => onChange(id)}
+          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+            value === id ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+});
+
+const ReceivableKPISection = React.memo(function ReceivableKPISection(props: {
+  totalReceivables: number;
+  collectionEfficiencyPct: number;
+  dsoDays: number;
+  openDebitRemSum: number;
+  dsoCriticalDays: number;
+  overdueDeltaVsCritical: number;
+  disputeCount: number;
+  disputeValue: number;
+  overdueAfterDays: number;
+  onOpenPending: () => void;
+}) {
+  const {
+    totalReceivables,
+    collectionEfficiencyPct,
+    dsoDays,
+    openDebitRemSum,
+    dsoCriticalDays,
+    overdueDeltaVsCritical,
+    disputeCount,
+    disputeValue,
+    overdueAfterDays,
+    onOpenPending,
+  } = props;
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Receivables</div>
+        <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{CURRENCY} {formatMoney(totalReceivables)}</div>
+        <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">All customers with a balance due</div>
+      </div>
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Collection Efficiency</div>
+        <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{collectionEfficiencyPct.toFixed(1)}%</div>
+        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+          <div className="h-full rounded-full bg-emerald-700 transition-all dark:bg-emerald-600" style={{ width: `${Math.min(100, collectionEfficiencyPct)}%` }} />
+        </div>
+      </div>
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Days Sales Outstanding (DSO)</div>
+        <div className="mt-2 flex flex-wrap items-baseline gap-2">
+          <span className="font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{openDebitRemSum > PAID_EPS ? `${dsoDays} Days` : '—'}</span>
+          {dsoDays > dsoCriticalDays && (
+            <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800 dark:bg-red-950/60 dark:text-red-300">
+              +{overdueDeltaVsCritical} vs threshold
+            </span>
+          )}
+        </div>
+        <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">Critical threshold: {dsoCriticalDays} (weighted by open debits)</div>
+      </div>
+      <button
+        type="button"
+        onClick={onOpenPending}
+        disabled={disputeCount === 0}
+        className={`rounded-2xl border border-slate-200/80 bg-white p-5 text-left shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900 ${
+          disputeCount > 0
+            ? 'cursor-pointer hover:border-amber-300 hover:bg-amber-50/50 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:hover:border-amber-800 dark:hover:bg-amber-950/20'
+            : 'cursor-default opacity-95'
+        }`}
+      >
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending attention</div>
+        <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{disputeCount}</div>
+        <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+          Open debits over {overdueAfterDays}d: {CURRENCY} {formatMoney(disputeValue)}
+          {disputeCount > 0 && <span className="mt-1 block font-semibold text-amber-700 dark:text-amber-400">Click to view list</span>}
+        </div>
+      </button>
+    </div>
+  );
+});
+
+const SummaryCards = React.memo(function SummaryCards({
+  totalDebit,
+  totalCredit,
+  unallocatedPayments,
+  closingBalance,
+}: {
+  totalDebit: number;
+  totalCredit: number;
+  unallocatedPayments: number;
+  closingBalance: number;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-3 border-t border-slate-200 bg-slate-100/90 px-6 py-4 dark:border-slate-800 dark:bg-slate-800/50 md:grid-cols-4 md:px-8">
+      <div className="rounded-xl border border-slate-200/70 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+        Total Debit <span className="ml-1 font-mono text-sm text-slate-900 dark:text-white">{CURRENCY} {formatMoney(totalDebit)}</span>
+      </div>
+      <div className="rounded-xl border border-slate-200/70 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+        Total Credit <span className="ml-1 font-mono text-sm text-slate-900 dark:text-white">{CURRENCY} {formatMoney(totalCredit)}</span>
+      </div>
+      <div className="rounded-xl border border-slate-200/70 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+        Unallocated Payments <span className="ml-1 font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">{CURRENCY} {formatMoney(unallocatedPayments)}</span>
+      </div>
+      <div className="rounded-xl border border-slate-200/70 bg-white px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+        Closing Balance <span className="ml-1 font-mono text-base font-bold text-slate-900 dark:text-white">{CURRENCY} {formatMoney(closingBalance)}</span>
+      </div>
+    </div>
+  );
+});
+
+const AccountsReceivablePage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [summary, setSummary] = useState<KhataSummaryRow[]>([]);
@@ -234,6 +431,7 @@ const KhataPage: React.FC = () => {
   const [receiveCustomerLocked, setReceiveCustomerLocked] = useState(false);
   const [receiveSubmitting, setReceiveSubmitting] = useState(false);
   const [receiveSelectedDebitIds, setReceiveSelectedDebitIds] = useState<string[]>([]);
+  const [receiveInvoiceSort, setReceiveInvoiceSort] = useState<'oldest' | 'newest' | 'highest'>('oldest');
   const [receiveCustomerLedger, setReceiveCustomerLedger] = useState<KhataLedgerEntry[]>([]);
   const [receiveLedgerLoading, setReceiveLedgerLoading] = useState(false);
   const [customers, setCustomers] = useState<
@@ -258,6 +456,7 @@ const KhataPage: React.FC = () => {
   const [entryPendingDelete, setEntryPendingDelete] = useState<KhataLedgerEntry | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [overdueListModalOpen, setOverdueListModalOpen] = useState(false);
+  const [expandedBulkPaymentGroups, setExpandedBulkPaymentGroups] = useState<string[]>([]);
 
   const loadSummary = useCallback(async () => {
     try {
@@ -404,8 +603,23 @@ const KhataPage: React.FC = () => {
   const receiveUnpaidInvoices = useMemo(() => {
     return receiveCustomerLedger
       .filter((e) => e.type === 'debit' && debitRemaining(e) > PAID_EPS)
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      .sort((a, b) => {
+        const ta = new Date(a.created_at).getTime();
+        const tb = new Date(b.created_at).getTime();
+        if (ta !== tb) return ta - tb;
+        return String(a.id).localeCompare(String(b.id));
+      });
   }, [receiveCustomerLedger]);
+
+  const sortedReceiveUnpaidInvoices = useMemo(() => {
+    const rows = [...receiveUnpaidInvoices];
+    if (receiveInvoiceSort === 'newest') {
+      rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    } else if (receiveInvoiceSort === 'highest') {
+      rows.sort((a, b) => debitRemaining(b) - debitRemaining(a));
+    }
+    return rows;
+  }, [receiveUnpaidInvoices, receiveInvoiceSort]);
 
   useEffect(() => {
     if (receiveSelectedDebitIds.length === 0) return;
@@ -417,6 +631,10 @@ const KhataPage: React.FC = () => {
     if (sum > PAID_EPS) setReceiveAmount(sum.toFixed(2));
   }, [receiveSelectedDebitIds, receiveUnpaidInvoices, receiveAmount]);
 
+  useEffect(() => {
+    setExpandedBulkPaymentGroups([]);
+  }, [selectedCustomerId, ledgerTypeFilter]);
+
   const receiveSelectedInvoicesTotal = useMemo(() => {
     if (receiveSelectedDebitIds.length === 0) return 0;
     return roundMoney(
@@ -425,6 +643,21 @@ const KhataPage: React.FC = () => {
         .reduce((s, e) => s + debitRemaining(e), 0)
     );
   }, [receiveSelectedDebitIds, receiveUnpaidInvoices]);
+
+  const receiveTotalOutstanding = useMemo(
+    () => roundMoney(receiveUnpaidInvoices.reduce((s, e) => s + debitRemaining(e), 0)),
+    [receiveUnpaidInvoices]
+  );
+
+  const receiveEnteredAmount = useMemo(() => {
+    const v = parseFloat(receiveAmount);
+    return Number.isFinite(v) && v > 0 ? roundMoney(v) : 0;
+  }, [receiveAmount]);
+
+  const receiveRemainingBalance = useMemo(
+    () => roundMoney(Math.max(0, receiveTotalOutstanding - receiveEnteredAmount)),
+    [receiveTotalOutstanding, receiveEnteredAmount]
+  );
 
   const receivePaymentAllocations = useMemo(() => {
     if (receiveSelectedDebitIds.length === 0) return [];
@@ -598,6 +831,75 @@ const KhataPage: React.FC = () => {
     return sortLedgerRecentFirst(rows);
   }, [activeLedger, ledgerTypeFilter, sortLedgerRecentFirst]);
 
+  const debitLedgerById = useMemo(() => {
+    const m = new Map<string, KhataLedgerEntry>();
+    for (const e of activeLedger) {
+      if (e.type === 'debit') m.set(e.id, e);
+    }
+    return m;
+  }, [activeLedger]);
+
+  const ledgerDisplayRows = useMemo<LedgerDisplayRow[]>(() => {
+    const out: LedgerDisplayRow[] = [];
+    let i = 0;
+    while (i < displayedLedger.length) {
+      const current = displayedLedger[i];
+      if (!isGroupedBulkPaymentCandidate(current)) {
+        out.push({ kind: 'entry', entry: current });
+        i += 1;
+        continue;
+      }
+      const note = current.note || '';
+      const customerId = current.customer_id;
+      const group: KhataLedgerEntry[] = [];
+      let j = i;
+      while (j < displayedLedger.length) {
+        const row = displayedLedger[j];
+        if (
+          isGroupedBulkPaymentCandidate(row) &&
+          row.customer_id === customerId &&
+          (row.note || '') === note
+        ) {
+          group.push(row);
+          j += 1;
+          continue;
+        }
+        break;
+      }
+
+      // Group only true multi-invoice bulk receipts; keep single-line credits unchanged.
+      if (group.length < 2) {
+        out.push({ kind: 'entry', entry: current });
+        i += 1;
+        continue;
+      }
+
+      const settledInvoices = group.map((g) => {
+        const debitId = g.linked_debit_id || '';
+        const debit = debitLedgerById.get(debitId);
+        return {
+          debitId,
+          ref: debit ? referenceLabel(debit) : `INV-${debitId.slice(0, 8).toUpperCase()}`,
+          amount: Number(g.amount) || 0,
+        };
+      });
+
+      out.push({
+        kind: 'bulkPayment',
+        groupId: `${customerId}:${note}:${group[0].id}`,
+        customerId,
+        createdAt: group[0].created_at,
+        note,
+        paymentEntries: group,
+        totalAmount: roundMoney(group.reduce((sum, g) => sum + (Number(g.amount) || 0), 0)),
+        settledInvoices,
+      });
+
+      i = j;
+    }
+    return out;
+  }, [displayedLedger, debitLedgerById]);
+
   const memberNameForEntry = useCallback(
     (entry: KhataLedgerEntry) =>
       entry.customer_name?.trim() ||
@@ -646,6 +948,7 @@ const KhataPage: React.FC = () => {
 
   const resetReceiveModalForm = () => {
     setReceiveSelectedDebitIds([]);
+    setReceiveInvoiceSort('oldest');
     setReceiveCustomerId('');
     setReceiveAmount('');
     setReceiveNote('');
@@ -937,77 +1240,56 @@ const KhataPage: React.FC = () => {
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col bg-slate-100 dark:bg-slate-950">
       <div className="shrink-0 border-b border-slate-200 bg-slate-100 px-4 py-5 dark:border-slate-800 dark:bg-slate-950 md:px-8 md:py-6">
         <div className="mx-auto flex max-w-[1600px] flex-col gap-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Total Receivables
-              </div>
-              <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-                {CURRENCY} {formatMoney(totalReceivables)}
-              </div>
-              <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">All customers with a balance due</div>
+          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,0.05)] dark:border-slate-800 dark:bg-slate-900 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Accounts Receivable</h1>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                Track customer balances, payments and invoice status in real-time.
+              </p>
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Collection Efficiency
-              </div>
-              <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-                {collectionEfficiencyPct.toFixed(1)}%
-              </div>
-              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                <div
-                  className="h-full rounded-full bg-emerald-700 transition-all dark:bg-emerald-600"
-                  style={{ width: `${Math.min(100, collectionEfficiencyPct)}%` }}
-                />
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={sendStatementWhatsApp}
+                disabled={!selectedCustomerId}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Statement
+              </button>
+              <button
+                type="button"
+                onClick={sendPendingReminderWhatsApp}
+                disabled={!selectedCustomerId}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <MessageCircle className="h-4 w-4 text-emerald-600" />
+                Remind
+              </button>
+              <button
+                type="button"
+                onClick={exportLedgerCsv}
+                disabled={!selectedCustomerId}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Download className="h-4 w-4" />
+                Export
+              </button>
+              <ReceivePaymentButton onClick={openReceiveModalForCurrentCustomer} disabled={!selectedCustomerId} />
             </div>
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Days Sales Outstanding (DSO)
-              </div>
-              <div className="mt-2 flex flex-wrap items-baseline gap-2">
-                <span className="font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-                  {openDebitRemSum > PAID_EPS ? `${dsoDays} Days` : '—'}
-                </span>
-                {dsoDays > DSO_CRITICAL_DAYS && (
-                  <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800 dark:bg-red-950/60 dark:text-red-300">
-                    +{overdueDeltaVsCritical} vs threshold
-                  </span>
-                )}
-              </div>
-              <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                Critical threshold: {DSO_CRITICAL_DAYS} (weighted by open debits)
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => disputeCount > 0 && setOverdueListModalOpen(true)}
-              disabled={disputeCount === 0}
-              className={`rounded-2xl border border-slate-200/80 bg-white p-5 text-left shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900 ${
-                disputeCount > 0
-                  ? 'cursor-pointer hover:border-amber-300 hover:bg-amber-50/50 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500 dark:hover:border-amber-800 dark:hover:bg-amber-950/20'
-                  : 'cursor-default opacity-95'
-              }`}
-              title={
-                disputeCount > 0
-                  ? `View ${disputeCount} open invoice${disputeCount === 1 ? '' : 's'} over ${OVERDUE_AFTER_DAYS} days`
-                  : `No open debits over ${OVERDUE_AFTER_DAYS} days`
-              }
-            >
-              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Pending attention
-              </div>
-              <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-white">
-                {disputeCount}
-              </div>
-              <div className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-                Open debits over {OVERDUE_AFTER_DAYS}d: {CURRENCY} {formatMoney(disputeValue)}
-                {disputeCount > 0 && (
-                  <span className="mt-1 block font-semibold text-amber-700 dark:text-amber-400">Click to view list</span>
-                )}
-              </div>
-            </button>
           </div>
+          <ReceivableKPISection
+            totalReceivables={totalReceivables}
+            collectionEfficiencyPct={collectionEfficiencyPct}
+            dsoDays={dsoDays}
+            openDebitRemSum={openDebitRemSum}
+            dsoCriticalDays={DSO_CRITICAL_DAYS}
+            overdueDeltaVsCritical={overdueDeltaVsCritical}
+            disputeCount={disputeCount}
+            disputeValue={disputeValue}
+            overdueAfterDays={OVERDUE_AFTER_DAYS}
+            onOpenPending={() => disputeCount > 0 && setOverdueListModalOpen(true)}
+          />
         </div>
       </div>
 
@@ -1151,32 +1433,7 @@ const KhataPage: React.FC = () => {
                       <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-muted-foreground">
                         {selectedCustomerId ? 'Khata ledger' : 'All transactions'}
                       </span>
-                      <div
-                        className="inline-flex rounded-lg border border-border bg-background p-0.5 shadow-sm"
-                        role="group"
-                        aria-label="Filter by transaction type"
-                      >
-                        {(
-                          [
-                            { id: 'all' as const, label: 'All' },
-                            { id: 'invoices' as const, label: 'Invoices' },
-                            { id: 'payments' as const, label: 'Payments' },
-                          ] as const
-                        ).map(({ id, label }) => (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() => setLedgerTypeFilter(id)}
-                            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-                              ledgerTypeFilter === id
-                                ? 'bg-primary text-primary-foreground shadow-sm'
-                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
+                      <TransactionTabs value={ledgerTypeFilter} onChange={setLedgerTypeFilter} />
                       {!selectedCustomerId && (
                         <span className="text-xs text-muted-foreground">Newest first · select a member to filter</span>
                       )}
@@ -1209,14 +1466,7 @@ const KhataPage: React.FC = () => {
                           <Download className="h-4 w-4 shrink-0" />
                           Export
                         </button>
-                        <button
-                          type="button"
-                          onClick={openReceiveModalForCurrentCustomer}
-                          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-                        >
-                          <Wallet className="h-4 w-4 shrink-0" />
-                          Receive Payment
-                        </button>
+                        <ReceivePaymentButton onClick={openReceiveModalForCurrentCustomer} />
                       </div>
                     )}
                   </div>
@@ -1294,110 +1544,234 @@ const KhataPage: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border">
-                            {displayedLedger.map((entry) => {
-                              const badge = entryStatusBadge(entry, debitLineStatus);
-                              const ref = referenceLabel(entry);
-                              const inv = khataEntrySaleInvoice(entry);
-                              const typ = rowDisplayType(entry);
-                              const memberName = memberNameForEntry(entry);
-                              const showDue =
-                                entry.type === 'debit' && debitLineStatus(entry) !== 'paid';
-                              return (
-                                <tr key={entry.id} className="hover:bg-muted/50">
-                                  <td className="whitespace-nowrap px-4 py-1.5 text-slate-600 dark:text-slate-400">
-                                    {new Date(entry.created_at).toLocaleDateString(undefined, {
-                                      day: 'numeric',
-                                      month: 'short',
-                                      year: '2-digit',
-                                    })}
-                                  </td>
-                                  {!selectedCustomerId && (
-                                    <td className="max-w-[180px] px-3 py-1.5">
-                                      <button
-                                        type="button"
-                                        onClick={() => selectMember(entry.customer_id, memberName)}
-                                        className="truncate text-left text-xs font-semibold text-primary hover:underline"
-                                        title={`View ${memberName}'s ledger`}
-                                      >
-                                        {memberName}
-                                      </button>
+                            {ledgerDisplayRows.map((row) => {
+                              if (row.kind === 'entry') {
+                                const entry = row.entry;
+                                const badge = entryStatusBadge(entry, debitLineStatus);
+                                const ref = referenceLabel(entry);
+                                const inv = khataEntrySaleInvoice(entry);
+                                const typ = rowDisplayType(entry);
+                                const memberName = memberNameForEntry(entry);
+                                const showDue = entry.type === 'debit' && debitLineStatus(entry) !== 'paid';
+                                return (
+                                  <tr key={entry.id} className="hover:bg-muted/50">
+                                    <td className="whitespace-nowrap px-4 py-1.5 text-slate-600 dark:text-slate-400">
+                                      {new Date(entry.created_at).toLocaleDateString(undefined, {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        year: '2-digit',
+                                      })}
                                     </td>
-                                  )}
-                                  <td className="whitespace-nowrap px-3 py-1.5 font-medium text-slate-800 dark:text-slate-200">
-                                    {typ}
-                                  </td>
-                                  <td className="whitespace-nowrap px-3 py-1.5">
-                                    <span
-                                      className={`inline-flex rounded px-1.5 py-0 text-[10px] font-bold uppercase leading-5 tracking-wide ${badge.className}`}
-                                    >
-                                      {badge.label}
-                                    </span>
-                                  </td>
-                                  <td className="max-w-[200px] truncate px-3 py-1.5 text-slate-600 dark:text-slate-400">
-                                    {inv ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => openSaleDetail(inv)}
-                                        className="truncate font-semibold text-blue-600 hover:underline dark:text-blue-400"
-                                        title={ref}
-                                      >
-                                        {ref}
-                                      </button>
-                                    ) : (
-                                      <span className="truncate font-medium text-blue-600 dark:text-blue-400" title={ref}>
-                                        {ref}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td
-                                    className={`whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums ${
-                                      entry.type === 'credit'
-                                        ? 'text-emerald-600 dark:text-emerald-400'
-                                        : 'text-slate-900 dark:text-white'
-                                    }`}
-                                  >
-                                    <span className="font-semibold">
-                                      {entry.type === 'debit' ? '+' : '−'}
-                                      {CURRENCY} {formatMoney(entry.amount)}
-                                    </span>
-                                    {showDue && (
-                                      <span className="ml-1.5 font-normal text-slate-500 dark:text-slate-400">
-                                        · Due {CURRENCY} {formatMoney(debitRemaining(entry))}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="whitespace-nowrap px-4 py-1.5 text-right">
-                                    <div className="inline-flex items-center justify-end gap-0.5">
-                                      {entry.type === 'debit' && debitLineStatus(entry) !== 'paid' && (
+                                    {!selectedCustomerId && (
+                                      <td className="max-w-[180px] px-3 py-1.5">
                                         <button
                                           type="button"
-                                          onClick={() => openReceiveModalFromEntry(entry)}
-                                          className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-emerald-700"
+                                          onClick={() => selectMember(entry.customer_id, memberName)}
+                                          className="truncate text-left text-xs font-semibold text-primary hover:underline"
+                                          title={`View ${memberName}'s ledger`}
                                         >
-                                          Receive
+                                          {memberName}
                                         </button>
+                                      </td>
+                                    )}
+                                    <td className="whitespace-nowrap px-3 py-1.5 font-medium text-slate-800 dark:text-slate-200">
+                                      {typ}
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-1.5">
+                                    <StatusBadge label={badge.label} className={badge.className} />
+                                    </td>
+                                    <td className="max-w-[200px] truncate px-3 py-1.5 text-slate-600 dark:text-slate-400">
+                                      {inv ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => openSaleDetail(inv)}
+                                          className="truncate font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                                          title={ref}
+                                        >
+                                          {ref}
+                                        </button>
+                                      ) : (
+                                        <span className="truncate font-medium text-blue-600 dark:text-blue-400" title={ref}>
+                                          {ref}
+                                        </span>
                                       )}
+                                    </td>
+                                    <td
+                                      className={`whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums ${
+                                        entry.type === 'credit'
+                                          ? 'text-emerald-600 dark:text-emerald-400'
+                                          : 'text-slate-900 dark:text-white'
+                                      }`}
+                                    >
+                                      <span className="font-semibold">
+                                        {entry.type === 'debit' ? '+' : '−'}
+                                        {CURRENCY} {formatMoney(entry.amount)}
+                                      </span>
+                                      {showDue && (
+                                        <span className="ml-1.5 font-normal text-slate-500 dark:text-slate-400">
+                                          · Due {CURRENCY} {formatMoney(debitRemaining(entry))}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="whitespace-nowrap px-4 py-1.5 text-right">
+                                      <div className="inline-flex items-center justify-end gap-0.5">
+                                        {entry.type === 'debit' && debitLineStatus(entry) !== 'paid' && (
+                                          <button
+                                            type="button"
+                                            onClick={() => openReceiveModalFromEntry(entry)}
+                                            className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-emerald-700"
+                                          >
+                                            Receive
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => openEditEntry(entry)}
+                                          className="rounded p-1 text-slate-500 transition-colors hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-950/40 dark:hover:text-violet-400"
+                                          title="Edit entry"
+                                          aria-label="Edit entry"
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEntryPendingDelete(entry)}
+                                          className="rounded p-1 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                                          title="Delete entry"
+                                          aria-label="Delete entry"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              }
+
+                              const isExpanded = expandedBulkPaymentGroups.includes(row.groupId);
+                              const bulkDate = new Date(row.createdAt).toLocaleDateString(undefined, {
+                                day: 'numeric',
+                                month: 'short',
+                                year: '2-digit',
+                              });
+                              const memberName =
+                                memberNameForEntry(row.paymentEntries[0]) || '—';
+                              return (
+                                <React.Fragment key={row.groupId}>
+                                  <tr className="bg-emerald-50/40 hover:bg-emerald-50/70 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30">
+                                    <td className="whitespace-nowrap px-4 py-1.5 text-slate-600 dark:text-slate-400">
+                                      {bulkDate}
+                                    </td>
+                                    {!selectedCustomerId && (
+                                      <td className="max-w-[180px] px-3 py-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => selectMember(row.customerId, memberName)}
+                                          className="truncate text-left text-xs font-semibold text-primary hover:underline"
+                                          title={`View ${memberName}'s ledger`}
+                                        >
+                                          {memberName}
+                                        </button>
+                                      </td>
+                                    )}
+                                    <td className="whitespace-nowrap px-3 py-1.5 font-semibold text-emerald-800 dark:text-emerald-300">
+                                      Bulk Payment
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-1.5">
+                                      <span className="inline-flex rounded bg-emerald-100 px-1.5 py-0 text-[10px] font-bold uppercase leading-5 tracking-wide text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                        Settled
+                                      </span>
+                                    </td>
+                                    <td className="max-w-[200px] truncate px-3 py-1.5 text-slate-600 dark:text-slate-400">
+                                      <span className="truncate font-semibold text-blue-600 dark:text-blue-400" title={row.note}>
+                                        {referenceLabel(row.paymentEntries[0])} · {row.settledInvoices.length} invoice
+                                        {row.settledInvoices.length > 1 ? 's' : ''}
+                                      </span>
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                                      <span className="font-semibold">
+                                        −{CURRENCY} {formatMoney(row.totalAmount)}
+                                      </span>
+                                    </td>
+                                    <td className="whitespace-nowrap px-4 py-1.5 text-right">
                                       <button
                                         type="button"
-                                        onClick={() => openEditEntry(entry)}
-                                        className="rounded p-1 text-slate-500 transition-colors hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-950/40 dark:hover:text-violet-400"
-                                        title="Edit entry"
-                                        aria-label="Edit entry"
+                                        onClick={() =>
+                                          setExpandedBulkPaymentGroups((prev) =>
+                                            prev.includes(row.groupId)
+                                              ? prev.filter((id) => id !== row.groupId)
+                                              : [...prev, row.groupId]
+                                          )
+                                        }
+                                        className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-700 hover:bg-muted dark:text-slate-200"
                                       >
-                                        <Pencil className="h-3.5 w-3.5" />
+                                        <ChevronRight
+                                          className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                        />
+                                        {isExpanded ? 'Hide' : 'Details'}
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setEntryPendingDelete(entry)}
-                                        className="rounded p-1 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-                                        title="Delete entry"
-                                        aria-label="Delete entry"
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
+                                    </td>
+                                  </tr>
+                                  {isExpanded &&
+                                    row.paymentEntries.map((credit) => {
+                                      const debitId = credit.linked_debit_id || '';
+                                      const debit = debitLedgerById.get(debitId);
+                                      const ref = debit ? referenceLabel(debit) : `INV-${debitId.slice(0, 8).toUpperCase()}`;
+                                      const inv = debit ? khataEntrySaleInvoice(debit) : null;
+                                      return (
+                                        <tr
+                                          key={`${row.groupId}:${credit.id}`}
+                                          className="bg-muted/20 text-[11px] hover:bg-muted/40"
+                                        >
+                                          <td className="whitespace-nowrap px-4 py-1.5 text-slate-500">↳</td>
+                                          {!selectedCustomerId && <td className="px-3 py-1.5 text-slate-500">—</td>}
+                                          <td className="whitespace-nowrap px-3 py-1.5 text-slate-600 dark:text-slate-300">
+                                            Settled invoice
+                                          </td>
+                                          <td className="whitespace-nowrap px-3 py-1.5 text-slate-500">Detail</td>
+                                          <td className="max-w-[200px] truncate px-3 py-1.5 text-slate-600 dark:text-slate-400">
+                                            {inv ? (
+                                              <button
+                                                type="button"
+                                                onClick={() => openSaleDetail(inv)}
+                                                className="truncate font-semibold text-blue-600 hover:underline dark:text-blue-400"
+                                                title={ref}
+                                              >
+                                                {ref}
+                                              </button>
+                                            ) : (
+                                              <span className="truncate font-medium text-blue-600 dark:text-blue-400">{ref}</span>
+                                            )}
+                                          </td>
+                                          <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                                            −{CURRENCY} {formatMoney(credit.amount)}
+                                          </td>
+                                          <td className="whitespace-nowrap px-4 py-1.5 text-right">
+                                            <div className="inline-flex items-center justify-end gap-0.5">
+                                              <button
+                                                type="button"
+                                                onClick={() => openEditEntry(credit)}
+                                                className="rounded p-1 text-slate-500 transition-colors hover:bg-violet-50 hover:text-violet-600 dark:hover:bg-violet-950/40 dark:hover:text-violet-400"
+                                                title="Edit entry"
+                                                aria-label="Edit entry"
+                                              >
+                                                <Pencil className="h-3.5 w-3.5" />
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => setEntryPendingDelete(credit)}
+                                                className="rounded p-1 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                                                title="Delete entry"
+                                                aria-label="Delete entry"
+                                              >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                </React.Fragment>
                               );
                             })}
                           </tbody>
@@ -1407,34 +1781,12 @@ const KhataPage: React.FC = () => {
                   </div>
 
                   {selectedCustomerId && customerFooter && (
-                      <div className="border-t border-slate-200 bg-slate-100/90 px-6 py-4 dark:border-slate-800 dark:bg-slate-800/50 md:px-8">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:gap-6">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Total debit{' '}
-                            <span className="ml-1 font-mono text-sm text-slate-900 dark:text-white">
-                              {CURRENCY} {formatMoney(customerFooter.totalDebit)}
-                            </span>
-                          </div>
-                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Total credit{' '}
-                            <span className="ml-1 font-mono text-sm text-slate-900 dark:text-white">
-                              {CURRENCY} {formatMoney(customerFooter.totalCredit)}
-                            </span>
-                          </div>
-                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                            Unallocated payments{' '}
-                            <span className="ml-1 font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                              {CURRENCY} {formatMoney(unallocatedPayments)}
-                            </span>
-                          </div>
-                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                            Closing balance{' '}
-                            <span className="ml-1 font-mono text-base font-bold text-slate-900 dark:text-white">
-                              {CURRENCY} {formatMoney(customerFooter.balance)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                    <SummaryCards
+                      totalDebit={customerFooter.totalDebit}
+                      totalCredit={customerFooter.totalCredit}
+                      unallocatedPayments={unallocatedPayments}
+                      closingBalance={customerFooter.balance}
+                    />
                   )}
 
                   {selectedCustomerId && (
@@ -1494,224 +1846,321 @@ const KhataPage: React.FC = () => {
           resetReceiveModalForm();
         }}
         title="Receive Payment"
-        size="lg"
+        size="xl"
       >
-        <form onSubmit={handleReceivePayment} className="space-y-5">
-          {receiveCustomerLocked && selectedCustomerName && (
-            <p className="rounded-lg border border-border bg-muted/80 px-3 py-2 text-xs text-muted-foreground">
-              Ledger: <span className="font-bold text-foreground">{selectedCustomerName}</span>
-              {receiveSelectedDebitIds.length > 0 ? (
-                <span className="mt-1 block font-semibold text-emerald-700 dark:text-emerald-400">
-                  {receiveSelectedDebitIds.length} invoice{receiveSelectedDebitIds.length === 1 ? '' : 's'} selected for
-                  settlement.
-                </span>
-              ) : (
-                <span className="mt-1 block">Select unpaid invoices below, or enter an unallocated payment amount.</span>
-              )}
-            </p>
-          )}
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">Customer</label>
-            <select
-              aria-label="Select customer"
-              value={receiveCustomerId}
-              onChange={(e) => {
-                setReceiveCustomerId(e.target.value);
-                setReceiveSelectedDebitIds([]);
-                setReceiveAmount('');
-              }}
-              disabled={receiveSubmitting || receiveCustomerLocked}
-              className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 disabled:cursor-not-allowed disabled:opacity-70 dark:border-gray-600 dark:bg-gray-900/90"
-              required
-            >
-              <option value="">Select customer</option>
-              {receiveCustomerId &&
-                !customers.some((c) => c.id === receiveCustomerId) &&
-                selectedCustomerName && (
-                  <option value={receiveCustomerId}>{selectedCustomerName} (current)</option>
-                )}
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.contact_no ? ` — ${c.contact_no}` : ''}
-                </option>
-              ))}
-            </select>
+        <form onSubmit={handleReceivePayment} className="space-y-4 bg-[#F8F9FB] px-1 py-2 md:space-y-6">
+          <div className="rounded-2xl border border-border bg-background px-5 py-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-red-50 p-2 text-red-500 dark:bg-red-950/40 dark:text-red-300">
+                  <UserRound className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Customer</div>
+                  <div className="truncate text-lg font-semibold text-foreground">
+                    {receiveCustomerId
+                      ? customers.find((c) => c.id === receiveCustomerId)?.name || selectedCustomerName || receiveCustomerId
+                      : 'Select customer'}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Phone className="h-3.5 w-3.5" />
+                    <span>{customers.find((c) => c.id === receiveCustomerId)?.contact_no || 'No phone on record'}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setReceiveCustomerLocked(false);
+                  setReceiveSelectedDebitIds([]);
+                  setReceiveAmount('');
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Change Customer
+              </button>
+            </div>
             {receiveCustomerLocked && (
-              <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Customer is fixed to match this ledger. Use the floating Receive button (mobile) or clear selection to pick
-                another customer from the directory first.
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Customer is fixed to match this ledger. Use the floating Receive button (mobile) or clear selection to pick another customer.
               </p>
+            )}
+            {!receiveCustomerLocked && (
+              <div className="mt-3">
+                <select
+                  value={receiveCustomerId}
+                  onChange={(e) => setReceiveCustomerId(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-background px-4 py-2.5 text-sm text-foreground outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90"
+                  required
+                >
+                  <option value="">Select customer</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.contact_no ? ` — ${c.contact_no}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
 
-          {receiveCustomerId && (
-            <div>
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                  Unpaid invoices
-                </label>
-                {receiveUnpaidInvoices.length > 0 && (
-                  <div className="flex gap-2 text-[11px] font-semibold">
+          <div className="grid gap-4 lg:grid-cols-10">
+            <div className="space-y-4 lg:col-span-7">
+              <div className="rounded-2xl border border-border bg-background shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
+                <div className="border-b border-border px-5 py-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Unpaid Invoices</div>
+                    {receiveUnpaidInvoices.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearReceiveInvoiceSelection}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-600"
+                        disabled={receiveSubmitting || receiveSelectedDebitIds.length === 0}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={selectAllReceiveInvoices}
-                      className="text-primary hover:underline"
-                      disabled={receiveSubmitting}
+                      disabled={receiveSubmitting || receiveSelectedDebitIds.length === receiveUnpaidInvoices.length}
+                      className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-50"
                     >
-                      Select all
+                      <CheckSquare className="h-3.5 w-3.5" />
+                      Select All
                     </button>
-                    <span className="text-muted-foreground">·</span>
                     <button
                       type="button"
-                      onClick={clearReceiveInvoiceSelection}
-                      className="text-primary hover:underline"
-                      disabled={receiveSubmitting || receiveSelectedDebitIds.length === 0}
+                      onClick={() => setReceiveInvoiceSort('oldest')}
+                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        receiveInvoiceSort === 'oldest'
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-foreground hover:bg-muted'
+                      }`}
                     >
-                      Clear
+                      <ArrowDownWideNarrow className="h-3.5 w-3.5" />
+                      Oldest First
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReceiveInvoiceSort('newest')}
+                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        receiveInvoiceSort === 'newest'
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <ArrowUpNarrowWide className="h-3.5 w-3.5" />
+                      Newest First
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReceiveInvoiceSort('highest')}
+                      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        receiveInvoiceSort === 'highest'
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <ArrowDownUp className="h-3.5 w-3.5" />
+                      Highest Amount
                     </button>
                   </div>
-                )}
-              </div>
-              {receiveLedgerLoading ? (
-                <p className="rounded-lg border border-border bg-muted/40 px-3 py-4 text-center text-sm text-muted-foreground">
-                  Loading invoices…
-                </p>
-              ) : receiveUnpaidInvoices.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-sm text-muted-foreground">
-                  No open invoices for this member. You can still record an unallocated payment below.
-                </p>
-              ) : (
-                <div className="max-h-52 overflow-y-auto rounded-lg border border-border">
-                  <ul className="divide-y divide-border">
-                    {receiveUnpaidInvoices.map((inv) => {
-                      const checked = receiveSelectedDebitIds.includes(inv.id);
-                      const ref = referenceLabel(inv);
-                      const due = debitRemaining(inv);
-                      const badge = entryStatusBadge(inv, debitLineStatus);
-                      return (
-                        <li key={inv.id}>
-                          <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5 hover:bg-muted/50">
-                            <input
-                              type="checkbox"
-                              className="mt-1 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary"
-                              checked={checked}
-                              disabled={receiveSubmitting}
-                              onChange={() => toggleReceiveInvoice(inv.id)}
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span className="flex flex-wrap items-center gap-2">
-                                <span className="font-semibold text-foreground">{ref}</span>
-                                <span
-                                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${badge.className}`}
-                                >
-                                  {badge.label}
-                                </span>
-                              </span>
-                              <span className="mt-0.5 block text-xs text-muted-foreground">
-                                {new Date(inv.created_at).toLocaleDateString(undefined, {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric',
-                                })}
-                                {' · '}
-                                Due {CURRENCY} {formatMoney(due)}
-                              </span>
-                            </span>
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
                 </div>
-              )}
+
+                <div className="max-h-[330px] overflow-y-auto px-4 py-4">
+                  {receiveLedgerLoading ? (
+                    <p className="rounded-xl border border-border bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground">
+                      Loading invoices...
+                    </p>
+                  ) : receiveUnpaidInvoices.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                      No open invoices for this customer. You can still record an unallocated payment below.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      {sortedReceiveUnpaidInvoices.map((inv) => {
+                        const checked = receiveSelectedDebitIds.includes(inv.id);
+                        const ref = referenceLabel(inv);
+                        const due = debitRemaining(inv);
+                        return (
+                          <button
+                            key={inv.id}
+                            type="button"
+                            onClick={() => toggleReceiveInvoice(inv.id)}
+                            className={`rounded-2xl border p-4 text-left transition-all duration-200 ${
+                              checked
+                                ? 'border-red-400 bg-red-50/40 shadow-sm dark:border-red-500/70 dark:bg-red-950/20'
+                                : 'border-border bg-background hover:border-primary/40 hover:shadow-sm'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex min-w-0 items-start gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  readOnly
+                                  aria-label={`Select invoice ${ref}`}
+                                  className="mt-0.5 h-5 w-5 rounded border-border text-primary focus:ring-primary"
+                                />
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-semibold text-foreground">{ref}</div>
+                                  <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                    <CalendarDays className="h-3.5 w-3.5" />
+                                    {new Date(inv.created_at).toLocaleDateString(undefined, {
+                                      day: 'numeric',
+                                      month: 'short',
+                                      year: 'numeric',
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                              <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                Open
+                              </span>
+                            </div>
+                            <div className="mt-4 text-xs text-muted-foreground">Outstanding</div>
+                            <div className="text-2xl font-semibold leading-tight text-foreground">{CURRENCY} {formatMoney(due)}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-background p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
+                <div className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Payment Details</div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Deposit To (Chart of Account)</label>
+                    <select
+                      aria-label="Deposit to cash or bank account"
+                      value={receiveBankAccountId}
+                      onChange={(e) => setReceiveBankAccountId(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90"
+                      required
+                    >
+                      <option value="">Select cash or bank account</option>
+                      {depositAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                          {a.account_type ? ` (${a.account_type})` : ''}
+                          {a.chart_code ? ` · ${a.chart_code}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Amount ({CURRENCY})</label>
+                    <div className="flex overflow-hidden rounded-xl border border-gray-200 focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/30 dark:border-gray-600">
+                      <span className="flex items-center bg-muted px-3 text-xs font-semibold text-muted-foreground">{CURRENCY}</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={receiveAmount}
+                        onChange={(e) => setReceiveAmount(e.target.value)}
+                        className="w-full bg-background px-3 py-2.5 text-sm text-foreground outline-none dark:bg-gray-900/90"
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Amount is auto-calculated from selected invoices. You can edit it if needed.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Note (Optional)</label>
+                    <input
+                      type="text"
+                      value={receiveNote}
+                      onChange={(e) => setReceiveNote(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 bg-background px-3 py-2.5 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90"
+                      placeholder="e.g. Cash received"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 lg:col-span-3">
+              <div className="rounded-2xl border border-border bg-background p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] lg:sticky lg:top-0">
+                <div className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Payment Summary</div>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Total Outstanding</span>
+                    <span className="font-semibold text-foreground">{CURRENCY} {formatMoney(receiveTotalOutstanding)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Selected Invoices ({receiveSelectedDebitIds.length})</span>
+                    <span className="font-semibold text-foreground">{CURRENCY} {formatMoney(receiveSelectedInvoicesTotal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-y border-border py-2 transition-opacity duration-200">
+                    <span className="text-muted-foreground">Receiving</span>
+                    <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {CURRENCY} {formatMoney(receiveEnteredAmount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between transition-opacity duration-200">
+                    <span className="text-muted-foreground">Remaining Balance</span>
+                    <span className="text-xl font-bold text-orange-500">{CURRENCY} {formatMoney(receiveRemainingBalance)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 shadow-[0_4px_20px_rgba(0,0,0,0.04)] dark:border-amber-900/60 dark:bg-amber-950/20">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-full bg-amber-100 p-2 text-amber-600 dark:bg-amber-900/50 dark:text-amber-300">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-foreground">Auto Match</div>
+                    <p className="mt-1 text-xs text-muted-foreground">Set amount to match selected invoices</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (receiveSelectedInvoicesTotal > PAID_EPS) {
+                          setReceiveAmount(receiveSelectedInvoicesTotal.toFixed(2));
+                        }
+                      }}
+                      className="mt-3 rounded-lg border border-amber-300 bg-background px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/40"
+                    >
+                      Match Amount
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-background p-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Payment Account</div>
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <Landmark className="h-4 w-4 text-muted-foreground" />
+                  {depositAccounts.find((a) => a.id === receiveBankAccountId)?.name || 'Select account'}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-background p-4 text-xs text-muted-foreground shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
+                You are about to record a payment. Please review the details before confirming.
+              </div>
+            </div>
+          </div>
+
+          {receivePaymentDescriptionPreview && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-xs dark:border-emerald-900 dark:bg-emerald-950/40">
+              <div className="font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                Payment description (saved on record)
+              </div>
+              <p className="mt-1 leading-relaxed text-emerald-900 dark:text-emerald-100">{receivePaymentDescriptionPreview}</p>
             </div>
           )}
 
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Deposit to (chart-linked account)
-            </label>
-            <select
-              aria-label="Deposit to cash or bank account"
-              value={receiveBankAccountId}
-              onChange={(e) => setReceiveBankAccountId(e.target.value)}
-              className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none transition-colors focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90"
-              required
-            >
-              <option value="">Select cash or bank account</option>
-              {depositAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                  {a.account_type ? ` (${a.account_type})` : ''}
-                  {a.chart_code ? ` · ${a.chart_code}` : ''}
-                </option>
-              ))}
-            </select>
-            {depositAccounts.length === 0 && (
-              <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-                No chart-linked cash/bank accounts found. Add one under shop bank accounts with a chart of accounts link.
-              </p>
-            )}
-          </div>
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Amount ({CURRENCY})
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={receiveAmount}
-              onChange={(e) => setReceiveAmount(e.target.value)}
-              className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90 dark:placeholder:text-gray-500"
-              placeholder="0.00"
-              required
-            />
-            {receiveSelectedDebitIds.length > 0 && (
-              <p className="mt-1.5 text-[11px] text-muted-foreground">
-                Selected invoices total {CURRENCY} {formatMoney(receiveSelectedInvoicesTotal)}. Payment is applied
-                oldest-first; you can pay less for partial settlement. Clear selection to record an unallocated payment.
-              </p>
-            )}
-            {receiveSelectedDebitIds.length > 0 &&
-              receivePaymentAllocations.length > 0 &&
-              receiveSelectedInvoicesTotal > parseFloat(receiveAmount || '0') + PAID_EPS && (
-                <p className="mt-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-300">
-                  Partial payment:{' '}
-                  {receivePaymentAllocations
-                    .map((a) => {
-                      const inv = receiveUnpaidInvoices.find((e) => e.id === a.debitLedgerId);
-                      const ref = inv ? referenceLabel(inv) : a.debitLedgerId.slice(0, 8);
-                      const due = inv ? debitRemaining(inv) : a.amount;
-                      const partial = a.amount < due - PAID_EPS;
-                      return `${ref} ${CURRENCY} ${formatMoney(a.amount)}${partial ? ' (partial)' : ''}`;
-                    })
-                    .join(' · ')}
-                </p>
-              )}
-          </div>
-          {receivePaymentDescriptionPreview && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5 dark:border-emerald-900 dark:bg-emerald-950/40">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                Payment description (saved on record)
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-emerald-900 dark:text-emerald-100">
-                {receivePaymentDescriptionPreview}
-              </p>
-            </div>
-          )}
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-muted-foreground">Note (optional)</label>
-            <input
-              type="text"
-              value={receiveNote}
-              onChange={(e) => setReceiveNote(e.target.value)}
-              className="w-full rounded-md border border-gray-200 bg-background px-4 py-3 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary-500 focus:ring-2 focus:ring-primary-500/30 dark:border-gray-600 dark:bg-gray-900/90 dark:placeholder:text-gray-500"
-              placeholder="e.g. Cash received"
-            />
-          </div>
-          <div className="flex gap-3 pt-2">
+          <div className="hidden items-center gap-3 pt-1 md:flex">
             <button
               type="button"
               onClick={() => {
@@ -1719,7 +2168,7 @@ const KhataPage: React.FC = () => {
                 resetReceiveModalForm();
               }}
               disabled={receiveSubmitting}
-              className="flex-1 rounded-xl border-2 border-border py-3 font-bold text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50 dark:border-slate-600"
+              className="rounded-2xl border border-border px-8 py-4 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
             >
               Cancel
             </button>
@@ -1733,10 +2182,52 @@ const KhataPage: React.FC = () => {
                 !receiveAmount ||
                 parseFloat(receiveAmount) <= 0
               }
-              className="flex-1 rounded-xl bg-violet-600 py-3 font-bold text-white shadow-sm transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-violet-500"
+              className="ml-auto inline-flex min-h-14 min-w-[280px] items-center justify-center gap-3 rounded-[14px] bg-gradient-to-r from-red-500 to-orange-500 px-6 py-3 text-white shadow-[0_8px_24px_rgba(239,68,68,0.35)] transition-transform duration-100 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {receiveSubmitting ? 'Saving…' : 'Record payment'}
+              <Send className="h-4 w-4" />
+              <span className="text-left">
+                <span className="block text-sm font-bold">{receiveSubmitting ? 'Saving...' : 'Record Payment'}</span>
+                <span className="block text-xs opacity-90">{CURRENCY} {formatMoney(receiveEnteredAmount)}</span>
+              </span>
             </button>
+          </div>
+
+          <div className="sticky bottom-0 z-20 -mx-1 rounded-t-2xl border-t border-border bg-background/95 px-3 py-3 backdrop-blur md:hidden">
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Receiving</span>
+              <span className="font-bold text-emerald-600">{CURRENCY} {formatMoney(receiveEnteredAmount)}</span>
+            </div>
+            <div className="mb-3 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Remaining</span>
+              <span className="font-bold text-orange-500">{CURRENCY} {formatMoney(receiveRemainingBalance)}</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setReceiveModalOpen(false);
+                  resetReceiveModalForm();
+                }}
+                disabled={receiveSubmitting}
+                className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold text-muted-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  receiveSubmitting ||
+                  !receiveCustomerId ||
+                  !receiveBankAccountId ||
+                  depositAccounts.length === 0 ||
+                  !receiveAmount ||
+                  parseFloat(receiveAmount) <= 0
+                }
+                className="flex-[1.4] rounded-xl bg-gradient-to-r from-red-500 to-orange-500 px-3 py-3 text-sm font-bold text-white shadow-[0_8px_24px_rgba(239,68,68,0.35)]"
+              >
+                {receiveSubmitting ? 'Saving...' : `Record · ${CURRENCY} ${formatMoney(receiveEnteredAmount)}`}
+              </button>
+            </div>
           </div>
         </form>
       </Modal>
@@ -1970,4 +2461,4 @@ const KhataPage: React.FC = () => {
   );
 };
 
-export default KhataPage;
+export default React.memo(AccountsReceivablePage);

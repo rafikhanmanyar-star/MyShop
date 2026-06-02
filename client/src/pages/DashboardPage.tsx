@@ -5,7 +5,7 @@ import { getDashboardCache, setDashboardCache, type DashboardStats } from '../se
 import { getTenantId } from '../services/posOfflineDb';
 import Card from '../components/ui/Card';
 import DailyReportSummaryPanel from '../components/shop/accounting/DailyReportSummaryPanel';
-import { CURRENCY, ICONS } from '../constants';
+import { CURRENCY } from '../constants';
 import {
   Package,
   ShoppingCart,
@@ -28,6 +28,7 @@ const DashboardCharts = lazy(() => import('../components/dashboard/DashboardChar
 
 type LowStockRow = { name: string; qty: string };
 type PendingOrderRow = { id: string; orderNumber: string; customer: string };
+type DashboardReportTab = 'daily' | 'weekly' | 'monthly';
 
 function mergeDailyTrend(
   raw: unknown,
@@ -89,6 +90,7 @@ export default function DashboardPage() {
   const [revenueBreakdown, setRevenueBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [chartsLoaded, setChartsLoaded] = useState(false);
   const [profit7d, setProfit7d] = useState<{ totalProfit: number; avgProfitPerDay: number } | null>(null);
+  const [activeReport, setActiveReport] = useState<DashboardReportTab>('daily');
 
   useEffect(() => {
     const gen = loadGenRef.current + 1;
@@ -214,7 +216,7 @@ export default function DashboardPage() {
     []
   );
 
-  const kpiCards = [
+  const weeklyKpiCards = [
     {
       label: 'Products',
       value: stats.totalProducts,
@@ -286,9 +288,42 @@ export default function DashboardPage() {
     },
   ];
 
+  const monthlyOverviewCards = [
+    {
+      label: 'Monthly gross revenue',
+      value: `${CURRENCY} ${stats.totalRevenue.toLocaleString()}`,
+      sub: 'Current month-to-date',
+    },
+    {
+      label: 'Monthly net sales',
+      value: `${CURRENCY} ${(stats.netRevenue ?? stats.totalRevenue).toLocaleString()}`,
+      sub: 'Current month-to-date',
+    },
+    {
+      label: 'Avg order value',
+      value: `${CURRENCY} ${stats.avgOrderValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
+      sub: 'Month-to-date average',
+    },
+    {
+      label: 'Monthly orders',
+      value: stats.totalSales.toLocaleString(),
+      sub: 'Total orders in current period',
+    },
+    {
+      label: 'Active customers',
+      value: stats.totalCustomers.toLocaleString(),
+      sub: 'Loyalty/customer base',
+    },
+    {
+      label: 'Mobile pending',
+      value: stats.mobileOrdersPending.toLocaleString(),
+      sub: 'Open mobile orders',
+    },
+  ];
+
   if (!ready) {
     return (
-      <div className="-mx-4 min-h-full bg-[#F8F9FA] px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:bg-background">
+      <div className="-mx-4 h-full min-h-0 bg-[#F8F9FA] px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:bg-background">
         <div className="space-y-8">
           <div className="h-8 w-48 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-700" />
           <div className="h-40 animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />
@@ -303,8 +338,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="-mx-4 min-h-full bg-[#F8F9FA] px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:bg-background">
-      <div className="space-y-8">
+    <div className="-mx-4 flex h-full min-h-0 flex-col overflow-hidden bg-[#F8F9FA] px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:bg-background">
+      <div className="shrink-0 space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-[#212529] dark:text-foreground">Dashboard</h1>
@@ -317,12 +352,6 @@ export default function DashboardPage() {
               <Calendar className="h-4 w-4 shrink-0 text-[#4A90E2]" strokeWidth={2} aria-hidden />
               <span className="tabular-nums">{todayLabel}</span>
             </span>
-            <Link
-              to="/accounting/reports/daily"
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-[#212529] shadow-sm transition-colors hover:border-[#4A90E2]/50 hover:text-[#4A90E2] dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:text-primary-400"
-            >
-              {ICONS.barChart} Daily report (full page)
-            </Link>
           </div>
         </div>
 
@@ -331,7 +360,37 @@ export default function DashboardPage() {
             Offline — showing cached data. Last updated: {new Date(cachedAt).toLocaleString()}
           </div>
         )}
+      </div>
 
+      <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-gray-200 bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card sm:p-4">
+        <div className="shrink-0 border-b border-gray-100 pb-3 dark:border-gray-700">
+          <div className="flex flex-wrap items-center gap-2">
+            {([
+              { id: 'daily', label: 'Daily report' },
+              { id: 'weekly', label: 'Weekly report' },
+              { id: 'monthly', label: 'Monthly report' },
+            ] as const).map((tab) => {
+              const active = activeReport === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveReport(tab.id)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-[#4A90E2]/15 text-[#1e4f82] dark:bg-[#4A90E2]/20 dark:text-[#9bc5f0]'
+                      : 'text-[#6C757D] hover:bg-gray-100 hover:text-[#212529] dark:text-muted-foreground dark:hover:bg-slate-800 dark:hover:text-foreground'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="custom-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+        {activeReport === 'daily' && (
         <section id="daily-report" className="scroll-mt-6 space-y-3" aria-labelledby="daily-report-heading">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <h2 id="daily-report-heading" className="text-lg font-semibold text-[#212529] dark:text-foreground">
@@ -345,19 +404,21 @@ export default function DashboardPage() {
             <DailyReportSummaryPanel />
           </div>
         </section>
+        )}
 
+        {activeReport === 'weekly' && (
         <section id="business-overview" className="scroll-mt-6 space-y-4" aria-labelledby="overview-heading">
           <div>
             <h2 id="overview-heading" className="text-lg font-semibold text-[#212529] dark:text-foreground">
-              Business overview
+              Weekly report
             </h2>
             <p className="mt-0.5 text-sm text-[#6C757D] dark:text-muted-foreground">
-              Overall stats (catalog, sales, loyalty), 7-day revenue trend, category mix, and operational alerts.
+              Weekly KPIs and charts with operational alerts.
             </p>
           </div>
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-          {kpiCards.map((card) => (
+          {weeklyKpiCards.map((card) => (
             <div
               key={card.label}
               className="relative overflow-hidden rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none"
@@ -485,6 +546,61 @@ export default function DashboardPage() {
           </Card>
         </div>
         </section>
+        )}
+
+        {activeReport === 'monthly' && (
+          <section id="monthly-overview" className="scroll-mt-6 space-y-4" aria-labelledby="monthly-overview-heading">
+            <div>
+              <h2 id="monthly-overview-heading" className="text-lg font-semibold text-[#212529] dark:text-foreground">
+                Monthly business overview
+              </h2>
+              <p className="mt-0.5 text-sm text-[#6C757D] dark:text-muted-foreground">
+                Month-to-date business snapshot across revenue, orders, customers, and profitability.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {monthlyOverviewCards.map((card) => (
+                <div
+                  key={card.label}
+                  className="rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none"
+                >
+                  <p className="text-xs font-medium text-[#6C757D] dark:text-muted-foreground">{card.label}</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums text-[#212529] dark:text-foreground">{card.value}</p>
+                  <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none">
+                <h3 className="text-sm font-semibold text-[#212529] dark:text-foreground">Revenue trend</h3>
+                <p className="mt-1 text-xs text-[#6C757D] dark:text-muted-foreground">
+                  Trend and category charts are shared from the existing dashboard analytics.
+                </p>
+                <div className="mt-3">
+                  <Suspense
+                    fallback={<div className="h-[260px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+                  >
+                    <DashboardCharts
+                      chartsLoaded={chartsLoaded}
+                      cachedAt={cachedAt}
+                      salesTrend={salesTrend}
+                      revenueBreakdown={revenueBreakdown}
+                    />
+                  </Suspense>
+                </div>
+              </div>
+              <div className="rounded-[10px] border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/25">
+                <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">Monthly profitability</h3>
+                <p className="mt-2 text-sm text-emerald-900/90 dark:text-emerald-300/90">
+                  {profit7d
+                    ? `${CURRENCY} ${profit7d.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 2 })} recent profit benchmark`
+                    : 'Profit benchmark is loading from current report data.'}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+        </div>
       </div>
     </div>
   );

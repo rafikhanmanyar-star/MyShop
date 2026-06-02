@@ -442,6 +442,7 @@ function AppLayout() {
   const { pathname } = useLocation();
   const isPosRoute = pathname === '/pos';
   const isOrderCenterRoute = pathname === '/order-center' || pathname === '/mobile-orders' || pathname === '/voice-orders';
+  const isMainDashboardRoute = pathname === '/';
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const role = user?.role || 'pos_cashier';
@@ -487,7 +488,7 @@ function AppLayout() {
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
         {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onLogout={() => { logout(); navigate('/'); }} />}
         <main className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden transition-all duration-300 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
-          <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isOrderCenterRoute ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
+          <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isOrderCenterRoute || isMainDashboardRoute ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
           {!posFullScreen && !isPosRoute && <AppHeader />}
           <OfflineBanner />
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
