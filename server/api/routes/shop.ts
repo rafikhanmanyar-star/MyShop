@@ -357,7 +357,8 @@ router.get('/products', async (req: any, res) => {
   } catch (error: any) {
     console.error('❌ Error fetching products:', error);
     try {
-      fs.appendFileSync('f:/AntiGravity projects/MyShop/server/server_errors.log', '\\nERROR:\\n' + error.stack + '\\n');
+      const logPath = path.resolve(process.cwd(), 'server_errors.log');
+      fs.appendFileSync(logPath, '\nERROR:\n' + error.stack + '\n');
     } catch (e) { }
 
     // Return structured error as per prompt instruction

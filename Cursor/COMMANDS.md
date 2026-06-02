@@ -330,6 +330,22 @@ If Play Console shows **Incomplete advertising ID declaration**, complete the fo
 
 The app uses Firebase Analytics, Crashlytics, and FCM — not AdMob or third-party ad SDKs. In-app promo banners come from your API, not the advertising ID.
 
+### Rejection: “Organization account required” (Play Console Requirements)
+
+If Play rejects a release with *Some types of apps can only be distributed by organizations*, the cause is almost always **App content declarations** or **store category** — not a bug in the AAB.
+
+**OBO Stores is a grocery app.** Checkout options (COD, Easypaisa/JazzCash as payment *instructions*, budget/menu planner) are **not** banking or medical services.
+
+**Fix in Play Console (try before converting the developer account):**
+
+1. **Policy and programs** → **App content**
+2. **Financial features** → **My app doesn’t provide any financial features** (do not select “Mobile payments and digital wallets” for COD / shop-shared payment details only).
+3. **Health apps** → **My app doesn’t provide any health features** (menu planner / recipes are shopping helpers, not medical apps).
+4. **Main store listing** → category **Shopping** or **Food & Drink**, not Finance or Medical.
+5. Resubmit the release for review (new AAB usually **not** required).
+
+Full checklist: `docs/PLAY_STORE_ORGANIZATION_REJECTION.md`. If Google still requires an organization after accurate declarations, upgrade to an **Organization** developer account and [transfer the app](https://support.google.com/googleplay/android-developer/answer/6230247).
+
 ---
 
 ## 10. Installable desktop app (Windows)

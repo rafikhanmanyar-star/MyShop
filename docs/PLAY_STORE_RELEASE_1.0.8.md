@@ -35,7 +35,7 @@ Welcome to OBO Stores on Android!
 
 • Order groceries, snacks, drinks, dairy, frozen items, and household essentials from FMC B-17 Kohsar Plaza
 • Fast delivery across B-17 Islamabad with live order tracking
-• Secure checkout — cash on delivery, Easypaisa, JazzCash, and more
+• Checkout — cash on delivery, pickup, or pay before delivery (shop shares Easypaisa/JazzCash/bank details with you)
 • Save your delivery address with GPS or map pin
 • Budget planner, weekly menu planner, recipes, and shopping lists
 • Order updates via push notifications (optional)

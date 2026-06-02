@@ -837,9 +837,14 @@ const KhataPage: React.FC = () => {
         });
         openWhatsAppTextMessage(msg, payPhone ?? undefined);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Receive payment failed', err);
-      alert('Failed to record payment. Please try again.');
+      const apiErr = err as { message?: string; error?: string };
+      const msg =
+        apiErr?.message?.trim() ||
+        apiErr?.error?.trim() ||
+        'Failed to record payment. Please try again.';
+      alert(msg);
     } finally {
       setReceiveSubmitting(false);
     }
