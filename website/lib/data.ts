@@ -23,8 +23,8 @@ export const siteConfig = {
   region: 'Islamabad Capital Territory',
   postalCode: '44000',
   countryCode: 'PK',
-  phone: '+92 330 9089380',
-  phoneE164: '+923309089380',
+  phone: '+92 341 9493062',
+  phoneE164: '+923419493062',
   email: 'support@obostore.com',
   promoCode: 'OBOFIRST',
   themeColor: '#1F7A63',
@@ -133,28 +133,28 @@ export const topFeatures = [
 
 export const utilities = [
   {
+    id: 'budget-planner',
     title: 'Budget Planner',
     description: 'Set monthly grocery budgets and track spending smartly.',
+    imageKey: 'budgetPlanner',
   },
   {
+    id: 'menu-planner',
     title: 'Weekly Menu Planner',
     description: 'Plan meals for the week and build your shopping list.',
+    imageKey: 'weeklyMenuPlanner',
   },
   {
-    title: 'Grocery Reminders',
-    description: 'Never forget essentials with smart reminder alerts.',
-  },
-  {
+    id: 'smart-recipes',
     title: 'Smart Recipes',
     description: 'Browse recipes and add ingredients to cart instantly.',
+    imageKey: 'smartRecipes',
   },
   {
-    title: 'Family Shared Cart',
-    description: 'Share and manage a family cart together in one app.',
-  },
-  {
+    id: 'shopping-planning',
     title: 'Shopping Planning',
     description: 'Plan ahead with organized lists and scheduled orders.',
+    imageKey: 'shoppingPlanning',
   },
 ] as const;
 
@@ -272,9 +272,7 @@ export const footerQuickLinks = [
 export const footerUtilityLinks = [
   { label: 'Budget Planner', href: '/utilities#budget-planner' },
   { label: 'Weekly Menu Planner', href: '/utilities#menu-planner' },
-  { label: 'Grocery Reminders', href: '/utilities#grocery-reminders' },
   { label: 'Smart Recipes', href: '/utilities#smart-recipes' },
-  { label: 'Family Shared Cart', href: '/utilities#family-cart' },
   { label: 'Shopping Planning', href: '/utilities#shopping-planning' },
 ] as const;
 

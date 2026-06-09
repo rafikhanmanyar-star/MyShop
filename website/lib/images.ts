@@ -36,6 +36,24 @@ export const siteImages = {
     width: 480,
     height: 320,
   },
+  weeklyMenuPlanner: {
+    src: '/images/weekly-menu-planner.webp',
+    alt: 'oBo Store weekly menu planner for meal planning',
+    width: 480,
+    height: 320,
+  },
+  smartRecipes: {
+    src: '/images/smart-recipes.webp',
+    alt: 'oBo Store smart recipes with add-to-cart ingredients',
+    width: 480,
+    height: 320,
+  },
+  shoppingPlanning: {
+    src: '/images/shopping-planning.webp',
+    alt: 'oBo Store shopping planning list and scheduled orders',
+    width: 480,
+    height: 320,
+  },
   pwaInstall: {
     src: '/images/pwa-install.webp',
     alt: 'Install oBo Store grocery delivery app on your phone',

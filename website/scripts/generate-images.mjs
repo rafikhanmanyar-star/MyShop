@@ -107,6 +107,74 @@ function budgetSvg() {
 </svg>`;
 }
 
+function weeklyMenuSvg() {
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const meals = [true, true, false, true, true, false, true];
+  const dayCells = days
+    .map((day, i) => {
+      const x = 80 + i * 112;
+      const dot = meals[i]
+        ? `<circle cx="${x + 28}" cy="300" r="14" fill="${brandGreen}"/>`
+        : `<circle cx="${x + 28}" cy="300" r="14" fill="rgba(255,255,255,0.12)"/>`;
+      return `<text x="${x}" y="250" fill="#94A3B8" font-family="Arial,sans-serif" font-size="22">${day}</text>${dot}`;
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">
+  <rect width="960" height="640" rx="24" fill="${dark}"/>
+  <text x="48" y="80" fill="#fff" font-family="Arial,sans-serif" font-size="36" font-weight="700">Weekly Menu Planner</text>
+  <rect x="48" y="120" width="864" height="280" rx="20" fill="rgba(255,255,255,0.08)"/>
+  <text x="80" y="180" fill="#94A3B8" font-family="Arial,sans-serif" font-size="24">This week</text>
+  <text x="80" y="230" fill="#fff" font-family="Arial,sans-serif" font-size="40" font-weight="700">Mar 3 — Mar 9</text>
+  ${dayCells}
+  <text x="80" y="450" fill="#94A3B8" font-family="Arial,sans-serif" font-size="22">5 meals planned · Shopping list ready</text>
+</svg>`;
+}
+
+function smartRecipesSvg() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">
+  <rect width="960" height="640" rx="24" fill="${dark}"/>
+  <text x="48" y="80" fill="#fff" font-family="Arial,sans-serif" font-size="36" font-weight="700">Smart Recipes</text>
+  <rect x="48" y="120" width="400" height="220" rx="20" fill="rgba(255,255,255,0.08)"/>
+  <text x="80" y="180" fill="#fff" font-family="Arial,sans-serif" font-size="28" font-weight="700">Chicken Biryani</text>
+  <text x="80" y="220" fill="#94A3B8" font-family="Arial,sans-serif" font-size="22">6 ingredients · 45 min</text>
+  <rect x="80" y="260" width="160" height="48" rx="12" fill="${brand}"/>
+  <text x="108" y="292" fill="#fff" font-family="Arial,sans-serif" font-size="20" font-weight="700">Add to cart</text>
+  <rect x="512" y="120" width="400" height="220" rx="20" fill="rgba(255,255,255,0.08)"/>
+  <text x="544" y="180" fill="#fff" font-family="Arial,sans-serif" font-size="28" font-weight="700">Aloo Paratha</text>
+  <text x="544" y="220" fill="#94A3B8" font-family="Arial,sans-serif" font-size="22">4 ingredients · 25 min</text>
+  <rect x="544" y="260" width="160" height="48" rx="12" fill="${brand}"/>
+  <text x="572" y="292" fill="#fff" font-family="Arial,sans-serif" font-size="20" font-weight="700">Add to cart</text>
+  <text x="80" y="450" fill="#94A3B8" font-family="Arial,sans-serif" font-size="22">Browse recipes and shop ingredients in one tap</text>
+</svg>`;
+}
+
+function shoppingPlanningSvg() {
+  const items = [
+    { label: 'Fresh milk 1L', checked: true },
+    { label: 'Basmati rice 5kg', checked: true },
+    { label: 'Tomatoes 1kg', checked: true },
+    { label: 'Cooking oil 1L', checked: false },
+  ];
+  const rows = items
+    .map((item, i) => {
+      const y = 180 + i * 56;
+      const boxFill = item.checked ? brandGreen : 'rgba(255,255,255,0.12)';
+      const check = item.checked
+        ? `<path d="M ${88} ${y - 6} L ${96} ${y + 2} L ${112} ${y - 14}" stroke="#fff" stroke-width="4" fill="none"/>`
+        : '';
+      const textFill = item.checked ? '#94A3B8' : '#fff';
+      return `<rect x="72" y="${y - 24}" width="28" height="28" rx="8" fill="${boxFill}"/>${check}<text x="120" y="${y - 4}" fill="${textFill}" font-family="Arial,sans-serif" font-size="26">${item.label}</text>`;
+    })
+    .join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640">
+  <rect width="960" height="640" rx="24" fill="${dark}"/>
+  <text x="48" y="80" fill="#fff" font-family="Arial,sans-serif" font-size="36" font-weight="700">Shopping Planning</text>
+  <rect x="48" y="120" width="864" height="300" rx="20" fill="rgba(255,255,255,0.08)"/>
+  ${rows}
+  <text x="80" y="450" fill="#94A3B8" font-family="Arial,sans-serif" font-size="22">12 of 18 items · Ready to order</text>
+</svg>`;
+}
+
 function installSvg() {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="560" viewBox="0 0 640 560">
   <rect width="640" height="560" rx="24" fill="#fff"/>
@@ -131,6 +199,9 @@ const assets = [
   { file: 'store-fmc-b17.webp', svg: storefrontSvg('oBo Store · FMC B-17'), width: 1280, height: 800 },
   { file: 'household-delivery.webp', svg: deliverySvg(), width: 1280, height: 800 },
   { file: 'budget-planner.webp', svg: budgetSvg(), width: 960, height: 640 },
+  { file: 'weekly-menu-planner.webp', svg: weeklyMenuSvg(), width: 960, height: 640 },
+  { file: 'smart-recipes.webp', svg: smartRecipesSvg(), width: 960, height: 640 },
+  { file: 'shopping-planning.webp', svg: shoppingPlanningSvg(), width: 960, height: 640 },
   { file: 'pwa-install.webp', svg: installSvg(), width: 640, height: 560 },
   { file: 'shop-kohsar-plaza.webp', svg: storefrontSvg('Kohsar Plaza'), width: 1280, height: 800 },
 ];

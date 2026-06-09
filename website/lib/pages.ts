@@ -18,7 +18,7 @@ export const pageMeta = {
     path: '/utilities',
     title: 'Smart Grocery Utilities | oBo Store Islamabad',
     description:
-      'Plan smarter with oBo Store utilities: budget planner, weekly menu planner, grocery reminders, smart recipes, family shared cart, and shopping planning for B-17 Islamabad.',
+      'Plan smarter with oBo Store utilities: budget planner, weekly menu planner, smart recipes, and shopping planning for B-17 Islamabad.',
   },
   about: {
     path: '/about',
