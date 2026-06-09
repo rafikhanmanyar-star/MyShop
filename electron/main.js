@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -22,6 +22,31 @@ function sendUpdateStatus(...args) {
 }
 const PORT = 3001;
 const isDev = process.argv.includes('--dev');
+
+async function clearRendererCacheOnVersionChange() {
+  try {
+    const userDataDir = app.getPath('userData');
+    const markerFile = path.join(userDataDir, 'renderer-version.txt');
+    const currentVersion = app.getVersion();
+    let previousVersion = null;
+    if (fs.existsSync(markerFile)) {
+      previousVersion = (fs.readFileSync(markerFile, 'utf-8') || '').trim() || null;
+    }
+    if (previousVersion !== currentVersion) {
+      const ses = session.defaultSession;
+      if (ses) {
+        await ses.clearCache();
+        await ses.clearStorageData({
+          storages: ['serviceworkers', 'cachestorage'],
+        });
+      }
+      fs.writeFileSync(markerFile, currentVersion, 'utf-8');
+      console.log(`[Cache] Cleared renderer cache for app version ${currentVersion}`);
+    }
+  } catch (err) {
+    console.warn('[Cache] Failed to clear renderer cache on version change:', err);
+  }
+}
 
 function detectCloudMode() {
   if (process.argv.includes('--cloud')) return true;
@@ -346,6 +371,7 @@ app.whenReady().then(async () => {
         setTimeout(check, 500);
       });
     }
+    await clearRendererCacheOnVersionChange();
     createWindow();
     setupUpdaterIPC();
     if (autoUpdater && app.isPackaged) {

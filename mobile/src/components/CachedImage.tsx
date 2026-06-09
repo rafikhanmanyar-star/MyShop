@@ -23,6 +23,8 @@ interface CachedImageProps {
     onLoad?: React.ReactEventHandler<HTMLImageElement>;
     /** Fires when image, text fallback, or icon placeholder is shown. */
     onReady?: () => void;
+    /** Use local IndexedDB blob before network (home promo slides). */
+    preferCache?: boolean;
 }
 
 /** Renders an img that uses local cached blob when available, so images load offline. */
@@ -37,8 +39,9 @@ export default function CachedImage({
     fallbackClassName,
     onLoad,
     onReady,
+    preferCache,
 }: CachedImageProps) {
-    const src = useImageUrl(path);
+    const src = useImageUrl(path, { preferCache });
     const [error, setError] = useState(false);
 
     useEffect(() => {

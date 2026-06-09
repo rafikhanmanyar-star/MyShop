@@ -11,7 +11,9 @@ import OrderAcceptanceClosedLoginModal from '../components/OrderAcceptanceClosed
 import PermissionOnboardingModal from '../components/permissions/PermissionOnboardingModal';
 import { getShop, setShop } from '../services/offlineCache';
 import { syncCatalogForShop } from '../services/catalogSync';
-import type { TenantBranding, HomePromoSlide } from '../context/AppContext';
+import { prefetchHomePromoSlideImages } from '../services/homePromoImageCache';
+import type { TenantBranding } from '../context/AppContext';
+import { normalizeBrandingFromApi } from '../utils/branding';
 
 const DEFAULT_BRANDING: TenantBranding = {
     logo_url: null,
@@ -24,27 +26,6 @@ const DEFAULT_BRANDING: TenantBranding = {
     home_promo_slides: [],
     home_promo_interval_seconds: 5,
 };
-
-function normalizeBrandingFromApi(raw: unknown): TenantBranding | null {
-    if (!raw || typeof raw !== 'object') return null;
-    const b = { ...(raw as TenantBranding) };
-    let slides: unknown = (b as unknown as { home_promo_slides?: unknown }).home_promo_slides;
-    if (typeof slides === 'string') {
-        try {
-            slides = JSON.parse(slides);
-        } catch {
-            slides = [];
-        }
-    }
-    if (!Array.isArray(slides)) slides = [];
-    const intervalRaw = (b as { home_promo_interval_seconds?: unknown }).home_promo_interval_seconds;
-    const intervalSec = Number(intervalRaw);
-    const home_promo_interval_seconds =
-        Number.isFinite(intervalSec) && intervalSec >= 3 && intervalSec <= 30
-            ? Math.round(intervalSec)
-            : 5;
-    return { ...b, home_promo_slides: slides as HomePromoSlide[], home_promo_interval_seconds };
-}
 
 function applyBranding(shopData: { shop: { company_name?: string; name: string; brand_color?: string } }, brandingData: { primary_color?: string; secondary_color?: string; accent_color?: string } | null) {
     if (brandingData?.primary_color) {
@@ -112,6 +93,7 @@ export default function ShopLoader() {
                 });
                 setShop(shopSlug, { shop: shopData.shop, settings: shopData.settings, branding });
                 applyBranding(shopData, branding);
+                void prefetchHomePromoSlideImages(branding.home_promo_slides);
                 if (!isOffline) {
                     syncCatalogForShop(shopSlug).catch(() => {});
                 }
@@ -126,7 +108,9 @@ export default function ShopLoader() {
                         settings: cached.settings,
                         branding: normalizeBrandingFromApi(cached.branding) ?? DEFAULT_BRANDING,
                     });
-                    applyBranding({ shop: cached.shop }, normalizeBrandingFromApi(cached.branding) ?? DEFAULT_BRANDING);
+                    const cachedBranding = normalizeBrandingFromApi(cached.branding) ?? DEFAULT_BRANDING;
+                    applyBranding({ shop: cached.shop }, cachedBranding);
+                    void prefetchHomePromoSlideImages(cachedBranding.home_promo_slides);
                     if (!isOffline) {
                         syncCatalogForShop(shopSlug).catch(() => {});
                     }
@@ -136,33 +120,6 @@ export default function ShopLoader() {
             })
             .finally(() => setLoading(false));
     }, [shopSlug]);
-
-    /** Refresh branding (home promo carousel, colors) from API without reloading the whole shop. */
-    useEffect(() => {
-        if (!shopSlug || !state.shop || !state.settings) return;
-        const shop = state.shop;
-        const settings = state.settings;
-        let cancelled = false;
-        publicApi
-            .getBranding(shopSlug)
-            .then((brandingData) => {
-                if (cancelled) return;
-                const branding = normalizeBrandingFromApi(brandingData);
-                if (!branding) return;
-                dispatch({
-                    type: 'SET_SHOP',
-                    slug: shopSlug,
-                    shop,
-                    settings,
-                    branding,
-                });
-                setShop(shopSlug, { shop, settings, branding }).catch(() => {});
-            })
-            .catch(() => {});
-        return () => {
-            cancelled = true;
-        };
-    }, [shopSlug, state.shop, state.settings]);
 
     if (loading) {
         return (

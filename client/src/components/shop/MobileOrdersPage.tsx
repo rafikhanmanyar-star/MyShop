@@ -2536,6 +2536,13 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
     const MB_PRIMARY = '#004494';
     const MB_ACCENT = '#FF8C00';
 
+    const cardClass =
+        'rounded-xl border border-slate-200/90 bg-card p-3.5 sm:p-4 shadow-sm dark:border-slate-600 dark:bg-slate-900/90';
+    const fieldClass =
+        'w-full rounded-lg border border-slate-200 bg-[#F4F4F9] px-3 py-2 text-sm text-foreground outline-none focus:border-[#004494] focus:ring-2 focus:ring-[#004494]/20 dark:border-slate-600 dark:bg-slate-800/80';
+    const labelClass = 'block text-xs font-medium text-foreground mb-1';
+    const microLabelClass = 'block text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1';
+
     const shopUrlPrefix = (() => {
         if (!qrData?.url) return '';
         try {
@@ -2560,80 +2567,97 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
     const riderMode = localSettings?.rider_assignment_mode || 'auto';
 
     return (
-        <div className="w-full min-w-0 space-y-10 pb-2">
+        <div className="w-full min-w-0 space-y-5 pb-1">
             {onBack && (
-                <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-                    <ChevronRight className="w-4 h-4 rotate-180" />
+                <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    <ChevronRight className="w-3.5 h-3.5 rotate-180" />
                     Back
                 </button>
             )}
 
-            {/* —— Mobile Branding —— */}
-            <section>
-                <h2 className="text-2xl font-bold text-foreground tracking-tight text-balance">Mobile Branding</h2>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <h2 className="text-lg font-bold text-foreground tracking-tight">Mobile storefront</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">Branding, shop access, ordering rules, and SMS verification</p>
+                </div>
+                {localSettings && (
+                    <button
+                        type="button"
+                        className="flex items-center gap-2 shrink-0 rounded-lg border border-slate-200/90 bg-card px-3 py-1.5 dark:border-slate-600"
+                        onClick={() => setLocalSettings({ ...localSettings, is_enabled: !localSettings.is_enabled })}
+                        aria-pressed={localSettings.is_enabled}
+                        aria-label="Mobile ordering active"
+                    >
+                        <div className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${localSettings.is_enabled ? 'bg-[#004494]' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                            <span
+                                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${localSettings.is_enabled ? 'left-[1.35rem]' : 'left-0.5'}`}
+                            />
+                        </div>
+                        <span className="text-xs font-semibold text-foreground whitespace-nowrap">Ordering {localSettings.is_enabled ? 'on' : 'off'}</span>
+                    </button>
+                )}
+            </div>
 
-                <div className="mt-6 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-8 xl:gap-10">
-                    <div className="space-y-6 min-w-0">
-                        {/* Shop Access QR */}
-                        <div className="rounded-2xl border border-slate-200/90 bg-card p-5 shadow-sm dark:border-slate-600 dark:bg-slate-900/90">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_220px] gap-4">
+                <div className="space-y-3.5 min-w-0">
+                    <section className={cardClass}>
+                        <div className="flex items-center gap-2 mb-3">
+                            <ExternalLink className="w-4 h-4 text-[#004494] shrink-0" />
+                            <div>
+                                <h3 className="text-sm font-bold text-foreground">Shop access</h3>
+                                <p className="text-[11px] text-muted-foreground leading-snug">QR code, branch routing, and public shop URL</p>
+                            </div>
+                        </div>
                             {qrData ? (
-                                <div className="flex flex-col sm:flex-row gap-5 sm:items-center">
+                                <div className="flex flex-col sm:flex-row gap-3 sm:items-center mb-3 pb-3 border-b border-slate-200/80 dark:border-slate-700">
                                     <div className="flex flex-col items-center shrink-0">
-                                        <div ref={qrRef} className="bg-black rounded-xl p-3 shadow-inner">
+                                        <div ref={qrRef} className="bg-black rounded-lg p-2 shadow-inner">
                                             <QRCodeSVG
                                                 value={qrData.url}
-                                                size={140}
+                                                size={108}
                                                 level="H"
                                                 includeMargin={false}
                                                 bgColor="#FFFFFF"
                                                 fgColor="#0f172a"
                                             />
-                                            <p className="text-center text-[10px] font-extrabold tracking-[0.35em] text-white pt-2">SHOP</p>
+                                            <p className="text-center text-[9px] font-extrabold tracking-[0.3em] text-white pt-1">SHOP</p>
                                         </div>
                                     </div>
-                                    <div className="flex-1 min-w-0 flex flex-col justify-center gap-3">
-                                        <div>
-                                            <h3 className="text-lg font-bold text-foreground">Shop Access QR</h3>
-                                            <p className="text-sm text-muted-foreground mt-0.5">Instant customer access to your mobile shop.</p>
-                                        </div>
-                                        <div className="flex flex-wrap gap-3">
+                                    <div className="flex-1 min-w-0 flex flex-wrap gap-2 items-center">
                                             <button
                                                 type="button"
                                                 onClick={handlePrintSticker}
-                                                className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 min-w-[8rem] rounded-xl bg-[#004494] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#003a7a]"
+                                                className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#004494] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#003a7a]"
                                             >
-                                                <Printer className="w-4 h-4 shrink-0" />
-                                                Print Code
+                                                <Printer className="w-3.5 h-3.5 shrink-0" />
+                                                Print
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={handleCopyUrl}
-                                                className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 min-w-[8rem] rounded-xl border-2 border-[#004494] bg-card px-5 py-2.5 text-sm font-semibold text-[#004494] transition-colors hover:bg-[#004494]/5"
+                                                className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#004494] bg-card px-3.5 py-2 text-xs font-semibold text-[#004494] transition-colors hover:bg-[#004494]/5"
                                             >
-                                                {copied ? <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" /> : <Copy className="w-4 h-4 shrink-0" />}
+                                                {copied ? <CheckCircle className="w-3.5 h-3.5 shrink-0 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 shrink-0" />}
                                                 {copied ? 'Copied' : 'Copy URL'}
                                             </button>
-                                        </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex flex-col sm:flex-row gap-5 items-center justify-center py-8 text-center">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#004494] border-t-transparent" />
-                                    <p className="text-sm text-muted-foreground">Generating QR code…</p>
+                                <div className="flex items-center justify-center gap-2 py-4 mb-3 border-b border-slate-200/80 dark:border-slate-700">
+                                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-[#004494] border-t-transparent" />
+                                    <p className="text-xs text-muted-foreground">Generating QR code…</p>
                                 </div>
                             )}
-                        </div>
 
                         {localBranding ? (
-                            <>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="sm:col-span-2">
-                                        <label htmlFor="mobile-branding-branch" className="block text-sm font-medium text-foreground mb-1.5">Branch (QR &amp; orders)</label>
+                                        <label htmlFor="mobile-branding-branch" className={labelClass}>Branch (QR &amp; orders)</label>
                                         <select
                                             id="mobile-branding-branch"
                                             value={selectedBranchId}
                                             onChange={e => setSelectedBranchId(e.target.value)}
-                                            className="w-full rounded-xl border border-slate-200 bg-[#F4F4F9] px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-[#004494] focus:ring-2 focus:ring-[#004494]/20 dark:border-slate-600 dark:bg-slate-800/80"
+                                            className={fieldClass}
                                         >
                                             <option value="">Default (first branch)</option>
                                             {branches.map(b => (
@@ -2641,16 +2665,16 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                             ))}
                                         </select>
                                         {(localBranding.branch_name || localBranding.branch_location) && (
-                                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
                                                 {[localBranding.branch_name, localBranding.branch_location].filter(Boolean).join(' · ')}
                                             </p>
                                         )}
                                     </div>
                                     <div className="sm:col-span-2">
-                                        <label htmlFor="mobile-branding-shop-slug" className="block text-sm font-medium text-foreground mb-1.5">Shop URL</label>
-                                        <div className="flex rounded-xl border border-slate-200 bg-[#F4F4F9] overflow-hidden dark:border-slate-600 dark:bg-slate-800/80">
+                                        <label htmlFor="mobile-branding-shop-slug" className={labelClass}>Shop URL</label>
+                                        <div className="flex rounded-lg border border-slate-200 bg-[#F4F4F9] overflow-hidden dark:border-slate-600 dark:bg-slate-800/80">
                                             {shopUrlPrefix && (
-                                                <span className="shrink-0 px-3 py-2.5 text-sm text-muted-foreground border-r border-slate-200/80 dark:border-slate-600">
+                                                <span className="shrink-0 px-2.5 py-2 text-xs text-muted-foreground border-r border-slate-200/80 dark:border-slate-600">
                                                     {shopUrlPrefix}
                                                 </span>
                                             )}
@@ -2660,19 +2684,43 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                                 value={localBranding.slug || ''}
                                                 onChange={e => setLocalBranding({ ...localBranding, slug: e.target.value })}
                                                 placeholder="your-shop-slug"
-                                                className="flex-1 min-w-0 bg-transparent border-0 px-3 py-2.5 text-sm text-foreground outline-none font-mono"
+                                                className="flex-1 min-w-0 bg-transparent border-0 px-2.5 py-2 text-sm text-foreground outline-none font-mono"
                                             />
                                         </div>
-                                        <p className="text-xs text-muted-foreground mt-1">Orders from this link go to the selected branch&apos;s POS.</p>
+                                        <p className="text-[10px] text-muted-foreground mt-0.5">Orders from this link go to the selected branch&apos;s POS.</p>
+                                    </div>
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
+                                <RefreshCw className="w-4 h-4 animate-spin text-[#004494]" />
+                                <span className="text-xs">Loading branding…</span>
+                            </div>
+                        )}
+                    </section>
+
+                    {localBranding && (
+                        <>
+                            <section className={cardClass}>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Store className="w-4 h-4 text-[#004494] shrink-0" />
+                                    <div>
+                                        <h3 className="text-sm font-bold text-foreground">Brand identity</h3>
+                                        <p className="text-[11px] text-muted-foreground leading-snug">Logo and theme colors</p>
                                     </div>
                                 </div>
-
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-sm font-medium text-foreground mb-1.5">Logo Upload</label>
-                                    <div className="flex items-center gap-4 rounded-2xl border border-dashed border-slate-300 bg-[#F4F4F9] px-4 py-4 dark:border-slate-600 dark:bg-slate-800/50">
-                                        <CloudUpload className="w-8 h-8 shrink-0 text-[#004494]/80" />
+                                    <label className={labelClass}>Logo</label>
+                                    <div className="flex items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-[#F4F4F9] px-3 py-2.5 dark:border-slate-600 dark:bg-slate-800/50">
+                                        <div className="h-10 w-10 shrink-0 rounded-full bg-white border border-slate-200 overflow-hidden flex items-center justify-center dark:border-slate-600">
+                                            {localBranding.logo_url ? (
+                                                <img src={getFullImageUrl(localBranding.logo_url)} alt="" className="h-full w-full object-cover" />
+                                            ) : (
+                                                <CloudUpload className="w-4 h-4 text-[#004494]/80" />
+                                            )}
+                                        </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-foreground truncate">{logoFileLabel}</p>
+                                            <p className="text-xs font-medium text-foreground truncate">{logoFileLabel}</p>
                                             <input
                                                 type="file"
                                                 ref={fileInputRef}
@@ -2685,7 +2733,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                                 type="button"
                                                 onClick={() => fileInputRef.current?.click()}
                                                 disabled={uploading}
-                                                className="mt-0.5 text-sm font-semibold text-[#004494] hover:underline disabled:opacity-50"
+                                                className="text-xs font-semibold text-[#004494] hover:underline disabled:opacity-50"
                                             >
                                                 {uploading ? 'Uploading…' : 'Replace'}
                                             </button>
@@ -2693,53 +2741,10 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label htmlFor="mobile-branding-address" className="block text-sm font-medium text-foreground mb-1.5">Business Address</label>
-                                    <textarea
-                                        id="mobile-branding-address"
-                                        value={localBranding.address || ''}
-                                        onChange={e => setLocalBranding({ ...localBranding, address: e.target.value })}
-                                        placeholder="123 Precision Way, Suite 400..."
-                                        rows={2}
-                                        className="w-full rounded-2xl border border-slate-200 bg-[#F4F4F9] px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-[#004494] focus:ring-2 focus:ring-[#004494]/20 resize-y min-h-[3rem] dark:border-slate-600 dark:bg-slate-800/80"
-                                    />
-                                </div>
-
-                                <HomePromoAdsEditor
-                                    variant="panel"
-                                    value={{
-                                        home_promo_slides: localBranding.home_promo_slides,
-                                        home_promo_interval_seconds: localBranding.home_promo_interval_seconds,
-                                    }}
-                                    onChange={(patch) => setLocalBranding({ ...localBranding, ...patch })}
-                                />
-
-                                <details className="rounded-xl border border-slate-200/80 bg-muted/30 px-3 py-2 text-sm dark:border-slate-600">
-                                    <summary className="cursor-pointer font-medium text-muted-foreground">Map coordinates (optional)</summary>
-                                    <div className="grid grid-cols-2 gap-2 mt-3 pb-1">
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            value={localBranding.lat ?? ''}
-                                            onChange={e => setLocalBranding({ ...localBranding, lat: e.target.value ? parseFloat(e.target.value) : null })}
-                                            placeholder="Latitude"
-                                            className="rounded-lg border border-slate-200 bg-card px-2.5 py-2 text-xs font-mono dark:border-slate-600"
-                                        />
-                                        <input
-                                            type="number"
-                                            step="any"
-                                            value={localBranding.lng ?? ''}
-                                            onChange={e => setLocalBranding({ ...localBranding, lng: e.target.value ? parseFloat(e.target.value) : null })}
-                                            placeholder="Longitude"
-                                            className="rounded-lg border border-slate-200 bg-card px-2.5 py-2 text-xs font-mono dark:border-slate-600"
-                                        />
-                                    </div>
-                                </details>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-1">
+                                <div className="grid grid-cols-2 gap-2">
                                     <div>
-                                        <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Primary Color</label>
-                                        <div className="flex items-center gap-3">
+                                        <label className={microLabelClass}>Primary</label>
+                                        <div className="flex items-center gap-2">
                                             <input
                                                 type="color"
                                                 value={primaryHex}
@@ -2749,7 +2754,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                                     brand_color: e.target.value,
                                                     secondary_color: localBranding.secondary_color || e.target.value,
                                                 })}
-                                                className="h-10 w-10 shrink-0 cursor-pointer rounded-full border-2 border-white shadow-md p-0"
+                                                className="h-8 w-8 shrink-0 cursor-pointer rounded-full border-2 border-white shadow p-0"
                                                 aria-label="Primary color"
                                             />
                                             <input
@@ -2760,120 +2765,154 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                                     primary_color: e.target.value,
                                                     brand_color: e.target.value,
                                                 })}
-                                                className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-[#F4F4F9] px-3 py-2 text-sm font-mono uppercase dark:border-slate-600 dark:bg-slate-800/80"
+                                                className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-[#F4F4F9] px-2 py-1.5 text-xs font-mono uppercase dark:border-slate-600 dark:bg-slate-800/80"
                                                 aria-label="Primary color hex value"
                                             />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Accent Color</label>
-                                        <div className="flex items-center gap-3">
+                                        <label className={microLabelClass}>Accent</label>
+                                        <div className="flex items-center gap-2">
                                             <input
                                                 type="color"
                                                 value={accentHex}
                                                 onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
-                                                className="h-10 w-10 shrink-0 cursor-pointer rounded-full border-2 border-white shadow-md p-0"
+                                                className="h-8 w-8 shrink-0 cursor-pointer rounded-full border-2 border-white shadow p-0"
                                                 aria-label="Accent color"
                                             />
                                             <input
                                                 type="text"
                                                 value={accentHex}
                                                 onChange={e => setLocalBranding({ ...localBranding, accent_color: e.target.value })}
-                                                className="flex-1 min-w-0 rounded-xl border border-slate-200 bg-[#F4F4F9] px-3 py-2 text-sm font-mono uppercase dark:border-slate-600 dark:bg-slate-800/80"
+                                                className="flex-1 min-w-0 rounded-lg border border-slate-200 bg-[#F4F4F9] px-2 py-1.5 text-xs font-mono uppercase dark:border-slate-600 dark:bg-slate-800/80"
                                                 aria-label="Accent color hex value"
                                             />
                                         </div>
                                     </div>
                                 </div>
-                            </>
-                        ) : (
-                            <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                                <RefreshCw className="w-5 h-5 animate-spin text-[#004494]" />
-                                <span>Loading branding…</span>
-                            </div>
-                        )}
-                    </div>
+                                </div>
+                            </section>
 
-                    {/* Live Preview */}
-                    <div className="rounded-2xl border border-slate-200/90 bg-[#F4F4F9] p-5 shadow-sm dark:border-slate-600 dark:bg-slate-900/40 xl:sticky xl:top-4 h-fit">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-4">
-                            <Smartphone className="w-4 h-4 text-[#004494]" />
-                            Live Preview
-                        </div>
-                        <div
-                            className="mx-auto flex w-[260px] flex-col overflow-hidden rounded-[2rem] border-[10px] border-slate-800 bg-white shadow-xl dark:border-slate-700"
-                            style={{ minHeight: '420px' }}
-                        >
-                            <div
-                                className="flex shrink-0 flex-col items-center justify-center px-4 pt-8 pb-6"
-                                style={{ backgroundColor: primaryHex }}
-                            >
-                                <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-white shadow-md ring-4 ring-white/30 overflow-hidden">
-                                    {localBranding?.logo_url ? (
-                                        <img src={getFullImageUrl(localBranding.logo_url)} alt="" className="h-full w-full object-cover" />
-                                    ) : (
-                                        <Store className="w-9 h-9 text-slate-400" />
-                                    )}
-                                </div>
-                            </div>
-                            <div className="flex flex-1 flex-col gap-3 bg-white px-4 pb-6 pt-4">
-                                <div className="h-2.5 w-3/4 rounded-full bg-slate-200" />
-                                <div className="h-2.5 w-1/2 rounded-full bg-slate-100" />
-                                <div className="mt-2 space-y-2">
-                                    <div className="h-16 rounded-xl bg-slate-100" />
-                                    <div className="h-16 rounded-xl bg-slate-100" />
-                                </div>
-                                <div className="mt-auto pt-6">
-                                    <div
-                                        className="w-full rounded-2xl py-3.5 text-center text-sm font-bold text-white shadow-md"
-                                        style={{ backgroundColor: accentHex }}
-                                    >
-                                        Check Out
+                            <section className={cardClass}>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <MapPin className="w-4 h-4 text-[#004494] shrink-0" />
+                                    <div>
+                                        <h3 className="text-sm font-bold text-foreground">Location</h3>
+                                        <p className="text-[11px] text-muted-foreground leading-snug">Address and optional map coordinates</p>
                                     </div>
                                 </div>
+                                <div className="space-y-2.5">
+                                    <div>
+                                        <label htmlFor="mobile-branding-address" className={labelClass}>Business address</label>
+                                        <textarea
+                                            id="mobile-branding-address"
+                                            value={localBranding.address || ''}
+                                            onChange={e => setLocalBranding({ ...localBranding, address: e.target.value })}
+                                            placeholder="123 Precision Way, Suite 400..."
+                                            rows={2}
+                                            className={`${fieldClass} resize-y min-h-[2.5rem]`}
+                                        />
+                                    </div>
+                                    <details className="rounded-lg border border-slate-200/80 bg-muted/30 px-2.5 py-1.5 text-xs dark:border-slate-600">
+                                        <summary className="cursor-pointer font-medium text-muted-foreground">Map coordinates (optional)</summary>
+                                        <div className="grid grid-cols-2 gap-2 mt-2 pb-0.5">
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                value={localBranding.lat ?? ''}
+                                                onChange={e => setLocalBranding({ ...localBranding, lat: e.target.value ? parseFloat(e.target.value) : null })}
+                                                placeholder="Latitude"
+                                                className="rounded-lg border border-slate-200 bg-card px-2 py-1.5 text-xs font-mono dark:border-slate-600"
+                                            />
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                value={localBranding.lng ?? ''}
+                                                onChange={e => setLocalBranding({ ...localBranding, lng: e.target.value ? parseFloat(e.target.value) : null })}
+                                                placeholder="Longitude"
+                                                className="rounded-lg border border-slate-200 bg-card px-2 py-1.5 text-xs font-mono dark:border-slate-600"
+                                            />
+                                        </div>
+                                    </details>
+                                </div>
+                            </section>
+
+                            <HomePromoAdsEditor
+                                variant="panel"
+                                value={{
+                                    home_promo_slides: localBranding.home_promo_slides,
+                                    home_promo_interval_seconds: localBranding.home_promo_interval_seconds,
+                                }}
+                                onChange={(patch) => setLocalBranding({ ...localBranding, ...patch })}
+                            />
+                        </>
+                    )}
+                </div>
+
+                <aside className={`${cardClass} bg-[#F4F4F9] dark:bg-slate-900/40 xl:sticky xl:top-3 h-fit`}>
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-2.5">
+                        <Smartphone className="w-3.5 h-3.5 text-[#004494]" />
+                        Live preview
+                    </div>
+                    <div
+                        className="mx-auto flex w-[200px] flex-col overflow-hidden rounded-[1.5rem] border-[8px] border-slate-800 bg-white shadow-lg dark:border-slate-700"
+                        style={{ minHeight: '320px' }}
+                    >
+                        <div
+                            className="flex shrink-0 flex-col items-center justify-center px-3 pt-5 pb-4"
+                            style={{ backgroundColor: primaryHex }}
+                        >
+                            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-md ring-2 ring-white/30 overflow-hidden">
+                                {localBranding?.logo_url ? (
+                                    <img src={getFullImageUrl(localBranding.logo_url)} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                    <Store className="w-7 h-7 text-slate-400" />
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex flex-1 flex-col gap-2 bg-white px-3 pb-4 pt-3">
+                            <div className="h-2 w-3/4 rounded-full bg-slate-200" />
+                            <div className="h-2 w-1/2 rounded-full bg-slate-100" />
+                            <div className="mt-1 space-y-1.5">
+                                <div className="h-12 rounded-lg bg-slate-100" />
+                                <div className="h-12 rounded-lg bg-slate-100" />
+                            </div>
+                            <div className="mt-auto pt-3">
+                                <div
+                                    className="w-full rounded-xl py-2.5 text-center text-xs font-bold text-white shadow-md"
+                                    style={{ backgroundColor: accentHex }}
+                                >
+                                    Check Out
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </section>
+                </aside>
+            </div>
 
             {/* —— Ordering Parameters —— */}
             {localSettings && (
-                <section>
-                    <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="space-y-3.5">
+                    <div className="flex items-center gap-2">
+                        <Package className="w-4 h-4 text-[#004494] shrink-0" />
                         <div>
-                            <h2 className="text-2xl font-bold text-foreground tracking-tight">Ordering Parameters</h2>
-                            <p className="text-sm text-muted-foreground mt-1 max-w-xl">
-                                Configure fulfillment logic, fees, and operational windows for your mobile storefront.
-                            </p>
+                            <h3 className="text-sm font-bold text-foreground">Ordering &amp; fulfillment</h3>
+                            <p className="text-[11px] text-muted-foreground leading-snug">Fees, hours, rider dispatch, and pending-order rules</p>
                         </div>
-                        <button
-                            type="button"
-                            className="flex items-center gap-3 shrink-0"
-                            onClick={() => setLocalSettings({ ...localSettings, is_enabled: !localSettings.is_enabled })}
-                            aria-pressed={localSettings.is_enabled}
-                            aria-label="Mobile ordering active"
-                        >
-                            <div className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${localSettings.is_enabled ? 'bg-[#004494]' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                                <span
-                                    className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${localSettings.is_enabled ? 'left-7' : 'left-1'}`}
-                                />
-                            </div>
-                            <span className="text-sm font-semibold text-foreground whitespace-nowrap">Mobile Ordering Active</span>
-                        </button>
                     </div>
 
-                    <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="rounded-2xl bg-[#F4F4F9] p-5 sm:p-6 dark:bg-slate-800/40">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                        <div className={`${cardClass} bg-[#F4F4F9] dark:bg-slate-800/40 border-0`}>
+                            <h4 className="text-xs font-bold text-foreground mb-2.5">Fees &amp; timing</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                 <div>
-                                    <label htmlFor="mobile-order-min" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Minimum Order Value</label>
+                                    <label htmlFor="mobile-order-min" className={microLabelClass}>Minimum order</label>
                                     <input
                                         id="mobile-order-min"
                                         type="number"
                                         value={localSettings.minimum_order_amount ?? 0}
                                         onChange={e => setLocalSettings({ ...localSettings, minimum_order_amount: parseFloat(e.target.value) })}
-                                        className="w-full rounded-xl border-0 bg-white px-3.5 py-2.5 text-sm shadow-sm outline-none ring-1 ring-slate-200/80 focus:ring-2 focus:ring-[#004494] dark:bg-slate-900 dark:ring-slate-600"
+                                        className={`${fieldClass} bg-white dark:bg-slate-900`}
                                     />
                                 </div>
                                 <div>
@@ -2966,26 +3005,26 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                         </div>
 
                         <div
-                            className="rounded-2xl p-5 sm:p-6 text-white shadow-md"
+                            className="rounded-xl p-3.5 sm:p-4 text-white shadow-sm"
                             style={{ backgroundColor: MB_PRIMARY }}
                         >
-                            <div className="flex items-start gap-3">
-                                <Bike className="w-6 h-6 shrink-0 opacity-95" />
+                            <div className="flex items-center gap-2 mb-2.5">
+                                <Bike className="w-4 h-4 shrink-0 opacity-95" />
                                 <div>
-                                    <h3 className="text-lg font-bold">Rider Logistics</h3>
-                                    <p className="text-sm text-white/85 mt-0.5">Select how order assignments are handled for delivery.</p>
+                                    <h4 className="text-sm font-bold">Rider logistics</h4>
+                                    <p className="text-[11px] text-white/85 leading-snug">How delivery assignments are handled</p>
                                 </div>
                             </div>
 
-                            <div className="mt-5 space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 {([
-                                    { id: 'auto' as const, title: 'Automatic Dispatch', sub: 'Nearest available rider notified' },
-                                    { id: 'manual' as const, title: 'Manual Assignment', sub: 'Administrator assigns each trip' },
-                                    { id: 'third_party' as const, title: 'Third Party Only', sub: 'Redirect to external couriers' },
+                                    { id: 'auto' as const, title: 'Automatic', sub: 'Nearest rider notified' },
+                                    { id: 'manual' as const, title: 'Manual', sub: 'Admin assigns each trip' },
+                                    { id: 'third_party' as const, title: 'Third party', sub: 'External couriers' },
                                 ]).map(opt => (
                                     <label
                                         key={opt.id}
-                                        className={`flex cursor-pointer gap-3 rounded-xl border-2 px-4 py-3 transition-colors ${
+                                        className={`flex cursor-pointer gap-2 rounded-lg border px-3 py-2 transition-colors ${
                                             riderMode === opt.id
                                                 ? 'border-white bg-white/15 shadow-inner'
                                                 : 'border-transparent bg-white/10 hover:bg-white/15'
@@ -2994,13 +3033,13 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                                         <input
                                             type="radio"
                                             name="rider_mode_settings"
-                                            className="mt-1 h-4 w-4 shrink-0 border-white/50 text-white focus:ring-white/50"
+                                            className="mt-0.5 h-3.5 w-3.5 shrink-0 border-white/50 text-white focus:ring-white/50"
                                             checked={riderMode === opt.id}
                                             onChange={() => setLocalSettings({ ...localSettings, rider_assignment_mode: opt.id })}
                                         />
                                         <span>
-                                            <span className="block text-sm font-bold">{opt.title}</span>
-                                            <span className="block text-xs text-white/80 mt-0.5">{opt.sub}</span>
+                                            <span className="block text-xs font-bold">{opt.title}</span>
+                                            <span className="block text-[10px] text-white/80 mt-0.5 leading-snug">{opt.sub}</span>
                                         </span>
                                     </label>
                                 ))}
@@ -3008,32 +3047,32 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                         </div>
                     </div>
 
-                    <div className="mt-8 rounded-2xl border border-slate-200/90 bg-card p-5 sm:p-6 shadow-sm dark:border-slate-600 dark:bg-slate-900/50">
-                        <div className="flex flex-wrap items-start gap-3">
-                            <MessageSquare className="w-6 h-6 shrink-0 text-[#004494]" />
+                    <section className={cardClass}>
+                        <div className="flex flex-wrap items-start gap-2 mb-3">
+                            <MessageSquare className="w-4 h-4 shrink-0 text-[#004494]" />
                             <div className="min-w-0 flex-1">
-                                <h3 className="text-lg font-bold text-foreground">SMS signup verification (Twilio)</h3>
-                                <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-                                    Sends a one-time code when customers tap Register in the mobile app. Requires a Twilio account (trial works if recipient numbers are verified in Twilio).
+                                <h4 className="text-sm font-bold text-foreground">SMS signup verification (Twilio)</h4>
+                                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug max-w-3xl">
+                                    One-time code when customers register. Trial accounts must verify destination numbers in Twilio.
                                 </p>
                             </div>
                             <button
                                 type="button"
-                                className="flex items-center gap-3 shrink-0"
+                                className="flex items-center gap-2 shrink-0 rounded-lg border border-slate-200/90 px-2.5 py-1 dark:border-slate-600"
                                 onClick={() => setLocalSettings({ ...localSettings, signup_otp_enabled: !localSettings.signup_otp_enabled })}
                                 aria-pressed={!!localSettings.signup_otp_enabled}
                                 aria-label="Require SMS code for new registrations"
                             >
-                                <div className={`relative h-8 w-14 shrink-0 rounded-full transition-colors ${localSettings.signup_otp_enabled ? 'bg-[#004494]' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                <div className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${localSettings.signup_otp_enabled ? 'bg-[#004494]' : 'bg-slate-300 dark:bg-slate-600'}`}>
                                     <span
-                                        className={`absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${localSettings.signup_otp_enabled ? 'left-7' : 'left-1'}`}
+                                        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${localSettings.signup_otp_enabled ? 'left-[1.35rem]' : 'left-0.5'}`}
                                     />
                                 </div>
-                                <span className="text-sm font-semibold text-foreground whitespace-nowrap">Require OTP</span>
+                                <span className="text-xs font-semibold text-foreground whitespace-nowrap">Require OTP</span>
                             </button>
                         </div>
 
-                        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
                             <div>
                                 <label htmlFor="twilio-account-sid" className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Account SID</label>
                                 <input
@@ -3097,7 +3136,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                             </div>
                         </div>
 
-                        <p className="mt-4 text-xs text-muted-foreground leading-relaxed">
+                        <p className="mt-2.5 text-[10px] text-muted-foreground leading-snug">
                             OTP applies only when <strong className="font-semibold text-foreground">Require OTP</strong> is on and Account SID, Auth Token, and either Messaging Service SID or From number are set.
                             Trial accounts must{' '}
                             <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/verified" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#004494] hover:underline">
@@ -3105,16 +3144,16 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                             </a>{' '}
                             in Twilio before SMS delivers.
                         </p>
-                    </div>
-                </section>
+                    </section>
+                </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-end gap-4 border-t border-slate-200 pt-6 dark:border-slate-700">
+            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
                 <button
                     type="button"
                     onClick={handleDiscard}
                     disabled={saving}
-                    className="text-sm font-semibold text-slate-600 hover:text-foreground transition-colors disabled:opacity-50 dark:text-slate-400"
+                    className="text-xs font-semibold text-slate-600 hover:text-foreground transition-colors disabled:opacity-50 dark:text-slate-400"
                 >
                     Discard Changes
                 </button>
@@ -3122,7 +3161,7 @@ export function MobileSettingsPanel({ onBack }: { onBack?: () => void }) {
                     type="button"
                     onClick={handleSaveConfiguration}
                     disabled={saving || !localBranding || !localSettings}
-                    className="min-w-[200px] rounded-xl bg-[#004494] px-8 py-3 text-sm font-bold text-white shadow-md transition-colors hover:bg-[#003a7a] disabled:opacity-50"
+                    className="min-w-[160px] rounded-lg bg-[#004494] px-6 py-2.5 text-xs font-bold text-white shadow-md transition-colors hover:bg-[#003a7a] disabled:opacity-50"
                 >
                     {saving ? 'Saving…' : 'Save Configuration'}
                 </button>

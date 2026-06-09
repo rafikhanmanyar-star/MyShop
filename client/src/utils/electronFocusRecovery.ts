@@ -63,23 +63,9 @@ export function installElectronFocusRecovery(): () => void {
     if (input) input.focus({ preventScroll: true });
   };
 
-  const intervalId = window.setInterval(() => {
-    if (!document.hasFocus()) return;
-    const sel = document.getSelection();
-    if (sel && !sel.isCollapsed) return;
-
-    const ae = document.activeElement;
-    if (ae !== document.body && ae !== document.documentElement) return;
-    if (dev) console.warn('[focus] recover — document had no editable focus');
-    findFocusableInput()?.focus({ preventScroll: true });
-  }, 2000);
-
-  document.addEventListener('focusin', onFocusIn, true);
-  document.addEventListener('focusout', onFocusOut, true);
   window.addEventListener('click', onClick, true);
 
   return () => {
-    window.clearInterval(intervalId);
     document.removeEventListener('focusin', onFocusIn, true);
     document.removeEventListener('focusout', onFocusOut, true);
     window.removeEventListener('click', onClick, true);

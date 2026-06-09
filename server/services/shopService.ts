@@ -110,6 +110,10 @@ const inventorySkuListCache = new Map<string, { expiresAt: number; payload: unkn
 const INV_SKU_CACHE_TTL_MS = 25_000;
 const INV_SKU_CACHE_MAX_KEYS = 40;
 
+/** Short-lived cache for dashboard overview KPIs (expensive multi-table aggregate for large tenants). */
+const dashboardOverviewCache = new Map<string, { expiresAt: number; payload: unknown }>();
+const DASHBOARD_OVERVIEW_CACHE_TTL_MS = 60_000; // 60 s — dashboard stats are not real-time
+
 function touchInventorySkuCacheSize() {
   while (inventorySkuListCache.size > INV_SKU_CACHE_MAX_KEYS) {
     const first = inventorySkuListCache.keys().next().value;
@@ -980,6 +984,8 @@ export class ShopService {
       skipCache?: boolean;
       /** When set, only rows whose product or related inventory row changed after this ISO timestamp (for incremental sync). */
       updatedSince?: string;
+      /** POS catalog load: skip expensive per-product expiry aggregation. */
+      forPos?: boolean;
     } = {}
   ) {
     const t0 = Date.now();
@@ -989,6 +995,7 @@ export class ShopService {
     const searchRaw = (options.search ?? '').trim();
     const stockFilter = (options.stockFilter ?? 'all').toLowerCase();
     const skipCache = options.skipCache === true;
+    const forPos = options.forPos === true;
     const updatedSince =
       options.updatedSince && !Number.isNaN(Date.parse(options.updatedSince))
         ? options.updatedSince
@@ -1023,7 +1030,7 @@ export class ShopService {
     const orderExpr = INVENTORY_SKU_SORT_SQL[sortKey];
     const sortDirSql = options.sortDir === 'desc' ? 'DESC' : 'ASC';
 
-    const cacheKey = `${tenantId}:${page}:${limit}:${searchRaw}:${stockFilter}:${updatedSince || '—'}:${sortKey}:${sortDirSql}`;
+    const cacheKey = `${tenantId}:${page}:${limit}:${searchRaw}:${stockFilter}:${updatedSince || '—'}:${sortKey}:${sortDirSql}:${forPos ? 'pos' : 'full'}`;
     if (!skipCache && !updatedSince) {
       const hit = inventorySkuListCache.get(cacheKey);
       if (hit && hit.expiresAt > Date.now()) {
@@ -1067,6 +1074,30 @@ export class ShopService {
       p++;
     }
 
+    const includeExpiryAgg = !forPos || stockFilter === 'near_expiry';
+    const nearestExpiryCte = includeExpiryAgg
+      ? `,
+      nearest_expiry AS (
+        SELECT product_id,
+          MIN(expiry_date) FILTER (
+            WHERE expiry_date IS NOT NULL AND expiry_date >= CURRENT_DATE
+          ) AS nearest_expiry
+        FROM inventory_batches
+        WHERE tenant_id = $1 AND quantity_remaining > 0
+        GROUP BY product_id
+      )`
+      : '';
+    const filteredFrom = includeExpiryAgg
+      ? `SELECT pa.*, ne.nearest_expiry
+        FROM pa
+        LEFT JOIN nearest_expiry ne ON ne.product_id = pa.id
+        WHERE TRUE
+          ${stockClause}`
+      : `SELECT pa.*, NULL::date AS nearest_expiry
+        FROM pa
+        WHERE TRUE
+          ${stockClause}`;
+
     const sql = `
       WITH batch_sellable AS (
         SELECT tenant_id, product_id, warehouse_id,
@@ -1103,16 +1134,7 @@ export class ShopService {
         LEFT JOIN batch_wh bw
           ON bw.tenant_id = i.tenant_id AND bw.product_id = i.product_id AND bw.warehouse_id = i.warehouse_id
         WHERE i.tenant_id = $1
-      ),
-      nearest_expiry AS (
-        SELECT product_id,
-          MIN(expiry_date) FILTER (
-            WHERE expiry_date IS NOT NULL AND expiry_date >= CURRENT_DATE
-          ) AS nearest_expiry
-        FROM inventory_batches
-        WHERE tenant_id = $1 AND quantity_remaining > 0
-        GROUP BY product_id
-      ),
+      )${nearestExpiryCte},
       inv_agg AS (
         SELECT
           ie.product_id,
@@ -1174,11 +1196,7 @@ export class ShopService {
           ${searchClause}
       ),
       filtered AS (
-        SELECT pa.*, ne.nearest_expiry
-        FROM pa
-        LEFT JOIN nearest_expiry ne ON ne.product_id = pa.id
-        WHERE TRUE
-          ${stockClause}
+        ${filteredFrom}
       ),
       counted AS (
         SELECT f.*, COUNT(*) OVER ()::int AS __total
@@ -1588,6 +1606,7 @@ export class ShopService {
     notifyDailyReportUpdated(tenantId).catch(() => {});
     notifyDailyReportUpdated(tenantId, 'sale_created').catch(() => {});
     invalidateInventorySkuListCache(tenantId);
+    this.invalidateDashboardOverviewCache(tenantId);
 
     return result;
   }
@@ -1806,31 +1825,34 @@ export class ShopService {
    * Ensures every mobile_customers row has a matching loyalty + contact row (backfill for users who
    * registered without ordering or before auto-enrollment existed).
    */
-  async getLoyaltyMembers(tenantId: string) {
-    const needsEnrollment = await this.db.query(
-      `SELECT mc.phone, mc.name
-       FROM mobile_customers mc
-       WHERE mc.tenant_id = $1
-         AND NULLIF(trim(mc.phone), '') IS NOT NULL
-         AND NOT EXISTS (
-           SELECT 1
-           FROM shop_loyalty_members m
-           INNER JOIN contacts c ON c.id = m.customer_id AND c.tenant_id = mc.tenant_id
-           WHERE m.tenant_id = mc.tenant_id
-             AND regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
-             AND length(regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g')) > 0
-         )`,
-      [tenantId]
-    );
-    for (const row of needsEnrollment) {
-      try {
-        await this.ensureLoyaltyMemberForMobileUser(tenantId, {
-          phone: row.phone,
-          name: row.name || 'Customer',
-          email: null,
-        });
-      } catch {
-        // Best-effort; list still loads for other members
+  async getLoyaltyMembers(tenantId: string, options?: { skipEnrollmentBackfill?: boolean }) {
+    if (!options?.skipEnrollmentBackfill) {
+      const needsEnrollment = await this.db.query(
+        `SELECT mc.phone, mc.name
+         FROM mobile_customers mc
+         WHERE mc.tenant_id = $1
+           AND NULLIF(trim(mc.phone), '') IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1
+             FROM shop_loyalty_members m
+             INNER JOIN contacts c ON c.id = m.customer_id AND c.tenant_id = mc.tenant_id
+             WHERE m.tenant_id = mc.tenant_id
+               AND regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g') = regexp_replace(COALESCE(c.contact_no, ''), '[^0-9]', '', 'g')
+               AND length(regexp_replace(COALESCE(mc.phone, ''), '[^0-9]', '', 'g')) > 0
+           )
+         LIMIT 25`,
+        [tenantId]
+      );
+      for (const row of needsEnrollment) {
+        try {
+          await this.ensureLoyaltyMemberForMobileUser(tenantId, {
+            phone: row.phone,
+            name: row.name || 'Customer',
+            email: null,
+          });
+        } catch {
+          // Best-effort; list still loads for other members
+        }
       }
     }
 
@@ -2567,6 +2589,20 @@ export class ShopService {
     );
   }
 
+  /** Active staff sessions (non-expired user_sessions for active users). */
+  async getLoggedInUsers(tenantId: string): Promise<{ id: string; name: string; role: string }[]> {
+    return this.db.query<{ id: string; name: string; role: string }>(
+      `SELECT u.id, u.name, u.role
+       FROM user_sessions s
+       INNER JOIN users u ON u.id = s.user_id AND u.tenant_id = s.tenant_id
+       WHERE s.tenant_id = $1
+         AND s.expires_at > NOW()
+         AND u.is_active = TRUE
+       ORDER BY u.name ASC`,
+      [tenantId]
+    );
+  }
+
   async createUser(tenantId: string, data: any) {
     const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     const bcrypt = await import('bcryptjs');
@@ -3021,13 +3057,14 @@ export class ShopService {
       this.db.query(`SELECT * FROM shop_policies WHERE tenant_id = $1 LIMIT 1`, [tenantId]),
       this.getPosSettings(tenantId),
       this.getReceiptSettings(tenantId),
-      this.getLoyaltyMembers(tenantId),
+      this.getLoyaltyMembers(tenantId, { skipEnrollmentBackfill: true }),
     ]);
 
     const skuPack = await this.listInventorySkus(tenantId, {
       page: 1,
       limit: 10000,
       skipCache: true,
+      forPos: true,
     });
 
     return {
@@ -3047,13 +3084,19 @@ export class ShopService {
   }
 
   /** Incremental sync: changed rows since `since` ISO timestamp plus joined SKU rows for touched products/inventory. */
-  async getSyncChanges(tenantId: string, sinceRaw: string | undefined) {
+  async getSyncChanges(
+    tenantId: string,
+    sinceRaw: string | undefined,
+    options: { forPos?: boolean } = {}
+  ) {
     const since =
       sinceRaw && !Number.isNaN(Date.parse(sinceRaw))
         ? sinceRaw
         : new Date(0).toISOString();
     const serverTime = new Date().toISOString();
+    const forPos = options.forPos === true;
 
+    /** POS client only consumes skus_delta + mirror stores — skip duplicate product/inventory row arrays. */
     const [
       products,
       inventory,
@@ -3066,8 +3109,12 @@ export class ShopService {
       policies,
       posSettingsRows,
     ] = await Promise.all([
-      this.db.query(`SELECT * FROM shop_products WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
-      this.db.query(`SELECT * FROM shop_inventory WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      forPos
+        ? Promise.resolve([])
+        : this.db.query(`SELECT * FROM shop_products WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
+      forPos
+        ? Promise.resolve([])
+        : this.db.query(`SELECT * FROM shop_inventory WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
       this.db.query(`SELECT * FROM categories WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
       this.db.query(`SELECT * FROM shop_brands WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
       this.db.query(`SELECT * FROM contacts WHERE tenant_id = $1 AND updated_at > $2`, [tenantId, since]),
@@ -3083,6 +3130,7 @@ export class ShopService {
       limit: 10000,
       skipCache: true,
       updatedSince: since,
+      forPos,
     });
 
     return {
@@ -3115,6 +3163,22 @@ export class ShopService {
    * Aggregated dashboard KPIs + alert rows in one round-trip (replaces loading full product/sales/inventory lists on the client).
    */
   async getDashboardOverview(tenantId: string) {
+    const cacheKey = tenantId;
+    const hit = dashboardOverviewCache.get(cacheKey);
+    if (hit && hit.expiresAt > Date.now()) {
+      return hit.payload as Awaited<ReturnType<typeof this._computeDashboardOverview>>;
+    }
+    const result = await this._computeDashboardOverview(tenantId);
+    dashboardOverviewCache.set(cacheKey, { expiresAt: Date.now() + DASHBOARD_OVERVIEW_CACHE_TTL_MS, payload: result });
+    return result;
+  }
+
+  /** Bust the dashboard overview cache for a tenant (call after a sale is recorded). */
+  invalidateDashboardOverviewCache(tenantId: string) {
+    dashboardOverviewCache.delete(tenantId);
+  }
+
+  private async _computeDashboardOverview(tenantId: string) {
     const [statsRows, lowStockRows, pendingRows] = await Promise.all([
       this.db.query(
         `

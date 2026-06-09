@@ -25,6 +25,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$KeepReleaseCount = 10
 
 # -----------------------------------------------------------
 # Helper: Increment a semver string
@@ -59,6 +60,62 @@ function Update-PackageVersion {
     $updated = $content -replace '"version"\s*:\s*"[^"]*"', "`"version`": `"$NewVersion`""
     Set-Content -Path $FilePath -Value $updated -NoNewline
     Write-Host "  Updated $FilePath -> v$NewVersion" -ForegroundColor Cyan
+}
+
+# -----------------------------------------------------------
+# Helper: Stop desktop app processes that lock release\win-unpacked\resources\app.asar
+# -----------------------------------------------------------
+function Stop-MyShopDesktopProcesses {
+    foreach ($name in @('MyShop')) {
+        Get-Process -Name $name -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "  Stopping process: $($_.ProcessName) (pid $($_.Id))" -ForegroundColor DarkGray
+            Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Path -and $_.Path -like "*\MyShop\release\win-unpacked\*"
+    } | ForEach-Object {
+        Write-Host "  Stopping unpacked app: $($_.ProcessName) (pid $($_.Id))" -ForegroundColor DarkGray
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Seconds 1
+}
+
+function Clear-ReleaseWinUnpacked {
+    param([string]$Root)
+    $winUnpacked = Join-Path $Root 'release\win-unpacked'
+    if (-not (Test-Path $winUnpacked)) { return }
+    Stop-MyShopDesktopProcesses
+    try {
+        Remove-Item $winUnpacked -Recurse -Force -ErrorAction Stop
+        Write-Host "  Cleared release\win-unpacked" -ForegroundColor DarkGray
+    }
+    catch {
+        Write-Host "  release\win-unpacked is locked (MyShop may still be running); using an isolated build folder." -ForegroundColor DarkYellow
+    }
+}
+
+function Get-ReleaseBuildOutputDir {
+    param(
+        [string]$Root,
+        [string]$Version
+    )
+    return Join-Path $Root "release\build-$Version"
+}
+
+function Publish-ReleaseBuildArtifacts {
+    param(
+        [string]$BuildOutDir,
+        [string]$ReleaseDir
+    )
+    if (-not (Test-Path $BuildOutDir)) { return }
+    foreach ($pattern in @('MyShop-Setup-*.exe', 'latest.yml', 'MyShop-Setup-*.exe.blockmap')) {
+        Get-ChildItem -Path $BuildOutDir -Filter $pattern -ErrorAction SilentlyContinue | ForEach-Object {
+            $dest = Join-Path $ReleaseDir $_.Name
+            Copy-Item -Path $_.FullName -Destination $dest -Force
+            Write-Host "  Published $($_.Name) -> release\" -ForegroundColor DarkGray
+        }
+    }
 }
 
 # ============================================================
@@ -106,9 +163,18 @@ try {
     # Package with electron-builder (client-only config; no embedded server)
     # Disable code signing so winCodeSign is not used (avoids Windows symlink errors when not in Developer Mode / Admin)
     $env:CSC_IDENTITY_AUTO_DISCOVERY = "false"
-    Write-Host "  Packaging with electron-builder..." -ForegroundColor Cyan
-    npx electron-builder --win -c electron-builder.cloud.json "-c.extraMetadata.version=$newVersion"
+    Write-Host "  Preparing release folder (stop MyShop if running)..." -ForegroundColor Cyan
+    Clear-ReleaseWinUnpacked -Root $ProjectRoot
+    $buildOutDir = Get-ReleaseBuildOutputDir -Root $ProjectRoot -Version $newVersion
+    $buildOutRelative = "release/build-$newVersion"
+    if (Test-Path $buildOutDir) {
+        Remove-Item $buildOutDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    New-Item -ItemType Directory -Path $buildOutDir -Force | Out-Null
+    Write-Host "  Packaging with electron-builder -> $buildOutRelative..." -ForegroundColor Cyan
+    npx electron-builder --win -c electron-builder.cloud.json "-c.directories.output=$buildOutRelative" "-c.extraMetadata.version=$newVersion"
     if ($LASTEXITCODE -ne 0) { throw "Electron build failed!" }
+    Publish-ReleaseBuildArtifacts -BuildOutDir $buildOutDir -ReleaseDir "$ProjectRoot\release"
 
     Write-Host "  Build complete! Installer is in ./release/" -ForegroundColor Green
 }
@@ -170,6 +236,10 @@ Write-Host "[4/5] Pushing to GitHub..." -ForegroundColor Yellow
 
 Push-Location $ProjectRoot
 try {
+    git fetch origin
+    if ($LASTEXITCODE -ne 0) { throw "Git fetch failed!" }
+    git pull --rebase origin main
+    if ($LASTEXITCODE -ne 0) { throw "Git pull --rebase failed! Resolve conflicts, then run npm run release again." }
     git push origin
     if ($LASTEXITCODE -ne 0) { throw "Git push failed!" }
     Write-Host "  Pushed to GitHub successfully!" -ForegroundColor Green
@@ -251,13 +321,13 @@ if (-not $SkipRelease) {
         Write-Host "  https://github.com/rafikhanmanyar-star/MyShop/releases" -ForegroundColor Green
         Write-Host "  Users can now use Settings -> App -> Check for updates." -ForegroundColor Green
 
-        # Prune old GitHub releases: keep only the latest 3
-        Write-Host "  Pruning old GitHub releases (keeping latest 3)..." -ForegroundColor Cyan
+        # Prune old GitHub releases: keep only the latest $KeepReleaseCount
+        Write-Host "  Pruning old GitHub releases (keeping latest $KeepReleaseCount)..." -ForegroundColor Cyan
         $releasesJson = gh release list --json tagName,publishedAt --limit 100 2>$null
         if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($releasesJson)) {
             $releases = $releasesJson | ConvertFrom-Json
             $sorted = $releases | Sort-Object { [datetime]::Parse($_.publishedAt) } -Descending
-            $toDelete = $sorted | Select-Object -Skip 3
+            $toDelete = $sorted | Select-Object -Skip $KeepReleaseCount
             foreach ($r in $toDelete) {
                 gh release delete $r.tagName --yes 2>$null
                 if ($LASTEXITCODE -eq 0) {
@@ -265,7 +335,7 @@ if (-not $SkipRelease) {
                 }
             }
             if ($toDelete.Count -gt 0) {
-                Write-Host "  Kept latest 3 GitHub releases; removed $($toDelete.Count) older." -ForegroundColor Green
+                Write-Host "  Kept latest $KeepReleaseCount GitHub releases; removed $($toDelete.Count) older." -ForegroundColor Green
             }
         }
     }
@@ -283,12 +353,12 @@ if (-not $SkipRelease) {
 }
 
 # -----------------------------------------------------------
-# Prune local release folder: keep only the latest 3 installer builds
+# Prune local release folder: keep only the latest $KeepReleaseCount installer builds
 # -----------------------------------------------------------
 $releaseDir = "$ProjectRoot\release"
 if (Test-Path $releaseDir) {
     Write-Host ""
-    Write-Host "Pruning local release folder (keeping latest 3 builds)..." -ForegroundColor Yellow
+    Write-Host "Pruning local release folder (keeping latest $KeepReleaseCount builds)..." -ForegroundColor Yellow
     $installers = Get-ChildItem -Path $releaseDir -Filter "MyShop-Setup-*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch "unpacked" }
     $withVersion = @()
     foreach ($f in $installers) {
@@ -296,16 +366,16 @@ if (Test-Path $releaseDir) {
             $withVersion += [PSCustomObject]@{ File = $f; Version = $matches[1] }
         }
     }
-    if ($withVersion.Count -gt 3) {
+    if ($withVersion.Count -gt $KeepReleaseCount) {
         $sortedInstallers = $withVersion | Sort-Object { [version]$_.Version } -Descending
-        $toRemove = $sortedInstallers | Select-Object -Skip 3
+        $toRemove = $sortedInstallers | Select-Object -Skip $KeepReleaseCount
         foreach ($x in $toRemove) {
             Remove-Item $x.File.FullName -Force -ErrorAction SilentlyContinue
             $blockmap = $x.File.FullName + ".blockmap"
             if (Test-Path $blockmap) { Remove-Item $blockmap -Force -ErrorAction SilentlyContinue }
             Write-Host "  Removed local: $($x.File.Name)" -ForegroundColor DarkGray
         }
-        Write-Host "  Local release folder: kept latest 3 builds; removed $($toRemove.Count) older." -ForegroundColor Green
+        Write-Host "  Local release folder: kept latest $KeepReleaseCount builds; removed $($toRemove.Count) older." -ForegroundColor Green
     }
     else {
         Write-Host "  Local release folder: $($withVersion.Count) build(s), no pruning needed." -ForegroundColor DarkGray

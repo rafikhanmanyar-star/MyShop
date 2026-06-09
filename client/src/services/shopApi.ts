@@ -150,8 +150,8 @@ export const shopApi = {
   getSyncChanges: (since?: string) =>
     apiClient.get<unknown>(
       since
-        ? `/shop/sync/changes?since=${encodeURIComponent(since)}`
-        : '/shop/sync/changes'
+        ? `/shop/sync/changes?since=${encodeURIComponent(since)}&forPos=1`
+        : '/shop/sync/changes?forPos=1'
     ),
   getDashboardOverview: () => apiClient.get<DashboardOverviewResponse>('/shop/dashboard/overview'),
 
@@ -212,6 +212,8 @@ export const shopApi = {
     sortDir?: 'asc' | 'desc';
     /** Bypass server SKU list cache after procurement / adjustments */
     skipCache?: boolean;
+    /** Faster POS catalog (large tenants like oBo grocery). */
+    forPos?: boolean;
   }) => {
     const q = new URLSearchParams();
     if (params?.page != null) q.set('page', String(params.page));
@@ -221,6 +223,7 @@ export const shopApi = {
     if (params?.sortBy) q.set('sortBy', params.sortBy);
     if (params?.sortDir) q.set('sortDir', params.sortDir);
     if (params?.skipCache) q.set('skipCache', '1');
+    if (params?.forPos) q.set('forPos', '1');
     const qs = q.toString();
     return apiClient.get<{
       items: any[];
@@ -418,7 +421,14 @@ export interface ShopUser {
   created_at?: string;
 }
 
+export interface LoggedInUser {
+  id: string;
+  name: string;
+  role: string;
+}
+
 export const shopUserApi = {
+  getLoggedInCount: () => apiClient.get<{ count: number; users: LoggedInUser[] }>('/shop/users/logged-in-count'),
   getUsers: () => apiClient.get<ShopUser[]>('/shop/users'),
   createUser: (data: any) => apiClient.post<{ id: string }>('/shop/users', data),
   updateUser: (id: string, data: any) => apiClient.put(`/shop/users/${id}`, data),

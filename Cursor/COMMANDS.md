@@ -94,6 +94,43 @@ Copy **on-hand / reserved** quantities and optional **batch** rows from one tena
 
 ---
 
+## 4b. Migrate suppliers & loyalty members between tenants (oBo → obostores)
+
+Copy **suppliers** (`shop_vendors`) and **loyalty members** (`shop_loyalty_members` + linked `contacts`) from one tenant to another.
+
+| Step | Where to run | Command |
+|------|----------------|---------|
+| List tenants | **`server/`** | `npm run migrate-suppliers-loyalty -- --list-tenants` |
+| Dry run | **`server/`** | `npm run migrate-suppliers-loyalty` |
+| Apply suppliers + loyalty | **`server/`** | `npm run migrate-suppliers-loyalty -- --execute` |
+| Apply + update existing rows | **`server/`** | `npm run migrate-suppliers-loyalty -- --update-existing --execute` |
+| Suppliers only | **`server/`** | `npm run migrate-suppliers-loyalty -- --suppliers-only --execute` |
+| Loyalty only | **`server/`** | `npm run migrate-suppliers-loyalty -- --loyalty-only --execute` |
+
+**Matching:** suppliers by normalized **name + company_name**; loyalty contacts by **phone digits**, members by **card number** or linked contact.
+
+**Environment (optional):** `FROM_COMPANY_HINT` (default `obo`), `TO_COMPANY_HINT` (default `obostores`), or `--from-id` / `--to-id`. Requires `DATABASE_URL` in `server/.env`.
+
+**Note:** loyalty members without a phone on their contact are skipped (logged). `mobile_customers` are per-tenant and are **not** copied by this script.
+
+---
+
+## 4c. Migrate khata invoices & payments between tenants (oBo → obostores)
+
+Copy **khata ledger** rows: **debit** = customer invoice, **credit** = payment. Links payments to invoices via `linked_debit_id`. Customers matched by **phone**, unique **name**, or new contact created on destination.
+
+| Step | Where to run | Command |
+|------|----------------|---------|
+| List tenants | **`server/`** | `npm run migrate-khata -- --list-tenants` |
+| Dry run | **`server/`** | `npm run migrate-khata` |
+| Apply | **`server/`** | `npm run migrate-khata -- --execute` |
+
+**Environment (optional):** `FROM_COMPANY_HINT` (default `obo`), `TO_COMPANY_HINT` (default `obostores`), or `--from-id` / `--to-id`. Requires `DATABASE_URL` in `server/.env`.
+
+**Note:** Preserves `created_at`. `order_id` is set only when a matching `shop_sales.sale_number` exists on the destination (otherwise `NULL`; sale ref stays in `note`). Does **not** copy journal/GL entries for khata payments.
+
+---
+
 ## 5. Delete product & related transactions (DB cleanup)
 
 One-off script to remove a product and its **POS sales**, **sales returns**, **mobile orders** (lines referencing the product), **purchase bills** (lines referencing the product), **inventory movements / batches**, and **procurement demand draft lines**, then the **`shop_products`** row. Uses the same `DATABASE_URL` as the API (`server/.env`).
@@ -293,6 +330,22 @@ If Play Console shows **Incomplete advertising ID declaration**, complete the fo
 
 The app uses Firebase Analytics, Crashlytics, and FCM — not AdMob or third-party ad SDKs. In-app promo banners come from your API, not the advertising ID.
 
+### Rejection: “Organization account required” (Play Console Requirements)
+
+If Play rejects a release with *Some types of apps can only be distributed by organizations*, the cause is almost always **App content declarations** or **store category** — not a bug in the AAB.
+
+**OBO Stores is a grocery app.** Checkout options (COD, Easypaisa/JazzCash as payment *instructions*, budget/menu planner) are **not** banking or medical services.
+
+**Fix in Play Console (try before converting the developer account):**
+
+1. **Policy and programs** → **App content**
+2. **Financial features** → **My app doesn’t provide any financial features** (do not select “Mobile payments and digital wallets” for COD / shop-shared payment details only).
+3. **Health apps** → **My app doesn’t provide any health features** (menu planner / recipes are shopping helpers, not medical apps).
+4. **Main store listing** → category **Shopping** or **Food & Drink**, not Finance or Medical.
+5. Resubmit the release for review (new AAB usually **not** required).
+
+Full checklist: `docs/PLAY_STORE_ORGANIZATION_REJECTION.md`. If Google still requires an organization after accurate declarations, upgrade to an **Organization** developer account and [transfer the app](https://support.google.com/googleplay/android-developer/answer/6230247).
+
 ---
 
 ## 10. Installable desktop app (Windows)
@@ -318,7 +371,7 @@ One command runs the PowerShell script that does all steps: bump version, build,
 
 | Command | Description |
 |--------|-------------|
-| `npm run release` | Patch bump (e.g. 1.0.47 → 1.0.48), build **cloud** Windows app, commit, push, create GitHub release and upload installer + `latest.yml` (+ blockmap if present). **Keeps only the latest 3 GitHub releases** (deletes older ones) and **keeps only the latest 3 builds** in the local `release/` folder. |
+| `npm run release` | Patch bump (e.g. 1.0.47 → 1.0.48), build **cloud** Windows app, commit, push, create GitHub release and upload installer + `latest.yml` (+ blockmap if present). **Keeps only the latest 10 GitHub releases** (deletes older ones) and **keeps only the latest 10 builds** in the local `release/` folder. |
 | `npm run release:minor` | Minor bump (e.g. 1.0.47 → 1.1.0), then same as `release`. |
 | `npm run release:major` | Major bump (e.g. 1.0.47 → 2.0.0), then same as `release`. |
 
@@ -329,8 +382,8 @@ One command runs the PowerShell script that does all steps: bump version, build,
 3. `git add -A` and commit (e.g. `build: vX.Y.Z - release build`).
 4. `git push origin`.
 5. Create GitHub release for the new tag and upload the installer, `latest.yml`, and blockmap (for in-app updates).
-6. **Prune GitHub releases**: delete all but the latest 3 releases on GitHub.
-7. **Prune local `release/` folder**: delete older installer builds so only the latest 3 remain (by version).
+6. **Prune GitHub releases**: delete all but the latest 10 releases on GitHub.
+7. **Prune local `release/` folder**: delete older installer builds so only the latest 10 remain (by version).
 
 **Requirements:** GitHub CLI (`gh`) installed and logged in (`gh auth login`). On Windows you can install with: `winget install GitHub.cli`.
 

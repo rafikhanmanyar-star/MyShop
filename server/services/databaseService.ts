@@ -215,7 +215,8 @@ export class DatabaseService implements IDatabaseService {
     // Basic conversion from $1, $2 to @p1, @p2 for SQLite named parameters
     return sql.replace(/\$(\d+)/g, '@p$1')
       .replace(/NOW\(\)/gi, "datetime('now')")
-      .replace(/SERIAL/gi, 'INTEGER PRIMARY KEY AUTOINCREMENT');
+      .replace(/SERIAL/gi, 'INTEGER PRIMARY KEY AUTOINCREMENT')
+      .replace(/\s+FOR UPDATE\b/gi, '');
   }
 
   // Helper for PG specific features if needed

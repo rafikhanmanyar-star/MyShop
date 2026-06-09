@@ -33,8 +33,10 @@ import {
     getMirrorPosSettings,
     getMirrorReceiptSettings,
 } from '../offline/localDb';
+import { debugTrace } from '../utils/perfTrace';
 import { isBrowserOnline } from '../offline/syncEngine';
 import type { InventoryItem } from '../types/inventory';
+import { resolvePosWarehouseWithStock } from '../components/shop/pos/posProductCardUtils';
 
 const HELD_SALES_STORAGE_PREFIX = 'myshop_pos_held_sales_v1:';
 
@@ -201,7 +203,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { pathname } = useLocation();
     const isPosRoute = pathname === '/pos';
     const { currentShift } = useShifts();
-    const { refreshItems: refreshInventory, items: inventoryItems } = useInventory();
+    const { refreshItems: refreshInventory, items: inventoryItems, applySaleStockDeductions } = useInventory();
     const currentUserId = authUser?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('user_id') : null) ?? null;
 
     /** Restore held sales after navigation or full reload (session-scoped, per logged-in user). */
@@ -230,12 +232,22 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [heldSales, authUser?.id]);
 
     useEffect(() => {
-        const onRealtime = () => {
+        let debounceTimer: number | undefined;
+        const onRealtime = (e: Event) => {
             if (pathname !== '/pos' && pathname !== '/inventory') return;
-            refreshInventory().catch(() => {});
+            const detail = (e as CustomEvent).detail as { type?: string } | undefined;
+            debugTrace('pos:realtime:event', { type: detail?.type, pathname });
+            if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
+            debounceTimer = window.setTimeout(() => {
+                debugTrace('pos:realtime:refresh-inventory');
+                refreshInventory().catch(() => {});
+            }, 15_000);
         };
         window.addEventListener('shop:realtime', onRealtime as EventListener);
-        return () => window.removeEventListener('shop:realtime', onRealtime as EventListener);
+        return () => {
+            if (debounceTimer !== undefined) window.clearTimeout(debounceTimer);
+            window.removeEventListener('shop:realtime', onRealtime as EventListener);
+        };
     }, [refreshInventory, pathname]);
 
     // Totals Calculation
@@ -251,20 +263,26 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { subtotal, taxTotal, discountTotal, grandTotal, totalPaid, balanceDue, changeDue };
     }, [cart, payments]);
 
-    // Initialize barcode scanner and thermal printer
+    // Initialize barcode scanner and thermal printer (POS route only — global key listener blocks UI elsewhere)
     useEffect(() => {
-        // Re-create thermal printer with receipt + print settings (configurable template, optional silent print)
         thermalPrinterRef.current = createThermalPrinter({
             printSettings: posSettings ?? state.printSettings,
             receiptSettings: receiptSettings ?? undefined,
         });
+
+        if (!isPosRoute) {
+            if (barcodeScannerRef.current) {
+                barcodeScannerRef.current.stop();
+                barcodeScannerRef.current = null;
+            }
+            return;
+        }
 
         console.log('🖨️ Thermal printer initialized with settings:', {
             shopName: state.printSettings?.posShopName,
             showBarcode: state.printSettings?.posShowBarcode
         });
 
-        // Initialize barcode scanner (only once). Detect SALE|tenant|invoice to open sale detail.
         if (!barcodeScannerRef.current) {
             barcodeScannerRef.current = createBarcodeScanner((barcode) => {
                 const match = typeof barcode === 'string' && barcode.match(/^SALE\|[^|]+\|(.+)$/);
@@ -279,13 +297,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             barcodeScannerRef.current.start();
         }
 
-        // Cleanup on unmount
         return () => {
             if (barcodeScannerRef.current) {
                 barcodeScannerRef.current.stop();
+                barcodeScannerRef.current = null;
             }
         };
-    }, [state.printSettings, posSettings, receiptSettings]);
+    }, [state.printSettings, posSettings, receiptSettings, isPosRoute]);
 
     // Fetch Branches and Terminals (defer off POS so dashboard stays responsive in Electron)
     useEffect(() => {
@@ -759,17 +777,8 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 createdAt: new Date().toISOString()
             };
 
-            const resolveSaleWarehouseId = (branchId: string | null, productId: string, invItems: InventoryItem[]): string | null => {
-                if (branchId) return branchId;
-                const inv = invItems.find((i) => i.id === productId);
-                if (inv?.warehouseStock && Object.keys(inv.warehouseStock).length > 0) {
-                    return Object.keys(inv.warehouseStock)[0];
-                }
-                if (inv?.warehouseSellable && Object.keys(inv.warehouseSellable).length > 0) {
-                    return Object.keys(inv.warehouseSellable)[0];
-                }
-                return null;
-            };
+            const resolveSaleWarehouseId = (branchId: string | null, productId: string, invItems: InventoryItem[]): string | null =>
+                resolvePosWarehouseWithStock(invItems.find((i) => i.id === productId), branchId);
 
             const showSaleToast = (text: string, ok: boolean) => {
                 const toast = document.createElement('div');
@@ -812,10 +821,13 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 };
                 setLastCompletedSale(completedSale);
 
+                applySaleStockDeductions(
+                    cart.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+                    selectedBranchId
+                );
                 clearCart();
                 setPayments([]);
 
-                refreshInventory().catch(() => { });
                 window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_created', saleId: saleId } }));
 
                 const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
@@ -926,9 +938,12 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     reprint_count: 0,
                 };
                 setLastCompletedSale(completedSale);
+                applySaleStockDeductions(
+                    cart.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+                    selectedBranchId
+                );
                 clearCart();
                 setPayments([]);
-                refreshInventory().catch(() => { });
                 window.dispatchEvent(new CustomEvent('shop:realtime', { detail: { type: 'sale_queued' } }));
 
                 const shouldAutoPrint = posSettings?.auto_print_receipt ?? true;
@@ -959,7 +974,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             throw error;
         }
-    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId, currentShift?.id, posSettings, printReceipt, inventoryItems]);
+    }, [cart, customer, payments, totals, clearCart, currentUserId, selectedBranchId, selectedTerminalId, currentShift?.id, posSettings, printReceipt, inventoryItems, applySaleStockDeductions]);
 
     const applyGlobalDiscount = useCallback((percentage: number) => {
         setCart(prev => prev.map(item => {
@@ -978,7 +993,7 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }));
     }, []);
 
-    const value = {
+    const value = useMemo(() => ({
         cart,
         lastAddedUnitPrice,
         focusedCatalogProduct,
@@ -1020,7 +1035,38 @@ export const POSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isDenseMode,
         setIsDenseMode,
         posSettings
-    };
+    }), [
+        cart,
+        lastAddedUnitPrice,
+        focusedCatalogProduct,
+        addToCart,
+        removeFromCart,
+        updateCartItem,
+        clearCart,
+        applyGlobalDiscount,
+        customer,
+        payments,
+        addPayment,
+        removePayment,
+        heldSales,
+        holdSale,
+        recallSale,
+        totals,
+        isPaymentModalOpen,
+        isHeldSalesModalOpen,
+        isCustomerModalOpen,
+        isSalesHistoryModalOpen,
+        searchQuery,
+        completeSale,
+        printReceipt,
+        lastCompletedSale,
+        branches,
+        terminals,
+        selectedBranchId,
+        selectedTerminalId,
+        isDenseMode,
+        posSettings
+    ]);
 
     return <POSContext.Provider value={value}>{children}</POSContext.Provider>;
 };

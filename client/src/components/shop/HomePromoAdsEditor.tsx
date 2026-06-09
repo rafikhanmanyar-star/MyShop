@@ -82,17 +82,21 @@ export default function HomePromoAdsEditor({ value, onChange, variant = 'panel' 
     const wrapClass =
         variant === 'card'
             ? 'p-6'
-            : 'rounded-2xl border border-slate-200/90 bg-card p-5 shadow-sm dark:border-slate-600 dark:bg-slate-900/90';
+            : 'rounded-xl border border-slate-200/90 bg-card p-3.5 sm:p-4 shadow-sm dark:border-slate-600 dark:bg-slate-900/90';
+
+    const isPanel = variant === 'panel';
 
     return (
         <div className={wrapClass}>
-            <h3 className="text-lg font-bold text-foreground mb-2 tracking-tight">Home promotional ads</h3>
-            <p className="text-sm text-muted-foreground mb-4">
+            <h3 className={`font-bold text-foreground tracking-tight ${isPanel ? 'text-sm mb-0.5' : 'text-lg mb-2'}`}>
+                Home promotional ads
+            </h3>
+            <p className={`text-muted-foreground ${isPanel ? 'text-xs mb-2.5 leading-snug' : 'text-sm mb-4'}`}>
                 Rotating carousel on the mobile home page (replaces Quick Delivery + Recipe ideas). Upload up to{' '}
                 {HOME_PROMO_MAX_SLIDES} images — delivery, voice order, offers, recipes, budgets, and more.
             </p>
 
-            <div className="mb-6 max-w-xs">
+            <div className={isPanel ? 'mb-3 max-w-[11rem]' : 'mb-6 max-w-xs'}>
                 <label htmlFor="home-promo-interval" className="block text-sm font-medium text-foreground mb-1.5">
                     Seconds per slide
                 </label>
@@ -121,9 +125,9 @@ export default function HomePromoAdsEditor({ value, onChange, variant = 'panel' 
                 aria-label="Upload promotional ad image"
             />
 
-            <div className="space-y-4">
+            <div className={isPanel ? 'space-y-2.5' : 'space-y-4'}>
                 {slides.length === 0 ? (
-                    <p className="text-sm text-muted-foreground italic">
+                    <p className={`text-muted-foreground italic ${isPanel ? 'text-xs' : 'text-sm'}`}>
                         No ads yet — add one to replace the default delivery banner on the mobile home page.
                     </p>
                 ) : (
@@ -133,9 +137,17 @@ export default function HomePromoAdsEditor({ value, onChange, variant = 'panel' 
                         return (
                             <div
                                 key={idx}
-                                className="flex flex-col sm:flex-row gap-4 p-4 rounded-2xl border border-slate-200/80 bg-[#F4F4F9]/80 dark:border-slate-600 dark:bg-slate-800/50"
+                                className={`flex flex-col sm:flex-row border border-slate-200/80 bg-[#F4F4F9]/80 dark:border-slate-600 dark:bg-slate-800/50 ${
+                                    isPanel
+                                        ? 'gap-2.5 p-2.5 rounded-lg'
+                                        : 'gap-4 p-4 rounded-2xl'
+                                }`}
                             >
-                                <div className="w-full sm:w-36 aspect-[16/9] rounded-xl bg-card border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center dark:border-slate-600">
+                                <div
+                                    className={`w-full aspect-[16/9] rounded-lg bg-card border border-slate-200 overflow-hidden flex-shrink-0 flex items-center justify-center dark:border-slate-600 ${
+                                        isPanel ? 'sm:w-28' : 'sm:w-36 rounded-xl'
+                                    }`}
+                                >
                                     {slide.image_url ? (
                                         <img
                                             src={getFullImageUrl(slide.image_url)}

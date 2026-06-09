@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from '../config/apiUrl';
 import { getAppContext } from './appContext';
+import { debugTrace, perfMark, perfMeasure } from '../utils/perfTrace';
 
 export interface ApiError {
   error: string;
@@ -99,10 +100,18 @@ class ApiClient {
 
       const contentType = response.headers.get('content-type') || '';
       const rawText = await response.text();
+      const rawBytes = rawText.length;
       let responseData: Record<string, unknown> = {};
       if (rawText.trim()) {
         try {
+          if (rawBytes > 200_000) {
+            perfMark(`api:json-parse:${endpoint}`, { bytes: rawBytes });
+          }
           responseData = JSON.parse(rawText) as Record<string, unknown>;
+          if (rawBytes > 200_000) {
+            perfMeasure(`api:json-parse:${endpoint}`, `api:json-parse:${endpoint}`, { bytes: rawBytes });
+            debugTrace('api:json-parsed', { endpoint, kb: Math.round(rawBytes / 1024) });
+          }
         } catch {
           if (!response.ok) {
             const statusMessages: Record<number, string> = {

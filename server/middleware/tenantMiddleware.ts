@@ -98,7 +98,7 @@ export function tenantMiddleware(db: IDatabaseService) {
              VALUES ($1, $2, $3, $4, $5, NOW(), NULL)
              ON CONFLICT (user_id, tenant_id) DO UPDATE 
              SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, last_activity = NOW(),
-                 pos_terminal_id = COALESCE(pos_terminal_id, EXCLUDED.pos_terminal_id)`,
+                 pos_terminal_id = COALESCE(user_sessions.pos_terminal_id, EXCLUDED.pos_terminal_id)`,
             [sessionId, decoded.userId, decoded.tenantId, token, expiresAt]
           );
         }

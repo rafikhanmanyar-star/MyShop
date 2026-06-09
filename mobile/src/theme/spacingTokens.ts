@@ -10,7 +10,7 @@ export const spacingTokens = {
   headerHeightCompact: '52px',
   homeSearchHeight: '44px',
   browseSearchHeight: '48px',
-  bottomNavHeight: '54px',
+  bottomNavHeight: '78px',
   radius: '12px',
   radiusLg: '16px',
   radiusXl: '20px',

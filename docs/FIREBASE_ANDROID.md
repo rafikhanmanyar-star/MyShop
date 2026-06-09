@@ -123,8 +123,8 @@ Back up the `.keystore` file and passwords securely.
 Copy the example and edit passwords. **`storePassword` and `keyPassword` must match** what you entered in `keytool` (usually the same value twice).
 
 ```powershell
-copy "F:\AntiGravity projects\MyShop\android\keystore.properties.example" `
-     "F:\AntiGravity projects\MyShop\android\keystore.properties"
+copy "C:\My Projects\MyShop\android\keystore.properties.example" `
+     "C:\My Projects\MyShop\android\keystore.properties"
 ```
 
 ```properties
@@ -138,7 +138,7 @@ Verify before building (must print two OK lines). Run from **repo root** or use 
 
 ```powershell
 $env:JAVA_HOME = "F:\Program Files\Android\Android Studio\jbr"
-cd "F:\AntiGravity projects\MyShop"
+cd "C:\My Projects\MyShop"
 .\android\scripts\verify-keystore.ps1
 # or from mobile/:  npm run android:verify-keystore
 ```
@@ -147,7 +147,7 @@ If verification fails (`keystore password was incorrect`), create a **new** keys
 
 ```powershell
 $env:JAVA_HOME = "F:\Program Files\Android\Android Studio\jbr"
-cd "F:\AntiGravity projects\MyShop"
+cd "C:\My Projects\MyShop"
 .\android\scripts\create-release-keystore.ps1
 # or from mobile/:  npm run android:create-keystore
 ```
@@ -171,8 +171,8 @@ Then set the same value for `storePassword` and `keyPassword` in `keystore.prope
 `android/keystore.properties` **must exist** with the same passwords you used when running `keytool`. Without it, `app-release.aab` is **unsigned** and Play Console rejects it ("All uploaded bundles must be signed").
 
 ```powershell
-copy "F:\AntiGravity projects\MyShop\android\keystore.properties.example" `
-     "F:\AntiGravity projects\MyShop\android\keystore.properties"
+copy "C:\My Projects\MyShop\android\keystore.properties.example" `
+     "C:\My Projects\MyShop\android\keystore.properties"
 # Edit keystore.properties — set storePassword and keyPassword to your real values
 
 $env:JAVA_HOME = "F:\Program Files\Android\Android Studio\jbr"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useDeferredValue } from 'react';
 import { usePOS } from '../../../context/POSContext';
 import { useInventory } from '../../../context/InventoryContext';
 import { ICONS } from '../../../constants';
@@ -239,7 +239,8 @@ const ProductSearch: React.FC = () => {
         isCustomerModalOpen,
         isSalesHistoryModalOpen
     } = usePOS();
-    const { items: inventoryItems } = useInventory();
+    const { items: inventoryItems, catalogReady } = useInventory();
+    const deferredInventoryItems = useDeferredValue(inventoryItems);
     const inventoryItemsRef = useRef(inventoryItems);
     inventoryItemsRef.current = inventoryItems;
 
@@ -478,10 +479,56 @@ const ProductSearch: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        loadProducts();
         loadShopCategories();
         loadPopularProducts();
-    }, [loadProducts, loadShopCategories, loadPopularProducts]);
+        // Full catalog comes from InventoryContext only — never duplicate GET /products (obo ~1052 SKUs).
+    }, [loadShopCategories, loadPopularProducts]);
+
+    useEffect(() => {
+        if (catalogReady || (deferredInventoryItems?.length ?? 0) > 0) {
+            setIsLoading(false);
+            setLoadError(null);
+            return;
+        }
+        const timeout = window.setTimeout(() => {
+            if ((inventoryItemsRef.current?.length ?? 0) > 0) return;
+            setIsLoading(false);
+            setLoadError('Product catalog is still loading. Try refreshing the page or check your connection.');
+        }, 45_000);
+        return () => window.clearTimeout(timeout);
+    }, [catalogReady, deferredInventoryItems?.length]);
+
+    const catalogProducts = useMemo(() => products, [products]);
+
+    const inventoryById = useMemo(() => {
+        const map = new Map<string, InventoryItem>();
+        for (const item of deferredInventoryItems ?? []) {
+            map.set(item.id, item);
+        }
+        return map;
+    }, [deferredInventoryItems]);
+
+    /** Single-pass POS catalog from inventory mirror (large grocery catalogs like oBo). */
+    const productsForPOSCatalog = useMemo(() => {
+        if (deferredInventoryItems?.length) {
+            const out: POSProduct[] = [];
+            for (const inv of deferredInventoryItems) {
+                if (inv.salesDeactivated) continue;
+                const { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved } =
+                    computeBranchStockForPos(inv, selectedBranchId);
+                out.push({
+                    ...mapInventoryItemToPOS(inv),
+                    stockLevel: Math.floor(branchSellable),
+                    onHandAtBranch: branchOnHand,
+                    onlyExpiredStock,
+                    branchFullyReserved,
+                    reorderPoint: inv.reorderPoint ?? 10,
+                });
+            }
+            return out;
+        }
+        return catalogProducts.filter((p) => !p.salesDeactivated);
+    }, [deferredInventoryItems, catalogProducts, selectedBranchId]);
 
     useEffect(() => {
         const t = window.setTimeout(() => focusPosSearch(), 0);
@@ -499,7 +546,11 @@ const ProductSearch: React.FC = () => {
     }, [shopCategories]);
 
     useEffect(() => {
-        setExpandedCategoryIds(new Set(parentIdsWithChildren));
+        if (parentIdsWithChildren.size > 40) {
+            setExpandedCategoryIds(new Set());
+        } else {
+            setExpandedCategoryIds(new Set(parentIdsWithChildren));
+        }
     }, [parentIdsWithChildren]);
 
     const toggleCategoryExpand = useCallback((id: string) => {
@@ -516,52 +567,11 @@ const ProductSearch: React.FC = () => {
         return getDescendantCategoryIds(shopCategories, selectedCategory);
     }, [selectedCategory, shopCategories]);
 
-    // Merge inventory into products: stock (branch-aware, sellable qty), and name/price/image/SKU so edits reflect without refetching the catalog API.
-    const productsWithStock = useMemo(() => {
-        if (!inventoryItems?.length) return products;
-        return products.map((p) => {
-            const inv = inventoryItems.find((i) => i.id === p.id);
-            const { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved } = computeBranchStockForPos(
-                inv,
-                selectedBranchId
-            );
-            const stockLevel = inv != null ? Math.floor(branchSellable) : Number(p.stockLevel) || 0;
-            const merged =
-                inv != null
-                    ? {
-                          ...p,
-                          name: inv.name,
-                          sku: inv.sku,
-                          barcode: inv.barcode ?? p.barcode,
-                          price: Number(inv.retailPrice) || p.price,
-                          cost: Number(inv.costPrice) || p.cost,
-                          imageUrl: inv.imageUrl ?? p.imageUrl,
-                          categoryId: inv.category || p.categoryId,
-                          salesDeactivated: inv.salesDeactivated ?? p.salesDeactivated
-                      }
-                    : p;
-            return {
-                ...merged,
-                stockLevel,
-                onHandAtBranch: inv != null ? branchOnHand : undefined,
-                onlyExpiredStock: Boolean(inv && onlyExpiredStock),
-                branchFullyReserved: Boolean(inv && branchFullyReserved),
-                reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
-            };
-        });
-    }, [products, inventoryItems, selectedBranchId]);
-
-    /** SKUs manually deactivated for sales stay out of POS grid and barcode add (still in inventory for reactivation). */
-    const productsForPOSCatalog = useMemo(
-        () => productsWithStock.filter((p) => !p.salesDeactivated),
-        [productsWithStock]
-    );
-
     /** Same merge as main grid — popular list API can lag or omit branch qty; inventory keeps labels and stock in sync. */
     const popularProductsWithStock = useMemo(() => {
         if (!popularProducts.length) return [];
         return popularProducts.map((p) => {
-            const inv = inventoryItems?.find((i) => i.id === p.id);
+            const inv = inventoryById.get(p.id);
             const { branchOnHand, branchSellable, onlyExpiredStock, branchFullyReserved } = computeBranchStockForPos(
                 inv,
                 selectedBranchId
@@ -590,7 +600,7 @@ const ProductSearch: React.FC = () => {
                 reorderPoint: inv?.reorderPoint ?? p.reorderPoint ?? 10
             };
         });
-    }, [popularProducts, inventoryItems, selectedBranchId]);
+    }, [popularProducts, inventoryById, selectedBranchId]);
 
     const popularProductsForPOS = useMemo(
         () => popularProductsWithStock.filter((p) => !p.salesDeactivated),
@@ -638,13 +648,15 @@ const ProductSearch: React.FC = () => {
     }, []);
 
     const fuse = useMemo(() => {
+        const query = localQuery.trim();
+        if (!query) return null;
         return new Fuse(productsForPOSCatalog, {
             keys: ['name', 'sku', 'barcode', 'categoryId', 'subcategoryId'],
             threshold: 0.3,
             distance: 100,
             ignoreLocation: true,
         });
-    }, [productsForPOSCatalog]);
+    }, [localQuery, productsForPOSCatalog]);
 
     const popularProductIdSet = useMemo(
         () => new Set(popularProductsForPOS.map((p) => p.id)),
@@ -691,7 +703,7 @@ const ProductSearch: React.FC = () => {
             if (exactBarcode) return [exactBarcode];
 
             // Fuzzy match
-            const fuzzyResults = fuse.search(query);
+            const fuzzyResults = fuse ? fuse.search(query) : [];
             result = fuzzyResults.map(r => r.item);
         }
 
@@ -840,8 +852,8 @@ const ProductSearch: React.FC = () => {
     const initialEditingItemForModal = useMemo((): InventoryItem | null => {
         if (!skuModal.open || skuModal.kind !== 'edit') return null;
         const p = skuModal.product;
-        return inventoryItems.find((i) => i.id === p.id) ?? posProductToInventoryStub(p);
-    }, [skuModal, inventoryItems]);
+        return inventoryById.get(p.id) ?? posProductToInventoryStub(p);
+    }, [skuModal, inventoryById]);
 
     const handleProductContextMenu = useCallback((e: React.MouseEvent, product: POSProduct) => {
         e.preventDefault();

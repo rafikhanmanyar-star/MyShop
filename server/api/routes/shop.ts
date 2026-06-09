@@ -64,7 +64,8 @@ router.get('/sync/bootstrap', checkRole(['admin', 'pos_cashier', 'accountant']),
 router.get('/sync/changes', checkRole(['admin', 'pos_cashier', 'accountant']), async (req: any, res) => {
   try {
     const since = typeof req.query?.since === 'string' ? req.query.since : undefined;
-    const payload = await getShopService().getSyncChanges(req.tenantId, since);
+    const forPos = req.query?.forPos === '1' || req.query?.forPos === 'true';
+    const payload = await getShopService().getSyncChanges(req.tenantId, since, { forPos });
     res.json(payload);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -356,7 +357,8 @@ router.get('/products', async (req: any, res) => {
   } catch (error: any) {
     console.error('❌ Error fetching products:', error);
     try {
-      fs.appendFileSync('f:/AntiGravity projects/MyShop/server/server_errors.log', '\\nERROR:\\n' + error.stack + '\\n');
+      const logPath = path.resolve(process.cwd(), 'server_errors.log');
+      fs.appendFileSync(logPath, '\nERROR:\n' + error.stack + '\n');
     } catch (e) { }
 
     // Return structured error as per prompt instruction
@@ -550,6 +552,10 @@ router.get('/inventory/skus', async (req: any, res) => {
       req.query.skipCache === '1' ||
       req.query.skipCache === 'true' ||
       req.query.refresh === '1';
+    const forPos =
+      req.query.forPos === '1' ||
+      req.query.forPos === 'true' ||
+      req.query.pos === '1';
     const result = await getShopService().listInventorySkus(req.tenantId, {
       page,
       limit,
@@ -558,6 +564,7 @@ router.get('/inventory/skus', async (req: any, res) => {
       sortBy,
       sortDir,
       skipCache,
+      forPos,
     });
     res.setHeader('X-Response-Time-Ms', String(Date.now() - t0));
     res.json({ ...result, routeMs: Date.now() - t0 });
@@ -844,6 +851,16 @@ router.delete('/vendors/:id', async (req: any, res) => {
   try {
     await getShopService().deleteVendor(req.tenantId, req.params.id);
     res.json({ success: true, message: 'Vendor deactivated' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- Logged-in staff (sidebar; any authenticated shop user) ---
+router.get('/users/logged-in-count', async (req: any, res) => {
+  try {
+    const users = await getShopService().getLoggedInUsers(req.tenantId);
+    res.json({ count: users.length, users });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

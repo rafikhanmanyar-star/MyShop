@@ -2,6 +2,56 @@ import { CURRENCY } from '../../../constants';
 import type { InventoryItem } from '../../../types/inventory';
 import { POSProduct } from '../../../types/pos';
 
+function sumWarehouseValues(rec: Record<string, number>): number {
+    return Object.values(rec).reduce((s, v) => s + (Number(v) || 0), 0);
+}
+
+function warehouseHasSellableStock(inv: InventoryItem, whId: string): boolean {
+    const sellable = inv.warehouseSellable?.[whId];
+    if (sellable != null && sellable > 0) return true;
+    const onHand = inv.warehouseStock?.[whId];
+    return onHand != null && onHand > 0;
+}
+
+/** Pick warehouse for POS sale/deduction (matches server resolveWarehouseForSaleDeduction). */
+export function resolvePosWarehouseWithStock(
+    inv: InventoryItem | undefined,
+    branchId?: string | null
+): string | null {
+    if (!inv) return branchId ?? null;
+    if (branchId && warehouseHasSellableStock(inv, branchId)) return branchId;
+    for (const whId of Object.keys(inv.warehouseStock ?? {})) {
+        if (branchId && whId === branchId) continue;
+        if (warehouseHasSellableStock(inv, whId)) return whId;
+    }
+    for (const whId of Object.keys(inv.warehouseSellable ?? {})) {
+        if (warehouseHasSellableStock(inv, whId)) return whId;
+    }
+    return branchId ?? Object.keys(inv.warehouseStock ?? {})[0] ?? Object.keys(inv.warehouseSellable ?? {})[0] ?? null;
+}
+
+/**
+ * Branch id often equals a shop_warehouses row (id = branch id). After cross-tenant inventory
+ * migration, stock may sit on a warehouse keyed by code (e.g. BR-xxxx) while the branch row is 0.
+ * Mirror server resolveWarehouseForSaleDeduction: use other warehouses when branch row is empty.
+ */
+function branchQtyWhenBranchWarehouseEmpty(
+    branchQty: number,
+    selectedBranchId: string | null,
+    perWarehouse: Record<string, number>,
+    aggregate: number
+): number {
+    if (branchQty > 0 || !selectedBranchId || aggregate <= 0) return branchQty;
+    const whSum = sumWarehouseValues(perWarehouse);
+    if (whSum <= 0) return branchQty;
+    const branchKeyPresent = Object.prototype.hasOwnProperty.call(perWarehouse, selectedBranchId);
+    const branchKeyEmpty = branchKeyPresent && Number(perWarehouse[selectedBranchId] ?? 0) <= 0;
+    if (branchKeyEmpty || !branchKeyPresent) {
+        return Math.min(aggregate, whSum);
+    }
+    return branchQty;
+}
+
 /** On-hand vs sellable at a branch. Handles warehouse ids that differ from branch ids (legacy receipts). */
 export function computeBranchStockForPos(
     inv: InventoryItem | undefined,
@@ -22,9 +72,18 @@ export function computeBranchStockForPos(
     const nWh = Object.keys(whStock).length;
     const aggSellable = Math.max(0, Number(inv.sellableOnHand ?? inv.available ?? 0));
 
-    const branchOnHand = selectedBranchId
+    const aggOnHand = Math.max(0, Number(inv.onHand ?? 0));
+    let branchOnHand = selectedBranchId
         ? Math.max(0, Number(whStock[selectedBranchId] ?? 0))
-        : Math.max(0, Number(inv.onHand ?? 0));
+        : aggOnHand;
+    if (selectedBranchId) {
+        branchOnHand = branchQtyWhenBranchWarehouseEmpty(
+            branchOnHand,
+            selectedBranchId,
+            whStock,
+            aggOnHand
+        );
+    }
 
     let branchReserved = 0;
     if (selectedBranchId != null && selectedBranchId !== '') {
@@ -63,9 +122,19 @@ export function computeBranchStockForPos(
     } else {
         branchSellable = Math.max(0, Number(whStock[selectedBranchId] ?? 0));
         if (branchSellable <= 0 && aggSellable > 0) {
-            const stockSum = Object.values(whStock).reduce((s, v) => s + (Number(v) || 0), 0);
+            const stockSum = sumWarehouseValues(whStock);
             if (stockSum > 0) branchSellable = Math.min(aggSellable, stockSum);
         }
+    }
+
+    if (selectedBranchId) {
+        const sellSource = hasWhSell ? whSell : whStock;
+        branchSellable = branchQtyWhenBranchWarehouseEmpty(
+            branchSellable,
+            selectedBranchId,
+            sellSource,
+            aggSellable
+        );
     }
 
     const eps = 1e-6;
