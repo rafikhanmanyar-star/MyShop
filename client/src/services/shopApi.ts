@@ -580,6 +580,17 @@ export const accountingApi = {
       avgProfitPerDay: number;
     }>(`/shop/accounting/reports/daily/profit-summary?${q.toString()}`);
   },
+  dailyProfitRange: (from: string, to: string, branchId?: string | null) => {
+    const q = new URLSearchParams();
+    q.set('from', from);
+    q.set('to', to);
+    if (branchId) q.set('branchId', branchId);
+    return apiClient.get<{
+      days: number;
+      totalProfit: number;
+      avgProfitPerDay: number;
+    }>(`/shop/accounting/reports/daily/profit-summary?${q.toString()}`);
+  },
   dailyReportSummary: (date: string, branchId?: string | null) => {
     const q = new URLSearchParams();
     q.set('date', date);

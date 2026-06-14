@@ -7,6 +7,7 @@ import { ShiftsProvider } from './context/ShiftsContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
+import MobileOverviewPage from './pages/MobileOverviewPage';
 import SettingsPage from './components/shop/SettingsPage';
 import {
   LayoutDashboard, ShoppingCart, Package, Truck, Users, Building2,
@@ -26,6 +27,10 @@ import AppHeader from './components/AppHeader';
 import { InventoryPageHeaderProvider } from './context/InventoryPageHeaderContext';
 import { ProcurementPageHeaderProvider } from './context/ProcurementPageHeaderContext';
 import { useAutoLogout } from './hooks/useAutoLogout';
+import { useIsMobile } from './hooks/useIsMobile';
+import MobileBottomNav from './components/mobile/MobileBottomNav';
+import PWAInstallPrompt from './components/pwa/PWAInstallPrompt';
+import PWAReloadPrompt from './components/pwa/PWAReloadPrompt';
 import { shopApi, shopUserApi, type OrganizationProfile, type LoggedInUser } from './services/shopApi';
 import { getFullImageUrl } from './config/apiUrl';
 import { installDebugObservers } from './utils/perfTrace';
@@ -439,10 +444,12 @@ function Sidebar({ collapsed, onToggle, onLogout }: { collapsed: boolean; onTogg
 function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [posFullScreen, setPosFullScreen] = useState(false);
+  const isMobile = useIsMobile();
   const { pathname } = useLocation();
   const isPosRoute = pathname === '/pos';
   const isOrderCenterRoute = pathname === '/order-center' || pathname === '/mobile-orders' || pathname === '/voice-orders';
   const isMainDashboardRoute = pathname === '/';
+  const isMobileOverviewRoute = isMobile && pathname === '/';
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const role = user?.role || 'pos_cashier';
@@ -486,12 +493,12 @@ function AppLayout() {
             <ShopRealtimeBridge />
           </Suspense>
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
-        {!posFullScreen && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onLogout={() => { logout(); navigate('/'); }} />}
-        <main className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden transition-all duration-300 ease-in-out ${posFullScreen ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
-          <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isOrderCenterRoute || isMainDashboardRoute ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
-          {!posFullScreen && !isPosRoute && <AppHeader />}
+        {!posFullScreen && !isMobile && <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} onLogout={() => { logout(); navigate('/'); }} />}
+        <main className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden transition-all duration-300 ease-in-out ${posFullScreen || isMobile ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-72'}`}>
+          <div className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden page-container ${isOrderCenterRoute || (isMainDashboardRoute && !isMobile) ? 'overflow-y-hidden' : 'overflow-y-auto'}`}>
+          {!posFullScreen && !isPosRoute && !isMobileOverviewRoute && <AppHeader />}
           <OfflineBanner />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${isMobile && !posFullScreen ? 'pb-[calc(4.5rem+env(safe-area-inset-bottom))]' : ''}`}>
           <Suspense fallback={
             <div className="flex min-h-[60vh] items-center justify-center">
               <div className="relative h-12 w-12">
@@ -505,10 +512,32 @@ function AppLayout() {
               <LoyaltyProvider>
                 <POSProvider>
             <Routes>
-              {/* Redirect pos_cashier to Cashier Dashboard if they try to access / */}
-              <Route path="/" element={role === 'pos_cashier' ? <Navigate to="/cashier-dashboard" replace /> : <DashboardPage />} />
+              {/* Mobile: high-level system overview at home */}
+              <Route
+                path="/"
+                element={
+                  isMobile ? (
+                    <MobileOverviewPage />
+                  ) : role === 'pos_cashier' ? (
+                    <Navigate to="/cashier-dashboard" replace />
+                  ) : (
+                    <DashboardPage />
+                  )
+                }
+              />
 
-              <Route path="/cashier-dashboard" element={role === 'pos_cashier' ? <CashierDashboardPage /> : <Navigate to="/" replace />} />
+              <Route
+                path="/cashier-dashboard"
+                element={
+                  isMobile ? (
+                    <Navigate to="/" replace />
+                  ) : role === 'pos_cashier' ? (
+                    <CashierDashboardPage />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
               <Route path="/pos" element={<div className="flex-1 min-h-0 flex flex-col overflow-hidden h-full"><POSSalesPage /></div>} />
               <Route
                 path="/sales-returns/new"
@@ -570,7 +599,15 @@ function AppLayout() {
               <Route path="/forecast" element={['admin', 'accountant'].includes(role) ? <div className="flex-1 min-h-0 flex flex-col overflow-hidden"><ForecastPage /></div> : <Navigate to="/" replace />} />
               <Route path="/settings" element={<SettingsPage />} />
 
-              <Route path="*" element={<Navigate to={role === 'pos_cashier' ? '/cashier-dashboard' : '/'} replace />} />
+              <Route
+                path="*"
+                element={
+                  <Navigate
+                    to={isMobile ? '/' : role === 'pos_cashier' ? '/cashier-dashboard' : '/'}
+                    replace
+                  />
+                }
+              />
             </Routes>
                 </POSProvider>
               </LoyaltyProvider>
@@ -580,6 +617,7 @@ function AppLayout() {
           </div>
           </div>
         </main>
+        {isMobile && !posFullScreen && <MobileBottomNav role={role} />}
       </div>
           </ProcurementPageHeaderProvider>
           </InventoryPageHeaderProvider>
@@ -610,10 +648,24 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
-    return authView === 'login'
-      ? <LoginPage onSwitchToRegister={() => setAuthView('register')} />
-      : <RegisterPage onSwitchToLogin={() => setAuthView('login')} />;
+    return (
+      <>
+        {authView === 'login' ? (
+          <LoginPage onSwitchToRegister={() => setAuthView('register')} />
+        ) : (
+          <RegisterPage onSwitchToLogin={() => setAuthView('login')} />
+        )}
+        <PWAInstallPrompt />
+        <PWAReloadPrompt />
+      </>
+    );
   }
 
-  return <AppLayout />;
+  return (
+    <>
+      <AppLayout />
+      <PWAInstallPrompt />
+      <PWAReloadPrompt />
+    </>
+  );
 }

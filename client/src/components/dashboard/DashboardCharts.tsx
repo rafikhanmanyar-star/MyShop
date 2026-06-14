@@ -32,6 +32,7 @@ export type DashboardChartsProps = {
   revenueBreakdown: { name: string; value: number }[];
   trendTitle?: string;
   trendSubtitle?: string;
+  trendTickInterval?: number;
 };
 
 export default function DashboardCharts({
@@ -41,6 +42,7 @@ export default function DashboardCharts({
   revenueBreakdown,
   trendTitle = 'Daily Sales Trends',
   trendSubtitle = 'Last 7 days (POS + mobile)',
+  trendTickInterval = 0,
 }: DashboardChartsProps) {
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -70,7 +72,13 @@ export default function DashboardCharts({
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.6} />
-                <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval={trendTickInterval > 0 ? trendTickInterval : undefined}
+                />
                 <YAxis
                   tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
                   axisLine={false}

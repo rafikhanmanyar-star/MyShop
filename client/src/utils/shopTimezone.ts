@@ -89,3 +89,40 @@ export function lastNDayRangeIso(
   const categoryToIso = calendarDayBoundsIso(timeZone, addDaysYmd(dayKeys[dayKeys.length - 1], 1)).start;
   return { fromIso, toIso, dayKeys, categoryToIso };
 }
+
+/** Last N calendar months in shop timezone (oldest first), including the current month. */
+export function lastNMonthKeys(count: number, timeZone: string): string[] {
+  const n = Math.max(1, Math.floor(count));
+  const tz = normalizeShopTimezone(timeZone);
+  const today = todayYmdInTimezone(tz);
+  const [y, m] = today.split('-').map(Number);
+  const out: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    let month = m - i;
+    let year = y;
+    while (month < 1) {
+      month += 12;
+      year -= 1;
+    }
+    out.push(`${year}-${String(month).padStart(2, '0')}`);
+  }
+  return out;
+}
+
+/** UTC bounds for the last N calendar months through end of the current month. */
+export function lastNMonthRangeIso(
+  count: number,
+  timeZone: string
+): { fromIso: string; toIso: string; monthKeys: string[]; categoryToIso: string } {
+  const monthKeys = lastNMonthKeys(count, timeZone);
+  const fromIso = calendarDayBoundsIso(timeZone, `${monthKeys[0]}-01`).start;
+  const [ly, lm] = monthKeys[monthKeys.length - 1].split('-').map(Number);
+  let nextMonth = lm + 1;
+  let nextYear = ly;
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear += 1;
+  }
+  const toIso = calendarDayBoundsIso(timeZone, `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`).start;
+  return { fromIso, toIso, monthKeys, categoryToIso: toIso };
+}

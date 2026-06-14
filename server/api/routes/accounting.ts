@@ -363,14 +363,21 @@ router.get('/reports/daily/summary', checkRole(['admin', 'accountant']), async (
 
 router.get('/reports/daily/profit-summary', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
-        const rawDates = (req.query.dates as string) || '';
-        const dates = rawDates
-            .split(',')
-            .map((d) => d.trim())
-            .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+        const from = (req.query.from as string) || '';
+        const to = (req.query.to as string) || '';
         const raw = (req.query.branchId as string) || '';
         const branchId = raw && raw !== 'all' ? raw : null;
-        const data = await getDailyReportService().getProfitForDates(req.tenantId, dates, branchId);
+        let data;
+        if (from && to) {
+            data = await getDailyReportService().getProfitForRange(req.tenantId, from, to, branchId);
+        } else {
+            const rawDates = (req.query.dates as string) || '';
+            const dates = rawDates
+                .split(',')
+                .map((d) => d.trim())
+                .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+            data = await getDailyReportService().getProfitForDates(req.tenantId, dates, branchId);
+        }
         res.json(data);
     } catch (error: any) {
         console.error('❌ Error daily profit summary:', error);
