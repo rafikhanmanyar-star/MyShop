@@ -1,5 +1,7 @@
 import { getDatabaseService } from './databaseService.js';
-import { calendarDayBoundsForTenant } from '../utils/shopTimezone.js';
+import { calendarDayBoundsForTenant, resolveTenantTimezone } from '../utils/shopTimezone.js';
+
+export type HourlyTrendPoint = { hour: number; label: string; revenue: number; orders: number };
 
 export interface DailyReportSummary {
   date: string;
@@ -345,6 +347,71 @@ export class DailyReportService {
        ORDER BY e.amount DESC, ec.name`,
       branchId ? [tenantId, dateStr, branchId] : [tenantId, dateStr]
     );
+  }
+
+  /** POS + mobile revenue by hour (0–23) for one calendar day in the tenant timezone. */
+  async getHourlyTrend(
+    tenantId: string,
+    dateStr: string,
+    branchId: string | null
+  ): Promise<HourlyTrendPoint[]> {
+    const db = getDatabaseService();
+    const { start, end } = await calendarDayBoundsForTenant(tenantId, dateStr);
+    const tz = await resolveTenantTimezone(tenantId);
+    const branchFilter = branchId ? 'AND branch_id = $4' : '';
+    const baseParams = branchId ? [tenantId, start, end, branchId, tz] : [tenantId, start, end, tz];
+    const tzParam = branchId ? '$5' : '$4';
+    const hourExpr = `EXTRACT(HOUR FROM (created_at AT TIME ZONE ${tzParam}))::int`;
+
+    const pos = await db.query<{ hr: number; revenue: string; orders: string }>(
+      `SELECT ${hourExpr} AS hr,
+              COALESCE(SUM(grand_total::numeric), 0)::text AS revenue,
+              COUNT(*)::text AS orders
+       FROM shop_sales
+       WHERE tenant_id = $1 AND created_at >= $2::timestamptz AND created_at < $3::timestamptz
+       ${branchFilter}
+       GROUP BY 1`,
+      baseParams
+    );
+
+    const mobile = await db.query<{ hr: number; revenue: string; orders: string }>(
+      `SELECT ${hourExpr} AS hr,
+              COALESCE(SUM(grand_total::numeric), 0)::text AS revenue,
+              COUNT(*)::text AS orders
+       FROM mobile_orders
+       WHERE tenant_id = $1 AND created_at >= $2::timestamptz AND created_at < $3::timestamptz
+         AND status <> 'Cancelled'
+       ${branchFilter}
+       GROUP BY 1`,
+      baseParams
+    );
+
+    const byHour = new Map<number, { revenue: number; orders: number }>();
+    for (const row of [...pos, ...mobile]) {
+      const hr = Number(row.hr);
+      if (!Number.isFinite(hr) || hr < 0 || hr > 23) continue;
+      const cur = byHour.get(hr) || { revenue: 0, orders: 0 };
+      cur.revenue += parseFloat(row.revenue || '0') || 0;
+      cur.orders += parseInt(row.orders || '0', 10) || 0;
+      byHour.set(hr, cur);
+    }
+
+    const formatHour = (h: number) => {
+      if (h === 0) return '12 AM';
+      if (h < 12) return `${h} AM`;
+      if (h === 12) return '12 PM';
+      return `${h - 12} PM`;
+    };
+
+    return Array.from({ length: 24 }, (_, hour) => {
+      const row = byHour.get(hour) || { revenue: 0, orders: 0 };
+      return {
+        hour,
+        label: formatHour(hour),
+        revenue: Math.round(row.revenue * 100) / 100,
+        orders: row.orders,
+      };
+    });
   }
 
   async getProductsCreated(tenantId: string, dateStr: string) {

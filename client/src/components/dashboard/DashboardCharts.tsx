@@ -30,6 +30,8 @@ export type DashboardChartsProps = {
   cachedAt: string | null;
   salesTrend: { label: string; revenue: number }[];
   revenueBreakdown: { name: string; value: number }[];
+  trendTitle?: string;
+  trendSubtitle?: string;
 };
 
 export default function DashboardCharts({
@@ -37,13 +39,15 @@ export default function DashboardCharts({
   cachedAt,
   salesTrend,
   revenueBreakdown,
+  trendTitle = 'Daily Sales Trends',
+  trendSubtitle = 'Last 7 days (POS + mobile)',
 }: DashboardChartsProps) {
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <Card className="border border-gray-100 bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:shadow-none" padding="none">
         <div className="border-b border-gray-100 px-5 py-4 dark:border-gray-700">
-          <h2 className="text-base font-semibold text-[#212529] dark:text-foreground">Daily Sales Trends</h2>
-          <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">Last 7 days (POS + mobile)</p>
+          <h2 className="text-base font-semibold text-[#212529] dark:text-foreground">{trendTitle}</h2>
+          <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{trendSubtitle}</p>
         </div>
         <div className="p-4 pt-2">
           {!chartsLoaded || salesTrend.length === 0 ? (

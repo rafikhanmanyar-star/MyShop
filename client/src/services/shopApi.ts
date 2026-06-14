@@ -562,6 +562,14 @@ export const accountingApi = {
   },
   clearAllTransactions: () => apiClient.post<{ success: boolean; message: string }>('/shop/accounting/clear-transactions'),
 
+  hourlyTrend: (date: string, branchId?: string | null) => {
+    const q = new URLSearchParams();
+    q.set('date', date);
+    if (branchId) q.set('branchId', branchId);
+    return apiClient.get<{ hours: { hour: number; label: string; revenue: number; orders: number }[] }>(
+      `/shop/accounting/reports/daily/hourly-trend?${q.toString()}`
+    );
+  },
   dailyProfitSummary: (dates: string[], branchId?: string | null) => {
     const q = new URLSearchParams();
     q.set('dates', dates.join(','));

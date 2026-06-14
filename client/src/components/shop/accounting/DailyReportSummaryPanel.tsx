@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   RefreshCw,
@@ -24,6 +24,8 @@ import { useShopTimezone } from '../../../context/ShopTimezoneContext';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
+
+const DailyHourlyTrendChart = lazy(() => import('../../dashboard/DailyHourlyTrendChart'));
 
 const DAILY_REPORT_REFRESH_TYPES = new Set(['daily_report_updated', 'sales_return_created']);
 
@@ -204,6 +206,8 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
   const branchId = urlSync ? urlBranchId : localBranchId;
 
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof accountingApi.dailyReportSummary>> | null>(null);
+  const [hourlyTrend, setHourlyTrend] = useState<{ hour: number; label: string; revenue: number; orders: number }[]>([]);
+  const [hourlyLoading, setHourlyLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -221,8 +225,23 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
     }
   }, [date, branchId]);
 
+  const loadHourly = useCallback(async () => {
+    setHourlyLoading(true);
+    try {
+      const res = await accountingApi.hourlyTrend(date, branchId);
+      setHourlyTrend(Array.isArray(res?.hours) ? res.hours : []);
+    } catch {
+      setHourlyTrend([]);
+    } finally {
+      setHourlyLoading(false);
+    }
+  }, [date, branchId]);
+
   // Full daily report page: dedicated SSE. Embedded dashboard: shared ShopRealtimeBridge event.
-  useDailyReportStream(load, urlSync);
+  useDailyReportStream(() => {
+    load();
+    loadHourly();
+  }, urlSync);
 
   useEffect(() => {
     if (urlSync) return;
@@ -234,6 +253,7 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
         load();
+        loadHourly();
       }, 400);
     };
     window.addEventListener('shop:realtime', onRealtime as EventListener);
@@ -241,11 +261,21 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
       if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener('shop:realtime', onRealtime as EventListener);
     };
-  }, [urlSync, load]);
+  }, [urlSync, load, loadHourly]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    loadHourly();
+  }, [loadHourly]);
+
+  const hourlyDateLabel = useMemo(() => {
+    const [y, m, d] = date.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d, 12));
+    return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }, [date]);
 
   const setDate = (v: string) => {
     if (urlSync) {
@@ -302,7 +332,7 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
           <span className="mb-1 block text-xs font-medium text-foreground invisible select-none" aria-hidden="true">
             Action
           </span>
-          <Button variant="secondary" onClick={() => load()} disabled={loading} className="flex items-center gap-1.5 text-sm">
+          <Button variant="secondary" onClick={() => { load(); loadHourly(); }} disabled={loading} className="flex items-center gap-1.5 text-sm">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
@@ -491,6 +521,12 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
           <ChevronRight className="h-3.5 w-3.5" aria-hidden />
         </span>
       </button>
+
+      <Suspense
+        fallback={<div className="h-[280px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+      >
+        <DailyHourlyTrendChart loading={hourlyLoading} data={hourlyTrend} dateLabel={hourlyDateLabel} />
+      </Suspense>
 
       <div className="flex flex-col gap-1 rounded-xl border border-emerald-200/90 bg-emerald-50/90 px-3 py-2.5 dark:border-emerald-800/50 dark:bg-emerald-950/35 sm:flex-row sm:items-center sm:justify-between">
         <div>

@@ -19,6 +19,7 @@ import {
   LineChart,
 } from 'lucide-react';
 import { useShopTimezone } from '../context/ShopTimezoneContext';
+import { lastNDayRangeIso } from '../utils/shopTimezone';
 import { promiseWithTimeout } from '../utils/promiseTimeout';
 
 const CACHE_READ_TIMEOUT_MS = 4_000;
@@ -29,11 +30,23 @@ const DashboardCharts = lazy(() => import('../components/dashboard/DashboardChar
 type LowStockRow = { name: string; qty: string };
 type PendingOrderRow = { id: string; orderNumber: string; customer: string };
 type DashboardReportTab = 'daily' | 'weekly' | 'monthly';
+type TrendLabelMode = 'weekday' | 'shortDate';
+type KpiCard = {
+  label: string;
+  value: string | number;
+  icon: typeof Package;
+  iconClass: string;
+  isString?: boolean;
+  sub?: string;
+  warn?: boolean;
+  mobileLink?: boolean;
+};
 
 function mergeDailyTrend(
   raw: unknown,
   dayKeys: string[],
-  timeZone: string
+  timeZone: string,
+  labelMode: TrendLabelMode = 'weekday'
 ): { label: string; revenue: number }[] {
   const r = raw as { pos?: { day?: string; revenue?: string | number }[]; mobile?: { day?: string; revenue?: string | number }[] } | null;
   const pos = Array.isArray(r?.pos) ? r!.pos! : [];
@@ -52,9 +65,96 @@ function mergeDailyTrend(
   return dayKeys.map((key) => {
     const [y, m, day] = key.split('-').map(Number);
     const dt = new Date(Date.UTC(y, m - 1, day, 12));
-    const label = dt.toLocaleDateString('en', { weekday: 'short', timeZone });
+    const label =
+      labelMode === 'shortDate'
+        ? dt.toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone })
+        : dt.toLocaleDateString('en', { weekday: 'short', timeZone });
     return { label, revenue: Math.round((byDay.get(key) || 0) * 100) / 100 };
   });
+}
+
+function buildPeriodKpiCards(
+  stats: DashboardStats,
+  profit: { totalProfit: number; avgProfitPerDay: number } | null,
+  chartsLoaded: boolean,
+  profitLabel: string,
+  periodStats?: { totalSales: number; totalRevenue: number; netRevenue: number }
+): KpiCard[] {
+  const sales = periodStats?.totalSales ?? stats.totalSales;
+  const gross = periodStats?.totalRevenue ?? stats.totalRevenue;
+  const net = periodStats?.netRevenue ?? stats.netRevenue ?? stats.totalRevenue;
+
+  return [
+    {
+      label: 'Products',
+      value: stats.totalProducts,
+      icon: Package,
+      iconClass: 'text-[#4A90E2]',
+    },
+    {
+      label: 'Total Sales',
+      value: sales,
+      icon: ShoppingCart,
+      iconClass: 'text-emerald-600 dark:text-emerald-400',
+    },
+    {
+      label: 'Gross revenue',
+      value: `${CURRENCY} ${gross.toLocaleString()}`,
+      icon: TrendingUp,
+      iconClass: 'text-violet-600 dark:text-violet-400',
+      isString: true,
+    },
+    {
+      label: 'Net sales',
+      value: `${CURRENCY} ${net.toLocaleString()}`,
+      icon: DollarSign,
+      iconClass: 'text-emerald-700 dark:text-emerald-300',
+      isString: true,
+    },
+    {
+      label: profitLabel,
+      value:
+        profit != null
+          ? `${CURRENCY} ${profit.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+          : '—',
+      icon: LineChart,
+      iconClass: 'text-teal-600 dark:text-teal-400',
+      isString: true,
+      sub:
+        profit != null
+          ? `Avg ${CURRENCY} ${profit.avgProfitPerDay.toLocaleString(undefined, { maximumFractionDigits: 2 })}/day`
+          : chartsLoaded
+            ? 'No profit data'
+            : 'Loading…',
+    },
+    {
+      label: "Today's Sales",
+      value: stats.todaySalesCount,
+      icon: Calendar,
+      iconClass: 'text-[#4A90E2]',
+      sub: `${CURRENCY} ${stats.todayRevenue.toLocaleString()} today`,
+    },
+    {
+      label: 'Loyalty members',
+      value: stats.totalCustomers,
+      icon: Users,
+      iconClass: 'text-amber-600 dark:text-amber-400',
+    },
+    {
+      label: 'Low Stock',
+      value: stats.lowStockItems,
+      icon: AlertTriangle,
+      iconClass: 'text-amber-500',
+      warn: true,
+    },
+    {
+      label: 'Mobile Orders Pending',
+      value: stats.mobileOrdersPending,
+      icon: Smartphone,
+      iconClass: 'text-[#4A90E2]',
+      mobileLink: true,
+    },
+  ];
 }
 
 const EMPTY_STATS: DashboardStats = {
@@ -80,6 +180,8 @@ export default function DashboardPage() {
   const { lastYmdDays, timezone, loading: timezoneLoading } = useShopTimezone();
   const trendDayKeys = useMemo(() => lastYmdDays(7), [lastYmdDays, timezone]);
   const trendDayKeysKey = trendDayKeys.join(',');
+  const monthlyRange = useMemo(() => lastNDayRangeIso(30, timezone), [timezone]);
+  const monthlyDayKeysKey = monthlyRange.dayKeys.join(',');
   const loadGenRef = useRef(0);
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
   const [ready, setReady] = useState(false);
@@ -90,6 +192,15 @@ export default function DashboardPage() {
   const [revenueBreakdown, setRevenueBreakdown] = useState<{ name: string; value: number }[]>([]);
   const [chartsLoaded, setChartsLoaded] = useState(false);
   const [profit7d, setProfit7d] = useState<{ totalProfit: number; avgProfitPerDay: number } | null>(null);
+  const [monthlySalesTrend, setMonthlySalesTrend] = useState<{ label: string; revenue: number }[]>([]);
+  const [monthlyRevenueBreakdown, setMonthlyRevenueBreakdown] = useState<{ name: string; value: number }[]>([]);
+  const [profit30d, setProfit30d] = useState<{ totalProfit: number; avgProfitPerDay: number } | null>(null);
+  const [monthlyPeriodStats, setMonthlyPeriodStats] = useState<{
+    totalSales: number;
+    totalRevenue: number;
+    netRevenue: number;
+  } | null>(null);
+  const [monthlyChartsLoaded, setMonthlyChartsLoaded] = useState(false);
   const [activeReport, setActiveReport] = useState<DashboardReportTab>('daily');
 
   useEffect(() => {
@@ -102,10 +213,19 @@ export default function DashboardPage() {
     async function loadCharts() {
       if (!isOnline || !tenantId || timezoneLoading) return;
       try {
-        const [trendRaw, categoryPerf, profitSummary] = await Promise.all([
+        const [trendRaw, categoryPerf, profitSummary, monthlyTrendRaw, monthlyCategoryPerf, profit30Summary, sales30] =
+          await Promise.all([
           accountingApi.getDailyTrend(7).catch(() => null),
           accountingApi.getCategoryPerformance().catch(() => []),
           accountingApi.dailyProfitSummary(trendDayKeys).catch(() => null),
+          accountingApi
+            .getDailyTrend({ from: monthlyRange.fromIso, to: monthlyRange.toIso })
+            .catch(() => null),
+          accountingApi
+            .getCategoryPerformance(monthlyRange.fromIso, monthlyRange.categoryToIso)
+            .catch(() => []),
+          accountingApi.dailyProfitSummary(monthlyRange.dayKeys).catch(() => null),
+          accountingApi.getSalesBySource(monthlyRange.fromIso, monthlyRange.toIso).catch(() => null),
         ]);
         if (cancelled || loadGenRef.current !== gen) return;
         setSalesTrend(mergeDailyTrend(trendRaw, trendDayKeys, timezone));
@@ -129,10 +249,53 @@ export default function DashboardPage() {
           setProfit7d(null);
         }
         setChartsLoaded(true);
+
+        setMonthlySalesTrend(
+          mergeDailyTrend(monthlyTrendRaw, monthlyRange.dayKeys, timezone, 'shortDate')
+        );
+        const monthlyCatArr = Array.isArray(monthlyCategoryPerf) ? monthlyCategoryPerf : [];
+        setMonthlyRevenueBreakdown(
+          monthlyCatArr
+            .map((c: { category?: string; revenue?: string | number }) => ({
+              name: String(c.category ?? 'Uncategorized'),
+              value: Math.max(0, parseFloat(String(c.revenue)) || 0),
+            }))
+            .filter((x) => x.value > 0)
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 7)
+        );
+        if (profit30Summary && typeof profit30Summary === 'object') {
+          setProfit30d({
+            totalProfit: Number(profit30Summary.totalProfit) || 0,
+            avgProfitPerDay: Number(profit30Summary.avgProfitPerDay) || 0,
+          });
+        } else {
+          setProfit30d(null);
+        }
+        if (sales30 && typeof sales30 === 'object') {
+          const pos = (sales30 as { pos?: Record<string, unknown> }).pos ?? {};
+          const mobile = (sales30 as { mobile?: Record<string, unknown> }).mobile ?? {};
+          const posOrders = Number(pos.totalOrders) || 0;
+          const mobileOrders = Number(mobile.totalOrders) || 0;
+          const posGross = Number(pos.totalRevenue) || 0;
+          const mobileGross = Number(mobile.totalRevenue) || 0;
+          const posNet = Number(pos.netRevenue) || Math.max(0, posGross - (Number(pos.totalReturns) || 0));
+          setMonthlyPeriodStats({
+            totalSales: posOrders + mobileOrders,
+            totalRevenue: posGross + mobileGross,
+            netRevenue: posNet + mobileGross,
+          });
+        } else {
+          setMonthlyPeriodStats(null);
+        }
+        setMonthlyChartsLoaded(true);
       } catch {
         if (!cancelled) {
           setChartsLoaded(false);
           setProfit7d(null);
+          setMonthlyChartsLoaded(false);
+          setProfit30d(null);
+          setMonthlyPeriodStats(null);
         }
       }
     }
@@ -161,6 +324,9 @@ export default function DashboardPage() {
         if (!cancelled && loadGenRef.current === gen) {
           setChartsLoaded(false);
           setProfit7d(null);
+          setMonthlyChartsLoaded(false);
+          setProfit30d(null);
+          setMonthlyPeriodStats(null);
         }
         return;
       }
@@ -203,7 +369,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [timezone, trendDayKeysKey, timezoneLoading]);
+  }, [timezone, trendDayKeysKey, monthlyDayKeysKey, timezoneLoading]);
 
   const todayLabel = useMemo(
     () =>
@@ -216,110 +382,22 @@ export default function DashboardPage() {
     []
   );
 
-  const weeklyKpiCards = [
-    {
-      label: 'Products',
-      value: stats.totalProducts,
-      icon: Package,
-      iconClass: 'text-[#4A90E2]',
-    },
-    {
-      label: 'Total Sales',
-      value: stats.totalSales,
-      icon: ShoppingCart,
-      iconClass: 'text-emerald-600 dark:text-emerald-400',
-    },
-    {
-      label: 'Gross revenue',
-      value: `${CURRENCY} ${stats.totalRevenue.toLocaleString()}`,
-      icon: TrendingUp,
-      iconClass: 'text-violet-600 dark:text-violet-400',
-      isString: true,
-    },
-    {
-      label: 'Net sales',
-      value: `${CURRENCY} ${(stats.netRevenue ?? stats.totalRevenue).toLocaleString()}`,
-      icon: DollarSign,
-      iconClass: 'text-emerald-700 dark:text-emerald-300',
-      isString: true,
-    },
-    {
-      label: '7-day profit',
-      value:
-        profit7d != null
-          ? `${CURRENCY} ${profit7d.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
-          : '—',
-      icon: LineChart,
-      iconClass: 'text-teal-600 dark:text-teal-400',
-      isString: true,
-      sub:
-        profit7d != null
-          ? `Avg ${CURRENCY} ${profit7d.avgProfitPerDay.toLocaleString(undefined, { maximumFractionDigits: 2 })}/day`
-          : chartsLoaded
-            ? 'No profit data'
-            : 'Loading…',
-    },
-    {
-      label: "Today's Sales",
-      value: stats.todaySalesCount,
-      icon: Calendar,
-      iconClass: 'text-[#4A90E2]',
-      sub: `${CURRENCY} ${stats.todayRevenue.toLocaleString()} today`,
-    },
-    {
-      label: 'Loyalty members',
-      value: stats.totalCustomers,
-      icon: Users,
-      iconClass: 'text-amber-600 dark:text-amber-400',
-    },
-    {
-      label: 'Low Stock',
-      value: stats.lowStockItems,
-      icon: AlertTriangle,
-      iconClass: 'text-amber-500',
-      warn: true,
-    },
-    {
-      label: 'Mobile Orders Pending',
-      value: stats.mobileOrdersPending,
-      icon: Smartphone,
-      iconClass: 'text-[#4A90E2]',
-      mobileLink: true,
-    },
-  ];
+  const weeklyKpiCards = useMemo(
+    () => buildPeriodKpiCards(stats, profit7d, chartsLoaded, '7-day profit'),
+    [stats, profit7d, chartsLoaded]
+  );
 
-  const monthlyOverviewCards = [
-    {
-      label: 'Monthly gross revenue',
-      value: `${CURRENCY} ${stats.totalRevenue.toLocaleString()}`,
-      sub: 'Current month-to-date',
-    },
-    {
-      label: 'Monthly net sales',
-      value: `${CURRENCY} ${(stats.netRevenue ?? stats.totalRevenue).toLocaleString()}`,
-      sub: 'Current month-to-date',
-    },
-    {
-      label: 'Avg order value',
-      value: `${CURRENCY} ${stats.avgOrderValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}`,
-      sub: 'Month-to-date average',
-    },
-    {
-      label: 'Monthly orders',
-      value: stats.totalSales.toLocaleString(),
-      sub: 'Total orders in current period',
-    },
-    {
-      label: 'Active customers',
-      value: stats.totalCustomers.toLocaleString(),
-      sub: 'Loyalty/customer base',
-    },
-    {
-      label: 'Mobile pending',
-      value: stats.mobileOrdersPending.toLocaleString(),
-      sub: 'Open mobile orders',
-    },
-  ];
+  const monthlyKpiCards = useMemo(
+    () =>
+      buildPeriodKpiCards(
+        stats,
+        profit30d,
+        monthlyChartsLoaded,
+        '30-day profit',
+        monthlyPeriodStats ?? undefined
+      ),
+    [stats, profit30d, monthlyChartsLoaded, monthlyPeriodStats]
+  );
 
   if (!ready) {
     return (
@@ -549,56 +627,147 @@ export default function DashboardPage() {
         )}
 
         {activeReport === 'monthly' && (
-          <section id="monthly-overview" className="scroll-mt-6 space-y-4" aria-labelledby="monthly-overview-heading">
-            <div>
-              <h2 id="monthly-overview-heading" className="text-lg font-semibold text-[#212529] dark:text-foreground">
-                Monthly business overview
-              </h2>
-              <p className="mt-0.5 text-sm text-[#6C757D] dark:text-muted-foreground">
-                Month-to-date business snapshot across revenue, orders, customers, and profitability.
+        <section id="monthly-overview" className="scroll-mt-6 space-y-4" aria-labelledby="monthly-overview-heading">
+          <div>
+            <h2 id="monthly-overview-heading" className="text-lg font-semibold text-[#212529] dark:text-foreground">
+              Monthly report
+            </h2>
+            <p className="mt-0.5 text-sm text-[#6C757D] dark:text-muted-foreground">
+              Last 30 days — KPIs, trends, and operational alerts.
+            </p>
+          </div>
+
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+          {monthlyKpiCards.map((card) => (
+            <div
+              key={card.label}
+              className="relative overflow-hidden rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none"
+            >
+              <p className="pr-10 text-xs font-medium text-[#6C757D] dark:text-muted-foreground">{card.label}</p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-[#212529] dark:text-foreground">
+                {card.isString
+                  ? card.value
+                  : typeof card.value === 'number'
+                    ? card.value.toLocaleString()
+                    : card.value}
               </p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {monthlyOverviewCards.map((card) => (
-                <div
-                  key={card.label}
-                  className="rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none"
+              {'sub' in card && card.sub && <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>}
+              {card.mobileLink && stats.mobileOrdersPending > 0 && (
+                <Link
+                  to="/order-center"
+                  className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-[#4A90E2] hover:underline"
                 >
-                  <p className="text-xs font-medium text-[#6C757D] dark:text-muted-foreground">{card.label}</p>
-                  <p className="mt-1 text-xl font-bold tabular-nums text-[#212529] dark:text-foreground">{card.value}</p>
-                  <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>
-                </div>
-              ))}
+                  (View orders <ArrowRight className="inline h-3 w-3" />)
+                </Link>
+              )}
+              <div className={`absolute right-3 top-3 ${card.iconClass}`}>
+                <card.icon className="h-5 w-5 opacity-90" strokeWidth={2} />
+              </div>
             </div>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none">
-                <h3 className="text-sm font-semibold text-[#212529] dark:text-foreground">Revenue trend</h3>
-                <p className="mt-1 text-xs text-[#6C757D] dark:text-muted-foreground">
-                  Trend and category charts are shared from the existing dashboard analytics.
-                </p>
-                <div className="mt-3">
-                  <Suspense
-                    fallback={<div className="h-[260px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
+          <Suspense
+            fallback={
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />
+                <div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />
+              </div>
+            }
+          >
+            <DashboardCharts
+              chartsLoaded={monthlyChartsLoaded}
+              cachedAt={cachedAt}
+              salesTrend={monthlySalesTrend}
+              revenueBreakdown={monthlyRevenueBreakdown}
+              trendTitle="Daily Sales Trends"
+              trendSubtitle="Last 30 days (POS + mobile)"
+            />
+          </Suspense>
+
+          <Card
+            className="border border-gray-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:shadow-none xl:sticky xl:top-4"
+            padding="none"
+          >
+            <div className="border-b border-gray-100 px-5 py-4 dark:border-gray-700">
+              <h2 className="text-base font-semibold text-[#212529] dark:text-foreground">Alerts</h2>
+            </div>
+            <div className="space-y-4 p-4">
+              <div className="overflow-hidden rounded-lg border border-amber-200/80 dark:border-amber-800/60">
+                <div className="bg-[#F6C23E] px-3 py-2 text-sm font-semibold text-gray-900">Low Stock</div>
+                <div className="bg-[#FFF3CD] p-3 dark:bg-amber-950/30">
+                  {lowStockRows.length === 0 ? (
+                    <p className="text-sm text-gray-700 dark:text-gray-300">No low stock items.</p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                          <th className="pb-2 pr-2">Item</th>
+                          <th className="pb-2 text-right">Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-gray-800 dark:text-gray-200">
+                        {lowStockRows.map((row, idx) => (
+                          <tr key={`${row.name}-${idx}`} className="border-t border-amber-200/60 dark:border-amber-800/40">
+                            <td className="py-1.5 pr-2">{row.name}</td>
+                            <td className="py-1.5 text-right tabular-nums">{row.qty}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  <Link
+                    to="/inventory"
+                    className="mt-2 inline-block text-xs font-medium text-[#4A90E2] hover:underline"
                   >
-                    <DashboardCharts
-                      chartsLoaded={chartsLoaded}
-                      cachedAt={cachedAt}
-                      salesTrend={salesTrend}
-                      revenueBreakdown={revenueBreakdown}
-                    />
-                  </Suspense>
+                    Open inventory
+                  </Link>
                 </div>
               </div>
-              <div className="rounded-[10px] border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/25">
-                <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">Monthly profitability</h3>
-                <p className="mt-2 text-sm text-emerald-900/90 dark:text-emerald-300/90">
-                  {profit7d
-                    ? `${CURRENCY} ${profit7d.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 2 })} recent profit benchmark`
-                    : 'Profit benchmark is loading from current report data.'}
-                </p>
+
+              <div className="overflow-hidden rounded-lg border border-red-200/80 dark:border-red-900/50">
+                <div className="bg-[#E74A3B] px-3 py-2 text-sm font-semibold text-white">Pending Orders</div>
+                <div className="bg-[#F8D7DA] p-3 dark:bg-red-950/25">
+                  {pendingOrderRows.length === 0 ? (
+                    <p className="text-sm text-gray-800 dark:text-gray-200">No pending mobile orders.</p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-400">
+                          <th className="pb-2 pr-2">Order #</th>
+                          <th className="pb-2">Customer</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingOrderRows.map((row) => (
+                          <tr key={row.id} className="border-t border-red-200/60 dark:border-red-900/40">
+                            <td className="py-1.5 pr-2">
+                              <Link
+                                to={`/order-center?order=${encodeURIComponent(row.id)}&kind=cart`}
+                                className="font-medium text-[#4A90E2] hover:underline"
+                              >
+                                {row.orderNumber}
+                              </Link>
+                            </td>
+                            <td className="py-1.5 text-gray-800 dark:text-gray-200">{row.customer}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  <Link
+                    to="/order-center"
+                    className="mt-2 inline-block text-xs font-medium text-[#4A90E2] hover:underline"
+                  >
+                    View all mobile orders
+                  </Link>
+                </div>
               </div>
             </div>
-          </section>
+          </Card>
+        </div>
+        </section>
         )}
         </div>
       </div>

@@ -65,3 +65,27 @@ export function lastYmdDaysInTimezone(count: number, timeZone: string): string[]
   }
   return out;
 }
+
+/** UTC ISO bounds for one calendar day in the given IANA timezone. */
+export function calendarDayBoundsIso(
+  timeZone: string,
+  dateYmd: string
+): { start: string; end: string } {
+  const tz = normalizeShopTimezone(timeZone);
+  const start = zonedDateTimeToUtc(dateYmd, '00:00:00', tz);
+  const nextYmd = addDaysYmd(dateYmd, 1);
+  const end = zonedDateTimeToUtc(nextYmd, '00:00:00', tz);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+/** Inclusive last-N-day window in shop timezone (oldest first). */
+export function lastNDayRangeIso(
+  count: number,
+  timeZone: string
+): { fromIso: string; toIso: string; dayKeys: string[]; categoryToIso: string } {
+  const dayKeys = lastYmdDaysInTimezone(count, timeZone);
+  const fromIso = calendarDayBoundsIso(timeZone, dayKeys[0]).start;
+  const toIso = calendarDayBoundsIso(timeZone, dayKeys[dayKeys.length - 1]).end;
+  const categoryToIso = calendarDayBoundsIso(timeZone, addDaysYmd(dayKeys[dayKeys.length - 1], 1)).start;
+  return { fromIso, toIso, dayKeys, categoryToIso };
+}

@@ -378,6 +378,19 @@ router.get('/reports/daily/profit-summary', checkRole(['admin', 'accountant']), 
     }
 });
 
+router.get('/reports/daily/hourly-trend', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const date = (req.query.date as string) || (await tenantTodayYmd(req.tenantId));
+        const raw = (req.query.branchId as string) || '';
+        const branchId = raw && raw !== 'all' ? raw : null;
+        const data = await getDailyReportService().getHourlyTrend(req.tenantId, date, branchId);
+        res.json({ hours: data });
+    } catch (error: any) {
+        console.error('❌ Error daily hourly trend:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.get('/reports/daily/inventory-out', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {
         const date = (req.query.date as string) || (await tenantTodayYmd(req.tenantId));
