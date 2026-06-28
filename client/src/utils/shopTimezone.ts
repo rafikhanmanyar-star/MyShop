@@ -90,6 +90,83 @@ export function lastNDayRangeIso(
   return { fromIso, toIso, dayKeys, categoryToIso };
 }
 
+/** Day of week (0=Sunday..6=Saturday) for a YYYY-MM-DD date string. */
+function weekdayOfYmd(ymd: string): number {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/** Inclusive day range from startYmd through today (shop timezone), oldest first. */
+function rangeFromStartYmd(
+  startYmd: string,
+  timeZone: string
+): { fromIso: string; toIso: string; dayKeys: string[]; categoryToIso: string } {
+  const tz = normalizeShopTimezone(timeZone);
+  const today = todayYmdInTimezone(tz);
+  const dayKeys: string[] = [];
+  let cur = startYmd > today ? today : startYmd;
+  while (cur <= today) {
+    dayKeys.push(cur);
+    cur = addDaysYmd(cur, 1);
+  }
+  const fromIso = calendarDayBoundsIso(tz, dayKeys[0]).start;
+  const lastKey = dayKeys[dayKeys.length - 1];
+  const toIso = calendarDayBoundsIso(tz, lastKey).end;
+  const categoryToIso = calendarDayBoundsIso(tz, addDaysYmd(lastKey, 1)).start;
+  return { fromIso, toIso, dayKeys, categoryToIso };
+}
+
+/** Week-to-date window in shop timezone (from the start of the current week through today). */
+export function weekToDateRangeIso(
+  timeZone: string,
+  weekStartsOn: 0 | 1 = 1
+): { fromIso: string; toIso: string; dayKeys: string[]; categoryToIso: string } {
+  const tz = normalizeShopTimezone(timeZone);
+  const today = todayYmdInTimezone(tz);
+  const diff = (weekdayOfYmd(today) - weekStartsOn + 7) % 7;
+  return rangeFromStartYmd(addDaysYmd(today, -diff), tz);
+}
+
+/** Month-to-date window in shop timezone (from the 1st of the current month through today). */
+export function monthToDateRangeIso(
+  timeZone: string
+): { fromIso: string; toIso: string; dayKeys: string[]; categoryToIso: string } {
+  const tz = normalizeShopTimezone(timeZone);
+  const today = todayYmdInTimezone(tz);
+  return rangeFromStartYmd(`${today.slice(0, 7)}-01`, tz);
+}
+
+/** Year-to-date window in shop timezone (from Jan 1 of the current year through today). */
+export function yearToDateRangeIso(
+  timeZone: string
+): { fromIso: string; toIso: string; dayKeys: string[]; categoryToIso: string } {
+  const tz = normalizeShopTimezone(timeZone);
+  const today = todayYmdInTimezone(tz);
+  return rangeFromStartYmd(`${today.slice(0, 4)}-01-01`, tz);
+}
+
+/** Year-to-date month buckets in shop timezone (Jan through the current month). */
+export function yearToDateMonthRangeIso(
+  timeZone: string
+): { fromIso: string; toIso: string; monthKeys: string[]; categoryToIso: string } {
+  const tz = normalizeShopTimezone(timeZone);
+  const today = todayYmdInTimezone(tz);
+  const [y, m] = today.split('-').map(Number);
+  const monthKeys: string[] = [];
+  for (let mo = 1; mo <= m; mo++) {
+    monthKeys.push(`${y}-${String(mo).padStart(2, '0')}`);
+  }
+  const fromIso = calendarDayBoundsIso(tz, `${monthKeys[0]}-01`).start;
+  let nextMonth = m + 1;
+  let nextYear = y;
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear += 1;
+  }
+  const toIso = calendarDayBoundsIso(tz, `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`).start;
+  return { fromIso, toIso, monthKeys, categoryToIso: toIso };
+}
+
 /** Last N calendar months in shop timezone (oldest first), including the current month. */
 export function lastNMonthKeys(count: number, timeZone: string): string[] {
   const n = Math.max(1, Math.floor(count));

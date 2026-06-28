@@ -21,7 +21,12 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useShopTimezone } from '../context/ShopTimezoneContext';
-import { lastNDayRangeIso, lastNMonthRangeIso } from '../utils/shopTimezone';
+import {
+  weekToDateRangeIso,
+  monthToDateRangeIso,
+  yearToDateRangeIso,
+  yearToDateMonthRangeIso,
+} from '../utils/shopTimezone';
 import { promiseWithTimeout } from '../utils/promiseTimeout';
 import type { InventoryValuePoint } from '../components/dashboard/InventoryValueChart';
 
@@ -440,13 +445,13 @@ const EMPTY_STATS: DashboardStats = {
 
 export default function DashboardPage() {
   const { timezone, loading: timezoneLoading } = useShopTimezone();
-  const weeklyRange = useMemo(() => lastNDayRangeIso(7, timezone), [timezone]);
+  const weeklyRange = useMemo(() => weekToDateRangeIso(timezone), [timezone]);
   const weeklyDayKeysKey = weeklyRange.dayKeys.join(',');
-  const monthlyRange = useMemo(() => lastNDayRangeIso(30, timezone), [timezone]);
+  const monthlyRange = useMemo(() => monthToDateRangeIso(timezone), [timezone]);
   const monthlyDayKeysKey = monthlyRange.dayKeys.join(',');
-  const yearlyKpiRange = useMemo(() => lastNDayRangeIso(365, timezone), [timezone]);
+  const yearlyKpiRange = useMemo(() => yearToDateRangeIso(timezone), [timezone]);
   const yearlyKpiDayKeysKey = yearlyKpiRange.dayKeys.join(',');
-  const yearlyChartRange = useMemo(() => lastNMonthRangeIso(12, timezone), [timezone]);
+  const yearlyChartRange = useMemo(() => yearToDateMonthRangeIso(timezone), [timezone]);
   const yearlyMonthKeysKey = yearlyChartRange.monthKeys.join(',');
   const loadGenRef = useRef(0);
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
@@ -722,7 +727,7 @@ export default function DashboardPage() {
   );
 
   const weeklyKpiCards = useMemo(
-    () => buildPeriodKpiCards(stats, profit7d, chartsLoaded, '7-day profit', weeklyPeriodStats, weeklyInventory),
+    () => buildPeriodKpiCards(stats, profit7d, chartsLoaded, 'Week-to-date profit', weeklyPeriodStats, weeklyInventory),
     [stats, profit7d, chartsLoaded, weeklyPeriodStats, weeklyInventory]
   );
 
@@ -732,7 +737,7 @@ export default function DashboardPage() {
         stats,
         profit30d,
         monthlyChartsLoaded,
-        '30-day profit',
+        'Month-to-date profit',
         monthlyPeriodStats,
         monthlyInventory
       ),
@@ -745,7 +750,7 @@ export default function DashboardPage() {
         stats,
         profit365d,
         yearlyChartsLoaded,
-        '365-day profit',
+        'Year-to-date profit',
         yearlyPeriodStats,
         yearlyInventory
       ),
@@ -854,7 +859,7 @@ export default function DashboardPage() {
               chartsLoaded={chartsLoaded}
               cachedAt={cachedAt}
               data={weeklyInventory?.points ?? []}
-              subtitle="Total purchase (cost) vs. selling (retail) value — last 7 days"
+              subtitle="Total purchase (cost) vs. selling (retail) value — week to date"
             />
           </Suspense>
         </section>
@@ -867,7 +872,7 @@ export default function DashboardPage() {
               Weekly report
             </h2>
             <p className="mt-0.5 text-sm text-[#6C757D] dark:text-muted-foreground">
-              Weekly KPIs and charts with operational alerts.
+              Week to date — KPIs and charts with operational alerts.
             </p>
           </div>
 
@@ -884,7 +889,7 @@ export default function DashboardPage() {
             chartsLoaded={chartsLoaded}
             cachedAt={cachedAt}
             data={weeklyInventory?.points ?? []}
-            subtitle="Total purchase (cost) vs. selling (retail) value — last 7 days"
+            subtitle="Total purchase (cost) vs. selling (retail) value — week to date"
           />
         </Suspense>
 
@@ -902,6 +907,7 @@ export default function DashboardPage() {
               cachedAt={cachedAt}
               salesTrend={salesTrend}
               revenueBreakdown={revenueBreakdown}
+              trendSubtitle="Week to date (POS + mobile)"
             />
           </Suspense>
 
@@ -996,7 +1002,7 @@ export default function DashboardPage() {
               Monthly report
             </h2>
             <p className="mt-0.5 text-sm text-[#6C757D] dark:text-muted-foreground">
-              Last 30 days — KPIs, trends, and operational alerts.
+              Month to date — KPIs, trends, and operational alerts.
             </p>
           </div>
 
@@ -1013,7 +1019,7 @@ export default function DashboardPage() {
             chartsLoaded={monthlyChartsLoaded}
             cachedAt={cachedAt}
             data={monthlyInventory?.points ?? []}
-            subtitle="Total purchase (cost) vs. selling (retail) value — last 30 days"
+            subtitle="Total purchase (cost) vs. selling (retail) value — month to date"
           />
         </Suspense>
 
@@ -1032,7 +1038,7 @@ export default function DashboardPage() {
               salesTrend={monthlySalesTrend}
               revenueBreakdown={monthlyRevenueBreakdown}
               trendTitle="Daily Sales Trends"
-              trendSubtitle="Last 30 days (POS + mobile)"
+              trendSubtitle="Month to date (POS + mobile)"
             />
           </Suspense>
 
@@ -1127,7 +1133,7 @@ export default function DashboardPage() {
               Yearly report
             </h2>
             <p className="mt-0.5 text-sm text-[#6C757D] dark:text-muted-foreground">
-              Last 365 days — KPIs and operational alerts. Monthly revenue trend covers the last 12 months.
+              Year to date — KPIs and operational alerts. Monthly revenue trend covers each month this year.
             </p>
           </div>
 
@@ -1144,7 +1150,7 @@ export default function DashboardPage() {
             chartsLoaded={yearlyChartsLoaded}
             cachedAt={cachedAt}
             data={yearlyInventory?.points ?? []}
-            subtitle="Total purchase (cost) vs. selling (retail) value — last 12 months"
+            subtitle="Total purchase (cost) vs. selling (retail) value — year to date (monthly)"
             tickInterval={0}
           />
         </Suspense>
@@ -1164,7 +1170,7 @@ export default function DashboardPage() {
               salesTrend={yearlySalesTrend}
               revenueBreakdown={yearlyRevenueBreakdown}
               trendTitle="Monthly Sales Trends"
-              trendSubtitle="Last 12 months (POS + mobile)"
+              trendSubtitle="Year to date (POS + mobile)"
               trendTickInterval={0}
             />
           </Suspense>

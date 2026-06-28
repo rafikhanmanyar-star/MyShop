@@ -394,7 +394,9 @@ export class DailyReportService {
     const branchFilter = branchId ? 'AND branch_id = $4' : '';
     const baseParams = branchId ? [tenantId, start, end, branchId, tz] : [tenantId, start, end, tz];
     const tzParam = branchId ? '$5' : '$4';
-    const hourExpr = `EXTRACT(HOUR FROM (created_at AT TIME ZONE ${tzParam}))::int`;
+    // created_at is a naive UTC timestamp: anchor it to UTC, then convert to the
+    // shop timezone to read the correct local hour (independent of DB session tz).
+    const hourExpr = `EXTRACT(HOUR FROM (created_at AT TIME ZONE 'UTC' AT TIME ZONE ${tzParam}))::int`;
 
     const pos = await db.query<{ hr: number; revenue: string; orders: string }>(
       `SELECT ${hourExpr} AS hr,
