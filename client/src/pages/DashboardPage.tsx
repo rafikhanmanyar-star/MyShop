@@ -31,7 +31,6 @@ import { promiseWithTimeout } from '../utils/promiseTimeout';
 import type { InventoryValuePoint } from '../components/dashboard/InventoryValueChart';
 import StatCard from '../components/dashboard/StatCard';
 import AssetVelocityPanel from '../components/dashboard/AssetVelocityPanel';
-import RecentActivitySection from '../components/dashboard/RecentActivitySection';
 import { useNavigate } from 'react-router-dom';
 
 const CACHE_READ_TIMEOUT_MS = 4_000;
@@ -886,8 +885,6 @@ export default function DashboardPage() {
           <AssetVelocityPanel data={weeklyInventory} loading={!chartsLoaded} />
         </div>
 
-        <RecentActivitySection />
-
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
           <Suspense
             fallback={
@@ -1020,8 +1017,6 @@ export default function DashboardPage() {
           </Suspense>
           <AssetVelocityPanel data={monthlyInventory} loading={!monthlyChartsLoaded} />
         </div>
-
-        <RecentActivitySection />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
           <Suspense
@@ -1157,8 +1152,6 @@ export default function DashboardPage() {
           </Suspense>
           <AssetVelocityPanel data={yearlyInventory} loading={!yearlyChartsLoaded} />
         </div>
-
-        <RecentActivitySection />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
           <Suspense

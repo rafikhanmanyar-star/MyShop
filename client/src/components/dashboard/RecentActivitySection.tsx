@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Eye, Receipt, BookMarked, CreditCard } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { shopApi, khataApi, procurementApi } from '../../services/shopApi';
+import { accountingApi, khataApi, procurementApi } from '../../services/shopApi';
 import { CURRENCY } from '../../constants';
 
 type RecentRow = {
@@ -122,7 +122,7 @@ export default function RecentActivitySection() {
     (async () => {
       setLoading(true);
       const [salesRes, khataRes, payRes] = await Promise.all([
-        shopApi.getSales({ days: 90 }).catch(() => []),
+        accountingApi.getTransactions(5).catch(() => []),
         khataApi.getLedger().catch(() => []),
         procurementApi.getSupplierPayments().catch(() => []),
       ]);
@@ -132,7 +132,7 @@ export default function RecentActivitySection() {
       const payArr = Array.isArray(payRes) ? payRes : [];
       setSales(
         [...salesArr]
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
           .slice(0, 2)
       );
       setKhata(
@@ -151,13 +151,13 @@ export default function RecentActivitySection() {
   const salesRows: RecentRow[] = useMemo(
     () =>
       sales.map((s, i) => ({
-        id: String(s.id ?? s.saleNumber ?? i),
-        ref: String(s.saleNumber ?? '—'),
-        title: s.customerName?.trim() || 'Walk-in customer',
-        subtitle: shortDate(s.createdAt),
-        amount: Number(s.grandTotal) || 0,
+        id: String(s.id ?? s.reference ?? i),
+        ref: String(s.reference ?? '—'),
+        title: String(s.source || 'Sale'),
+        subtitle: s.payment_method ? `${s.payment_method} · ${shortDate(s.created_at)}` : shortDate(s.created_at),
+        amount: Number(s.amount) || 0,
         amountClass: 'text-emerald-600 dark:text-emerald-400',
-        onOpen: () => navigate(`/accounting/reports/daily?date=${ymd(s.createdAt)}`),
+        onOpen: () => navigate(`/accounting/reports/daily?date=${ymd(s.created_at)}`),
       })),
     [sales, navigate]
   );
