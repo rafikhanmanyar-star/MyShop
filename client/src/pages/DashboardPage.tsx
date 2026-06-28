@@ -29,6 +29,10 @@ import {
 } from '../utils/shopTimezone';
 import { promiseWithTimeout } from '../utils/promiseTimeout';
 import type { InventoryValuePoint } from '../components/dashboard/InventoryValueChart';
+import StatCard from '../components/dashboard/StatCard';
+import AssetVelocityPanel from '../components/dashboard/AssetVelocityPanel';
+import RecentActivitySection from '../components/dashboard/RecentActivitySection';
+import { useNavigate } from 'react-router-dom';
 
 const CACHE_READ_TIMEOUT_MS = 4_000;
 const OVERVIEW_FETCH_TIMEOUT_MS = 45_000;
@@ -45,6 +49,7 @@ type KpiCard = {
   value: string | number;
   icon: typeof Package;
   iconClass: string;
+  accentClass?: string;
   isString?: boolean;
   sub?: string;
   warn?: boolean;
@@ -145,6 +150,7 @@ function inventoryKpiCards(inventory: InventoryTrend, loaded: boolean): KpiCard[
           : '—',
       icon: Wallet,
       iconClass: 'text-indigo-600 dark:text-indigo-400',
+      accentClass: 'bg-indigo-500',
       isString: true,
       delta: ready ? pctChange(inventory!.costStart, inventory!.costNow) : undefined,
       sub: 'Total stock at cost',
@@ -158,6 +164,7 @@ function inventoryKpiCards(inventory: InventoryTrend, loaded: boolean): KpiCard[
           : '—',
       icon: Package,
       iconClass: 'text-emerald-600 dark:text-emerald-400',
+      accentClass: 'bg-emerald-500',
       isString: true,
       delta: ready ? pctChange(inventory!.retailStart, inventory!.retailNow) : undefined,
       sub: 'Total stock at retail',
@@ -298,12 +305,14 @@ function buildPeriodKpiCards(
       value: stats.totalProducts,
       icon: Package,
       iconClass: 'text-[#4A90E2]',
+      accentClass: 'bg-sky-500',
     },
     {
       label: 'Total Sales',
       value: periodReady ? sales! : chartsLoaded ? 0 : '—',
       icon: ShoppingCart,
       iconClass: 'text-emerald-600 dark:text-emerald-400',
+      accentClass: 'bg-emerald-500',
     },
     {
       label: 'Gross revenue',
@@ -314,6 +323,7 @@ function buildPeriodKpiCards(
           : '—',
       icon: TrendingUp,
       iconClass: 'text-violet-600 dark:text-violet-400',
+      accentClass: 'bg-violet-500',
       isString: true,
     },
     {
@@ -325,6 +335,7 @@ function buildPeriodKpiCards(
           : '—',
       icon: DollarSign,
       iconClass: 'text-emerald-700 dark:text-emerald-300',
+      accentClass: 'bg-emerald-600',
       isString: true,
     },
     {
@@ -335,6 +346,7 @@ function buildPeriodKpiCards(
           : '—',
       icon: LineChart,
       iconClass: 'text-teal-600 dark:text-teal-400',
+      accentClass: 'bg-teal-500',
       isString: true,
       sub:
         profit != null
@@ -348,6 +360,7 @@ function buildPeriodKpiCards(
       value: stats.todaySalesCount,
       icon: Calendar,
       iconClass: 'text-[#4A90E2]',
+      accentClass: 'bg-sky-500',
       sub: `${CURRENCY} ${stats.todayRevenue.toLocaleString()} today`,
     },
     {
@@ -355,12 +368,14 @@ function buildPeriodKpiCards(
       value: stats.totalCustomers,
       icon: Users,
       iconClass: 'text-amber-600 dark:text-amber-400',
+      accentClass: 'bg-amber-500',
     },
     {
       label: 'Low Stock',
       value: stats.lowStockItems,
       icon: AlertTriangle,
       iconClass: 'text-amber-500',
+      accentClass: 'bg-rose-500',
       warn: true,
     },
     {
@@ -368,6 +383,7 @@ function buildPeriodKpiCards(
       value: stats.mobileOrdersPending,
       icon: Smartphone,
       iconClass: 'text-[#4A90E2]',
+      accentClass: 'bg-blue-500',
       mobileLink: true,
     },
     ...inventoryKpiCards(inventory ?? null, chartsLoaded),
@@ -381,46 +397,31 @@ function KpiCardTile({
   card: KpiCard;
   mobileOrdersPending: number;
 }) {
+  const navigate = useNavigate();
+  const displayValue = card.isString
+    ? card.value
+    : typeof card.value === 'number'
+      ? card.value.toLocaleString()
+      : card.value;
+  const sub =
+    card.mobileLink && mobileOrdersPending > 0 ? (
+      <span className="inline-flex items-center gap-0.5 font-semibold text-[#4A90E2]">
+        View orders <ArrowRight className="inline h-3 w-3" />
+      </span>
+    ) : (
+      card.sub
+    );
   return (
-    <div className="relative overflow-hidden rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none">
-      <p className="pr-10 text-xs font-medium text-[#6C757D] dark:text-muted-foreground">{card.label}</p>
-      <p className="mt-1 text-xl font-bold tabular-nums text-[#212529] dark:text-foreground">
-        {card.isString
-          ? card.value
-          : typeof card.value === 'number'
-            ? card.value.toLocaleString()
-            : card.value}
-      </p>
-      {typeof card.delta === 'number' && Number.isFinite(card.delta) && (
-        <p
-          className={`mt-0.5 flex items-center gap-0.5 text-xs font-medium ${
-            card.delta >= 0
-              ? 'text-emerald-600 dark:text-emerald-400'
-              : 'text-rose-600 dark:text-rose-400'
-          }`}
-        >
-          {card.delta >= 0 ? (
-            <TrendingUp className="h-3.5 w-3.5" strokeWidth={2} />
-          ) : (
-            <TrendingDown className="h-3.5 w-3.5" strokeWidth={2} />
-          )}
-          {card.delta >= 0 ? '+' : ''}
-          {card.delta.toFixed(1)}% vs start
-        </p>
-      )}
-      {card.sub && <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>}
-      {card.mobileLink && mobileOrdersPending > 0 && (
-        <Link
-          to="/order-center"
-          className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-[#4A90E2] hover:underline"
-        >
-          (View orders <ArrowRight className="inline h-3 w-3" />)
-        </Link>
-      )}
-      <div className={`absolute right-3 top-3 ${card.iconClass}`}>
-        <card.icon className="h-5 w-5 opacity-90" strokeWidth={2} />
-      </div>
-    </div>
+    <StatCard
+      label={card.label}
+      value={displayValue}
+      sub={sub}
+      delta={card.delta}
+      icon={card.icon}
+      iconClass={card.iconClass}
+      accentClass={card.accentClass ?? (card.warn ? 'bg-amber-500' : 'bg-[#4A90E2]')}
+      onClick={card.mobileLink ? () => navigate('/order-center') : undefined}
+    />
   );
 }
 
@@ -757,11 +758,6 @@ export default function DashboardPage() {
     [stats, profit365d, yearlyChartsLoaded, yearlyPeriodStats, yearlyInventory]
   );
 
-  const dailyInventoryCards = useMemo(
-    () => inventoryKpiCards(weeklyInventory, chartsLoaded),
-    [weeklyInventory, chartsLoaded]
-  );
-
   if (!ready) {
     return (
       <div className="-mx-4 h-full min-h-0 bg-[#F8F9FA] px-4 py-5 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 dark:bg-background">
@@ -783,9 +779,9 @@ export default function DashboardPage() {
       <div className="shrink-0 space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#212529] dark:text-foreground">Dashboard</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-[#212529] dark:text-foreground">Dashboard Overview</h1>
             <p className="mt-1 max-w-2xl text-sm text-[#6C757D] dark:text-muted-foreground">
-              Daily accounting totals at the top, then catalog-wide KPIs, trends, and alerts.
+              Real-time operational intelligence — sales, inventory velocity, and recent activity.
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
@@ -846,12 +842,6 @@ export default function DashboardPage() {
             <DailyReportSummaryPanel />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-            {dailyInventoryCards.map((card) => (
-              <KpiCardTile key={card.label} card={card} mobileOrdersPending={stats.mobileOrdersPending} />
-            ))}
-          </div>
-
           <Suspense
             fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
           >
@@ -882,16 +872,21 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        <Suspense
-          fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
-        >
-          <InventoryValueChart
-            chartsLoaded={chartsLoaded}
-            cachedAt={cachedAt}
-            data={weeklyInventory?.points ?? []}
-            subtitle="Total purchase (cost) vs. selling (retail) value — week to date"
-          />
-        </Suspense>
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr] xl:items-stretch">
+          <Suspense
+            fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+          >
+            <InventoryValueChart
+              chartsLoaded={chartsLoaded}
+              cachedAt={cachedAt}
+              data={weeklyInventory?.points ?? []}
+              subtitle="Total purchase (cost) vs. selling (retail) value — week to date"
+            />
+          </Suspense>
+          <AssetVelocityPanel data={weeklyInventory} loading={!chartsLoaded} />
+        </div>
+
+        <RecentActivitySection />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
           <Suspense
@@ -1012,16 +1007,21 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        <Suspense
-          fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
-        >
-          <InventoryValueChart
-            chartsLoaded={monthlyChartsLoaded}
-            cachedAt={cachedAt}
-            data={monthlyInventory?.points ?? []}
-            subtitle="Total purchase (cost) vs. selling (retail) value — month to date"
-          />
-        </Suspense>
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr] xl:items-stretch">
+          <Suspense
+            fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+          >
+            <InventoryValueChart
+              chartsLoaded={monthlyChartsLoaded}
+              cachedAt={cachedAt}
+              data={monthlyInventory?.points ?? []}
+              subtitle="Total purchase (cost) vs. selling (retail) value — month to date"
+            />
+          </Suspense>
+          <AssetVelocityPanel data={monthlyInventory} loading={!monthlyChartsLoaded} />
+        </div>
+
+        <RecentActivitySection />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
           <Suspense
@@ -1143,17 +1143,22 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        <Suspense
-          fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
-        >
-          <InventoryValueChart
-            chartsLoaded={yearlyChartsLoaded}
-            cachedAt={cachedAt}
-            data={yearlyInventory?.points ?? []}
-            subtitle="Total purchase (cost) vs. selling (retail) value — year to date (monthly)"
-            tickInterval={0}
-          />
-        </Suspense>
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr] xl:items-stretch">
+          <Suspense
+            fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+          >
+            <InventoryValueChart
+              chartsLoaded={yearlyChartsLoaded}
+              cachedAt={cachedAt}
+              data={yearlyInventory?.points ?? []}
+              subtitle="Total purchase (cost) vs. selling (retail) value — year to date (monthly)"
+              tickInterval={0}
+            />
+          </Suspense>
+          <AssetVelocityPanel data={yearlyInventory} loading={!yearlyChartsLoaded} />
+        </div>
+
+        <RecentActivitySection />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
           <Suspense

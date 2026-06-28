@@ -2,11 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspens
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   RefreshCw,
-  Receipt,
-  Undo2,
-  ChartColumn,
-  Smartphone,
-  Sigma,
   Package,
   PackagePlus,
   Banknote,
@@ -15,15 +10,18 @@ import {
   ChevronRight,
   CreditCard,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { accountingApi } from '../../../services/shopApi';
 import { useBranch } from '../../../context/BranchContext';
 import { CURRENCY } from '../../../constants';
 import { getApiBaseUrl } from '../../../config/apiUrl';
 import { useShopTimezone } from '../../../context/ShopTimezoneContext';
+import { weekToDateRangeIso } from '../../../utils/shopTimezone';
 import Button from '../../ui/Button';
 import Input from '../../ui/Input';
 import Select from '../../ui/Select';
+import StatCard from '../../dashboard/StatCard';
+import AssetVelocityPanel, { type AssetVelocityData } from '../../dashboard/AssetVelocityPanel';
+import RecentActivitySection from '../../dashboard/RecentActivitySection';
 
 const DailyHourlyTrendChart = lazy(() => import('../../dashboard/DailyHourlyTrendChart'));
 
@@ -116,68 +114,6 @@ function formatQty(n: number) {
 
 const ICON_RING = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg';
 
-type MetricCardProps = {
-  icon: LucideIcon;
-  iconBg: string;
-  iconColor: string;
-  label: string;
-  value: string;
-  hint?: string;
-  loading: boolean;
-  onClick?: () => void;
-  labelClassName?: string;
-  emphasis?: boolean;
-};
-
-function MetricCard({
-  icon: Icon,
-  iconBg,
-  iconColor,
-  label,
-  value,
-  hint,
-  loading,
-  onClick,
-  labelClassName = 'text-muted-foreground',
-  emphasis,
-}: MetricCardProps) {
-  const inner = (
-    <>
-      <div className="flex items-start gap-2.5">
-        <div className={`${ICON_RING} ${iconBg}`}>
-          <Icon className={`h-4 w-4 ${iconColor}`} strokeWidth={2} aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className={`text-[0.65rem] font-bold uppercase tracking-wide ${labelClassName}`}>{label}</div>
-          <div
-            className={`mt-0.5 truncate text-base font-semibold tabular-nums leading-tight text-foreground sm:text-lg ${
-              emphasis ? 'text-indigo-700 dark:text-indigo-300' : ''
-            }`}
-          >
-            {loading ? '—' : value}
-          </div>
-          {hint ? (
-            <div className="mt-0.5 line-clamp-2 text-[0.65rem] leading-snug text-muted-foreground">{hint}</div>
-          ) : null}
-        </div>
-      </div>
-    </>
-  );
-
-  const cardCls =
-    'rounded-xl border border-border/80 bg-card/90 p-3 text-left shadow-sm transition hover:border-indigo-500/35 dark:border-slate-700 dark:bg-slate-900/50 dark:hover:border-indigo-400/35' +
-    (onClick ? ' cursor-pointer hover:shadow-md' : '');
-
-  if (onClick) {
-    return (
-      <button type="button" className={cardCls} onClick={onClick}>
-        {inner}
-      </button>
-    );
-  }
-  return <div className={cardCls}>{inner}</div>;
-}
-
 export type DailyReportSummaryPanelProps = {
   /**
    * When true, date and branch follow URL search params (accounting daily report route).
@@ -191,7 +127,7 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { branches } = useBranch();
-  const { todayYmd } = useShopTimezone();
+  const { todayYmd, timezone } = useShopTimezone();
   const shopToday = todayYmd();
 
   const [localDate, setLocalDate] = useState(() => shopToday);
@@ -210,6 +146,43 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
   const [hourlyLoading, setHourlyLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [assetVelocity, setAssetVelocity] = useState<AssetVelocityData>(null);
+  const [assetLoading, setAssetLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setAssetLoading(true);
+      try {
+        const range = weekToDateRangeIso(timezone);
+        const raw = await accountingApi.getInventoryValueTrend(range.fromIso, range.toIso);
+        if (cancelled) return;
+        const points = (raw?.days ?? []).map((d) => {
+          const [y, m, day] = String(d.day).slice(0, 10).split('-').map(Number);
+          const dt = new Date(Date.UTC(y, m - 1, day, 12));
+          return {
+            label: dt.toLocaleDateString('en', { weekday: 'short', timeZone: timezone }),
+            costValue: Math.round((Number(d.costValue) || 0) * 100) / 100,
+            retailValue: Math.round((Number(d.retailValue) || 0) * 100) / 100,
+          };
+        });
+        setAssetVelocity({
+          points,
+          costNow: Number(raw?.costNow) || 0,
+          retailNow: Number(raw?.retailNow) || 0,
+          costStart: Number(raw?.costStart) || 0,
+          retailStart: Number(raw?.retailStart) || 0,
+        });
+      } catch {
+        if (!cancelled) setAssetVelocity(null);
+      } finally {
+        if (!cancelled) setAssetLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [timezone]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -352,73 +325,24 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
           <span className="h-px min-w-[2rem] flex-1 bg-border dark:bg-slate-700" />
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-          <MetricCard
-            icon={Receipt}
-            iconBg="bg-sky-500/15 dark:bg-sky-400/10"
-            iconColor="text-sky-600 dark:text-sky-400"
-            label="POS (gross)"
-            value={`${CURRENCY} ${formatMoney(summary?.posSales ?? 0)}`}
-            hint="shop_sales"
-            loading={loading}
-          />
-          <MetricCard
-            icon={Undo2}
-            iconBg="bg-rose-500/15 dark:bg-rose-400/10"
-            iconColor="text-rose-600 dark:text-rose-400"
-            label="POS returns"
-            value={`${CURRENCY} ${formatMoney(summary?.posReturns ?? 0)}`}
-            hint="Returns from POS sales"
-            loading={loading}
-            labelClassName="text-rose-700 dark:text-rose-400"
-          />
-          <MetricCard
-            icon={ChartColumn}
-            iconBg="bg-emerald-500/15 dark:bg-emerald-400/10"
-            iconColor="text-emerald-600 dark:text-emerald-400"
-            label="Net POS"
-            value={`${CURRENCY} ${formatMoney(summary?.netPosSales ?? 0)}`}
-            hint="Gross − POS returns"
-            loading={loading}
-          />
-          <MetricCard
-            icon={Smartphone}
-            iconBg="bg-violet-500/15 dark:bg-violet-400/10"
-            iconColor="text-violet-600 dark:text-violet-400"
-            label="Mobile (gross)"
-            value={`${CURRENCY} ${formatMoney(summary?.mobileSales ?? 0)}`}
-            hint="mobile_orders (not cancelled)"
-            loading={loading}
-          />
-          <MetricCard
-            icon={Undo2}
-            iconBg="bg-rose-500/15 dark:bg-rose-400/10"
-            iconColor="text-rose-600 dark:text-rose-400"
-            label="Mobile returns"
-            value={`${CURRENCY} ${formatMoney(summary?.mobileReturns ?? 0)}`}
-            hint="Returns from app orders"
-            loading={loading}
-            labelClassName="text-rose-700 dark:text-rose-400"
-          />
-          <MetricCard
-            icon={Smartphone}
-            iconBg="bg-violet-500/15 dark:bg-violet-400/10"
-            iconColor="text-violet-600 dark:text-violet-400"
-            label="Net mobile"
-            value={`${CURRENCY} ${formatMoney(summary?.netMobileSales ?? 0)}`}
-            hint="Gross − mobile returns"
-            loading={loading}
-          />
-          <MetricCard
-            icon={Sigma}
-            iconBg="bg-indigo-500/15 dark:bg-indigo-400/10"
-            iconColor="text-indigo-600 dark:text-indigo-400"
-            label="Net sales (total)"
-            value={`${CURRENCY} ${formatMoney(summary?.netTotalSales ?? 0)}`}
-            hint="Net POS + net mobile"
-            loading={loading}
-            emphasis
-          />
+          <StatCard label="POS gross" value={`${CURRENCY} ${formatMoney(summary?.posSales ?? 0)}`} accentClass="bg-sky-500" loading={loading} />
+          <StatCard label="POS returns" value={`${CURRENCY} ${formatMoney(summary?.posReturns ?? 0)}`} accentClass="bg-rose-500" loading={loading} />
+          <StatCard label="Net POS" value={`${CURRENCY} ${formatMoney(summary?.netPosSales ?? 0)}`} accentClass="bg-emerald-500" loading={loading} />
+          <StatCard label="Mobile gross" value={`${CURRENCY} ${formatMoney(summary?.mobileSales ?? 0)}`} accentClass="bg-violet-500" loading={loading} />
+          <StatCard label="Mobile ret." value={`${CURRENCY} ${formatMoney(summary?.mobileReturns ?? 0)}`} accentClass="bg-rose-500" loading={loading} />
+          <StatCard label="Net mobile" value={`${CURRENCY} ${formatMoney(summary?.netMobileSales ?? 0)}`} accentClass="bg-violet-500" loading={loading} />
+          <StatCard label="Net sales" value={`${CURRENCY} ${formatMoney(summary?.netTotalSales ?? 0)}`} highlight loading={loading} />
         </div>
+      </div>
+
+      {/* Hourly trend + asset velocity */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr] xl:items-stretch">
+        <Suspense
+          fallback={<div className="h-[280px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+        >
+          <DailyHourlyTrendChart loading={hourlyLoading} data={hourlyTrend} dateLabel={hourlyDateLabel} />
+        </Suspense>
+        <AssetVelocityPanel data={assetVelocity} loading={assetLoading} />
       </div>
 
       {/* Operations */}
@@ -428,53 +352,53 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
           <span className="h-px min-w-[2rem] flex-1 bg-border dark:bg-slate-700" />
         </div>
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-5">
-          <MetricCard
-            icon={Package}
-            iconBg="bg-amber-500/12 dark:bg-amber-400/10"
-            iconColor="text-amber-700 dark:text-amber-400"
+          <StatCard
             label="Inventory out"
             value={formatQty(summary?.inventoryOutQty ?? 0)}
-            hint="Click for detail"
+            sub="Units sold today"
+            accentClass="bg-amber-500"
+            icon={Package}
+            iconClass="text-amber-600 dark:text-amber-400"
             loading={loading}
             onClick={() => navigate(`/accounting/reports/daily/inventory-out?${q}`)}
           />
-          <MetricCard
-            icon={PackagePlus}
-            iconBg="bg-teal-500/12 dark:bg-teal-400/10"
-            iconColor="text-teal-700 dark:text-teal-400"
+          <StatCard
             label="Inventory in"
             value={formatQty(summary?.inventoryInQty ?? 0)}
-            hint="Procurement & sale returns"
+            sub="Procurement & returns"
+            accentClass="bg-teal-500"
+            icon={PackagePlus}
+            iconClass="text-teal-600 dark:text-teal-400"
             loading={loading}
             onClick={() => navigate(`/accounting/reports/daily/inventory-in?${q}`)}
           />
-          <MetricCard
-            icon={CreditCard}
-            iconBg="bg-blue-500/12 dark:bg-blue-400/10"
-            iconColor="text-blue-700 dark:text-blue-400"
+          <StatCard
             label="Vendor payments"
             value={`${CURRENCY} ${formatMoney(summary?.vendorPaymentsTotal ?? 0)}`}
-            hint="Bill payments & supplier settlements · all locations"
+            sub="Supplier settlements"
+            accentClass="bg-blue-500"
+            icon={CreditCard}
+            iconClass="text-blue-600 dark:text-blue-400"
             loading={loading}
             onClick={() => navigate('/procurement')}
           />
-          <MetricCard
-            icon={Banknote}
-            iconBg="bg-orange-500/12 dark:bg-orange-400/10"
-            iconColor="text-orange-700 dark:text-orange-400"
+          <StatCard
             label="Expenses"
             value={`${CURRENCY} ${formatMoney(summary?.totalExpenses ?? 0)}`}
-            hint="Click for detail"
+            sub="Operational costs"
+            accentClass="bg-orange-500"
+            icon={Banknote}
+            iconClass="text-orange-600 dark:text-orange-400"
             loading={loading}
             onClick={() => navigate(`/accounting/reports/daily/expenses?${q}`)}
           />
-          <MetricCard
-            icon={Tag}
-            iconBg="bg-fuchsia-500/12 dark:bg-fuchsia-400/10"
-            iconColor="text-fuchsia-700 dark:text-fuchsia-400"
-            label="New products"
+          <StatCard
+            label="New items"
             value={String(summary?.newProductsCount ?? 0)}
-            hint="Created today"
+            sub="Created today"
+            accentClass="bg-fuchsia-500"
+            icon={Tag}
+            iconClass="text-fuchsia-600 dark:text-fuchsia-400"
             loading={loading}
             onClick={() => navigate(`/accounting/reports/daily/products-created?${q}`)}
           />
@@ -522,12 +446,6 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
         </span>
       </button>
 
-      <Suspense
-        fallback={<div className="h-[280px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
-      >
-        <DailyHourlyTrendChart loading={hourlyLoading} data={hourlyTrend} dateLabel={hourlyDateLabel} />
-      </Suspense>
-
       <div className="flex flex-col gap-1 rounded-xl border border-emerald-200/90 bg-emerald-50/90 px-3 py-2.5 dark:border-emerald-800/50 dark:bg-emerald-950/35 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-[0.65rem] font-bold uppercase tracking-wide text-emerald-800 dark:text-emerald-400/90">
@@ -541,6 +459,8 @@ const DailyReportSummaryPanel: React.FC<DailyReportSummaryPanelProps> = ({ urlSy
           {loading ? '—' : `${CURRENCY} ${formatMoney(summary?.netProfitDaily ?? 0)}`}
         </div>
       </div>
+
+      <RecentActivitySection />
     </div>
   );
 };
