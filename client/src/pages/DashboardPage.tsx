@@ -10,6 +10,7 @@ import {
   Package,
   ShoppingCart,
   TrendingUp,
+  TrendingDown,
   Users,
   AlertTriangle,
   DollarSign,
@@ -17,15 +18,18 @@ import {
   Smartphone,
   ArrowRight,
   LineChart,
+  Wallet,
 } from 'lucide-react';
 import { useShopTimezone } from '../context/ShopTimezoneContext';
 import { lastNDayRangeIso, lastNMonthRangeIso } from '../utils/shopTimezone';
 import { promiseWithTimeout } from '../utils/promiseTimeout';
+import type { InventoryValuePoint } from '../components/dashboard/InventoryValueChart';
 
 const CACHE_READ_TIMEOUT_MS = 4_000;
 const OVERVIEW_FETCH_TIMEOUT_MS = 45_000;
 
 const DashboardCharts = lazy(() => import('../components/dashboard/DashboardCharts'));
+const InventoryValueChart = lazy(() => import('../components/dashboard/InventoryValueChart'));
 
 type LowStockRow = { name: string; qty: string };
 type PendingOrderRow = { id: string; orderNumber: string; customer: string };
@@ -40,7 +44,121 @@ type KpiCard = {
   sub?: string;
   warn?: boolean;
   mobileLink?: boolean;
+  delta?: number;
 };
+
+type InventoryTrendRaw = {
+  days: { day: string; costValue: number; retailValue: number }[];
+  costNow: number;
+  retailNow: number;
+  costStart: number;
+  retailStart: number;
+} | null;
+
+type InventoryTrend = {
+  points: InventoryValuePoint[];
+  costNow: number;
+  retailNow: number;
+  costStart: number;
+  retailStart: number;
+} | null;
+
+function pctChange(start: number, now: number): number | undefined {
+  if (!start || start === 0) return undefined;
+  return ((now - start) / start) * 100;
+}
+
+/** Map a reconstructed daily inventory series to chart points with period-appropriate labels. */
+function buildInventoryDailyPoints(
+  raw: InventoryTrendRaw,
+  timeZone: string,
+  labelMode: TrendLabelMode = 'weekday'
+): InventoryValuePoint[] {
+  return (raw?.days ?? []).map((d) => {
+    const [y, m, day] = String(d.day).slice(0, 10).split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, day, 12));
+    const label =
+      labelMode === 'shortDate'
+        ? dt.toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone })
+        : dt.toLocaleDateString('en', { weekday: 'short', timeZone });
+    return {
+      label,
+      costValue: Math.round((Number(d.costValue) || 0) * 100) / 100,
+      retailValue: Math.round((Number(d.retailValue) || 0) * 100) / 100,
+    };
+  });
+}
+
+/** Collapse a daily inventory series to end-of-month points for the 12-month yearly view. */
+function buildInventoryMonthlyPoints(raw: InventoryTrendRaw, timeZone: string): InventoryValuePoint[] {
+  const byMonth = new Map<string, { day: string; costValue: number; retailValue: number }>();
+  for (const d of raw?.days ?? []) {
+    const dayStr = String(d.day).slice(0, 10);
+    const key = dayStr.slice(0, 7);
+    const existing = byMonth.get(key);
+    if (!existing || dayStr > existing.day) {
+      byMonth.set(key, {
+        day: dayStr,
+        costValue: Number(d.costValue) || 0,
+        retailValue: Number(d.retailValue) || 0,
+      });
+    }
+  }
+  return [...byMonth.keys()].sort().map((key) => {
+    const [y, mo] = key.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, mo - 1, 1, 12));
+    const v = byMonth.get(key)!;
+    return {
+      label: dt.toLocaleDateString('en', { month: 'short', year: '2-digit', timeZone }),
+      costValue: Math.round(v.costValue * 100) / 100,
+      retailValue: Math.round(v.retailValue * 100) / 100,
+    };
+  });
+}
+
+function buildInventoryTrend(raw: InventoryTrendRaw, points: InventoryValuePoint[]): InventoryTrend {
+  if (!raw) return null;
+  return {
+    points,
+    costNow: Number(raw.costNow) || 0,
+    retailNow: Number(raw.retailNow) || 0,
+    costStart: Number(raw.costStart) || 0,
+    retailStart: Number(raw.retailStart) || 0,
+  };
+}
+
+/** The two inventory-value KPI cards shared across all four reports. */
+function inventoryKpiCards(inventory: InventoryTrend, loaded: boolean): KpiCard[] {
+  const ready = inventory != null;
+  return [
+    {
+      label: 'Inventory purchase value',
+      value: ready
+        ? `${CURRENCY} ${inventory!.costNow.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+        : loaded
+          ? `${CURRENCY} 0`
+          : '—',
+      icon: Wallet,
+      iconClass: 'text-indigo-600 dark:text-indigo-400',
+      isString: true,
+      delta: ready ? pctChange(inventory!.costStart, inventory!.costNow) : undefined,
+      sub: 'Total stock at cost',
+    },
+    {
+      label: 'Inventory selling value',
+      value: ready
+        ? `${CURRENCY} ${inventory!.retailNow.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+        : loaded
+          ? `${CURRENCY} 0`
+          : '—',
+      icon: Package,
+      iconClass: 'text-emerald-600 dark:text-emerald-400',
+      isString: true,
+      delta: ready ? pctChange(inventory!.retailStart, inventory!.retailNow) : undefined,
+      sub: 'Total stock at retail',
+    },
+  ];
+}
 
 function mergeDailyTrend(
   raw: unknown,
@@ -161,7 +279,8 @@ function buildPeriodKpiCards(
   profit: { totalProfit: number; avgProfitPerDay: number } | null,
   chartsLoaded: boolean,
   profitLabel: string,
-  periodStats?: PeriodStats | null
+  periodStats?: PeriodStats | null,
+  inventory?: InventoryTrend
 ): KpiCard[] {
   const periodReady = chartsLoaded && periodStats != null;
   const sales = periodStats?.totalSales;
@@ -246,7 +365,58 @@ function buildPeriodKpiCards(
       iconClass: 'text-[#4A90E2]',
       mobileLink: true,
     },
+    ...inventoryKpiCards(inventory ?? null, chartsLoaded),
   ];
+}
+
+function KpiCardTile({
+  card,
+  mobileOrdersPending,
+}: {
+  card: KpiCard;
+  mobileOrdersPending: number;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none">
+      <p className="pr-10 text-xs font-medium text-[#6C757D] dark:text-muted-foreground">{card.label}</p>
+      <p className="mt-1 text-xl font-bold tabular-nums text-[#212529] dark:text-foreground">
+        {card.isString
+          ? card.value
+          : typeof card.value === 'number'
+            ? card.value.toLocaleString()
+            : card.value}
+      </p>
+      {typeof card.delta === 'number' && Number.isFinite(card.delta) && (
+        <p
+          className={`mt-0.5 flex items-center gap-0.5 text-xs font-medium ${
+            card.delta >= 0
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-rose-600 dark:text-rose-400'
+          }`}
+        >
+          {card.delta >= 0 ? (
+            <TrendingUp className="h-3.5 w-3.5" strokeWidth={2} />
+          ) : (
+            <TrendingDown className="h-3.5 w-3.5" strokeWidth={2} />
+          )}
+          {card.delta >= 0 ? '+' : ''}
+          {card.delta.toFixed(1)}% vs start
+        </p>
+      )}
+      {card.sub && <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>}
+      {card.mobileLink && mobileOrdersPending > 0 && (
+        <Link
+          to="/order-center"
+          className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-[#4A90E2] hover:underline"
+        >
+          (View orders <ArrowRight className="inline h-3 w-3" />)
+        </Link>
+      )}
+      <div className={`absolute right-3 top-3 ${card.iconClass}`}>
+        <card.icon className="h-5 w-5 opacity-90" strokeWidth={2} />
+      </div>
+    </div>
+  );
 }
 
 const EMPTY_STATS: DashboardStats = {
@@ -307,6 +477,9 @@ export default function DashboardPage() {
     netRevenue: number;
   } | null>(null);
   const [yearlyChartsLoaded, setYearlyChartsLoaded] = useState(false);
+  const [weeklyInventory, setWeeklyInventory] = useState<InventoryTrend>(null);
+  const [monthlyInventory, setMonthlyInventory] = useState<InventoryTrend>(null);
+  const [yearlyInventory, setYearlyInventory] = useState<InventoryTrend>(null);
   const [activeReport, setActiveReport] = useState<DashboardReportTab>('daily');
 
   useEffect(() => {
@@ -332,6 +505,9 @@ export default function DashboardPage() {
           yearlyCategoryPerf,
           profit365Summary,
           sales365,
+          weeklyInventoryRaw,
+          monthlyInventoryRaw,
+          yearlyInventoryRaw,
         ] = await Promise.all([
           accountingApi.getDailyTrend({ from: weeklyRange.fromIso, to: weeklyRange.toIso }).catch(() => null),
           accountingApi.getCategoryPerformance(weeklyRange.fromIso, weeklyRange.categoryToIso).catch(() => []),
@@ -345,6 +521,9 @@ export default function DashboardPage() {
           accountingApi.getCategoryPerformance(yearlyChartRange.fromIso, yearlyChartRange.categoryToIso).catch(() => []),
           accountingApi.dailyProfitRange(yearlyKpiRange.fromIso, yearlyKpiRange.toIso).catch(() => null),
           accountingApi.getSalesBySource(yearlyKpiRange.fromIso, yearlyKpiRange.toIso).catch(() => null),
+          accountingApi.getInventoryValueTrend(weeklyRange.fromIso, weeklyRange.toIso).catch(() => null),
+          accountingApi.getInventoryValueTrend(monthlyRange.fromIso, monthlyRange.toIso).catch(() => null),
+          accountingApi.getInventoryValueTrend(yearlyChartRange.fromIso, yearlyChartRange.toIso).catch(() => null),
         ]);
         if (cancelled || loadGenRef.current !== gen) return;
         setSalesTrend(mergeDailyTrend(trendRaw, weeklyRange.dayKeys, timezone));
@@ -368,6 +547,12 @@ export default function DashboardPage() {
           setProfit7d(null);
         }
         setWeeklyPeriodStats(resolvePeriodStats(sales7, trendRaw, weeklyRange.dayKeys));
+        setWeeklyInventory(
+          buildInventoryTrend(
+            weeklyInventoryRaw,
+            buildInventoryDailyPoints(weeklyInventoryRaw, timezone)
+          )
+        );
         setChartsLoaded(true);
 
         setMonthlySalesTrend(
@@ -393,6 +578,12 @@ export default function DashboardPage() {
           setProfit30d(null);
         }
         setMonthlyPeriodStats(resolvePeriodStats(sales30, monthlyTrendRaw, monthlyRange.dayKeys));
+        setMonthlyInventory(
+          buildInventoryTrend(
+            monthlyInventoryRaw,
+            buildInventoryDailyPoints(monthlyInventoryRaw, timezone, 'shortDate')
+          )
+        );
         setMonthlyChartsLoaded(true);
 
         setYearlySalesTrend(mergeMonthlyTrend(yearlyTrendRaw, yearlyChartRange.monthKeys, timezone));
@@ -416,6 +607,12 @@ export default function DashboardPage() {
           setProfit365d(null);
         }
         setYearlyPeriodStats(parsePeriodStatsFromSalesBySource(sales365));
+        setYearlyInventory(
+          buildInventoryTrend(
+            yearlyInventoryRaw,
+            buildInventoryMonthlyPoints(yearlyInventoryRaw, timezone)
+          )
+        );
         setYearlyChartsLoaded(true);
       } catch {
         if (!cancelled) {
@@ -428,6 +625,9 @@ export default function DashboardPage() {
           setYearlyChartsLoaded(false);
           setProfit365d(null);
           setYearlyPeriodStats(null);
+          setWeeklyInventory(null);
+          setMonthlyInventory(null);
+          setYearlyInventory(null);
         }
       }
     }
@@ -463,6 +663,9 @@ export default function DashboardPage() {
           setYearlyChartsLoaded(false);
           setProfit365d(null);
           setYearlyPeriodStats(null);
+          setWeeklyInventory(null);
+          setMonthlyInventory(null);
+          setYearlyInventory(null);
         }
         return;
       }
@@ -519,8 +722,8 @@ export default function DashboardPage() {
   );
 
   const weeklyKpiCards = useMemo(
-    () => buildPeriodKpiCards(stats, profit7d, chartsLoaded, '7-day profit', weeklyPeriodStats),
-    [stats, profit7d, chartsLoaded, weeklyPeriodStats]
+    () => buildPeriodKpiCards(stats, profit7d, chartsLoaded, '7-day profit', weeklyPeriodStats, weeklyInventory),
+    [stats, profit7d, chartsLoaded, weeklyPeriodStats, weeklyInventory]
   );
 
   const monthlyKpiCards = useMemo(
@@ -530,9 +733,10 @@ export default function DashboardPage() {
         profit30d,
         monthlyChartsLoaded,
         '30-day profit',
-        monthlyPeriodStats
+        monthlyPeriodStats,
+        monthlyInventory
       ),
-    [stats, profit30d, monthlyChartsLoaded, monthlyPeriodStats]
+    [stats, profit30d, monthlyChartsLoaded, monthlyPeriodStats, monthlyInventory]
   );
 
   const yearlyKpiCards = useMemo(
@@ -542,9 +746,15 @@ export default function DashboardPage() {
         profit365d,
         yearlyChartsLoaded,
         '365-day profit',
-        yearlyPeriodStats
+        yearlyPeriodStats,
+        yearlyInventory
       ),
-    [stats, profit365d, yearlyChartsLoaded, yearlyPeriodStats]
+    [stats, profit365d, yearlyChartsLoaded, yearlyPeriodStats, yearlyInventory]
+  );
+
+  const dailyInventoryCards = useMemo(
+    () => inventoryKpiCards(weeklyInventory, chartsLoaded),
+    [weeklyInventory, chartsLoaded]
   );
 
   if (!ready) {
@@ -630,6 +840,23 @@ export default function DashboardPage() {
           <div className="rounded-[10px] border border-gray-200 bg-white p-3 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card sm:p-4">
             <DailyReportSummaryPanel />
           </div>
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+            {dailyInventoryCards.map((card) => (
+              <KpiCardTile key={card.label} card={card} mobileOrdersPending={stats.mobileOrdersPending} />
+            ))}
+          </div>
+
+          <Suspense
+            fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+          >
+            <InventoryValueChart
+              chartsLoaded={chartsLoaded}
+              cachedAt={cachedAt}
+              data={weeklyInventory?.points ?? []}
+              subtitle="Total purchase (cost) vs. selling (retail) value — last 7 days"
+            />
+          </Suspense>
         </section>
         )}
 
@@ -646,33 +873,20 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           {weeklyKpiCards.map((card) => (
-            <div
-              key={card.label}
-              className="relative overflow-hidden rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none"
-            >
-              <p className="pr-10 text-xs font-medium text-[#6C757D] dark:text-muted-foreground">{card.label}</p>
-              <p className="mt-1 text-xl font-bold tabular-nums text-[#212529] dark:text-foreground">
-                {card.isString
-                  ? card.value
-                  : typeof card.value === 'number'
-                    ? card.value.toLocaleString()
-                    : card.value}
-              </p>
-              {'sub' in card && card.sub && <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>}
-              {card.mobileLink && stats.mobileOrdersPending > 0 && (
-                <Link
-                  to="/order-center"
-                  className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-[#4A90E2] hover:underline"
-                >
-                  (View orders <ArrowRight className="inline h-3 w-3" />)
-                </Link>
-              )}
-              <div className={`absolute right-3 top-3 ${card.iconClass}`}>
-                <card.icon className="h-5 w-5 opacity-90" strokeWidth={2} />
-              </div>
-            </div>
+            <KpiCardTile key={card.label} card={card} mobileOrdersPending={stats.mobileOrdersPending} />
           ))}
         </div>
+
+        <Suspense
+          fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+        >
+          <InventoryValueChart
+            chartsLoaded={chartsLoaded}
+            cachedAt={cachedAt}
+            data={weeklyInventory?.points ?? []}
+            subtitle="Total purchase (cost) vs. selling (retail) value — last 7 days"
+          />
+        </Suspense>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
           <Suspense
@@ -788,33 +1002,20 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           {monthlyKpiCards.map((card) => (
-            <div
-              key={card.label}
-              className="relative overflow-hidden rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none"
-            >
-              <p className="pr-10 text-xs font-medium text-[#6C757D] dark:text-muted-foreground">{card.label}</p>
-              <p className="mt-1 text-xl font-bold tabular-nums text-[#212529] dark:text-foreground">
-                {card.isString
-                  ? card.value
-                  : typeof card.value === 'number'
-                    ? card.value.toLocaleString()
-                    : card.value}
-              </p>
-              {'sub' in card && card.sub && <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>}
-              {card.mobileLink && stats.mobileOrdersPending > 0 && (
-                <Link
-                  to="/order-center"
-                  className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-[#4A90E2] hover:underline"
-                >
-                  (View orders <ArrowRight className="inline h-3 w-3" />)
-                </Link>
-              )}
-              <div className={`absolute right-3 top-3 ${card.iconClass}`}>
-                <card.icon className="h-5 w-5 opacity-90" strokeWidth={2} />
-              </div>
-            </div>
+            <KpiCardTile key={card.label} card={card} mobileOrdersPending={stats.mobileOrdersPending} />
           ))}
         </div>
+
+        <Suspense
+          fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+        >
+          <InventoryValueChart
+            chartsLoaded={monthlyChartsLoaded}
+            cachedAt={cachedAt}
+            data={monthlyInventory?.points ?? []}
+            subtitle="Total purchase (cost) vs. selling (retail) value — last 30 days"
+          />
+        </Suspense>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
           <Suspense
@@ -932,33 +1133,21 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           {yearlyKpiCards.map((card) => (
-            <div
-              key={card.label}
-              className="relative overflow-hidden rounded-[10px] border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:bg-card dark:shadow-none"
-            >
-              <p className="pr-10 text-xs font-medium text-[#6C757D] dark:text-muted-foreground">{card.label}</p>
-              <p className="mt-1 text-xl font-bold tabular-nums text-[#212529] dark:text-foreground">
-                {card.isString
-                  ? card.value
-                  : typeof card.value === 'number'
-                    ? card.value.toLocaleString()
-                    : card.value}
-              </p>
-              {'sub' in card && card.sub && <p className="mt-0.5 text-xs text-[#6C757D] dark:text-muted-foreground">{card.sub}</p>}
-              {card.mobileLink && stats.mobileOrdersPending > 0 && (
-                <Link
-                  to="/order-center"
-                  className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-[#4A90E2] hover:underline"
-                >
-                  (View orders <ArrowRight className="inline h-3 w-3" />)
-                </Link>
-              )}
-              <div className={`absolute right-3 top-3 ${card.iconClass}`}>
-                <card.icon className="h-5 w-5 opacity-90" strokeWidth={2} />
-              </div>
-            </div>
+            <KpiCardTile key={card.label} card={card} mobileOrdersPending={stats.mobileOrdersPending} />
           ))}
         </div>
+
+        <Suspense
+          fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+        >
+          <InventoryValueChart
+            chartsLoaded={yearlyChartsLoaded}
+            cachedAt={cachedAt}
+            data={yearlyInventory?.points ?? []}
+            subtitle="Total purchase (cost) vs. selling (retail) value — last 12 months"
+            tickInterval={0}
+          />
+        </Suspense>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
           <Suspense

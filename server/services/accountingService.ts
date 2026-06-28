@@ -562,6 +562,114 @@ export class AccountingService {
   }
 
   /**
+   * Reconstructs an approximate inventory value time series over [from, to].
+   *
+   * Current stock is valued at each product's unit cost (weighted-average or
+   * cost_price) and retail_price to get the live totals. Historical end-of-day
+   * values are then reconstructed by walking backwards from "now", subtracting
+   * the net value of inventory movements that occurred after each day. Movements
+   * are valued at today's unit cost/retail, so the series is approximate (it
+   * captures the slope of stock changes, not historical price drift).
+   */
+  async getInventoryValueTrend(
+    tenantId: string,
+    range: { from: string; to: string }
+  ): Promise<{
+    days: { day: string; costValue: number; retailValue: number }[];
+    costNow: number;
+    retailNow: number;
+    costStart: number;
+    retailStart: number;
+  }> {
+    const toNum = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v) || 0);
+
+    // Live totals: quantity_on_hand x cost and x retail across active products.
+    const nowRows = await this.db.query(
+      `SELECT
+         COALESCE(SUM(i.quantity_on_hand * COALESCE(NULLIF(p.average_cost, 0), p.cost_price, 0)), 0) AS cost_now,
+         COALESCE(SUM(i.quantity_on_hand * COALESCE(p.retail_price, 0)), 0) AS retail_now
+       FROM shop_products p
+       LEFT JOIN shop_inventory i ON i.product_id = p.id AND i.tenant_id = $1
+       WHERE p.tenant_id = $1 AND p.is_active = TRUE`,
+      [tenantId]
+    );
+    const costNow = toNum((nowRows as any[])[0]?.cost_now);
+    const retailNow = toNum((nowRows as any[])[0]?.retail_now);
+
+    // Daily net value deltas from signed movements, valued at current unit cost/retail.
+    const deltaRows = await this.db.query(
+      `SELECT DATE(m.created_at) AS day,
+         COALESCE(SUM(m.quantity * COALESCE(NULLIF(p.average_cost, 0), p.cost_price, 0)), 0) AS cost_delta,
+         COALESCE(SUM(m.quantity * COALESCE(p.retail_price, 0)), 0) AS retail_delta
+       FROM shop_inventory_movements m
+       JOIN shop_products p ON p.id = m.product_id AND p.tenant_id = m.tenant_id
+       WHERE m.tenant_id = $1 AND m.created_at <= $2
+       GROUP BY DATE(m.created_at)
+       ORDER BY day ASC`,
+      [tenantId, range.to]
+    );
+
+    const dayKey = (v: unknown): string =>
+      v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10);
+    const costDeltaByDay = new Map<string, number>();
+    const retailDeltaByDay = new Map<string, number>();
+    for (const r of deltaRows as any[]) {
+      const k = dayKey(r.day);
+      costDeltaByDay.set(k, toNum(r.cost_delta));
+      retailDeltaByDay.set(k, toNum(r.retail_delta));
+    }
+
+    // Build the inclusive list of day keys spanning the requested range.
+    const fromKey = String(range.from).slice(0, 10);
+    const toKey = String(range.to).slice(0, 10);
+    const dayKeys: string[] = [];
+    {
+      const [fy, fm, fd] = fromKey.split('-').map(Number);
+      const [ty, tm, td] = toKey.split('-').map(Number);
+      const cur = new Date(Date.UTC(fy, fm - 1, fd));
+      const last = new Date(Date.UTC(ty, tm - 1, td));
+      while (cur <= last) {
+        dayKeys.push(cur.toISOString().slice(0, 10));
+        cur.setUTCDate(cur.getUTCDate() + 1);
+      }
+    }
+
+    // Walk backwards from now: value at end of day D = value_now - sum(deltas after D).
+    // Process days in descending order, accumulating the delta of the day *after* each.
+    const costValueByDay = new Map<string, number>();
+    const retailValueByDay = new Map<string, number>();
+    let runningCost = costNow;
+    let runningRetail = retailNow;
+    let prevKey: string | null = null;
+    for (let idx = dayKeys.length - 1; idx >= 0; idx--) {
+      const k = dayKeys[idx];
+      // Remove the delta that happened on the day we just stepped down from.
+      if (prevKey !== null) {
+        runningCost -= costDeltaByDay.get(prevKey) || 0;
+        runningRetail -= retailDeltaByDay.get(prevKey) || 0;
+      }
+      costValueByDay.set(k, runningCost);
+      retailValueByDay.set(k, runningRetail);
+      prevKey = k;
+    }
+
+    const days = dayKeys.map((k) => ({
+      day: k,
+      costValue: Math.round((costValueByDay.get(k) || 0) * 100) / 100,
+      retailValue: Math.round((retailValueByDay.get(k) || 0) * 100) / 100,
+    }));
+
+    const first = days[0];
+    return {
+      days,
+      costNow: Math.round(costNow * 100) / 100,
+      retailNow: Math.round(retailNow * 100) / 100,
+      costStart: first ? first.costValue : Math.round(costNow * 100) / 100,
+      retailStart: first ? first.retailValue : Math.round(retailNow * 100) / 100,
+    };
+  }
+
+  /**
    * POS + mobile revenue grouped by branch name for the Executive Overview node rankings.
    */
   async getBranchRevenueTotals(tenantId: string, range: { from: string; to: string }) {

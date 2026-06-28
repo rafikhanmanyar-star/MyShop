@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Calendar, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useShopTimezone } from '../context/ShopTimezoneContext';
+import { lastNDayRangeIso } from '../utils/shopTimezone';
 import {
   shopApi,
   accountingApi,
@@ -19,6 +20,7 @@ import { CURRENCY } from '../constants';
 import ThemeToggle from '../components/ui/ThemeToggle';
 import MobileUserMenu from '../components/mobile/MobileUserMenu';
 import MobileStatGrid, { type MobileStatTile } from '../components/mobile/MobileStatGrid';
+import MobilePeriodTabs, { isMobilePeriod, type MobilePeriod } from '../components/mobile/MobilePeriodTabs';
 import {
   defaultMobileModuleId,
   isMobileModuleId,
@@ -45,11 +47,35 @@ function sumKhataReceivables(rows: KhataSummaryRow[]) {
   return { total, customers };
 }
 
+type PeriodStats = { totalSales: number; totalRevenue: number; netRevenue: number };
+type ProfitStats = { totalProfit: number; avgProfitPerDay: number };
+
+function parsePeriodStatsFromSalesBySource(data: unknown): PeriodStats | null {
+  if (!data || typeof data !== 'object') return null;
+  const pos = (data as { pos?: Record<string, unknown> }).pos ?? {};
+  const mobile = (data as { mobile?: Record<string, unknown> }).mobile ?? {};
+  const posOrders = Number(pos.totalOrders) || 0;
+  const mobileOrders = Number(mobile.totalOrders) || 0;
+  const posGross = Number(pos.totalRevenue) || 0;
+  const mobileGross = Number(mobile.totalRevenue) || 0;
+  const posNet = Number(pos.netRevenue) || Math.max(0, posGross - (Number(pos.totalReturns) || 0));
+  return {
+    totalSales: posOrders + mobileOrders,
+    totalRevenue: posGross + mobileGross,
+    netRevenue: posNet + mobileGross,
+  };
+}
+
 type MobileOverviewData = {
   dashboard: DashboardStats | null;
-  profit7d: { totalProfit: number; avgProfitPerDay: number } | null;
   dailyNetProfit: number;
   dailyNetSales: number;
+  periodWeekly: PeriodStats | null;
+  periodMonthly: PeriodStats | null;
+  periodYearly: PeriodStats | null;
+  profit7d: ProfitStats | null;
+  profit30d: ProfitStats | null;
+  profit365d: ProfitStats | null;
   khata: { totalReceivables: number; customersWithBalance: number; totalCustomers: number };
   procurement: {
     totalOutstanding: number;
@@ -75,9 +101,14 @@ type MobileOverviewData = {
 
 const EMPTY_DATA: MobileOverviewData = {
   dashboard: null,
-  profit7d: null,
   dailyNetProfit: 0,
   dailyNetSales: 0,
+  periodWeekly: null,
+  periodMonthly: null,
+  periodYearly: null,
+  profit7d: null,
+  profit30d: null,
+  profit365d: null,
   khata: { totalReceivables: 0, customersWithBalance: 0, totalCustomers: 0 },
   procurement: { totalOutstanding: 0, overdue: 0, openBills: 0, draftBills: 0 },
   orderCenter: {
@@ -91,28 +122,83 @@ const EMPTY_DATA: MobileOverviewData = {
   loyalty: { totalMembers: 0, activeMembers: 0, pointsOutstanding: 0, pointsIssued: 0 },
 };
 
-function tilesForModule(id: MobileModuleId, data: MobileOverviewData): MobileStatTile[] {
+function dashboardTiles(data: MobileOverviewData, period: MobilePeriod): MobileStatTile[] {
+  const s = data.dashboard;
+
+  if (period === 'today') {
+    return [
+      {
+        label: "Today's sales",
+        value: String(s?.todaySalesCount ?? 0),
+        hint: `${formatMoney(s?.todayRevenue ?? 0)} revenue today`,
+        featured: true,
+      },
+      { label: 'Net sales today', value: formatMoney(data.dailyNetSales) },
+      { label: 'Net profit today', value: formatMoney(data.dailyNetProfit) },
+      { label: 'Low stock SKUs', value: String(s?.lowStockItems ?? 0) },
+      { label: 'Mobile pending', value: String(s?.mobileOrdersPending ?? 0) },
+    ];
+  }
+
+  const periodConfig: Record<
+    Exclude<MobilePeriod, 'today'>,
+    { stats: PeriodStats | null; profit: ProfitStats | null; days: number; profitLabel: string }
+  > = {
+    weekly: { stats: data.periodWeekly, profit: data.profit7d, days: 7, profitLabel: '7-day profit' },
+    monthly: { stats: data.periodMonthly, profit: data.profit30d, days: 30, profitLabel: '30-day profit' },
+    yearly: { stats: data.periodYearly, profit: data.profit365d, days: 365, profitLabel: '365-day profit' },
+  };
+
+  const cfg = periodConfig[period];
+  const stats = cfg.stats;
+  const profit = cfg.profit;
+
+  return [
+    {
+      label: 'Total sales',
+      value: String(stats?.totalSales ?? 0),
+      hint: `Last ${cfg.days} days`,
+      featured: true,
+    },
+    { label: 'Gross revenue', value: formatMoney(stats?.totalRevenue ?? 0) },
+    { label: 'Net sales', value: formatMoney(stats?.netRevenue ?? 0) },
+    {
+      label: cfg.profitLabel,
+      value: profit ? formatMoney(profit.totalProfit) : '—',
+      hint: profit ? `Avg ${formatMoney(profit.avgProfitPerDay)}/day` : undefined,
+    },
+    { label: 'Low stock SKUs', value: String(s?.lowStockItems ?? 0) },
+    { label: 'Mobile pending', value: String(s?.mobileOrdersPending ?? 0) },
+  ];
+}
+
+function weeklyReportTiles(data: MobileOverviewData): MobileStatTile[] {
+  const stats = data.periodWeekly;
+  const profit = data.profit7d;
+  return [
+    {
+      label: 'Weekly sales',
+      value: String(stats?.totalSales ?? 0),
+      hint: `${formatMoney(stats?.totalRevenue ?? 0)} gross · last 7 days`,
+      featured: true,
+    },
+    { label: 'Net sales (7d)', value: formatMoney(stats?.netRevenue ?? 0) },
+    {
+      label: '7-day profit',
+      value: profit ? formatMoney(profit.totalProfit) : '—',
+      hint: profit ? `Avg ${formatMoney(profit.avgProfitPerDay)}/day` : undefined,
+    },
+  ];
+}
+
+function tilesForModule(
+  id: MobileModuleId,
+  data: MobileOverviewData,
+  period: MobilePeriod
+): MobileStatTile[] {
   switch (id) {
-    case 'dashboard': {
-      const s = data.dashboard;
-      return [
-        {
-          label: "Today's sales",
-          value: String(s?.todaySalesCount ?? 0),
-          hint: `${formatMoney(s?.todayRevenue ?? 0)} revenue today`,
-          featured: true,
-        },
-        { label: 'Net sales today', value: formatMoney(data.dailyNetSales) },
-        {
-          label: '7-day profit',
-          value: data.profit7d ? formatMoney(data.profit7d.totalProfit) : '—',
-          hint: data.profit7d ? `Avg ${formatMoney(data.profit7d.avgProfitPerDay)}/day` : undefined,
-        },
-        { label: 'Net profit today', value: formatMoney(data.dailyNetProfit) },
-        { label: 'Low stock SKUs', value: String(s?.lowStockItems ?? 0) },
-        { label: 'Mobile pending', value: String(s?.mobileOrdersPending ?? 0) },
-      ];
-    }
+    case 'dashboard':
+      return dashboardTiles(data, period);
     case 'khata':
       return [
         {
@@ -180,28 +266,62 @@ export default function MobileOverviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const modules = useMemo(() => mobileModulesForRole(role), [role]);
   const tabParam = searchParams.get('tab');
+  const periodParam = searchParams.get('period');
   const activeTab: MobileModuleId = isMobileModuleId(tabParam, role)
     ? tabParam
     : defaultMobileModuleId(role);
+  const activePeriod: MobilePeriod = isMobilePeriod(periodParam) ? periodParam : 'today';
   const activeModule = modules.find((m) => m.id === activeTab) ?? modules[0] ?? null;
 
-  const { todayYmd, lastYmdDays, loading: timezoneLoading } = useShopTimezone();
+  const { todayYmd, timezone, loading: timezoneLoading } = useShopTimezone();
+  const weeklyRange = useMemo(() => lastNDayRangeIso(7, timezone), [timezone]);
+  const monthlyRange = useMemo(() => lastNDayRangeIso(30, timezone), [timezone]);
+  const yearlyRange = useMemo(() => lastNDayRangeIso(365, timezone), [timezone]);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<MobileOverviewData>(EMPTY_DATA);
   const [orgName, setOrgName] = useState('MyShop');
 
   useEffect(() => {
     if (!modules.length) return;
+    const nextParams: Record<string, string> = {};
     if (!isMobileModuleId(tabParam, role)) {
-      setSearchParams({ tab: defaultMobileModuleId(role) }, { replace: true });
+      nextParams.tab = defaultMobileModuleId(role);
     }
-  }, [tabParam, role, modules.length, setSearchParams]);
+    if (!isMobilePeriod(periodParam)) {
+      nextParams.period = 'today';
+    }
+    if (Object.keys(nextParams).length > 0) {
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (nextParams.tab) p.set('tab', nextParams.tab);
+          if (nextParams.period) p.set('period', nextParams.period);
+          return p;
+        },
+        { replace: true }
+      );
+    }
+  }, [tabParam, periodParam, role, modules.length, setSearchParams]);
+
+  const setActivePeriod = useCallback(
+    (period: MobilePeriod) => {
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.set('period', period);
+          if (!p.get('tab')) p.set('tab', activeTab);
+          return p;
+        },
+        { replace: true }
+      );
+    },
+    [activeTab, setSearchParams]
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     const tenantId = getTenantId();
     const today = todayYmd();
-    const trendDayKeys = lastYmdDays(7);
     const next: MobileOverviewData = { ...EMPTY_DATA };
     const moduleIds = new Set(modules.map((m) => m.id));
 
@@ -224,16 +344,36 @@ export default function MobileOverviewPage() {
             }
             next.dashboard = overview?.stats ?? null;
 
-            const [daily, profit] = await Promise.all([
+            const [daily, sales7, sales30, sales365, profit7, profit30, profit365] = await Promise.all([
               accountingApi.dailyReportSummary(today).catch(() => null),
-              accountingApi.dailyProfitSummary(trendDayKeys).catch(() => null),
+              accountingApi.getSalesBySource(weeklyRange.fromIso, weeklyRange.toIso).catch(() => null),
+              accountingApi.getSalesBySource(monthlyRange.fromIso, monthlyRange.toIso).catch(() => null),
+              accountingApi.getSalesBySource(yearlyRange.fromIso, yearlyRange.toIso).catch(() => null),
+              accountingApi.dailyProfitSummary(weeklyRange.dayKeys).catch(() => null),
+              accountingApi.dailyProfitSummary(monthlyRange.dayKeys).catch(() => null),
+              accountingApi.dailyProfitRange(yearlyRange.fromIso, yearlyRange.toIso).catch(() => null),
             ]);
             next.dailyNetProfit = Number(daily?.netProfitDaily) || 0;
             next.dailyNetSales = Number(daily?.netTotalSales) || 0;
-            if (profit && typeof profit === 'object') {
+            next.periodWeekly = parsePeriodStatsFromSalesBySource(sales7);
+            next.periodMonthly = parsePeriodStatsFromSalesBySource(sales30);
+            next.periodYearly = parsePeriodStatsFromSalesBySource(sales365);
+            if (profit7 && typeof profit7 === 'object') {
               next.profit7d = {
-                totalProfit: Number(profit.totalProfit) || 0,
-                avgProfitPerDay: Number(profit.avgProfitPerDay) || 0,
+                totalProfit: Number(profit7.totalProfit) || 0,
+                avgProfitPerDay: Number(profit7.avgProfitPerDay) || 0,
+              };
+            }
+            if (profit30 && typeof profit30 === 'object') {
+              next.profit30d = {
+                totalProfit: Number(profit30.totalProfit) || 0,
+                avgProfitPerDay: Number(profit30.avgProfitPerDay) || 0,
+              };
+            }
+            if (profit365 && typeof profit365 === 'object') {
+              next.profit365d = {
+                totalProfit: Number(profit365.totalProfit) || 0,
+                avgProfitPerDay: Number(profit365.avgProfitPerDay) || 0,
               };
             }
           })()
@@ -333,7 +473,7 @@ export default function MobileOverviewPage() {
     } finally {
       setLoading(false);
     }
-  }, [modules, todayYmd, lastYmdDays]);
+  }, [modules, todayYmd, timezone, weeklyRange, monthlyRange, yearlyRange]);
 
   useEffect(() => {
     if (timezoneLoading) return;
@@ -352,9 +492,28 @@ export default function MobileOverviewPage() {
   );
 
   const activeTiles = useMemo(
-    () => (activeModule ? tilesForModule(activeModule.id, data) : []),
-    [activeModule, data]
+    () => (activeModule ? tilesForModule(activeModule.id, data, activePeriod) : []),
+    [activeModule, data, activePeriod]
   );
+
+  const showWeeklyReport = activeModule?.id === 'dashboard' && activePeriod === 'today';
+  const weeklyTiles = useMemo(() => weeklyReportTiles(data), [data]);
+
+  const periodSubtitle = useMemo(() => {
+    if (activeModule?.id !== 'dashboard') return activeModule?.subtitle ?? '';
+    switch (activePeriod) {
+      case 'today':
+        return "Today's sales, profit, and operational alerts";
+      case 'weekly':
+        return 'Last 7 days — sales, revenue, and profit';
+      case 'monthly':
+        return 'Last 30 days — sales, revenue, and profit';
+      case 'yearly':
+        return 'Last 365 days — sales, revenue, and profit';
+      default:
+        return activeModule?.subtitle ?? '';
+    }
+  }, [activeModule, activePeriod]);
 
   const ActiveIcon = activeModule?.icon;
   const heroClass = activeModule ? MOBILE_MODULE_HERO_CLASS[activeModule.id] : '';
@@ -420,11 +579,15 @@ export default function MobileOverviewPage() {
                 <div className="min-w-0 flex-1 pt-0.5">
                   <h2 className="text-base font-semibold text-[#212529] dark:text-foreground">{activeModule.label}</h2>
                   <p className="mt-1 text-sm leading-snug text-[#6C757D] dark:text-muted-foreground">
-                    {activeModule.subtitle}
+                    {periodSubtitle}
                   </p>
                 </div>
               </div>
             </div>
+
+            {activeModule.id === 'dashboard' && (
+              <MobilePeriodTabs active={activePeriod} onChange={setActivePeriod} />
+            )}
 
             {/* Stats */}
             <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] dark:border-gray-800 dark:bg-card">
@@ -440,6 +603,20 @@ export default function MobileOverviewPage() {
               </div>
               <MobileStatGrid tiles={activeTiles} loading={loading} />
             </section>
+
+            {showWeeklyReport && (
+              <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.06)] dark:border-gray-800 dark:bg-card">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#6C757D] dark:text-muted-foreground">
+                    Weekly report
+                  </h3>
+                  <span className="rounded-full bg-[#4A90E2]/10 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-[#4A90E2] dark:text-[#9bc5f0]">
+                    Last 7 days
+                  </span>
+                </div>
+                <MobileStatGrid tiles={weeklyTiles} loading={loading} />
+              </section>
+            )}
 
             <p className="pb-2 text-center text-[0.65rem] text-[#6C757D] dark:text-muted-foreground">
               Pull down or tap refresh to update · Switch modules from the bar below

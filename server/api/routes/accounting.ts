@@ -220,6 +220,22 @@ router.get('/daily-trend', checkRole(['admin', 'accountant']), async (req: any, 
     }
 });
 
+// --- Inventory Value Trend (cost + retail, reconstructed from movements) ---
+router.get('/inventory-value-trend', checkRole(['admin', 'accountant']), async (req: any, res) => {
+    try {
+        const from = (req.query.from as string) || '';
+        const to = (req.query.to as string) || '';
+        if (!from || !to) {
+            return res.status(400).json({ error: 'from and to (ISO) query params are required' });
+        }
+        const data = await getAccountingService().getInventoryValueTrend(req.tenantId, { from, to });
+        res.json(data);
+    } catch (error: any) {
+        console.error('❌ Error fetching inventory value trend:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- Branch revenue breakdown (Executive Overview node rankings) ---
 router.get('/branch-revenue', checkRole(['admin', 'accountant']), async (req: any, res) => {
     try {

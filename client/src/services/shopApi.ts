@@ -532,6 +532,18 @@ export const accountingApi = {
     q.set('to', to);
     return apiClient.get<Array<{ branch_name: string; revenue: number }>>(`/shop/accounting/branch-revenue?${q.toString()}`);
   },
+  getInventoryValueTrend: (from: string, to: string) => {
+    const q = new URLSearchParams();
+    q.set('from', from);
+    q.set('to', to);
+    return apiClient.get<{
+      days: { day: string; costValue: number; retailValue: number }[];
+      costNow: number;
+      retailNow: number;
+      costStart: number;
+      retailStart: number;
+    }>(`/shop/accounting/inventory-value-trend?${q.toString()}`);
+  },
   getCategoryPerformance: (from?: string, to?: string) => {
     const q = new URLSearchParams();
     if (from) q.set('from', from);
