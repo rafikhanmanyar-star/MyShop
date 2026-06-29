@@ -387,58 +387,103 @@ export class AccountingService {
   }
 
   /**
-   * Get bank account balances from shop_bank_accounts.
-   * When a bank account is linked to a chart account (chart_account_id), the balance shown
-   * is the ledger-derived balance for that chart account so it stays in sync with cleared transactions.
-   * Otherwise falls back to the denormalized shop_bank_accounts.balance.
+   * Cash & bank balances for the finance dashboard — one row per liquid chart account (111xx
+   * and legacy AST cash/bank codes), merged with shop_bank_accounts when linked.
+   * Balances come from the GL so POS, procurement, expenses, and khata payments stay in sync.
    */
   async getBankBalances(tenantId: string) {
-    const rows = await this.db.query(`
+    const shopRows = await this.db.query(`
       SELECT
-        sba.id, sba.name, sba.code, sba.account_type, sba.currency,
-        sba.balance, sba.is_active, sba.created_at, sba.updated_at,
-        sba.chart_account_id
-      FROM shop_bank_accounts sba
-      WHERE sba.tenant_id = $1 AND sba.is_active = TRUE AND sba.chart_account_id IS NOT NULL
-      ORDER BY sba.name ASC
+        id, name, code, account_type, currency, balance, is_active, created_at, updated_at,
+        chart_account_id
+      FROM shop_bank_accounts
+      WHERE tenant_id = $1 AND is_active = TRUE
+      ORDER BY name ASC
     `, [tenantId]);
 
-    if (rows.length === 0) return [];
+    let chartRows = await this.db.query(`
+      SELECT id, name, code
+      FROM accounts
+      WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE AND type = 'Asset'
+        AND (
+          code ~ '^111[0-9]{2}$'
+          OR code IN ('AST-100', 'AST-101', 'AST-102')
+        )
+      ORDER BY code ASC
+    `, [tenantId]);
 
-    const chartIds = rows.map((r: any) => r.chart_account_id).filter(Boolean);
-    let ledgerBalances: Record<string, number> = {};
-    if (chartIds.length > 0) {
-      const placeholders = chartIds.map((_: any, i: number) => `$${i + 2}`).join(', ');
-      const balanceRows = await this.db.query(`
-        SELECT
-          a.id,
-          CASE WHEN a.type IN ('Asset', 'Expense')
-            THEN COALESCE(SUM(le.debit), 0) - COALESCE(SUM(le.credit), 0)
-            ELSE COALESCE(SUM(le.credit), 0) - COALESCE(SUM(le.debit), 0)
-          END as balance
-        FROM accounts a
-        LEFT JOIN ledger_entries le ON le.account_id = a.id AND le.tenant_id = $1
-        WHERE a.tenant_id = $1 AND a.id IN (${placeholders})
-        GROUP BY a.id
-      `, [tenantId, ...chartIds]);
-      for (const r of balanceRows) {
-        ledgerBalances[r.id] = parseFloat(r.balance) || 0;
-      }
+    const chartIdSet = new Set(chartRows.map((r: any) => r.id));
+    const linkedExtraIds = shopRows
+      .map((r: any) => r.chart_account_id)
+      .filter((id: string | null) => id && !chartIdSet.has(id));
+    if (linkedExtraIds.length > 0) {
+      const extra = await this.db.query(
+        `SELECT id, name, code FROM accounts
+         WHERE tenant_id = $1 AND id = ANY($2::text[]) AND type = 'Asset'`,
+        [tenantId, linkedExtraIds]
+      );
+      chartRows = [...chartRows, ...extra];
     }
 
-    return rows.map((r: any) => ({
-      id: r.id,
-      name: r.name,
-      code: r.code,
-      account_type: r.account_type,
-      currency: r.currency,
-      is_active: r.is_active,
-      created_at: r.created_at,
-      updated_at: r.updated_at,
-      balance: r.chart_account_id != null && r.chart_account_id in ledgerBalances
-        ? ledgerBalances[r.chart_account_id]
-        : (parseFloat(r.balance) || 0),
-    }));
+    if (chartRows.length === 0) return [];
+
+    const chartIds = chartRows.map((r: any) => r.id);
+    const placeholders = chartIds.map((_: any, i: number) => `$${i + 2}`).join(', ');
+    const balanceRows = await this.db.query(`
+      SELECT
+        a.id,
+        COALESCE(SUM(le.debit), 0) AS total_debit,
+        COALESCE(SUM(le.credit), 0) AS total_credit,
+        COALESCE(SUM(le.debit), 0) - COALESCE(SUM(le.credit), 0) AS balance
+      FROM accounts a
+      LEFT JOIN ledger_entries le ON le.account_id = a.id AND le.tenant_id = $1
+      WHERE a.tenant_id = $1 AND a.id IN (${placeholders})
+      GROUP BY a.id
+    `, [tenantId, ...chartIds]);
+
+    const ledgerByChart: Record<string, { balance: number; total_debit: number; total_credit: number }> = {};
+    for (const r of balanceRows) {
+      ledgerByChart[r.id] = {
+        balance: parseFloat(r.balance) || 0,
+        total_debit: parseFloat(r.total_debit) || 0,
+        total_credit: parseFloat(r.total_credit) || 0,
+      };
+    }
+
+    const shopByChart = new Map<string, any>();
+    for (const s of shopRows) {
+      if (s.chart_account_id) shopByChart.set(s.chart_account_id, s);
+    }
+
+    return chartRows.map((c: any) => {
+      const shop = shopByChart.get(c.id);
+      const ledger = ledgerByChart[c.id];
+      const code = c.code || shop?.code || '';
+      const isCash =
+        shop?.account_type === 'Cash' ||
+        code === '11101' ||
+        code === '11104' ||
+        code === '11105' ||
+        code === 'AST-100' ||
+        /cash/i.test(String(c.name || shop?.name || ''));
+
+      return {
+        id: shop?.id ?? c.id,
+        chart_account_id: c.id,
+        name: shop?.name ?? c.name,
+        chart_name: c.name,
+        code,
+        account_type: shop?.account_type ?? (isCash ? 'Cash' : 'Bank'),
+        currency: shop?.currency ?? null,
+        is_active: shop?.is_active ?? true,
+        created_at: shop?.created_at ?? null,
+        updated_at: shop?.updated_at ?? null,
+        balance: ledger?.balance ?? (shop ? parseFloat(shop.balance) || 0 : 0),
+        total_debit: ledger?.total_debit ?? 0,
+        total_credit: ledger?.total_credit ?? 0,
+        has_shop_bank_link: Boolean(shop),
+      };
+    });
   }
 
   /**

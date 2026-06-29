@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BarChart3, ClipboardList, FileText } from 'lucide-react';
 import { AccountingProvider, useAccounting } from '../../context/AccountingContext';
@@ -113,16 +113,60 @@ const AccountingContent: React.FC = () => {
                 if (t === 'dashboard') next.delete('tab');
                 else next.set('tab', t);
                 if (t !== 'dashboard') next.delete('revenue');
+                if (t !== 'ledger') {
+                    next.delete('account');
+                    next.delete('cashBank');
+                }
                 return next;
             },
             { replace: true }
         );
     };
 
+    const ledgerAccountId = searchParams.get('account') || '';
+    const ledgerCashBankOnly = searchParams.get('cashBank') === '1';
+
+    const openLedgerForAccount = useCallback(
+        (chartAccountId: string) => {
+            setActiveTab('ledger');
+            setSearchParams(
+                (prev) => {
+                    const next = new URLSearchParams(prev);
+                    next.set('tab', 'ledger');
+                    next.set('account', chartAccountId);
+                    next.delete('cashBank');
+                    next.delete('revenue');
+                    return next;
+                },
+                { replace: true }
+            );
+        },
+        [setSearchParams]
+    );
+
+    const openCashBankReconciliation = useCallback(() => {
+        setActiveTab('ledger');
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.set('tab', 'ledger');
+                next.set('cashBank', '1');
+                next.delete('account');
+                next.delete('revenue');
+                return next;
+            },
+            { replace: true }
+        );
+    }, [setSearchParams]);
+
     useEffect(() => {
         const p = searchParams.get('tab');
+        const account = searchParams.get('account');
+        const cashBank = searchParams.get('cashBank');
         if (p === 'ledger' || p === 'statements') {
             setActiveTab(p);
+        } else if (account || cashBank === '1') {
+            setActiveTab('ledger');
         } else {
             setActiveTab('dashboard');
         }
@@ -160,7 +204,7 @@ const AccountingContent: React.FC = () => {
                         aria-labelledby="financial-tab-dashboard"
                         className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-6 lg:p-8"
                     >
-                        <AccountingDashboard />
+                        <AccountingDashboard onOpenCashBankReconciliation={openCashBankReconciliation} onOpenLedgerAccount={openLedgerForAccount} />
                     </section>
                 )}
                 {activeTab === 'ledger' && (
@@ -171,6 +215,8 @@ const AccountingContent: React.FC = () => {
                         className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 sm:px-6 sm:py-5 lg:px-8"
                     >
                         <GeneralLedger
+                            initialAccountId={ledgerAccountId}
+                            cashBankOnly={ledgerCashBankOnly}
                             onExportCsvReady={(fn) => {
                                 ledgerCsvExportRef.current = fn;
                             }}

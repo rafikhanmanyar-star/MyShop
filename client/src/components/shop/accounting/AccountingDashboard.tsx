@@ -1,6 +1,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useAccounting } from '../../../context/AccountingContext';
 import { accountingApi } from '../../../services/shopApi';
 import { CURRENCY, ICONS } from '../../../constants';
@@ -229,8 +230,146 @@ const RevenueBarChart: React.FC<{ buckets: Bucket[] }> = ({ buckets }) => {
     );
 };
 
-const AccountingDashboard: React.FC = () => {
-    const navigate = useNavigate();
+type CashBankRow = {
+    chartAccountId: string;
+    name: string;
+    code: string;
+    accountType: string;
+    balance: number;
+    totalDebit: number;
+    totalCredit: number;
+    hasShopLink: boolean;
+};
+
+const CashBankBalancesPanel: React.FC<{
+    bankAccounts: any[];
+    fmtMoney: (n: number) => string;
+    onOpenAccount: (chartAccountId: string) => void;
+    onOpenReconciliation: () => void;
+}> = ({ bankAccounts, fmtMoney, onOpenAccount, onOpenReconciliation }) => {
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    const rows: CashBankRow[] = useMemo(
+        () =>
+            (bankAccounts || []).map((acc: any) => ({
+                chartAccountId: String(acc.chart_account_id || acc.id),
+                name: String(acc.name || acc.chart_name || 'Account'),
+                code: String(acc.code || '—'),
+                accountType: String(acc.account_type || 'Bank'),
+                balance: parseFloat(acc.balance) || 0,
+                totalDebit: parseFloat(acc.total_debit) || 0,
+                totalCredit: parseFloat(acc.total_credit) || 0,
+                hasShopLink: Boolean(acc.has_shop_bank_link),
+            })),
+        [bankAccounts]
+    );
+
+    const totalBalance = useMemo(() => rows.reduce((s, r) => s + r.balance, 0), [rows]);
+
+    const toggle = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
+
+    return (
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900/50">
+            <div className="mb-4 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    {React.cloneElement(ICONS.building as React.ReactElement<any>, { width: 18, height: 18, className: 'text-slate-600 dark:text-slate-300' })}
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">Cash & Bank Balances</h3>
+                </div>
+                {rows.length > 1 && (
+                    <span className="font-mono text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        Total {fmtMoney(totalBalance)}
+                    </span>
+                )}
+            </div>
+            <div className="max-h-[320px] space-y-1 overflow-y-auto pr-1">
+                {rows.length === 0 ? (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                        No cash or bank accounts in Chart of Accounts (111xx). Add them in Settings → Chart of Accounts.
+                    </p>
+                ) : (
+                    rows.map((row) => {
+                        const open = expandedId === row.chartAccountId;
+                        return (
+                            <div
+                                key={row.chartAccountId}
+                                className="rounded-xl border border-slate-100 dark:border-slate-800"
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => toggle(row.chartAccountId)}
+                                    className="flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                >
+                                    <div className="flex min-w-0 items-start gap-2">
+                                        {open ? (
+                                            <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                                        ) : (
+                                            <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                                        )}
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-bold text-[#0f172a] dark:text-white">{row.name}</p>
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                {row.code} · {row.accountType}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <p className="shrink-0 font-mono text-sm font-bold text-[#0f172a] dark:text-white">
+                                        {fmtMoney(row.balance)}
+                                    </p>
+                                </button>
+                                {open && (
+                                    <div className="border-t border-slate-100 px-3 py-3 dark:border-slate-800">
+                                        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                                            <div>
+                                                <dt className="font-semibold uppercase tracking-wide text-slate-500">Total debits</dt>
+                                                <dd className="mt-0.5 font-mono font-bold text-[#0f172a] dark:text-white">{fmtMoney(row.totalDebit)}</dd>
+                                            </div>
+                                            <div>
+                                                <dt className="font-semibold uppercase tracking-wide text-slate-500">Total credits</dt>
+                                                <dd className="mt-0.5 font-mono font-bold text-[#0f172a] dark:text-white">{fmtMoney(row.totalCredit)}</dd>
+                                            </div>
+                                            <div className="col-span-2">
+                                                <dt className="font-semibold uppercase tracking-wide text-slate-500">POS / procurement link</dt>
+                                                <dd className="mt-0.5 text-slate-700 dark:text-slate-300">
+                                                    {row.hasShopLink
+                                                        ? 'Linked in shop bank accounts — used for POS receipts, supplier payments, expenses, khata collections.'
+                                                        : 'Chart account only — link in Settings → Bank Accounts to use in POS.'}
+                                                </dd>
+                                            </div>
+                                        </dl>
+                                        <button
+                                            type="button"
+                                            onClick={() => onOpenAccount(row.chartAccountId)}
+                                            className="mt-3 w-full rounded-lg border border-slate-200 bg-slate-50 py-2 text-[10px] font-bold uppercase tracking-wider text-[#1e3a5f] transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-sky-400 dark:hover:bg-slate-700"
+                                        >
+                                            View ledger transactions
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+            <button
+                type="button"
+                onClick={onOpenReconciliation}
+                className="mt-4 w-full rounded-xl border-2 border-[#1e3a5f] bg-transparent py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#1e3a5f] transition-colors hover:bg-slate-50 dark:border-sky-500 dark:text-sky-400 dark:hover:bg-slate-800"
+            >
+                View Reconciliation
+            </button>
+        </div>
+    );
+};
+
+type AccountingDashboardProps = {
+    onOpenCashBankReconciliation?: () => void;
+    onOpenLedgerAccount?: (chartAccountId: string) => void;
+};
+
+const AccountingDashboard: React.FC<AccountingDashboardProps> = ({
+    onOpenCashBankReconciliation,
+    onOpenLedgerAccount,
+}) => {
     const [searchParams, setSearchParams] = useSearchParams();
     const {
         accounts,
@@ -495,42 +634,12 @@ const AccountingDashboard: React.FC = () => {
 
                 {/* Right column */}
                 <div className="flex flex-col gap-6">
-                    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900/50">
-                        <div className="mb-4 flex items-center gap-2">
-                            {React.cloneElement(ICONS.building as React.ReactElement<any>, { width: 18, height: 18, className: 'text-slate-600 dark:text-slate-300' })}
-                            <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">Cash & Bank Balances</h3>
-                        </div>
-                        <div className="max-h-[280px] space-y-3 overflow-y-auto pr-1">
-                            {bankAccounts.length === 0 ? (
-                                <p className="text-xs text-slate-500 dark:text-slate-400">No linked bank accounts. Map accounts in Settings.</p>
-                            ) : (
-                                bankAccounts.map((acc: any, i: number) => {
-                                    const mask = acc.code ? `···${String(acc.code).slice(-4)}` : acc.account_type || '—';
-                                    return (
-                                        <div
-                                            key={i}
-                                            className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3 last:border-0 dark:border-slate-700"
-                                        >
-                                            <div className="min-w-0">
-                                                <p className="truncate text-sm font-bold text-[#0f172a] dark:text-white">{acc.name}</p>
-                                                <p className="text-[11px] text-slate-500 dark:text-slate-400">{mask}</p>
-                                            </div>
-                                            <p className="shrink-0 font-mono text-sm font-bold text-[#0f172a] dark:text-white">
-                                                {fmtMoney(parseFloat(acc.balance) || 0)}
-                                            </p>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => navigate('/accounting/reports/daily')}
-                            className="mt-4 w-full rounded-xl border-2 border-[#1e3a5f] bg-transparent py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#1e3a5f] transition-colors hover:bg-slate-50 dark:border-sky-500 dark:text-sky-400 dark:hover:bg-slate-800"
-                        >
-                            View Reconciliation
-                        </button>
-                    </div>
+                    <CashBankBalancesPanel
+                        bankAccounts={bankAccounts}
+                        fmtMoney={fmtMoney}
+                        onOpenAccount={(id) => onOpenLedgerAccount?.(id)}
+                        onOpenReconciliation={() => onOpenCashBankReconciliation?.()}
+                    />
 
                     <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900/50">
                         <div className="mb-3 flex items-center gap-2">

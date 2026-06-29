@@ -14,6 +14,7 @@ import { LedgerToolbar, ledgerLineTotals } from './ledger/LedgerToolbar';
 import { LedgerTransactionCard } from './ledger/LedgerTransactionCard';
 import { EmptyLedgerState } from './ledger/EmptyLedgerState';
 import { LedgerSkeleton } from './ledger/LedgerSkeleton';
+import { isCashOrBankAssetCode } from '../../../utils/payFromAccounts';
 import type { LedgerJournalEntry, LedgerSortId } from './ledger/types';
 import type { LedgerSourceFilter } from './ledger/types';
 
@@ -82,11 +83,20 @@ export interface GeneralLedgerProps {
   onExportCsvReady?: (fn: () => void) => void;
   /** Optional: parent can wire header “Manual Journal” shortcut */
   onRequestManualJournal?: () => void;
+  /** Pre-select a chart account (from URL / cash-bank drill-down). */
+  initialAccountId?: string;
+  /** When true, limit account picker and entry filter to cash/bank (111xx) accounts. */
+  cashBankOnly?: boolean;
 }
 
 const DRAWERUnmount_MS = 400;
 
-const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onRequestManualJournal }) => {
+const GeneralLedger: React.FC<GeneralLedgerProps> = ({
+  onExportCsvReady,
+  onRequestManualJournal,
+  initialAccountId = '',
+  cashBankOnly = false,
+}) => {
   const { user } = useAuth();
   const { accounts, updateJournalEntry, deleteJournalEntry } = useAccounting();
   const branchCtx = useBranch();
@@ -121,6 +131,20 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [ledgerRefreshTick, setLedgerRefreshTick] = useState(0);
+
+  useEffect(() => {
+    setAccountFilter(initialAccountId || '');
+  }, [initialAccountId]);
+
+  const cashBankAccountIds = useMemo(
+    () =>
+      new Set(
+        accounts
+          .filter((a: { type?: string; code?: string }) => a.type === 'Asset' && isCashOrBankAssetCode(String(a.code || '')))
+          .map((a: { id: string }) => a.id)
+      ),
+    [accounts]
+  );
 
   const openDrawerFor = useCallback((e: LedgerJournalEntry) => {
     setDrawerEntry(e);
@@ -187,6 +211,10 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
     let rows = ledgerItems.slice();
     if (accountFilter && rows.length) {
       rows = rows.filter((e) => (e.lines || []).some((l) => l.accountId === accountFilter));
+    } else if (cashBankOnly && cashBankAccountIds.size > 0 && rows.length) {
+      rows = rows.filter((e) =>
+        (e.lines || []).some((l) => cashBankAccountIds.has(l.accountId))
+      );
     }
     const sorted = [...rows];
     sorted.sort((a, b) => {
@@ -209,11 +237,13 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
       }
     });
     return sorted;
-  }, [ledgerItems, accountFilter, sort]);
+  }, [ledgerItems, accountFilter, sort, cashBankOnly, cashBankAccountIds]);
 
   const clientFilterNotice = accountFilter
     ? 'Account filter narrows entries on this page only. Clearing it shows all rows returned for the selected date range and server filters.'
-    : null;
+    : cashBankOnly
+      ? 'Showing journal lines that touch cash or bank accounts (111xx). Pick one account to narrow further.'
+      : null;
 
   const exportCsvNow = useCallback(() => {
     const rows = buildLedgerCsv(processedItems);
@@ -328,7 +358,18 @@ const GeneralLedger: React.FC<GeneralLedgerProps> = ({ onExportCsvReady, onReque
       ? `0 loaded · Page ${page} / ${totalPages}`
       : `Server rows ${rangeStart.toLocaleString()}–${rangeEnd.toLocaleString()} · ${processedItems.length} visible`;
 
-  const accountPicker = useMemo(() => accounts.map((a: { id: string; code: string; name: string }) => ({ id: a.id, code: a.code, name: a.name })), [accounts]);
+  const accountPicker = useMemo(() => {
+    const list = accounts.map((a: { id: string; code: string; name: string; type?: string }) => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+    }));
+    if (!cashBankOnly) return list;
+    return list.filter((a) => {
+      const full = accounts.find((x: { id: string }) => x.id === a.id);
+      return full?.type === 'Asset' && isCashOrBankAssetCode(String(a.code || ''));
+    });
+  }, [accounts, cashBankOnly]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
