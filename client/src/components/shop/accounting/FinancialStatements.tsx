@@ -8,15 +8,28 @@ const FinancialStatements: React.FC = () => {
     const {
         totalRevenue, grossProfit, netMargin, totalCOGS, totalExpenses,
         netProfit, accounts, totalAssets, totalLiabilities, totalEquity,
-        receivablesTotal, salesBySource, loading
+        receivablesTotal, customerAdvances, inventoryEquityAdjustment, salesBySource, loading
     } = useAccounting();
 
     const [statementType, setStatementType] = useState<'pnl' | 'balanceSheet'>('pnl');
+
+    const advances = Math.max(0, Number(customerAdvances) || 0);
+    const invAdj = Number(inventoryEquityAdjustment) || 0;
+    const isTradeReceivable = (a: any) =>
+        a?.code === '11201' || a?.code === 'AST-120' ||
+        (a?.type === 'Asset' && /^trade\s+receivable/i.test(String(a?.name || '')));
+    const isInventoryAcct = (a: any) =>
+        a?.type === 'Asset' && (/^113\d{2}$/.test(String(a?.code || '')) || a?.code === 'AST-110');
 
     // Expense accounts
     const expenseAccounts = accounts.filter((a: any) => a.type === 'Expense');
     const incomeAccounts = accounts.filter((a: any) => a.type === 'Income');
     const assetAccounts = accounts.filter((a: any) => a.type === 'Asset');
+    // Primary inventory account that absorbs the live-valuation adjustment (so the asset line
+    // items still foot to Total Assets when there are several 113xx accounts).
+    const primaryInventoryId =
+        (assetAccounts.find((a: any) => a.code === '11301' || a.code === 'AST-110') ||
+            assetAccounts.find((a: any) => isInventoryAcct(a)))?.id ?? null;
 
     const posRevenue = salesBySource?.pos?.totalRevenue || 0;
     const mobileRevenue = salesBySource?.mobile?.totalRevenue || 0;
@@ -166,12 +179,21 @@ const FinancialStatements: React.FC = () => {
                                 <span className="text-sm font-semibold uppercase text-foreground">Assets</span>
                                 <span className="text-sm font-semibold text-foreground">PKR</span>
                             </div>
-                            {assetAccounts.map((acc: any) => (
-                                <div key={acc.id} className="flex justify-between px-4 mb-2 italic">
-                                    <span className="text-sm text-muted-foreground">{acc.code} — {acc.name}</span>
-                                    <span className="text-sm font-bold text-foreground">{Number(acc.balance).toLocaleString()}</span>
-                                </div>
-                            ))}
+                            {assetAccounts.map((acc: any) => {
+                                // Show Trade Receivables at GROSS debtors (matches Khata Ledger);
+                                // the netted customer credit balances are reclassified to liabilities below.
+                                let shown = Number(acc.balance) || 0;
+                                if (isTradeReceivable(acc)) shown += advances;
+                                // Show inventory at live valuation (GL misses opening stock / adjustments);
+                                // the gap is offset to equity below so the statement stays balanced.
+                                if (acc.id === primaryInventoryId) shown += invAdj;
+                                return (
+                                    <div key={acc.id} className="flex justify-between px-4 mb-2 italic">
+                                        <span className="text-sm text-muted-foreground">{acc.code} — {acc.name}</span>
+                                        <span className="text-sm font-bold text-foreground">{shown.toLocaleString()}</span>
+                                    </div>
+                                );
+                            })}
                             {assetAccounts.length === 0 && (
                                 <div className="px-4 text-sm text-slate-300 dark:text-slate-500 italic">No asset accounts</div>
                             )}
@@ -192,7 +214,13 @@ const FinancialStatements: React.FC = () => {
                                     <span className="text-sm font-bold text-foreground">{Number(acc.balance).toLocaleString()}</span>
                                 </div>
                             ))}
-                            {accounts.filter((a: any) => a.type === 'Liability').length === 0 && (
+                            {advances > 0.005 && (
+                                <div className="flex justify-between px-4 mb-2 italic">
+                                    <span className="text-sm text-muted-foreground">Customer Advances (Khata credit balances)</span>
+                                    <span className="text-sm font-bold text-foreground">{advances.toLocaleString()}</span>
+                                </div>
+                            )}
+                            {accounts.filter((a: any) => a.type === 'Liability').length === 0 && advances <= 0.005 && (
                                 <div className="px-4 text-sm text-slate-300 dark:text-slate-500 italic">No liabilities recorded</div>
                             )}
                             <div className="flex justify-between px-4 font-semibold border-y border-border dark:border-slate-700 py-3 mt-4 bg-muted/80/50 dark:bg-slate-800/50">
@@ -210,6 +238,12 @@ const FinancialStatements: React.FC = () => {
                                 <span className="text-sm text-muted-foreground">Retained Earnings (Net Profit)</span>
                                 <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{netProfit.toLocaleString()}</span>
                             </div>
+                            {Math.abs(invAdj) > 0.005 && (
+                                <div className="flex justify-between px-4 mb-2 italic">
+                                    <span className="text-sm text-muted-foreground">Opening Balance Equity (un-journaled inventory)</span>
+                                    <span className="text-sm font-bold text-foreground">{invAdj.toLocaleString()}</span>
+                                </div>
+                            )}
                             {accounts.filter((a: any) => a.type === 'Equity').map((acc: any) => (
                                 <div key={acc.id} className="flex justify-between px-4 mb-2 italic">
                                     <span className="text-sm text-muted-foreground">{acc.name}</span>

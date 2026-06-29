@@ -296,6 +296,75 @@ export class AccountingService {
     `, [tenantId, COA.TRADE_RECEIVABLES, 'AST-120']);
     receivablesTotal = parseFloat(arResult[0]?.ar_balance) || 0;
 
+    // Customer advances (khata credit balances): customers who have prepaid / overpaid sit
+    // with a NET CREDIT balance in the khata subledger. The GL Trade Receivables account nets
+    // these against debtors, understating both Accounts Receivable and showing a phantom
+    // reduction in assets. Surface them so AR reflects GROSS debtors (matching the Khata Ledger)
+    // and the credit balances are presented as a Customer Advances liability. Net effect on
+    // equity is zero — assets and liabilities both rise by the same amount, so the books balance.
+    let customerAdvances = 0;
+    try {
+      const advResult = await this.db.query(`
+        SELECT COALESCE(SUM(credit_balance), 0) AS total_advances
+        FROM (
+          SELECT customer_id,
+            SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END)
+            - SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END) AS credit_balance
+          FROM khata_ledger
+          WHERE tenant_id = $1
+          GROUP BY customer_id
+          HAVING SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END)
+            - SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END) > 0
+        ) sub
+      `, [tenantId]);
+      customerAdvances = parseFloat(advResult[0]?.total_advances) || 0;
+    } catch {
+      customerAdvances = 0;
+    }
+    customerAdvances = Math.max(0, Math.round(customerAdvances * 100) / 100);
+
+    // Reclassify: AR shows gross debtors, advances move to liabilities (books stay balanced).
+    receivablesTotal = receivablesTotal + customerAdvances;
+    totalAssets = totalAssets + customerAdvances;
+    totalLiabilities = totalLiabilities + customerAdvances;
+
+    // Live inventory valuation (stock on hand × cost). Stock added through opening balances or
+    // manual stock adjustments updates shop_inventory WITHOUT any GL entry — only purchase bills
+    // debit the Merchandise Inventory GL account and sales credit it. So the GL balance can sit at
+    // ~0 even when real stock exists. Surface the live valuation and offset the gap to equity
+    // (effectively opening-balance capital) so the accounting page reflects the inventory the
+    // business actually holds while the balance sheet still foots (assets = liabilities + equity).
+    let inventoryValuation = 0;
+    try {
+      const invVal = await this.db.query(`
+        SELECT COALESCE(SUM(i.quantity_on_hand * COALESCE(NULLIF(p.average_cost, 0), p.cost_price, 0)), 0) AS total_value
+        FROM shop_products p
+        JOIN shop_inventory i ON i.product_id = p.id AND i.tenant_id = $1
+        WHERE p.tenant_id = $1 AND p.is_active = TRUE
+      `, [tenantId]);
+      inventoryValuation = parseFloat(invVal[0]?.total_value) || 0;
+    } catch {
+      inventoryValuation = 0;
+    }
+    inventoryValuation = Math.round(inventoryValuation * 100) / 100;
+
+    let glInventory = 0;
+    try {
+      const glInv = await this.db.query(`
+        SELECT COALESCE(SUM(le.debit) - SUM(le.credit), 0) AS inv_balance
+        FROM ledger_entries le
+        JOIN accounts a ON le.account_id = a.id AND a.tenant_id = $1
+        WHERE le.tenant_id = $1 AND (a.code LIKE '113%' OR a.code = 'AST-110')
+      `, [tenantId]);
+      glInventory = parseFloat(glInv[0]?.inv_balance) || 0;
+    } catch {
+      glInventory = 0;
+    }
+
+    const inventoryEquityAdjustment = Math.round((inventoryValuation - glInventory) * 100) / 100;
+    totalAssets = totalAssets + inventoryEquityAdjustment;
+    totalEquity = totalEquity + inventoryEquityAdjustment;
+
     const grossProfit = totalRevenue - totalCOGS;
     const netProfit = totalRevenue - totalExpenses;
     const netMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
@@ -311,6 +380,9 @@ export class AccountingService {
       totalLiabilities,
       totalEquity,
       receivablesTotal,
+      customerAdvances,
+      inventoryValuation,
+      inventoryEquityAdjustment,
     };
   }
 

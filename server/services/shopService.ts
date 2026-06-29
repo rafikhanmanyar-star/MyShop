@@ -1374,6 +1374,42 @@ export class ShopService {
       `, [tenantId, data.productId, data.warehouseId, data.type, data.quantity,
         data.referenceId || `adj-${Date.now()}`, data.userId, data.reason]);
 
+      // Post the stock change to the General Ledger so the Merchandise Inventory account stays in
+      // sync with real stock. Manual adjustments / stock-in previously bypassed accounting, which
+      // is why the inventory asset read as 0. Offset goes to Opening Balance Equity (balance-sheet
+      // only) so adjustments never distort revenue / COGS / profit. (Sales and purchase bills post
+      // their own inventory entries; this method is only reached from manual adjustments / imports.)
+      const adjUnitCost = await fetchUnitCostForProduct(client, tenantId, data.productId);
+      const adjValue = Math.round(Math.abs(Number(data.quantity)) * (Number(adjUnitCost) || 0) * 100) / 100;
+      if (adjValue > 0) {
+        const accounting = getAccountingService();
+        const invAccId = await accounting.getOrCreateAccountByCode(
+          tenantId, COA.MERCHANDISE_INVENTORY, 'Merchandise Inventory', 'Asset', client
+        );
+        const equityAccId = await accounting.getOrCreateAccountByCode(
+          tenantId, COA.OPENING_BALANCE_EQUITY, 'Opening Balance Equity', 'Equity', client
+        );
+        const ref = `INV-ADJ-${data.referenceId || Date.now()}`;
+        const desc = `Inventory ${data.quantity >= 0 ? 'increase' : 'decrease'} (${data.type})${data.reason ? `: ${data.reason}` : ''}`;
+        const jRes = await client.query(`
+          INSERT INTO journal_entries (tenant_id, date, reference, description, source_module, source_id, status)
+          VALUES ($1, NOW(), $2, $3, 'Inventory', $4, 'Posted') RETURNING id
+        `, [tenantId, ref, desc, data.productId]);
+        if (jRes.length > 0) {
+          const journalId = jRes[0].id;
+          const invIsDebit = Number(data.quantity) >= 0;
+          await client.query(
+            'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, $5)',
+            [tenantId, journalId, invAccId, invIsDebit ? adjValue : 0, invIsDebit ? 0 : adjValue]
+          );
+          await client.query(
+            'INSERT INTO ledger_entries (tenant_id, journal_entry_id, account_id, debit, credit) VALUES ($1, $2, $3, $4, $5)',
+            [tenantId, journalId, equityAccId, invIsDebit ? 0 : adjValue, invIsDebit ? adjValue : 0]
+          );
+          await client.query('DELETE FROM report_aggregates WHERE tenant_id = $1', [tenantId]);
+        }
+      }
+
       return updateRes[0];
     });
     const { notifyDailyReportUpdated } = await import('./dailyReportNotify.js');

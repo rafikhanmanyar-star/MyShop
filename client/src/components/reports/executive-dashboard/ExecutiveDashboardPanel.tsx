@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import YearlyOverviewReportPanel from './YearlyOverviewReportPanel';
 import {
   Area,
   AreaChart,
@@ -38,9 +40,24 @@ export interface ExecutiveDashboardPanelProps {
 }
 
 const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ filters, range }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get('view') === 'yearly' ? 'yearly' : 'summary';
   const [data, setData] = useState<ExecutiveSummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const setView = (next: 'summary' | 'yearly') => {
+    setSearchParams(
+      (prev) => {
+        const n = new URLSearchParams(prev);
+        n.set('cat', 'executive');
+        if (next === 'yearly') n.set('view', 'yearly');
+        else n.delete('view');
+        return n;
+      },
+      { replace: true }
+    );
+  };
 
   const queryKey = useMemo(
     () =>
@@ -53,6 +70,7 @@ const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ filte
   );
 
   useEffect(() => {
+    if (view !== 'summary') return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -83,7 +101,7 @@ const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ filte
     return () => {
       cancelled = true;
     };
-  }, [queryKey]);
+  }, [queryKey, view]);
 
   const pieExpense = useMemo(() => {
     if (!data) return [];
@@ -103,25 +121,60 @@ const ExecutiveDashboardPanel: React.FC<ExecutiveDashboardPanelProps> = ({ filte
     return hours;
   }, []);
 
-  if (loading) {
-    return (
-      <div className="grid animate-pulse gap-4 md:grid-cols-3 lg:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="h-28 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80" />
-        ))}
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2 border-b border-slate-200/80 pb-3 dark:border-slate-700">
+        {([
+          { id: 'summary' as const, label: 'Executive summary' },
+          { id: 'yearly' as const, label: 'Year to date overview' },
+        ]).map((tab) => {
+          const active = view === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setView(tab.id)}
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
+                active
+                  ? 'bg-[#0047AB] text-white shadow-sm dark:bg-blue-600'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
-    );
-  }
 
-  if (error || !data) {
-    return (
-      <Card className="border border-red-200 bg-red-50/90 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-        <p className="font-semibold">Could not load executive dashboard</p>
-        <p className="mt-1 text-sm">{error}</p>
-      </Card>
-    );
-  }
+      {view === 'yearly' ? (
+        <YearlyOverviewReportPanel />
+      ) : loading ? (
+        <div className="grid animate-pulse gap-4 md:grid-cols-3 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-28 rounded-2xl bg-slate-200/80 dark:bg-slate-800/80" />
+          ))}
+        </div>
+      ) : error || !data ? (
+        <Card className="border border-red-200 bg-red-50/90 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+          <p className="font-semibold">Could not load executive dashboard</p>
+          <p className="mt-1 text-sm">{error}</p>
+        </Card>
+      ) : (
+        <ExecutiveSummaryBody data={data} pieExpense={pieExpense} heatmap={heatmap} />
+      )}
+    </div>
+  );
+};
 
+function ExecutiveSummaryBody({
+  data,
+  pieExpense,
+  heatmap,
+}: {
+  data: ExecutiveSummaryResponse;
+  pieExpense: { name: string; value: number }[];
+  heatmap: { h: number; v: number }[];
+}) {
   const { kpis, series } = data;
 
   return (

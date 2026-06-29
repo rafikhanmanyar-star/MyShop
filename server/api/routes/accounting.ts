@@ -394,9 +394,13 @@ router.get('/reports/daily/profit-summary', checkRole(['admin', 'accountant']), 
                 .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
             data = await getDailyReportService().getProfitForDates(req.tenantId, dates, branchId);
         }
+        // The request may have already timed out (connect-timeout) for slow long-range queries;
+        // responding again would throw ERR_HTTP_HEADERS_SENT and crash the process.
+        if (res.headersSent || req.timedout) return;
         res.json(data);
     } catch (error: any) {
         console.error('❌ Error daily profit summary:', error);
+        if (res.headersSent || req.timedout) return;
         res.status(500).json({ error: error.message });
     }
 });

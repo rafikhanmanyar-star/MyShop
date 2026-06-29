@@ -239,6 +239,8 @@ const AccountingDashboard: React.FC = () => {
         grossProfit,
         netMargin,
         receivablesTotal,
+        customerAdvances,
+        inventoryValuation,
         salesBySource,
         totalCOGS,
         netProfit,
@@ -321,11 +323,20 @@ const AccountingDashboard: React.FC = () => {
         mobileOrders >= 1000 ? `${(mobileOrders / 1000).toFixed(1)}k orders` : `${mobileOrders} orders`;
 
     const ledgerData = useMemo(() => {
-        const arBal = tradeReceivablesBalance(accounts, receivablesTotal);
+        const advances = Math.max(0, Number(customerAdvances) || 0);
+        // GROSS debtors: GL Trade Receivables nets customer credit/advance balances against
+        // debtors. Adding the advances back makes AR match the Khata Ledger's receivables.
+        const arBal = tradeReceivablesBalance(accounts, receivablesTotal) + advances;
         const prepaidBal = prepaidExpensesBalance(accounts);
-        const invBal = inventoryAssetBalance(accounts);
+        // Live inventory valuation (stock × cost) — the GL Merchandise Inventory account misses
+        // opening stock / manual adjustments, so use the real valuation. Falls back to the GL
+        // balance if valuation is unavailable.
+        const invBal = (Number(inventoryValuation) || 0) > 0
+            ? Number(inventoryValuation)
+            : inventoryAssetBalance(accounts);
         const apRaw = tradePayablesBalance(accounts);
         const listedAssetsSum = arBal + prepaidBal + invBal;
+        // totalAssets already includes the reclassified advances (server-side), so this foots.
         const otherAssets = totalAssets - listedAssetsSum;
 
         const rows: { name: string; balance: number }[] = [
@@ -343,8 +354,14 @@ const AccountingDashboard: React.FC = () => {
             name: 'Accounts Payable',
             balance: apRaw > 0 ? -Math.abs(apRaw) : apRaw,
         });
+        if (advances > 0.005) {
+            rows.push({
+                name: 'Customer Advances (Khata credit)',
+                balance: -advances,
+            });
+        }
         return { rows };
-    }, [accounts, receivablesTotal, totalAssets]);
+    }, [accounts, receivablesTotal, customerAdvances, inventoryValuation, totalAssets]);
 
     const fmtMoney = (n: number) => `${CURRENCY} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

@@ -24,8 +24,6 @@ import { useShopTimezone } from '../context/ShopTimezoneContext';
 import {
   weekToDateRangeIso,
   monthToDateRangeIso,
-  yearToDateRangeIso,
-  yearToDateMonthRangeIso,
 } from '../utils/shopTimezone';
 import { promiseWithTimeout } from '../utils/promiseTimeout';
 import type { InventoryValuePoint } from '../components/dashboard/InventoryValueChart';
@@ -41,7 +39,7 @@ const InventoryValueChart = lazy(() => import('../components/dashboard/Inventory
 
 type LowStockRow = { name: string; qty: string };
 type PendingOrderRow = { id: string; orderNumber: string; customer: string };
-type DashboardReportTab = 'daily' | 'weekly' | 'monthly' | 'yearly';
+type DashboardReportTab = 'daily' | 'weekly' | 'monthly';
 type TrendLabelMode = 'weekday' | 'shortDate';
 type KpiCard = {
   label: string;
@@ -98,33 +96,6 @@ function buildInventoryDailyPoints(
   });
 }
 
-/** Collapse a daily inventory series to end-of-month points for the 12-month yearly view. */
-function buildInventoryMonthlyPoints(raw: InventoryTrendRaw, timeZone: string): InventoryValuePoint[] {
-  const byMonth = new Map<string, { day: string; costValue: number; retailValue: number }>();
-  for (const d of raw?.days ?? []) {
-    const dayStr = String(d.day).slice(0, 10);
-    const key = dayStr.slice(0, 7);
-    const existing = byMonth.get(key);
-    if (!existing || dayStr > existing.day) {
-      byMonth.set(key, {
-        day: dayStr,
-        costValue: Number(d.costValue) || 0,
-        retailValue: Number(d.retailValue) || 0,
-      });
-    }
-  }
-  return [...byMonth.keys()].sort().map((key) => {
-    const [y, mo] = key.split('-').map(Number);
-    const dt = new Date(Date.UTC(y, mo - 1, 1, 12));
-    const v = byMonth.get(key)!;
-    return {
-      label: dt.toLocaleDateString('en', { month: 'short', year: '2-digit', timeZone }),
-      costValue: Math.round(v.costValue * 100) / 100,
-      retailValue: Math.round(v.retailValue * 100) / 100,
-    };
-  });
-}
-
 function buildInventoryTrend(raw: InventoryTrendRaw, points: InventoryValuePoint[]): InventoryTrend {
   if (!raw) return null;
   return {
@@ -136,7 +107,7 @@ function buildInventoryTrend(raw: InventoryTrendRaw, points: InventoryValuePoint
   };
 }
 
-/** The two inventory-value KPI cards shared across all four reports. */
+/** The two inventory-value KPI cards shared across dashboard period reports. */
 function inventoryKpiCards(inventory: InventoryTrend, loaded: boolean): KpiCard[] {
   const ready = inventory != null;
   return [
@@ -199,33 +170,6 @@ function mergeDailyTrend(
         ? dt.toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone })
         : dt.toLocaleDateString('en', { weekday: 'short', timeZone });
     return { label, revenue: Math.round((byDay.get(key) || 0) * 100) / 100 };
-  });
-}
-
-function mergeMonthlyTrend(
-  raw: unknown,
-  monthKeys: string[],
-  timeZone: string
-): { label: string; revenue: number }[] {
-  const r = raw as { pos?: { day?: string; revenue?: string | number }[]; mobile?: { day?: string; revenue?: string | number }[] } | null;
-  const pos = Array.isArray(r?.pos) ? r!.pos! : [];
-  const mobile = Array.isArray(r?.mobile) ? r!.mobile! : [];
-  const byMonth = new Map<string, number>();
-  for (const d of pos) {
-    const key = String(d.day ?? '').slice(0, 7);
-    if (!key) continue;
-    byMonth.set(key, (byMonth.get(key) || 0) + (parseFloat(String(d.revenue)) || 0));
-  }
-  for (const d of mobile) {
-    const key = String(d.day ?? '').slice(0, 7);
-    if (!key) continue;
-    byMonth.set(key, (byMonth.get(key) || 0) + (parseFloat(String(d.revenue)) || 0));
-  }
-  return monthKeys.map((key) => {
-    const [y, mo] = key.split('-').map(Number);
-    const dt = new Date(Date.UTC(y, mo - 1, 1, 12));
-    const label = dt.toLocaleDateString('en', { month: 'short', year: '2-digit', timeZone });
-    return { label, revenue: Math.round((byMonth.get(key) || 0) * 100) / 100 };
   });
 }
 
@@ -449,10 +393,6 @@ export default function DashboardPage() {
   const weeklyDayKeysKey = weeklyRange.dayKeys.join(',');
   const monthlyRange = useMemo(() => monthToDateRangeIso(timezone), [timezone]);
   const monthlyDayKeysKey = monthlyRange.dayKeys.join(',');
-  const yearlyKpiRange = useMemo(() => yearToDateRangeIso(timezone), [timezone]);
-  const yearlyKpiDayKeysKey = yearlyKpiRange.dayKeys.join(',');
-  const yearlyChartRange = useMemo(() => yearToDateMonthRangeIso(timezone), [timezone]);
-  const yearlyMonthKeysKey = yearlyChartRange.monthKeys.join(',');
   const loadGenRef = useRef(0);
   const [stats, setStats] = useState<DashboardStats>(EMPTY_STATS);
   const [ready, setReady] = useState(false);
@@ -473,18 +413,8 @@ export default function DashboardPage() {
     netRevenue: number;
   } | null>(null);
   const [monthlyChartsLoaded, setMonthlyChartsLoaded] = useState(false);
-  const [yearlySalesTrend, setYearlySalesTrend] = useState<{ label: string; revenue: number }[]>([]);
-  const [yearlyRevenueBreakdown, setYearlyRevenueBreakdown] = useState<{ name: string; value: number }[]>([]);
-  const [profit365d, setProfit365d] = useState<{ totalProfit: number; avgProfitPerDay: number } | null>(null);
-  const [yearlyPeriodStats, setYearlyPeriodStats] = useState<{
-    totalSales: number;
-    totalRevenue: number;
-    netRevenue: number;
-  } | null>(null);
-  const [yearlyChartsLoaded, setYearlyChartsLoaded] = useState(false);
   const [weeklyInventory, setWeeklyInventory] = useState<InventoryTrend>(null);
   const [monthlyInventory, setMonthlyInventory] = useState<InventoryTrend>(null);
-  const [yearlyInventory, setYearlyInventory] = useState<InventoryTrend>(null);
   const [activeReport, setActiveReport] = useState<DashboardReportTab>('daily');
 
   useEffect(() => {
@@ -506,13 +436,8 @@ export default function DashboardPage() {
           monthlyCategoryPerf,
           profit30Summary,
           sales30,
-          yearlyTrendRaw,
-          yearlyCategoryPerf,
-          profit365Summary,
-          sales365,
           weeklyInventoryRaw,
           monthlyInventoryRaw,
-          yearlyInventoryRaw,
         ] = await Promise.all([
           accountingApi.getDailyTrend({ from: weeklyRange.fromIso, to: weeklyRange.toIso }).catch(() => null),
           accountingApi.getCategoryPerformance(weeklyRange.fromIso, weeklyRange.categoryToIso).catch(() => []),
@@ -522,13 +447,8 @@ export default function DashboardPage() {
           accountingApi.getCategoryPerformance(monthlyRange.fromIso, monthlyRange.categoryToIso).catch(() => []),
           accountingApi.dailyProfitSummary(monthlyRange.dayKeys).catch(() => null),
           accountingApi.getSalesBySource(monthlyRange.fromIso, monthlyRange.toIso).catch(() => null),
-          accountingApi.getDailyTrend({ from: yearlyChartRange.fromIso, to: yearlyChartRange.toIso }).catch(() => null),
-          accountingApi.getCategoryPerformance(yearlyChartRange.fromIso, yearlyChartRange.categoryToIso).catch(() => []),
-          accountingApi.dailyProfitRange(yearlyKpiRange.fromIso, yearlyKpiRange.toIso).catch(() => null),
-          accountingApi.getSalesBySource(yearlyKpiRange.fromIso, yearlyKpiRange.toIso).catch(() => null),
           accountingApi.getInventoryValueTrend(weeklyRange.fromIso, weeklyRange.toIso).catch(() => null),
           accountingApi.getInventoryValueTrend(monthlyRange.fromIso, monthlyRange.toIso).catch(() => null),
-          accountingApi.getInventoryValueTrend(yearlyChartRange.fromIso, yearlyChartRange.toIso).catch(() => null),
         ]);
         if (cancelled || loadGenRef.current !== gen) return;
         setSalesTrend(mergeDailyTrend(trendRaw, weeklyRange.dayKeys, timezone));
@@ -590,35 +510,6 @@ export default function DashboardPage() {
           )
         );
         setMonthlyChartsLoaded(true);
-
-        setYearlySalesTrend(mergeMonthlyTrend(yearlyTrendRaw, yearlyChartRange.monthKeys, timezone));
-        const yearlyCatArr = Array.isArray(yearlyCategoryPerf) ? yearlyCategoryPerf : [];
-        setYearlyRevenueBreakdown(
-          yearlyCatArr
-            .map((c: { category?: string; revenue?: string | number }) => ({
-              name: String(c.category ?? 'Uncategorized'),
-              value: Math.max(0, parseFloat(String(c.revenue)) || 0),
-            }))
-            .filter((x) => x.value > 0)
-            .sort((a, b) => b.value - a.value)
-            .slice(0, 7)
-        );
-        if (profit365Summary && typeof profit365Summary === 'object') {
-          setProfit365d({
-            totalProfit: Number(profit365Summary.totalProfit) || 0,
-            avgProfitPerDay: Number(profit365Summary.avgProfitPerDay) || 0,
-          });
-        } else {
-          setProfit365d(null);
-        }
-        setYearlyPeriodStats(parsePeriodStatsFromSalesBySource(sales365));
-        setYearlyInventory(
-          buildInventoryTrend(
-            yearlyInventoryRaw,
-            buildInventoryMonthlyPoints(yearlyInventoryRaw, timezone)
-          )
-        );
-        setYearlyChartsLoaded(true);
       } catch {
         if (!cancelled) {
           setChartsLoaded(false);
@@ -627,12 +518,8 @@ export default function DashboardPage() {
           setMonthlyChartsLoaded(false);
           setProfit30d(null);
           setMonthlyPeriodStats(null);
-          setYearlyChartsLoaded(false);
-          setProfit365d(null);
-          setYearlyPeriodStats(null);
           setWeeklyInventory(null);
           setMonthlyInventory(null);
-          setYearlyInventory(null);
         }
       }
     }
@@ -665,12 +552,8 @@ export default function DashboardPage() {
           setMonthlyChartsLoaded(false);
           setProfit30d(null);
           setMonthlyPeriodStats(null);
-          setYearlyChartsLoaded(false);
-          setProfit365d(null);
-          setYearlyPeriodStats(null);
           setWeeklyInventory(null);
           setMonthlyInventory(null);
-          setYearlyInventory(null);
         }
         return;
       }
@@ -713,7 +596,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [timezone, weeklyDayKeysKey, monthlyDayKeysKey, yearlyKpiDayKeysKey, yearlyMonthKeysKey, timezoneLoading]);
+  }, [timezone, weeklyDayKeysKey, monthlyDayKeysKey, timezoneLoading]);
 
   const todayLabel = useMemo(
     () =>
@@ -742,19 +625,6 @@ export default function DashboardPage() {
         monthlyInventory
       ),
     [stats, profit30d, monthlyChartsLoaded, monthlyPeriodStats, monthlyInventory]
-  );
-
-  const yearlyKpiCards = useMemo(
-    () =>
-      buildPeriodKpiCards(
-        stats,
-        profit365d,
-        yearlyChartsLoaded,
-        'Year-to-date profit',
-        yearlyPeriodStats,
-        yearlyInventory
-      ),
-    [stats, profit365d, yearlyChartsLoaded, yearlyPeriodStats, yearlyInventory]
   );
 
   if (!ready) {
@@ -805,7 +675,6 @@ export default function DashboardPage() {
               { id: 'daily', label: 'Daily report' },
               { id: 'weekly', label: 'Weekly report' },
               { id: 'monthly', label: 'Monthly report' },
-              { id: 'yearly', label: 'Yearly report' },
             ] as const).map((tab) => {
               const active = activeReport === tab.id;
               return (
@@ -1121,141 +990,15 @@ export default function DashboardPage() {
         </section>
         )}
 
-        {activeReport === 'yearly' && (
-        <section id="yearly-overview" className="scroll-mt-6 space-y-4" aria-labelledby="yearly-overview-heading">
-          <div>
-            <h2 id="yearly-overview-heading" className="text-lg font-semibold text-[#212529] dark:text-foreground">
-              Yearly report
-            </h2>
-            <p className="mt-0.5 text-sm text-[#6C757D] dark:text-muted-foreground">
-              Year to date — KPIs and operational alerts. Monthly revenue trend covers each month this year.
-            </p>
-          </div>
-
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-          {yearlyKpiCards.map((card) => (
-            <KpiCardTile key={card.label} card={card} mobileOrdersPending={stats.mobileOrdersPending} />
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr] xl:items-stretch">
-          <Suspense
-            fallback={<div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />}
+        <p className="pt-2 text-center text-xs text-[#6C757D] dark:text-muted-foreground">
+          Need year-to-date KPIs and charts?{' '}
+          <Link
+            to="/dashboard/reports?cat=executive&view=yearly"
+            className="font-semibold text-[#4A90E2] hover:underline dark:text-blue-400"
           >
-            <InventoryValueChart
-              chartsLoaded={yearlyChartsLoaded}
-              cachedAt={cachedAt}
-              data={yearlyInventory?.points ?? []}
-              subtitle="Total purchase (cost) vs. selling (retail) value — year to date (monthly)"
-              tickInterval={0}
-            />
-          </Suspense>
-          <AssetVelocityPanel data={yearlyInventory} loading={!yearlyChartsLoaded} />
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_min(100%,320px)] xl:items-start">
-          <Suspense
-            fallback={
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />
-                <div className="h-[320px] animate-pulse rounded-[10px] bg-gray-200 dark:bg-gray-700" />
-              </div>
-            }
-          >
-            <DashboardCharts
-              chartsLoaded={yearlyChartsLoaded}
-              cachedAt={cachedAt}
-              salesTrend={yearlySalesTrend}
-              revenueBreakdown={yearlyRevenueBreakdown}
-              trendTitle="Monthly Sales Trends"
-              trendSubtitle="Year to date (POS + mobile)"
-              trendTickInterval={0}
-            />
-          </Suspense>
-
-          <Card
-            className="border border-gray-100 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)] dark:border-gray-700 dark:shadow-none xl:sticky xl:top-4"
-            padding="none"
-          >
-            <div className="border-b border-gray-100 px-5 py-4 dark:border-gray-700">
-              <h2 className="text-base font-semibold text-[#212529] dark:text-foreground">Alerts</h2>
-            </div>
-            <div className="space-y-4 p-4">
-              <div className="overflow-hidden rounded-lg border border-amber-200/80 dark:border-amber-800/60">
-                <div className="bg-[#F6C23E] px-3 py-2 text-sm font-semibold text-gray-900">Low Stock</div>
-                <div className="bg-[#FFF3CD] p-3 dark:bg-amber-950/30">
-                  {lowStockRows.length === 0 ? (
-                    <p className="text-sm text-gray-700 dark:text-gray-300">No low stock items.</p>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
-                          <th className="pb-2 pr-2">Item</th>
-                          <th className="pb-2 text-right">Qty</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-gray-800 dark:text-gray-200">
-                        {lowStockRows.map((row, idx) => (
-                          <tr key={`${row.name}-${idx}`} className="border-t border-amber-200/60 dark:border-amber-800/40">
-                            <td className="py-1.5 pr-2">{row.name}</td>
-                            <td className="py-1.5 text-right tabular-nums">{row.qty}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                  <Link
-                    to="/inventory"
-                    className="mt-2 inline-block text-xs font-medium text-[#4A90E2] hover:underline"
-                  >
-                    Open inventory
-                  </Link>
-                </div>
-              </div>
-
-              <div className="overflow-hidden rounded-lg border border-red-200/80 dark:border-red-900/50">
-                <div className="bg-[#E74A3B] px-3 py-2 text-sm font-semibold text-white">Pending Orders</div>
-                <div className="bg-[#F8D7DA] p-3 dark:bg-red-950/25">
-                  {pendingOrderRows.length === 0 ? (
-                    <p className="text-sm text-gray-800 dark:text-gray-200">No pending mobile orders.</p>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-400">
-                          <th className="pb-2 pr-2">Order #</th>
-                          <th className="pb-2">Customer</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pendingOrderRows.map((row) => (
-                          <tr key={row.id} className="border-t border-red-200/60 dark:border-red-900/40">
-                            <td className="py-1.5 pr-2">
-                              <Link
-                                to={`/order-center?order=${encodeURIComponent(row.id)}&kind=cart`}
-                                className="font-medium text-[#4A90E2] hover:underline"
-                              >
-                                {row.orderNumber}
-                              </Link>
-                            </td>
-                            <td className="py-1.5 text-gray-800 dark:text-gray-200">{row.customer}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                  <Link
-                    to="/order-center"
-                    className="mt-2 inline-block text-xs font-medium text-[#4A90E2] hover:underline"
-                  >
-                    View all mobile orders
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-        </section>
-        )}
+            Open year to date report in Reports →
+          </Link>
+        </p>
         </div>
       </div>
     </div>

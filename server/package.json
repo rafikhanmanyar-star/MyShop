@@ -1,6 +1,6 @@
 {
   "name": "myshop-api",
-  "version": "1.1.30",
+  "version": "1.1.31",
   "description": "MyShop API Server - Standalone Shop & POS Application",
   "type": "module",
   "main": "dist/api/index.js",
@@ -11,6 +11,7 @@
     "migrate": "tsx scripts/run-migrations.ts",
     "typesense:index": "tsx scripts/index-typesense-products.ts",
     "purge-preprod": "tsx scripts/purge-pre-production-transactions.ts",
+    "backfill-inventory-gl": "tsx scripts/backfill-inventory-gl-opening.ts",
     "backfill-batch-expiry": "tsx scripts/backfill-legacy-batch-expiry.ts",
     "set-tenant-inventory-expiry": "tsx scripts/set-tenant-inventory-expiry.ts",
     "migrate-skus": "tsx scripts/migrate-skus-between-tenants.ts",

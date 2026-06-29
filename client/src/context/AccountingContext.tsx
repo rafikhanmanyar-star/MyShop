@@ -22,6 +22,9 @@ interface AccountingContextValue {
   totalExpenses: number;
   netProfit: number;
   receivablesTotal: number;
+  customerAdvances: number;
+  inventoryValuation: number;
+  inventoryEquityAdjustment: number;
   payablesTotal: number;
   totalAssets: number;
   totalLiabilities: number;
@@ -41,7 +44,8 @@ interface AccountingContextValue {
 const defaultValue: AccountingContextValue = {
   accounts: [], journalEntries: [], entries: [], bankAccounts: [], loading: false,
   totalRevenue: 0, grossProfit: 0, netMargin: 0, totalCOGS: 0, totalExpenses: 0,
-  netProfit: 0, receivablesTotal: 0, payablesTotal: 0,
+  netProfit: 0, receivablesTotal: 0, customerAdvances: 0,
+  inventoryValuation: 0, inventoryEquityAdjustment: 0, payablesTotal: 0,
   totalAssets: 0, totalLiabilities: 0, totalEquity: 0,
   salesBySource: null,
   refreshAccounts: async () => { },
@@ -322,6 +326,9 @@ export function AccountingProvider({ children }: { children: ReactNode }) {
     totalExpenses: parseFloat(summary.totalExpenses) || 0,
     netProfit: parseFloat(summary.netProfit) || 0,
     receivablesTotal: parseFloat(summary.receivablesTotal) || 0,
+    customerAdvances: parseFloat(summary.customerAdvances) || 0,
+    inventoryValuation: parseFloat(summary.inventoryValuation) || 0,
+    inventoryEquityAdjustment: parseFloat(summary.inventoryEquityAdjustment) || 0,
     payablesTotal: 0,
     totalAssets: parseFloat(summary.totalAssets) || 0,
     totalLiabilities: parseFloat(summary.totalLiabilities) || 0,

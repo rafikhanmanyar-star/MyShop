@@ -97,6 +97,7 @@ const DEFAULT_COA_TEMPLATE: CoATemplateRow[] = [
   { code: COA.ADDITIONAL_CAPITAL, name: 'Additional Capital', type: 'Equity', normal_balance: 'credit', level: 4, parent_code: '31000' },
   { code: COA.RETAINED_EARNINGS, name: 'Retained Earnings', type: 'Equity', normal_balance: 'credit', level: 4, parent_code: '31000' },
   { code: COA.DRAWINGS, name: 'Drawings', type: 'Equity', normal_balance: 'debit', level: 4, parent_code: '31000' },
+  { code: COA.OPENING_BALANCE_EQUITY, name: 'Opening Balance Equity', type: 'Equity', normal_balance: 'credit', level: 4, parent_code: '31000' },
 
   { code: COA.RETAIL_SALES, name: 'Retail Sales', type: 'Income', normal_balance: 'credit', level: 4, parent_code: '41000' },
   { code: COA.WHOLESALE_SALES, name: 'Wholesale Sales', type: 'Income', normal_balance: 'credit', level: 4, parent_code: '41000' },
