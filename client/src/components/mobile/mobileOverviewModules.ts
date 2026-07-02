@@ -3,11 +3,11 @@ import {
   Receipt,
   Truck,
   LayoutGrid,
-  Users,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react';
 
-export type MobileModuleId = 'dashboard' | 'khata' | 'procurement' | 'orders' | 'loyalty';
+export type MobileModuleId = 'dashboard' | 'khata' | 'procurement' | 'orders' | 'accounting';
 
 export type MobileModuleDef = {
   id: MobileModuleId;
@@ -52,12 +52,12 @@ export const MOBILE_MODULES: MobileModuleDef[] = [
     subtitle: 'Mobile, voice, and delivery queue',
   },
   {
-    id: 'loyalty',
-    label: 'Loyalty',
-    shortLabel: 'Loyalty',
-    icon: Users,
-    roles: ['admin'],
-    subtitle: 'Members and points program',
+    id: 'accounting',
+    label: 'Accounting',
+    shortLabel: 'Accounts',
+    icon: BookOpen,
+    roles: ['admin', 'accountant'],
+    subtitle: 'Financial summary, account balances, and ledger',
   },
 ];
 
@@ -80,7 +80,7 @@ export const MOBILE_MODULE_ICON_CLASS: Record<MobileModuleId, string> = {
   khata: 'bg-violet-500/15 text-violet-600 dark:bg-violet-400/10 dark:text-violet-400',
   procurement: 'bg-amber-500/15 text-amber-700 dark:bg-amber-400/10 dark:text-amber-400',
   orders: 'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400',
-  loyalty: 'bg-indigo-500/15 text-indigo-700 dark:bg-indigo-400/10 dark:text-indigo-400',
+  accounting: 'bg-sky-500/15 text-sky-700 dark:bg-sky-400/10 dark:text-sky-400',
 };
 
 export const MOBILE_MODULE_HERO_CLASS: Record<MobileModuleId, string> = {
@@ -88,5 +88,5 @@ export const MOBILE_MODULE_HERO_CLASS: Record<MobileModuleId, string> = {
   khata: 'from-violet-500/12 via-violet-500/5 to-transparent border-violet-500/20',
   procurement: 'from-amber-500/12 via-amber-500/5 to-transparent border-amber-500/20',
   orders: 'from-emerald-500/12 via-emerald-500/5 to-transparent border-emerald-500/20',
-  loyalty: 'from-indigo-500/12 via-indigo-500/5 to-transparent border-indigo-500/20',
+  accounting: 'from-sky-500/12 via-sky-500/5 to-transparent border-sky-500/20',
 };

@@ -1,5 +1,6 @@
 import { getDatabaseService } from './databaseService.js';
 import { COA, LEGACY_TO_COA } from '../constants/accountCodes.js';
+import { isPayFromEligibleAssetAccount } from '../utils/payFromAccounts.js';
 
 export class AccountingService {
   private db = getDatabaseService();
@@ -387,9 +388,10 @@ export class AccountingService {
   }
 
   /**
-   * Cash & bank balances for the finance dashboard — one row per liquid chart account (111xx
-   * and legacy AST cash/bank codes), merged with shop_bank_accounts when linked.
-   * Balances come from the GL so POS, procurement, expenses, and khata payments stay in sync.
+   * Cash & bank balances for the finance dashboard — one row per liquid pay-from asset
+   * (111xx, legacy AST cash/bank, shop-linked accounts, and user-created leaf assets
+   * such as HBL or NayaPay). Balances come from the GL so POS, procurement, expenses,
+   * and khata payments stay in sync.
    */
   async getBankBalances(tenantId: string) {
     const shopRows = await this.db.query(`
@@ -401,29 +403,30 @@ export class AccountingService {
       ORDER BY name ASC
     `, [tenantId]);
 
-    let chartRows = await this.db.query(`
-      SELECT id, name, code
+    const linkedChartIds = new Set(
+      shopRows.map((r: any) => r.chart_account_id).filter(Boolean)
+    );
+
+    const allAssetRows = await this.db.query(`
+      SELECT id, name, code, type, level, parent_account_id, is_active
       FROM accounts
       WHERE tenant_id = $1 AND COALESCE(is_active, TRUE) = TRUE AND type = 'Asset'
-        AND (
-          code ~ '^111[0-9]{2}$'
-          OR code IN ('AST-100', 'AST-101', 'AST-102')
-        )
-      ORDER BY code ASC
+      ORDER BY code ASC, name ASC
     `, [tenantId]);
 
-    const chartIdSet = new Set(chartRows.map((r: any) => r.id));
-    const linkedExtraIds = shopRows
-      .map((r: any) => r.chart_account_id)
-      .filter((id: string | null) => id && !chartIdSet.has(id));
-    if (linkedExtraIds.length > 0) {
-      const extra = await this.db.query(
-        `SELECT id, name, code FROM accounts
-         WHERE tenant_id = $1 AND id = ANY($2::text[]) AND type = 'Asset'`,
-        [tenantId, linkedExtraIds]
-      );
-      chartRows = [...chartRows, ...extra];
+    const childCount = new Map<string, number>();
+    for (const a of allAssetRows) {
+      if (a.parent_account_id) {
+        childCount.set(a.parent_account_id, (childCount.get(a.parent_account_id) || 0) + 1);
+      }
     }
+
+    const chartRows = allAssetRows.filter((a: any) =>
+      isPayFromEligibleAssetAccount(a, {
+        hasChildren: (childCount.get(a.id) || 0) > 0,
+        linkedToBank: linkedChartIds.has(a.id),
+      })
+    );
 
     if (chartRows.length === 0) return [];
 
@@ -455,15 +458,40 @@ export class AccountingService {
       if (s.chart_account_id) shopByChart.set(s.chart_account_id, s);
     }
 
-    return chartRows.map((c: any) => {
+    const cashFirst = (a: any, b: any) => {
+      const shopA = shopByChart.get(a.id);
+      const shopB = shopByChart.get(b.id);
+      const codeA = String(a.code || shopA?.code || '');
+      const codeB = String(b.code || shopB?.code || '');
+      const isCashA =
+        shopA?.account_type === 'Cash' ||
+        codeA === COA.CASH_ON_HAND ||
+        codeA === COA.MOBILE_WALLET ||
+        codeA === COA.PETTY_CASH ||
+        codeA === 'AST-100' ||
+        /cash/i.test(String(a.name || shopA?.name || ''));
+      const isCashB =
+        shopB?.account_type === 'Cash' ||
+        codeB === COA.CASH_ON_HAND ||
+        codeB === COA.MOBILE_WALLET ||
+        codeB === COA.PETTY_CASH ||
+        codeB === 'AST-100' ||
+        /cash/i.test(String(b.name || shopB?.name || ''));
+      if (isCashA !== isCashB) return isCashA ? -1 : 1;
+      const codeCmp = codeA.localeCompare(codeB);
+      if (codeCmp !== 0) return codeCmp;
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    };
+
+    return [...chartRows].sort(cashFirst).map((c: any) => {
       const shop = shopByChart.get(c.id);
       const ledger = ledgerByChart[c.id];
       const code = c.code || shop?.code || '';
       const isCash =
         shop?.account_type === 'Cash' ||
-        code === '11101' ||
-        code === '11104' ||
-        code === '11105' ||
+        code === COA.CASH_ON_HAND ||
+        code === COA.MOBILE_WALLET ||
+        code === COA.PETTY_CASH ||
         code === 'AST-100' ||
         /cash/i.test(String(c.name || shop?.name || ''));
 

@@ -1,7 +1,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useAccounting } from '../../../context/AccountingContext';
 import { accountingApi } from '../../../services/shopApi';
 import { CURRENCY, ICONS } from '../../../constants';
@@ -230,26 +229,13 @@ const RevenueBarChart: React.FC<{ buckets: Bucket[] }> = ({ buckets }) => {
     );
 };
 
-type CashBankRow = {
-    chartAccountId: string;
-    name: string;
-    code: string;
-    accountType: string;
-    balance: number;
-    totalDebit: number;
-    totalCredit: number;
-    hasShopLink: boolean;
-};
-
 const CashBankBalancesPanel: React.FC<{
     bankAccounts: any[];
     fmtMoney: (n: number) => string;
     onOpenAccount: (chartAccountId: string) => void;
     onOpenReconciliation: () => void;
 }> = ({ bankAccounts, fmtMoney, onOpenAccount, onOpenReconciliation }) => {
-    const [expandedId, setExpandedId] = useState<string | null>(null);
-
-    const rows: CashBankRow[] = useMemo(
+    const rows = useMemo(
         () =>
             (bankAccounts || []).map((acc: any) => ({
                 chartAccountId: String(acc.chart_account_id || acc.id),
@@ -257,99 +243,60 @@ const CashBankBalancesPanel: React.FC<{
                 code: String(acc.code || '—'),
                 accountType: String(acc.account_type || 'Bank'),
                 balance: parseFloat(acc.balance) || 0,
-                totalDebit: parseFloat(acc.total_debit) || 0,
-                totalCredit: parseFloat(acc.total_credit) || 0,
-                hasShopLink: Boolean(acc.has_shop_bank_link),
             })),
         [bankAccounts]
     );
 
     const totalBalance = useMemo(() => rows.reduce((s, r) => s + r.balance, 0), [rows]);
 
-    const toggle = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
-
     return (
         <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900/50">
-            <div className="mb-4 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                    {React.cloneElement(ICONS.building as React.ReactElement<any>, { width: 18, height: 18, className: 'text-slate-600 dark:text-slate-300' })}
-                    <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">Cash & Bank Balances</h3>
-                </div>
-                {rows.length > 1 && (
-                    <span className="font-mono text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                        Total {fmtMoney(totalBalance)}
-                    </span>
-                )}
+            <div className="mb-3 flex items-center gap-2">
+                {React.cloneElement(ICONS.building as React.ReactElement<any>, { width: 18, height: 18, className: 'text-slate-600 dark:text-slate-300' })}
+                <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">Cash & Bank Balances</h3>
             </div>
-            <div className="max-h-[320px] space-y-1 overflow-y-auto pr-1">
-                {rows.length === 0 ? (
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                        No cash or bank accounts in Chart of Accounts (111xx). Add them in Settings → Chart of Accounts.
-                    </p>
-                ) : (
-                    rows.map((row) => {
-                        const open = expandedId === row.chartAccountId;
-                        return (
-                            <div
+            {rows.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                    No cash or bank accounts in Chart of Accounts. Add Asset accounts (Cash, HBL, NayaPay, etc.) in Settings → Chart of Accounts.
+                </p>
+            ) : (
+                <table className="w-full text-left text-xs">
+                    <thead>
+                        <tr className="border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-600 dark:text-slate-400">
+                            <th className="pb-2">Account</th>
+                            <th className="pb-2 text-right">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody className="font-mono">
+                        {rows.map((row) => (
+                            <tr
                                 key={row.chartAccountId}
-                                className="rounded-xl border border-slate-100 dark:border-slate-800"
+                                className="cursor-pointer border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                                onClick={() => onOpenAccount(row.chartAccountId)}
+                                title="View ledger transactions"
                             >
-                                <button
-                                    type="button"
-                                    onClick={() => toggle(row.chartAccountId)}
-                                    className="flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                                >
-                                    <div className="flex min-w-0 items-start gap-2">
-                                        {open ? (
-                                            <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                                        ) : (
-                                            <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-                                        )}
-                                        <div className="min-w-0">
-                                            <p className="truncate text-sm font-bold text-[#0f172a] dark:text-white">{row.name}</p>
-                                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                                {row.code} · {row.accountType}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <p className="shrink-0 font-mono text-sm font-bold text-[#0f172a] dark:text-white">
-                                        {fmtMoney(row.balance)}
+                                <td className="py-2 pr-2 font-sans">
+                                    <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">{row.name}</p>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                                        {row.code} · {row.accountType}
                                     </p>
-                                </button>
-                                {open && (
-                                    <div className="border-t border-slate-100 px-3 py-3 dark:border-slate-800">
-                                        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
-                                            <div>
-                                                <dt className="font-semibold uppercase tracking-wide text-slate-500">Total debits</dt>
-                                                <dd className="mt-0.5 font-mono font-bold text-[#0f172a] dark:text-white">{fmtMoney(row.totalDebit)}</dd>
-                                            </div>
-                                            <div>
-                                                <dt className="font-semibold uppercase tracking-wide text-slate-500">Total credits</dt>
-                                                <dd className="mt-0.5 font-mono font-bold text-[#0f172a] dark:text-white">{fmtMoney(row.totalCredit)}</dd>
-                                            </div>
-                                            <div className="col-span-2">
-                                                <dt className="font-semibold uppercase tracking-wide text-slate-500">POS / procurement link</dt>
-                                                <dd className="mt-0.5 text-slate-700 dark:text-slate-300">
-                                                    {row.hasShopLink
-                                                        ? 'Linked in shop bank accounts — used for POS receipts, supplier payments, expenses, khata collections.'
-                                                        : 'Chart account only — link in Settings → Bank Accounts to use in POS.'}
-                                                </dd>
-                                            </div>
-                                        </dl>
-                                        <button
-                                            type="button"
-                                            onClick={() => onOpenAccount(row.chartAccountId)}
-                                            className="mt-3 w-full rounded-lg border border-slate-200 bg-slate-50 py-2 text-[10px] font-bold uppercase tracking-wider text-[#1e3a5f] transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-sky-400 dark:hover:bg-slate-700"
-                                        >
-                                            View ledger transactions
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })
-                )}
-            </div>
+                                </td>
+                                <td className="py-2 text-right text-[11px] font-bold text-[#0f172a] dark:text-white">
+                                    {fmtMoney(row.balance)}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td className="pt-3 text-[11px] font-bold text-[#0f172a] dark:text-white">Total cash & bank</td>
+                            <td className="pt-3 text-right font-mono text-[11px] font-bold text-[#0f172a] dark:text-white">
+                                {fmtMoney(totalBalance)}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            )}
             <button
                 type="button"
                 onClick={onOpenReconciliation}

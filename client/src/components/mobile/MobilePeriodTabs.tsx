@@ -1,16 +1,15 @@
 import React from 'react';
 
-export type MobilePeriod = 'today' | 'weekly' | 'monthly' | 'yearly';
+export type MobilePeriod = 'today' | 'weekly' | 'monthly';
 
 const TABS: { id: MobilePeriod; label: string }[] = [
   { id: 'today', label: 'Today' },
   { id: 'weekly', label: 'Weekly' },
   { id: 'monthly', label: 'Monthly' },
-  { id: 'yearly', label: 'Yearly' },
 ];
 
 export function isMobilePeriod(value: string | null): value is MobilePeriod {
-  return value === 'today' || value === 'weekly' || value === 'monthly' || value === 'yearly';
+  return value === 'today' || value === 'weekly' || value === 'monthly';
 }
 
 type Props = {

@@ -1,6 +1,5 @@
 import React from 'react';
 import { NavLink, useLocation, useSearchParams } from 'react-router-dom';
-import { ShoppingCart, Settings } from 'lucide-react';
 import {
   defaultMobileModuleId,
   isMobileModuleId,
@@ -17,25 +16,17 @@ export default function MobileBottomNav({ role }: Props) {
   const { pathname } = useLocation();
   const onOverview = pathname === '/';
   const modules = mobileModulesForRole(role);
-  const showPos = role === 'admin' || role === 'pos_cashier';
   const tabParam = searchParams.get('tab');
   const currentTab: MobileModuleId = isMobileModuleId(tabParam, role)
     ? tabParam
     : defaultMobileModuleId(role);
 
-  if (modules.length === 0 && !showPos) return null;
+  if (modules.length === 0) return null;
 
   const moduleTabClass = (active: boolean) =>
     `relative flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 rounded-xl px-2.5 py-2 text-[0.625rem] font-semibold transition-all ${
       active
         ? 'bg-[#4A90E2] text-white shadow-md shadow-[#4A90E2]/25'
-        : 'text-[#6C757D] active:scale-95 dark:text-muted-foreground'
-    }`;
-
-  const utilityClass = ({ isActive }: { isActive: boolean }) =>
-    `flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 rounded-xl px-2.5 py-2 text-[0.625rem] font-semibold transition-all ${
-      isActive
-        ? 'bg-slate-800 text-white shadow-md dark:bg-slate-600'
         : 'text-[#6C757D] active:scale-95 dark:text-muted-foreground'
     }`;
 
@@ -63,22 +54,6 @@ export default function MobileBottomNav({ role }: Props) {
                 </NavLink>
               );
             })}
-
-            {modules.length > 0 && showPos && (
-              <div className="mx-1 mb-2 w-px shrink-0 self-stretch bg-gray-200 dark:bg-gray-600" aria-hidden />
-            )}
-
-            {showPos && (
-              <NavLink to="/pos" className={utilityClass}>
-                <ShoppingCart className="h-[1.35rem] w-[1.35rem] shrink-0" strokeWidth={2} />
-                <span className="leading-none">POS</span>
-              </NavLink>
-            )}
-
-            <NavLink to="/settings" className={utilityClass}>
-              <Settings className="h-[1.35rem] w-[1.35rem] shrink-0" strokeWidth={2} />
-              <span className="leading-none">Settings</span>
-            </NavLink>
           </div>
         </div>
       </div>
